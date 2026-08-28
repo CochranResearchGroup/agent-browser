@@ -1227,7 +1227,10 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
     command: &mut Value,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Result<(), String> {
-    if command.get("action").and_then(Value::as_str) != Some("tab_new") {
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("tab_new" | "remote_view_open")
+    ) {
         return Ok(());
     }
     if service_request_has_complete_route_hints(command)

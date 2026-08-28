@@ -568,30 +568,8 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         .map(|page| page.target_id)
         .collect::<Vec<_>>();
     let logical_browser_id = super::capability::service_browser_id(&state.session_id);
-    let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(&profile_root)?;
-    let process_instance_digest = crate::native::runtime_lifecycle::digest_json(&process_identity)?;
     let repository = LockedServiceStateRepository::default_json()?;
     let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
-    if state.runtime_owner_binding.as_ref().is_some_and(|binding| {
-        runtime_binding_matches_managed_browser(
-            binding,
-            &logical_browser_id,
-            &profile_identity_digest,
-            &process_instance_digest,
-        )
-    }) {
-        let binding = state
-            .runtime_owner_binding
-            .as_mut()
-            .expect("matching runtime owner binding remains present");
-        authority.refresh_managed_lane(binding, &cdp_endpoint, target_ids)?;
-        let reviewed_process_tree = authority.reviewed_process_tree(binding, &process_identity)?;
-        if let Some(manager) = state.browser.as_mut() {
-            manager.mark_lifecycle_managed(reviewed_process_tree);
-        }
-        return Ok(());
-    }
     let registration = crate::native::runtime_lifecycle::ManagedLaneRegistration {
         logical_browser_id,
         profile_root,
@@ -613,17 +591,6 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         manager.mark_lifecycle_managed(reviewed_process_tree);
     }
     Ok(())
-}
-
-pub(crate) fn runtime_binding_matches_managed_browser(
-    binding: &crate::runtime_owner_transfer::RuntimeOwnerBinding,
-    logical_browser_id: &str,
-    profile_identity_digest: &str,
-    process_instance_digest: &str,
-) -> bool {
-    binding.claim.logical_browser_id == logical_browser_id
-        && binding.claim.profile_identity_digest == profile_identity_digest
-        && binding.claim.process_instance_digest == process_instance_digest
 }
 /// Enforces service-owned profile leases before Chrome starts.
 ///

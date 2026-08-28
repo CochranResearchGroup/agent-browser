@@ -400,6 +400,11 @@ try {
   const readinessSource = readFileSync(readinessScript, 'utf8');
   assert.match(readinessSource, /'--data-binary',\s*'@-'/);
   assert.equal(readinessSource.includes('`password=${password}`'), false);
+  const environmentLoader = installedFiles.find(
+    (path) => path.endsWith('/scripts/lib/agent-browser-env.js'),
+  );
+  assert.ok(environmentLoader, 'the installed readiness script must retain its environment-loader dependency');
+  assert.match(readFileSync(environmentLoader, 'utf8'), /export function loadAgentBrowserEnv/);
   const routeSync = installedFiles.find(
     (path) => basename(path) === 'sync-rdp-guac-route-specific-user-pool.sh',
   );

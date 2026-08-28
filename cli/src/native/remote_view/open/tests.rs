@@ -597,6 +597,8 @@ fn authorized_attribution() -> RouteBoundOpenAttribution {
         caller_id: Some("operator-a".to_string()),
         service_job_id: Some("job-a".to_string()),
         dashboard_deployment_generation: Some("dashboard-test".to_string()),
+        service_principal_id: None,
+        service_principal_provenance: None,
         authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
     }
 }
@@ -1194,10 +1196,31 @@ fn every_ingress_uses_the_same_transport_neutral_authorization_fact() {
         )
         .is_ok());
     }
+    let authenticated_resolver = json!({
+        "action": "service_remote_view_handoff_resolve",
+        "servicePrincipalId": "odollo-fulfillment",
+        "servicePrincipalProvenance": "registered_capability",
+    });
+    let resolver_attribution =
+        route_bound_open_attribution_from_authenticated_dispatch(&authenticated_resolver);
+    let rebuilt = RouteBoundDirectOpenRequest::from_compatibility_command(
+        json!({"action": "remote_view_open"}),
+        Some("handoff-a".to_string()),
+        resolver_attribution,
+    )
+    .expect("authenticated resolver attribution should cross the durable boundary")
+    .command();
+    assert_eq!(rebuilt["servicePrincipalId"], "odollo-fulfillment");
+    assert_eq!(
+        rebuilt["servicePrincipalProvenance"],
+        "registered_capability"
+    );
     let rejected_attribution = RouteBoundOpenAttribution {
         caller_id: None,
         service_job_id: None,
         dashboard_deployment_generation: None,
+        service_principal_id: None,
+        service_principal_provenance: None,
         authorization: RouteBoundOpenAuthorization::Rejected,
     };
     let rejected_direct = RouteBoundDirectOpenRequest::from_compatibility_command(

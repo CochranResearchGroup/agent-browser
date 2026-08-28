@@ -95,6 +95,7 @@ const OPEN_ROUTE_DISPLAYS_SCRIPT: &str =
 const ROUTE_DISPLAY_SELECTION_SCRIPT: &str =
     include_str!("../../scripts/lib/rdp-route-display-selection.js");
 const ROUTE_INVENTORY_SCRIPT: &str = include_str!("../../scripts/lib/rdp-route-inventory.js");
+const AGENT_BROWSER_ENV_SCRIPT: &str = include_str!("../../scripts/lib/agent-browser-env.js");
 const ROUTE_USER_POOL_SCRIPT: &str = include_str!("../../scripts/lib/rdp-route-user-pool.py");
 const ENSURE_POSTGRES_SCRIPT: &str = include_str!("../../scripts/ensure-rdp-guac-postgres.sh");
 const POSTGRES_DURABILITY_SCRIPT: &str =
@@ -104,7 +105,7 @@ const SYNC_ROUTE_POOL_SCRIPT: &str =
 const GRANT_ROUTE_DISPLAY_ACCESS_SCRIPT: &str =
     include_str!("../../scripts/grant-rdp-route-display-access.sh");
 const CONTROLLER_PACKAGE_JSON: &str = "{\n  \"private\": true,\n  \"type\": \"module\"\n}\n";
-const CONTROLLER_ASSETS: [(&str, &str, bool); 12] = [
+const CONTROLLER_ASSETS: [(&str, &str, bool); 13] = [
     (
         "scripts/smoke-rdp-guac-route-pool-readiness.js",
         ROUTE_POOL_READINESS_SCRIPT,
@@ -153,6 +154,11 @@ const CONTROLLER_ASSETS: [(&str, &str, bool); 12] = [
     (
         "scripts/lib/rdp-route-inventory.js",
         ROUTE_INVENTORY_SCRIPT,
+        false,
+    ),
+    (
+        "scripts/lib/agent-browser-env.js",
+        AGENT_BROWSER_ENV_SCRIPT,
         false,
     ),
     (
@@ -1512,6 +1518,8 @@ fn recover_operator_required_upgrade_for_root(
         return Err("workstation_recovery_old_generation_not_selected".to_string());
     }
     validate_sealed_generation_tree(&paths.generations_dir.join(&old_generation_id))?;
+    let candidate_matches_preserved_generation =
+        transaction.candidate_generation_id == old_generation_id;
 
     if pre_admission_inflight_block {
         transaction.stop_reason = Some("pre_admission_inflight_block_recovered".to_string());
@@ -1553,7 +1561,7 @@ fn recover_operator_required_upgrade_for_root(
         .pointer("/fallbackBackend/generationId")
         .and_then(Value::as_str)
         == Some(transaction.candidate_generation_id.as_str());
-    if candidate_selected || candidate_staged {
+    if (!candidate_matches_preserved_generation && candidate_selected) || candidate_staged {
         return Err("workstation_recovery_candidate_dashboard_still_routed".to_string());
     }
     if candidate_fallback {
@@ -1573,7 +1581,8 @@ fn recover_operator_required_upgrade_for_root(
             runtime_host_ingress_path,
         );
         let ingress = repository.load()?;
-        if ingress.selected_backend().generation_id == transaction.candidate_generation_id
+        if (!candidate_matches_preserved_generation
+            && ingress.selected_backend().generation_id == transaction.candidate_generation_id)
             || ingress.candidate_backend().is_some_and(|candidate| {
                 candidate.generation_id == transaction.candidate_generation_id
             })
@@ -1584,14 +1593,17 @@ fn recover_operator_required_upgrade_for_root(
 
     let mut live_process_references = std::collections::BTreeMap::new();
     collect_process_generation_references(&paths, &mut live_process_references);
-    if live_process_references.contains_key(&transaction.candidate_generation_id)
+    if !candidate_matches_preserved_generation
+        && live_process_references.contains_key(&transaction.candidate_generation_id)
         && operator_recovery_can_stop_rolled_back_candidate_host(&transaction)
     {
         stop_candidate_runtime_host(&paths, &transaction)?;
         live_process_references.clear();
         collect_process_generation_references(&paths, &mut live_process_references);
     }
-    if live_process_references.contains_key(&transaction.candidate_generation_id) {
+    if !candidate_matches_preserved_generation
+        && live_process_references.contains_key(&transaction.candidate_generation_id)
+    {
         return Err("workstation_recovery_candidate_process_still_live".to_string());
     }
 
@@ -1637,6 +1649,7 @@ fn recover_operator_required_upgrade_for_root(
         "transactionId": transaction.transaction_id,
         "state": transaction.state,
         "selectedGenerationId": old_generation_id,
+        "candidateGenerationEqualsPreservedGeneration": candidate_matches_preserved_generation,
         "candidateProcessAbsent": true,
         "candidateDashboardRouteAbsent": true,
         "candidateRuntimeHostRouteAbsent": true,
@@ -4939,9 +4952,12 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
         .unwrap_or_default();
 
     issues.iter().all(|issue| {
-        issue.get("code").and_then(Value::as_str) == Some("service_duplicate_profile_pressure")
+        let code = issue.get("code").and_then(Value::as_str);
+        code == Some("service_duplicate_profile_pressure")
             || issue.get("code").and_then(Value::as_str)
                 == Some("active_runtime_manual_preservation")
+            || (issue.get("severity").and_then(Value::as_str) == Some("warning")
+                && code.is_some_and(|code| code.starts_with("profile_lease_")))
             || (inactive_supervisors && supervisor_issues.contains(issue))
     })
 }
@@ -5501,6 +5517,16 @@ fn commit_prepared_service_state_migration(
     if migration.committed {
         return Ok(());
     }
+    // A no-change plan has no Service State bytes to commit. Runtime transfer
+    // and authenticated candidate presentation legitimately advance the live
+    // state after the snapshot, so treating that evolution as migration drift
+    // would make the required acceptance journey self-defeating.
+    if migration.status == "staged_validated_no_change" {
+        migration.committed = true;
+        migration.status = "committed_no_change".to_string();
+        migration.rollback_ready = false;
+        return Ok(());
+    }
     let state_path = PathBuf::from(&migration.authoritative_state_path);
     let snapshot_path = PathBuf::from(
         migration
@@ -5544,6 +5570,12 @@ fn commit_prepared_service_state_migration(
 fn restore_service_state_migration_record(
     migration: &mut crate::runtime_adoption::UpgradeServiceStateMigration,
 ) -> Result<(), String> {
+    if migration.status == "committed_no_change" {
+        migration.committed = false;
+        migration.status = "staged_validated_no_change".to_string();
+        migration.rollback_ready = false;
+        return Ok(());
+    }
     if !migration.committed && migration.status != "committed" {
         return Ok(());
     }
@@ -6067,12 +6099,16 @@ fn complete_runtime_transfer_phase(
 ) -> Result<(), String> {
     if candidate_runtime_host_stage_required(isolated_root, 0) {
         capture_selected_runtime_host_before_transfer(&mut prepared.transaction)?;
-        let transfer_evidence = transfer_discovered_runtimes(
+        let transfer_outcome = transfer_discovered_runtimes(
             paths,
             &prepared.staged,
             &prepared.transaction.transaction_id,
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
+        )?;
+        retire_preserved_runtime_convergence_lanes(
+            prepared.transaction.runtime_host_convergence.as_mut(),
+            &transfer_outcome.preserved_lane_sessions,
         )?;
         let candidate_socket_dir =
             candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
@@ -6087,7 +6123,7 @@ fn complete_runtime_transfer_phase(
             true,
             host_identity,
         )?;
-        for evidence in transfer_evidence {
+        for evidence in transfer_outcome.evidence {
             let session_names = prepared
                 .transaction
                 .runtime_migrations
@@ -6212,7 +6248,7 @@ fn transfer_discovered_runtimes(
     transaction_id: &str,
     migrations: &mut [crate::runtime_adoption::RuntimeMigrationRecord],
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
-) -> Result<Vec<RuntimeTransferEvidence>, String> {
+) -> Result<RuntimeTransferOutcome, String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeClassification, RuntimeDisposition};
 
@@ -6220,16 +6256,41 @@ fn transfer_discovered_runtimes(
         JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
     let old_binary = paths.current_selector.join("bin/agent-browser");
     let candidate_binary = staged.generation_path.join("bin/agent-browser");
+    let source_registry = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    )
+    .load()
+    .ok();
+    let source_backend = source_registry
+        .as_ref()
+        .map(crate::runtime_host_ingress::RuntimeHostIngressRegistry::selected_backend);
+    let source_socket_dir = source_backend
+        .map(|backend| backend.socket_dir.clone())
+        .unwrap_or_else(crate::connection::get_socket_dir);
+    let source_is_runtime_host = source_backend.is_some_and(|backend| {
+        backend.topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
+    });
     let mut transfer_evidence = Vec::new();
+    let mut preserved_lane_sessions = std::collections::BTreeSet::new();
     for migration in migrations {
         let source_session = resolve_runtime_source_session(&service_state, migration)?;
         match migration.disposition {
             RuntimeDisposition::CooperativeTransfer => {
                 let Some(source_session) = source_session else {
+                    record_preserved_runtime_lane_sessions(
+                        migration,
+                        None,
+                        &mut preserved_lane_sessions,
+                    );
                     preserve_runtime_without_live_source(migration);
                     continue;
                 };
-                if !crate::connection::daemon_ready(&source_session) {
+                if !runtime_transfer_source_ready(source_is_runtime_host, &source_session) {
+                    record_preserved_runtime_lane_sessions(
+                        migration,
+                        Some(&source_session),
+                        &mut preserved_lane_sessions,
+                    );
                     preserve_runtime_without_live_source(migration);
                     continue;
                 }
@@ -6239,6 +6300,8 @@ fn transfer_discovered_runtimes(
                         &service_state,
                         migration,
                         &source_session,
+                        &source_socket_dir,
+                        source_is_runtime_host,
                     )
                 {
                     Ok(prepared) => prepared,
@@ -6265,8 +6328,13 @@ fn transfer_discovered_runtimes(
                         transfer_evidence.push(evidence);
                         continue;
                     }
-                    Err((_failed_session, error)) => {
+                    Err((failed_session, error)) => {
                         if runtime_handoff_source_disappeared(&error) {
+                            record_preserved_runtime_lane_sessions(
+                                migration,
+                                Some(&failed_session),
+                                &mut preserved_lane_sessions,
+                            );
                             preserve_runtime_without_live_source(migration);
                             let reason = "handoff_source_disappeared_after_census";
                             if !migration.reason_codes.iter().any(|value| value == reason) {
@@ -6310,7 +6378,7 @@ fn transfer_discovered_runtimes(
                     .to_string();
                 let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
                 stage_candidate_runtime_handoff_descriptor(
-                    &crate::connection::get_socket_dir(),
+                    &source_socket_dir,
                     &candidate_socket_dir,
                     &source_session,
                     &prepared,
@@ -6336,7 +6404,12 @@ fn transfer_discovered_runtimes(
                 ) {
                     Ok(resumed) => resumed,
                     Err(error) => {
-                        let _ = run_agent_json(&old_binary, &source_session, &["handoff", "abort"]);
+                        let _ = run_agent_json_detailed_in_socket_dir(
+                            &old_binary,
+                            &source_session,
+                            &["handoff", "abort"],
+                            source_is_runtime_host.then_some((source_socket_dir.as_path(), true)),
+                        );
                         return Err(error);
                     }
                 };
@@ -6448,7 +6521,46 @@ fn transfer_discovered_runtimes(
             }
         }
     }
-    Ok(transfer_evidence)
+    Ok(RuntimeTransferOutcome {
+        evidence: transfer_evidence,
+        preserved_lane_sessions,
+    })
+}
+
+fn record_preserved_runtime_lane_sessions(
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    observed_session: Option<&str>,
+    sessions: &mut std::collections::BTreeSet<String>,
+) {
+    sessions.extend(migration.session_names.iter().cloned());
+    if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
+        sessions.insert(session.to_string());
+    }
+    if let Some(session) = observed_session.filter(|value| !value.trim().is_empty()) {
+        sessions.insert(session.to_string());
+    }
+}
+
+fn retire_preserved_runtime_convergence_lanes(
+    convergence: Option<&mut crate::runtime_adoption::RuntimeHostConvergenceRecord>,
+    preserved_sessions: &std::collections::BTreeSet<String>,
+) -> Result<(), String> {
+    let Some(convergence) = convergence else {
+        return Ok(());
+    };
+    if let Some(lane) = convergence.lanes.iter().find(|lane| {
+        preserved_sessions.contains(&lane.session_name)
+            && lane.state != crate::runtime_adoption::RuntimeLaneTransferState::CensusStable
+    }) {
+        return Err(format!(
+            "runtime_convergence_preservation_lane_state_invalid:{}:{:?}",
+            lane.session_name, lane.state
+        ));
+    }
+    convergence
+        .lanes
+        .retain(|lane| !preserved_sessions.contains(&lane.session_name));
+    Ok(())
 }
 
 fn runtime_orphan_owner_requires_fencing(
@@ -6679,11 +6791,23 @@ fn alternate_runtime_source_sessions(
         .collect()
 }
 
+/// Admission is drained during transfer, so a selected single host must be
+/// probed through ingress instead of the legacy per-session socket path.
+fn runtime_transfer_source_ready(source_is_runtime_host: bool, session: &str) -> bool {
+    if source_is_runtime_host {
+        crate::connection::daemon_ready_through_selected_ingress(session)
+    } else {
+        crate::connection::daemon_ready(session)
+    }
+}
+
 fn prepare_runtime_handoff_with_alias_fallback(
     old_binary: &Path,
     service_state: &crate::native::service_model::ServiceState,
     migration: &crate::runtime_adoption::RuntimeMigrationRecord,
     primary_session: &str,
+    source_socket_dir: &Path,
+    source_is_runtime_host: bool,
 ) -> Result<(String, Value, Vec<String>), (String, RuntimeTransactionCommandFailure)> {
     let mut candidates = vec![primary_session.to_string()];
     candidates.extend(
@@ -6693,20 +6817,24 @@ fn prepare_runtime_handoff_with_alias_fallback(
             primary_session,
         )
         .into_iter()
-        .filter(|session| crate::connection::daemon_ready(session)),
+        .filter(|session| runtime_transfer_source_ready(source_is_runtime_host, session)),
     );
     prepare_runtime_handoff_candidates(
         &migration.logical_browser_id,
         primary_session,
         candidates,
         |session| {
-            clear_exact_reversed_source_handoff_retry(service_state, session).map_err(
-                |message| RuntimeTransactionCommandFailure {
+            clear_exact_reversed_source_handoff_retry(service_state, session, source_socket_dir)
+                .map_err(|message| RuntimeTransactionCommandFailure {
                     kind: RuntimeTransactionCommandFailureKind::CommandFailed,
                     message,
-                },
-            )?;
-            run_agent_json_detailed(old_binary, session, &["handoff", "prepare"])
+                })?;
+            run_agent_json_detailed_in_socket_dir(
+                old_binary,
+                session,
+                &["handoff", "prepare"],
+                source_is_runtime_host.then_some((source_socket_dir, true)),
+            )
         },
         retire_idle_daemon,
     )
@@ -6715,11 +6843,12 @@ fn prepare_runtime_handoff_with_alias_fallback(
 fn clear_exact_reversed_source_handoff_retry(
     service_state: &crate::native::service_model::ServiceState,
     source_session: &str,
+    source_socket_dir: &Path,
 ) -> Result<bool, String> {
     if !crate::validation::is_valid_session_name(source_session) {
         return Err(crate::validation::session_name_error(source_session));
     }
-    let path = crate::connection::get_socket_dir().join(format!("{source_session}.handoff.json"));
+    let path = source_socket_dir.join(format!("{source_session}.handoff.json"));
     let descriptor_bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
@@ -7324,14 +7453,6 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
         })
 }
 
-fn run_agent_json_detailed(
-    binary: &Path,
-    session: &str,
-    command_args: &[&str],
-) -> Result<Value, RuntimeTransactionCommandFailure> {
-    run_agent_json_detailed_in_socket_dir(binary, session, command_args, None)
-}
-
 fn run_agent_json_detailed_in_socket_dir(
     binary: &Path,
     session: &str,
@@ -7642,6 +7763,10 @@ fn selected_runtime_host_capture_action(
 
 /// Re-observe a live selected host when its persisted boot epoch is missing or
 /// prior, then CAS-refresh only the same generation, socket, and binary scope.
+/// When the selected process is positively absent, an exact candidate binary
+/// already serving that socket may be used as the transfer source without
+/// changing selected ingress authority. The transaction-specific candidate
+/// remains the only backend eligible for the later ingress commit.
 fn capture_selected_runtime_host_before_transfer(
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
@@ -7678,12 +7803,27 @@ fn capture_selected_runtime_host_before_transfer(
     }
     if capture_action == SelectedRuntimeHostCaptureAction::RefreshIdentity {
         let expected_selected = selected.clone();
-        let (old_identity, observed_backend) = capture_runtime_host_identity(
+        let selected_capture = capture_runtime_host_identity(
             &selected.socket_dir,
             &selected.generation_id,
             &selected.binary_sha256,
             false,
-        )?;
+        );
+        let (old_identity, observed_backend) = match selected_capture {
+            Ok(capture) => capture,
+            Err(error)
+                if selected_host_absent && error == "runtime_host_executable_identity_mismatch" =>
+            {
+                capture_runtime_host_identity(
+                    &selected.socket_dir,
+                    &transaction.candidate_generation_id,
+                    &transaction.candidate_binary_sha256,
+                    true,
+                )?;
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
         repository.refresh_selected_backend_identity(
             registry.revision,
             &expected_selected,
@@ -7814,15 +7954,17 @@ fn clear_candidate_runtime_handoff_descriptor(
     }
 }
 
-fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
-    run_agent_json_detailed(binary, session, command_args).map_err(|error| error.message)
-}
-
 #[derive(Debug)]
 struct RuntimeTransferEvidence {
     logical_browser_id: String,
     candidate_session: String,
     receipt: crate::runtime_owner_transfer::OwnerTransferReceipt,
+}
+
+#[derive(Debug)]
+struct RuntimeTransferOutcome {
+    evidence: Vec<RuntimeTransferEvidence>,
+    preserved_lane_sessions: std::collections::BTreeSet<String>,
 }
 
 fn owner_transfer_receipt(
@@ -8306,6 +8448,9 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
         .clone();
     let source_is_runtime_host =
         source_backend.topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost;
+    let source_host_retirement_recorded =
+        source_runtime_host_retirement_is_recorded(&prepared.transaction);
+    let preserve_source_runtime_host = source_is_runtime_host && !source_host_retirement_recorded;
     for handoff in &mut prepared.runtime_handoffs {
         if handoff.should_finalize_source() {
             run_agent_json_detailed_in_socket_dir(
@@ -8318,10 +8463,14 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
             handoff.source_finalized = true;
         }
     }
-    if source_is_runtime_host {
+    if source_is_runtime_host && source_host_retirement_recorded {
         retire_finalized_source_runtime_host(&prepared.transaction, &source_backend)?;
     }
-    prove_finalized_source_exit(&prepared.transaction, &prepared.runtime_handoffs)?;
+    prove_finalized_source_exit(
+        &prepared.transaction,
+        &prepared.runtime_handoffs,
+        preserve_source_runtime_host,
+    )?;
     for handoff in prepared
         .runtime_handoffs
         .iter()
@@ -8337,6 +8486,16 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
         )?;
     }
     Ok(())
+}
+
+fn source_runtime_host_retirement_is_recorded(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    transaction
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.old_host.as_ref())
+        .is_some()
 }
 
 /// A shared runtime host owns several lanes, so finalizing one lane must not
@@ -8416,6 +8575,7 @@ fn wait_for_recorded_process_exit(
 fn prove_finalized_source_exit(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
     handoffs: &[PreparedRuntimeHandoff],
+    preserve_source_runtime_host: bool,
 ) -> Result<(), String> {
     crate::runtime_adoption::require_runtime_host_convergence_deadline(transaction)?;
     let deadline_unix_seconds = transaction
@@ -8431,6 +8591,9 @@ fn prove_finalized_source_exit(
                 handoff.source_session
             )
         })?;
+        if preserve_source_runtime_host {
+            continue;
+        }
         if !seen.insert((identity.pid, identity.start_token.clone())) {
             continue;
         }
@@ -10585,6 +10748,23 @@ mod tests {
     }
 
     #[test]
+    fn isolated_source_host_without_old_host_evidence_is_not_a_retirement_target() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-unrecorded-source-host-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+
+        assert!(!source_runtime_host_retirement_is_recorded(&transaction));
+    }
+
+    #[test]
     fn runtime_monitor_treats_upgrade_owned_lock_contention_as_a_skip() {
         let root = env::temp_dir().join(format!(
             "agent-browser-runtime-monitor-upgrade-lock-{}",
@@ -10884,6 +11064,86 @@ mod tests {
         assert!(migration
             .reason_codes
             .contains(&"verified_browser_without_live_source_session_preserved".to_string()));
+    }
+
+    #[test]
+    fn manual_preservation_retires_only_census_stable_convergence_lanes() {
+        let lane = |session_name: &str, state| crate::runtime_adoption::RuntimeLaneTransferRecord {
+            session_name: session_name.to_string(),
+            candidate_session_name: None,
+            source_generation_id: Some("old-generation".to_string()),
+            candidate_generation_id: "candidate-generation".to_string(),
+            state,
+            owner_generation_before: None,
+            owner_generation_after: None,
+            rollback_owner_generation: None,
+            observation_receipt_id: None,
+            commit_receipt_id: None,
+            rollback_receipt_id: None,
+            queued_work_count: 0,
+        };
+        let mut convergence = crate::runtime_adoption::RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-28T14:00:00Z".to_string(),
+            deadline_unix_seconds: 1,
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: None,
+            lanes: vec![
+                lane(
+                    "preserved",
+                    crate::runtime_adoption::RuntimeLaneTransferState::CensusStable,
+                ),
+                lane(
+                    "transferred",
+                    crate::runtime_adoption::RuntimeLaneTransferState::Committed,
+                ),
+            ],
+        };
+
+        retire_preserved_runtime_convergence_lanes(
+            Some(&mut convergence),
+            &std::collections::BTreeSet::from(["preserved".to_string()]),
+        )
+        .unwrap();
+
+        assert_eq!(convergence.lanes.len(), 1);
+        assert_eq!(convergence.lanes[0].session_name, "transferred");
+    }
+
+    #[test]
+    fn manual_preservation_rejects_a_lane_after_transfer_observation() {
+        let mut convergence = crate::runtime_adoption::RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-28T14:00:00Z".to_string(),
+            deadline_unix_seconds: 1,
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: None,
+            lanes: vec![crate::runtime_adoption::RuntimeLaneTransferRecord {
+                session_name: "preserved".to_string(),
+                candidate_session_name: Some("candidate".to_string()),
+                source_generation_id: Some("old-generation".to_string()),
+                candidate_generation_id: "candidate-generation".to_string(),
+                state: crate::runtime_adoption::RuntimeLaneTransferState::ObservationAttached,
+                owner_generation_before: Some(1),
+                owner_generation_after: None,
+                rollback_owner_generation: None,
+                observation_receipt_id: Some("observation".to_string()),
+                commit_receipt_id: None,
+                rollback_receipt_id: None,
+                queued_work_count: 0,
+            }],
+        };
+
+        let error = retire_preserved_runtime_convergence_lanes(
+            Some(&mut convergence),
+            &std::collections::BTreeSet::from(["preserved".to_string()]),
+        )
+        .unwrap_err();
+
+        assert!(error.starts_with("runtime_convergence_preservation_lane_state_invalid:preserved"));
+        assert_eq!(convergence.lanes.len(), 1);
     }
 
     #[test]
@@ -11607,6 +11867,62 @@ mod tests {
             .checkpoints
             .iter()
             .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation"));
+
+        remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operator_recovery_accepts_a_preserved_same_generation_selection() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-same-generation-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
+        fs::create_dir_all(&paths.unit_dir).unwrap();
+        fs::write(&paths.binary, b"legacy-binary").unwrap();
+        set_executable(&paths.binary).unwrap();
+        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
+        for unit in WORKSTATION_GENERATION_UNITS {
+            if unit != "agent-browser-dashboard-backend.service" {
+                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
+            }
+        }
+        let old_generation_id = migrate_legacy_payload_to_generation(&paths).unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            old_generation_id.clone(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some(old_generation_id.clone());
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.revision = 7;
+        transaction.stop_reason = Some("candidate_activation_failed".to_string());
+        transaction.terminal_result = Some("operator_recovery_required".to_string());
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&drain_path, &transaction).unwrap();
+
+        let report =
+            recover_operator_required_upgrade_for_root(&root, &transaction.transaction_id, true)
+                .unwrap();
+
+        assert_eq!(report["changed"], true);
+        assert_eq!(report["selectedGenerationId"], old_generation_id);
+        assert_eq!(report["candidateGenerationEqualsPreservedGeneration"], true);
+        assert!(!drain_path.exists());
+        let recovered: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
+        assert_eq!(
+            recovered.state,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        );
 
         remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
         fs::remove_dir_all(root).unwrap();
@@ -13126,6 +13442,14 @@ mod tests {
             "data": {
                 "issues": [
                     {"code": "service_duplicate_profile_pressure"},
+                    {
+                        "code": "profile_lease_legacy_principal_unproven",
+                        "severity": "warning"
+                    },
+                    {
+                        "code": "profile_lease_owner_generation_or_binding_mismatch",
+                        "severity": "warning"
+                    },
                     {"code": "executable_drift", "severity": "warning"}
                 ],
                 "sessionSupervisors": {
@@ -13511,6 +13835,35 @@ mod tests {
             permitted_stale_source_sessions(&finalized_handoffs, &migrations),
             vec!["manual-source".to_string()]
         );
+    }
+
+    #[test]
+    fn finalized_lane_does_not_require_its_exact_preserved_source_host_to_exit() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-preserved-source-host-exit-proof-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        let identity =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .expect("capture current test process identity");
+        let handoff = PreparedRuntimeHandoff {
+            source_session: "source-session".to_string(),
+            candidate_session: "candidate-session".to_string(),
+            source_process_identity: Some(identity.clone()),
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: true,
+            irreversible_source_revocation: false,
+        };
+
+        prove_finalized_source_exit(&transaction, &[handoff], true).unwrap();
     }
 
     #[test]
@@ -14301,6 +14654,57 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(&state_path).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn no_change_service_state_migration_preserves_live_acceptance_updates() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-install-state-no-change-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state_path = root.join(".agent-browser/service/state.json");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let original = serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": crate::native::service_state_migration::SERVICE_STATE_SCHEMA_VERSION,
+            "profileLeaseSchemaVersion": "agent-browser.profile-lease.v1",
+        }))
+        .unwrap();
+        fs::write(&state_path, &original).unwrap();
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::CensusStable;
+        transaction.runtime_census_digest = Some("census-stable".to_string());
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+
+        prepare_service_state_migration_transaction(&root, &transaction_path, &mut transaction)
+            .unwrap();
+        assert_eq!(
+            transaction.service_state_migration.as_ref().unwrap().status,
+            "staged_validated_no_change"
+        );
+        let live_acceptance_update = serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": crate::native::service_state_migration::SERVICE_STATE_SCHEMA_VERSION,
+            "profileLeaseSchemaVersion": "agent-browser.profile-lease.v1",
+            "events": [{"kind": "candidate_presentation_ready"}],
+        }))
+        .unwrap();
+        fs::write(&state_path, &live_acceptance_update).unwrap();
+
+        commit_prepared_service_state_migration(&mut transaction).unwrap();
+        assert_eq!(fs::read(&state_path).unwrap(), live_acceptance_update);
+        restore_service_state_migration_record(
+            transaction.service_state_migration.as_mut().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&state_path).unwrap(), live_acceptance_update);
 
         fs::remove_dir_all(root).unwrap();
     }

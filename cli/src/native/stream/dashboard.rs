@@ -162,7 +162,7 @@ pub async fn run_dashboard_server(port: u16) {
 
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) =
-        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION).await
+        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None).await
     {
         eprintln!("Failed to initialize dashboard service backend: {err}");
     }

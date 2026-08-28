@@ -559,29 +559,128 @@ fn reversed_owner_accepts_only_its_exact_stale_prepare_retry() {
 }
 
 #[test]
-fn managed_browser_refresh_rejects_a_terminal_binding_for_the_previous_process() {
-    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+fn current_owner_supersedes_stale_prepare_after_exact_evidence_refresh() {
+    use crate::runtime_adoption::BrowserAdoptionMode;
+    use crate::runtime_owner_transfer::{
+        OwnerTransferProposal, OwnerTransferRequest, ProfileOwner, ProfileOwnerState,
+    };
 
-    let binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+    let proposal = OwnerTransferProposal {
+        request: OwnerTransferRequest {
+            mode: BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: "session:browser-a".to_string(),
+            profile_identity_digest: "profile-a".to_string(),
+            expected_owner_id: Some("owner-a".to_string()),
+            expected_owner_generation: 4,
+            candidate_owner_id: "owner-b".to_string(),
+            candidate_daemon_session_route: "handoff-a".to_string(),
+            process_instance_digest: "process-a".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-old".to_string(),
+            target_set_digest: "targets-old".to_string(),
+            selected_target_identity_digest: "target-old".to_string(),
+            transfer_nonce_digest: "nonce-a".to_string(),
+        },
+        previous_owner_generation: 4,
+        candidate_owner_generation: 5,
+        candidate_effect_capable: false,
+    };
+    let owner = ProfileOwner {
         owner_id: "owner-a".to_string(),
         profile_identity_digest: "profile-a".to_string(),
-        owner_generation: 2,
-        logical_browser_id: "session:replacement".to_string(),
-        daemon_session_route: "replacement".to_string(),
-        process_instance_digest: "process-old".to_string(),
-    });
+        state: ProfileOwnerState::Ready,
+        owner_generation: 6,
+        browser_id: "session:browser-a".to_string(),
+        daemon_session_route: "source-a".to_string(),
+        process_instance_digest: "process-a".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-current".to_string(),
+        target_set_digest: "targets-current".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
 
-    assert!(runtime_binding_matches_managed_browser(
-        &binding,
-        "session:replacement",
+    assert!(stale_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &owner,
         "profile-a",
-        "process-old",
+        "process-a",
+        "chrome",
+        "cdp-current",
+        "targets-current",
+        false,
     ));
-    assert!(!runtime_binding_matches_managed_browser(
-        &binding,
-        "session:replacement",
+
+    let mut stale_generation = owner.clone();
+    stale_generation.owner_generation = proposal.previous_owner_generation;
+    assert!(!stale_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &stale_generation,
         "profile-a",
-        "process-new",
+        "process-a",
+        "chrome",
+        "cdp-current",
+        "targets-current",
+        false,
+    ));
+    assert!(!stale_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &owner,
+        "profile-a",
+        "process-a",
+        "chrome",
+        "cdp-other",
+        "targets-current",
+        false,
+    ));
+
+    let mut replaced_process_owner = owner.clone();
+    replaced_process_owner.owner_id = "owner-current".to_string();
+    replaced_process_owner.process_instance_digest = "process-current".to_string();
+    replaced_process_owner.cdp_endpoint_identity_digest = "cdp-stale".to_string();
+    replaced_process_owner.target_set_digest = "targets-stale".to_string();
+    assert!(stale_handoff_current_owner_refresh_allowed(
+        "source-a",
+        &proposal,
+        &replaced_process_owner,
+        "profile-a",
+        "process-current",
+        "chrome",
+    ));
+    assert!(!stale_handoff_current_owner_refresh_allowed(
+        "source-a",
+        &proposal,
+        &replaced_process_owner,
+        "profile-a",
+        "process-other",
+        "chrome",
+    ));
+    replaced_process_owner.cdp_endpoint_identity_digest = "cdp-current".to_string();
+    replaced_process_owner.target_set_digest = "targets-current".to_string();
+    assert!(stale_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &replaced_process_owner,
+        "profile-a",
+        "process-current",
+        "chrome",
+        "cdp-current",
+        "targets-current",
+        true,
+    ));
+    assert!(!stale_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &replaced_process_owner,
+        "profile-a",
+        "process-current",
+        "chrome",
+        "cdp-current",
+        "targets-current",
+        false,
     ));
 }
 

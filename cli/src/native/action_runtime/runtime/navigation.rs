@@ -216,7 +216,7 @@ pub(crate) async fn handle_runtime_handoff_prepare(
                     .to_string()
             })?;
             let repository = runtime_handoff_service_repository()?;
-            let current_owner = repository
+            let mut current_owner = repository
                 .load_snapshot()?
                 .runtime_owner_registry
                 .owner(&proposal.request.profile_identity_digest)
@@ -225,21 +225,108 @@ pub(crate) async fn handle_runtime_handoff_prepare(
                     "runtime_handoff_owner_missing: prepared owner is not registered".to_string()
                 })?;
             if current_owner.pending_transfer.as_ref() != Some(proposal) {
-                if reversed_handoff_retry_matches_current_owner(
+                let current_pid = manager
+                    .browser_pid()
+                    .or(state.attached_browser_pid)
+                    .ok_or_else(|| {
+                        "runtime_handoff_prepare_stale_retry_process_unavailable".to_string()
+                    })?;
+                let current_profile = manager
+                    .runtime_profile_name()
+                    .map(str::to_string)
+                    .or_else(|| state.attached_runtime_profile.clone())
+                    .ok_or_else(|| {
+                        "runtime_handoff_prepare_stale_retry_profile_unavailable".to_string()
+                    })?;
+                let current_process_identity =
+                    crate::process_identity::capture_process_identity(current_pid, None, None)
+                        .ok_or_else(|| {
+                            "runtime_handoff_prepare_stale_retry_process_identity_unavailable"
+                                .to_string()
+                        })?;
+                let current_profile_identity_digest =
+                    runtime_handoff_profile_digest(&current_profile)?;
+                let current_process_instance_digest =
+                    runtime_handoff_json_digest(&current_process_identity)?;
+                let current_cdp_endpoint_identity_digest =
+                    runtime_handoff_digest(manager.get_cdp_url());
+                let current_target_set_digest = runtime_handoff_target_set_digest(manager)?;
+                let descriptor_process_retired = descriptor.browser_pid.is_some_and(|pid| {
+                    matches!(
+                        runtime_handoff_process_assessment(&descriptor, pid).ownership,
+                        crate::process_identity::RuntimeProcessOwnership::Missing
+                            | crate::process_identity::RuntimeProcessOwnership::ReusedUnrelated
+                    )
+                });
+                let mut current_binding =
+                    crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                        crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(
+                            &current_owner,
+                        ),
+                    );
+                let authority = RuntimeLifecycleAuthority::new(&repository);
+                let current_lifecycle_authorized =
+                    authority.authorize_effect(&mut current_binding).is_ok();
+                let reversed_retry = reversed_handoff_retry_matches_current_owner(
                     &descriptor.session_name,
                     proposal,
                     &current_owner,
-                ) {
-                    fs::remove_file(runtime_handoff_path(&state.session_id)).map_err(|error| {
-                        format!("runtime_handoff_prepare_stale_retry_cleanup_failed: {error}")
-                    })?;
-                    state.runtime_owner_binding = Some(
+                );
+                if !reversed_retry
+                    && current_lifecycle_authorized
+                    && descriptor_process_retired
+                    && stale_handoff_current_owner_refresh_allowed(
+                        &descriptor.session_name,
+                        proposal,
+                        &current_owner,
+                        &current_profile_identity_digest,
+                        &current_process_instance_digest,
+                        &state.engine,
+                    )
+                {
+                    current_owner = match authority.transition(
+                        RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
+                            claim: current_binding.claim.clone(),
+                            cdp_endpoint_identity_digest:
+                                current_cdp_endpoint_identity_digest.clone(),
+                            target_set_digest: current_target_set_digest.clone(),
+                        },
+                    )? {
+                        crate::native::runtime_lifecycle::RuntimeLifecycleTransition::OwnerEvidenceRefreshed(
+                            owner,
+                        ) => owner,
+                        _ => {
+                            return Err(
+                                "runtime_handoff_stale_owner_refresh_outcome_mismatch".to_string(),
+                            )
+                        }
+                    };
+                    current_binding =
                         crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
                             crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(
                                 &current_owner,
                             ),
-                        ),
-                    );
+                        );
+                    authority.authorize_effect(&mut current_binding)?;
+                }
+                if reversed_retry
+                    || (current_lifecycle_authorized
+                        && stale_handoff_retry_matches_current_owner(
+                            &descriptor.session_name,
+                            proposal,
+                            &current_owner,
+                            &current_profile_identity_digest,
+                            &current_process_instance_digest,
+                            &state.engine,
+                            &current_cdp_endpoint_identity_digest,
+                            &current_target_set_digest,
+                            descriptor_process_retired,
+                        ))
+                {
+                    fs::remove_file(runtime_handoff_path(&state.session_id)).map_err(|error| {
+                        format!("runtime_handoff_prepare_stale_retry_cleanup_failed: {error}")
+                    })?;
+                    state.runtime_owner_binding = Some(current_binding);
                 } else {
                     return Err(
                         "runtime_handoff_prepare_replay_mismatch: descriptor and owner registry differ"
@@ -419,6 +506,57 @@ pub(crate) fn reversed_handoff_retry_matches_current_owner(
         && current_owner.cdp_endpoint_identity_digest
             == proposal.request.cdp_endpoint_identity_digest
         && current_owner.target_set_digest == proposal.request.target_set_digest
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn stale_handoff_current_owner_refresh_allowed(
+    descriptor_session: &str,
+    proposal: &crate::runtime_owner_transfer::OwnerTransferProposal,
+    current_owner: &crate::runtime_owner_transfer::ProfileOwner,
+    current_profile_identity_digest: &str,
+    current_process_instance_digest: &str,
+    current_browser_family: &str,
+) -> bool {
+    current_owner.pending_transfer.is_none()
+        && current_owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        && current_owner.owner_generation > proposal.previous_owner_generation
+        && current_owner.browser_id == proposal.request.logical_browser_id
+        && current_owner.daemon_session_route == descriptor_session
+        && current_owner.profile_identity_digest == proposal.request.profile_identity_digest
+        && current_owner.profile_identity_digest == current_profile_identity_digest
+        && current_owner.process_instance_digest == current_process_instance_digest
+        && current_owner.browser_family == current_browser_family
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn stale_handoff_retry_matches_current_owner(
+    descriptor_session: &str,
+    proposal: &crate::runtime_owner_transfer::OwnerTransferProposal,
+    current_owner: &crate::runtime_owner_transfer::ProfileOwner,
+    current_profile_identity_digest: &str,
+    current_process_instance_digest: &str,
+    current_browser_family: &str,
+    current_cdp_endpoint_identity_digest: &str,
+    current_target_set_digest: &str,
+    descriptor_process_retired: bool,
+) -> bool {
+    current_owner.pending_transfer.is_none()
+        && current_owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        && current_owner.owner_generation > proposal.previous_owner_generation
+        && current_owner.browser_id == proposal.request.logical_browser_id
+        && current_owner.daemon_session_route == descriptor_session
+        && current_owner.profile_identity_digest == proposal.request.profile_identity_digest
+        && current_owner.profile_identity_digest == current_profile_identity_digest
+        && current_owner.process_instance_digest == current_process_instance_digest
+        && current_owner.browser_family == current_browser_family
+        && current_owner.cdp_endpoint_identity_digest == current_cdp_endpoint_identity_digest
+        && current_owner.target_set_digest == current_target_set_digest
+        && (descriptor_process_retired
+            || (proposal.request.expected_owner_id.as_deref()
+                == Some(current_owner.owner_id.as_str())
+                && current_owner.process_instance_digest
+                    == proposal.request.process_instance_digest
+                && current_owner.browser_family == proposal.request.browser_family))
 }
 
 #[allow(clippy::too_many_arguments)]

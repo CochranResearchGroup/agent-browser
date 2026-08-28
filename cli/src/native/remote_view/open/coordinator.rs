@@ -47,6 +47,10 @@ pub(crate) struct RouteBoundOpenAttribution {
     pub(crate) caller_id: Option<String>,
     pub(crate) service_job_id: Option<String>,
     pub(crate) dashboard_deployment_generation: Option<String>,
+    /// Authenticated service identity from the current dispatch. Durable
+    /// handoff intent is a locator and never supplies these authority facts.
+    pub(crate) service_principal_id: Option<String>,
+    pub(crate) service_principal_provenance: Option<String>,
     pub(crate) authorization: RouteBoundOpenAuthorization,
 }
 
@@ -63,6 +67,8 @@ pub(crate) fn route_bound_open_attribution_from_authenticated_dispatch(
             cmd,
             "dashboardDeploymentGeneration",
         ),
+        service_principal_id: optional_command_string(cmd, "servicePrincipalId"),
+        service_principal_provenance: optional_command_string(cmd, "servicePrincipalProvenance"),
         authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
     }
 }
@@ -150,6 +156,12 @@ impl RouteBoundDirectOpenRequest {
                 command["serviceJobId"] = Value::String(service_job_id);
             }
         }
+        if let Some(service_principal_id) = attribution.service_principal_id {
+            command["servicePrincipalId"] = Value::String(service_principal_id);
+        }
+        if let Some(service_principal_provenance) = attribution.service_principal_provenance {
+            command["servicePrincipalProvenance"] = Value::String(service_principal_provenance);
+        }
         let intent = normalize_remote_view_open_intent(&command)?;
         let dry_run = remote_view_open_dry_run(&command);
         Ok(Self {
@@ -177,7 +189,7 @@ impl RouteBoundDirectOpenRequest {
         self
     }
 
-    fn command(&self) -> Value {
+    pub(crate) fn command(&self) -> Value {
         self.command.clone().into_value()
     }
 }

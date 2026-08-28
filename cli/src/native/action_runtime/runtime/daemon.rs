@@ -707,12 +707,28 @@ fn apply_existing_session_profile_selection(
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
+        if std::env::var_os("AGENT_BROWSER_DEBUG").is_some() {
+            eprintln!(
+                "[profile-selection] session={} binding=missing retained_observation={} persisted_session={} active_browser_session={}",
+                session_id,
+                retained_observation,
+                state.sessions.contains_key(&session_id),
+                state.browsers.values().any(|browser| browser
+                    .active_session_ids
+                    .iter()
+                    .any(|active_session| active_session == &session_id)),
+            );
+        }
         return if retained_observation {
             Err("existing_session_profile_identity_unproven".to_string())
         } else {
             Ok(None)
         };
     };
+    if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
+    {
+        return Ok(Some(ProfileSelectionReason::ExistingOwner));
+    }
     if !binding.effect_capable {
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
@@ -794,6 +810,140 @@ fn apply_existing_session_profile_selection(
         options.executable_path = None;
     }
     Ok(Some(ProfileSelectionReason::ExistingOwner))
+}
+
+fn apply_authenticated_orphaned_owner_recourse(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+    binding: &crate::runtime_owner_transfer::RuntimeOwnerBinding,
+) -> Result<bool, String> {
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("tab_new" | "remote_view_open" | "launch")
+    ) || command
+        .get("servicePrincipalProvenance")
+        .and_then(Value::as_str)
+        != Some("registered_capability")
+    {
+        return Ok(false);
+    }
+    let Some(principal_id) = command
+        .get("servicePrincipalId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+    let Some(profile_id) = optional_command_or_params_string(command, "runtimeProfile")
+        .or_else(|| optional_command_or_params_string(command, "profileId"))
+    else {
+        return Ok(false);
+    };
+    let Some(profile) = state.profiles.get(&profile_id) else {
+        return Ok(false);
+    };
+    let principal_active = state
+        .service_principals
+        .principals
+        .get(principal_id)
+        .is_some_and(|principal| {
+            principal.state
+                == crate::native::service_principal::ServicePrincipalState::Active
+                && principal.provenance
+                    == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
+        });
+    let capability = state
+        .service_principals
+        .profile_capabilities
+        .values()
+        .find(|capability| {
+            capability.principal_id == principal_id
+                && capability.profile_id == profile_id
+                && capability.state
+                    == crate::native::service_principal::ServiceProfileCapabilityState::Active
+        });
+    if !principal_active || capability.is_none() {
+        return Ok(false);
+    }
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            &profile_id,
+        )?);
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let principal_binding = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&profile_digest);
+    let owner_projection_absent = !state.sessions.contains_key(session_id)
+        && !state
+            .browsers
+            .contains_key(&binding.claim.logical_browser_id)
+        && !state.browsers.values().any(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|active_session| active_session == session_id)
+        });
+    // A normal owned shutdown releases the session and clears the browser's
+    // reverse session link before retained diagnostics are pruned. That exact
+    // inert projection is recoverable by the registered principal that owns
+    // the same profile capability. PID, CDP, active-session, and valid-tab
+    // evidence still fail closed, as do any foreign profile references.
+    let owner_projection_inert = state
+        .sessions
+        .get(session_id)
+        .zip(state.browsers.get(&binding.claim.logical_browser_id))
+        .is_some_and(|(session, browser)| {
+            session.profile_id.as_deref() == Some(profile_id.as_str())
+                && session.browser_ids.len() == 1
+                && session.browser_ids.first().map(String::as_str)
+                    == Some(binding.claim.logical_browser_id.as_str())
+                && matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                && session.tab_ids.is_empty()
+                && session
+                    .principal_id
+                    .as_deref()
+                    .is_none_or(|retained_principal| retained_principal == principal_id)
+                && browser.profile_id.as_deref() == Some(profile_id.as_str())
+                && browser.pid.is_none()
+                && browser.cdp_endpoint.is_none()
+                && browser.active_session_ids.is_empty()
+                && browser.tab_handles.iter().all(|handle| !handle.valid)
+        });
+    let competing_live_profile_projection = state.browsers.values().any(|browser| {
+        browser.id != binding.claim.logical_browser_id
+            && browser.profile_id.as_deref() == Some(profile_id.as_str())
+            && (browser.pid.is_some()
+                || browser.cdp_endpoint.is_some()
+                || !browser.active_session_ids.is_empty()
+                || browser.tab_handles.iter().any(|handle| handle.valid))
+    });
+    if (!owner_projection_absent && !owner_projection_inert)
+        || competing_live_profile_projection
+        || binding.claim.profile_identity_digest != profile_digest
+        || binding.claim.daemon_session_route != session_id
+        || principal_binding.is_some_and(|principal_binding| {
+            principal_binding.principal_id != principal_id
+                || principal_binding.profile_id != profile_id
+                || principal_binding.owner_generation != binding.claim.owner_generation
+        })
+    {
+        return Ok(false);
+    }
+    options.runtime_profile = Some(profile_id);
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
 }
 
 fn apply_registered_session_profile_continuity(

@@ -415,7 +415,9 @@ pub(super) async fn handle_http_request(
                 &relay_session_name,
                 &cmd,
             ) {
-                if let Err(err) = ensure_service_daemon_session(&relay_session_name).await {
+                if let Err(err) =
+                    ensure_service_daemon_session(&relay_session_name, Some(&cmd)).await
+                {
                     write_json_result(&mut stream, Err(err), "502 Bad Gateway").await;
                     return;
                 }
@@ -2072,17 +2074,60 @@ fn service_request_requires_relay_session_recovery(
         return false;
     }
     let action = command.get("action").and_then(Value::as_str);
-    let authenticated_cold_profile_acquisition = action == Some("tab_new")
-        && command
-            .get("servicePrincipalId")
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())
-        && command.get("browserId").is_none();
+    let authenticated_cold_profile_acquisition =
+        matches!(action, Some("tab_new" | "remote_view_open"))
+            && command
+                .get("servicePrincipalId")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+            && command.get("browserId").is_none();
     action == Some("service_remote_view_handoff_resolve") || authenticated_cold_profile_acquisition
 }
 
-pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<(), String> {
-    if daemon_ready(session_name) {
+fn service_daemon_session_recovery_args(
+    session_name: &str,
+    service_command: Option<&Value>,
+) -> Vec<String> {
+    let mut args = vec!["--session".to_string(), session_name.to_string()];
+    for (field, flag) in [
+        ("runtimeProfile", "--runtime-profile"),
+        ("profile", "--profile"),
+    ] {
+        if let Some(value) = service_command
+            .and_then(|command| command.get(field))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            args.push(flag.to_string());
+            args.push(value.to_string());
+        }
+    }
+    args.extend([
+        "--json".to_string(),
+        "stream".to_string(),
+        "enable".to_string(),
+    ]);
+    args
+}
+
+fn service_daemon_session_requires_lane_refresh(service_command: Option<&Value>) -> bool {
+    service_command.is_some_and(|command| {
+        ["runtimeProfile", "profile"].iter().any(|field| {
+            command
+                .get(field)
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        })
+    })
+}
+
+pub(super) async fn ensure_service_daemon_session(
+    session_name: &str,
+    service_command: Option<&Value>,
+) -> Result<(), String> {
+    if daemon_ready(session_name) && !service_daemon_session_requires_lane_refresh(service_command)
+    {
         return Ok(());
     }
 
@@ -2090,7 +2135,10 @@ pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<
         .map_err(|err| format!("Cannot resolve executable for remote-view recovery: {err}"))?;
     let mut command = tokio::process::Command::new(exe);
     command
-        .args(["--session", session_name, "--json", "stream", "enable"])
+        .args(service_daemon_session_recovery_args(
+            session_name,
+            service_command,
+        ))
         .env_remove("AGENT_BROWSER_DAEMON")
         .env_remove(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
         .env_remove("AGENT_BROWSER_DAEMON_AUTH_TOKEN")
@@ -5211,6 +5259,70 @@ mod tests {
         let relay_session = service_request_relay_session("default", body, &command);
 
         assert!(relay_session.starts_with("principal-profile-"));
+        assert!(service_request_requires_relay_session_recovery(
+            "default",
+            &relay_session,
+            &command
+        ));
+    }
+
+    #[test]
+    fn authenticated_cold_remote_view_request_recovers_its_principal_owned_daemon_lane() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:agent-browser-install".to_string(),
+            profile_id: "candidate-presentation".to_string(),
+            capability_id: "profile-capability-v1:candidate-presentation".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: std::collections::BTreeMap::from([(
+                "candidate-presentation".to_string(),
+                BrowserProfile {
+                    id: "candidate-presentation".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let body = r##"{
+            "action":"remote_view_open",
+            "runtimeProfile":"candidate-presentation",
+            "serviceName":"agent-browser-install",
+            "agentName":"codex",
+            "taskName":"candidate-presentation",
+            "params":{"url":"about:blank","viewStreamProvider":"rdp_gateway"}
+        }"##;
+
+        let command = service_request_command_with_state_and_authority(
+            body,
+            Some(&state),
+            None,
+            "default",
+            Some(&authority),
+        )
+        .unwrap();
+        let relay_session = service_request_relay_session("default", body, &command);
+
+        assert_eq!(command["action"], "remote_view_open");
+        assert!(relay_session.starts_with("principal-profile-"));
+        assert_eq!(
+            service_daemon_session_recovery_args(&relay_session, Some(&command)),
+            vec![
+                "--session",
+                relay_session.as_str(),
+                "--runtime-profile",
+                "candidate-presentation",
+                "--json",
+                "stream",
+                "enable",
+            ]
+        );
+        assert!(service_daemon_session_requires_lane_refresh(Some(&command)));
         assert!(service_request_requires_relay_session_recovery(
             "default",
             &relay_session,

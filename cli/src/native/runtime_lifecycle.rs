@@ -229,10 +229,25 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             return Err("runtime_owner_observation_only: candidate cannot issue browser effects before owner compare-and-swap".to_string());
         }
         let registry = self.repository.load_snapshot()?.runtime_owner_registry;
-        if registry.authorizes(&binding.claim) {
+        let authorizes_effect = |claim: &OwnerAuthorityClaim| {
+            registry.authorizes(claim)
+                && registry
+                    .lifecycle_records
+                    .get(&claim.logical_browser_id)
+                    .is_some_and(|lifecycle| {
+                        lifecycle.profile_identity_digest == claim.profile_identity_digest
+                            && lifecycle.owner_generation == claim.owner_generation
+                            && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready
+                            && lifecycle.cleanup_obligation_state == CleanupObligationState::Owned
+                    })
+        };
+        if authorizes_effect(&binding.claim) {
             return Ok(());
         }
-        if let Some(claim) = registry.refreshed_claim_after_reverse(&binding.claim) {
+        if let Some(claim) = registry
+            .refreshed_claim_after_reverse(&binding.claim)
+            .filter(|claim| authorizes_effect(claim))
+        {
             binding.claim = claim;
             return Ok(());
         }
@@ -902,6 +917,52 @@ pub(crate) fn complete_reconciled_close(
     Ok(record)
 }
 
+/// Reconcile a ready lane whose exact process, profile lock, browser, session,
+/// and tab projections are all absent. This is the crash/rollback counterpart
+/// to the ordinary closing-lane path and preserves the same generation CAS.
+pub(crate) fn complete_reconciled_abandoned_ready_lane(
+    registry: &mut RuntimeOwnerRegistry,
+    logical_browser_id: String,
+    profile_identity_digest: String,
+    expected_owner_generation: u64,
+    terminal_evidence: Vec<String>,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let owner = registry
+        .owner(&profile_identity_digest)
+        .filter(|owner| {
+            owner.browser_id == logical_browser_id
+                && owner.owner_generation == expected_owner_generation
+                && owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && owner.pending_transfer.is_none()
+        })
+        .cloned()
+        .ok_or_else(|| "runtime_lifecycle_abandoned_owner_mismatch".to_string())?;
+    let lifecycle = registry
+        .lifecycle_records
+        .get(&logical_browser_id)
+        .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
+    if lifecycle.profile_identity_digest != profile_identity_digest
+        || lifecycle.owner_generation != expected_owner_generation
+        || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Ready
+        || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+    {
+        return Err("runtime_lifecycle_abandoned_ready_compare_and_swap_mismatch".to_string());
+    }
+    apply_transition(
+        registry,
+        RuntimeLifecycleIntent::BeginClose {
+            claim: OwnerAuthorityClaim::from_owner(&owner),
+        },
+    )?;
+    complete_reconciled_close(
+        registry,
+        logical_browser_id,
+        profile_identity_digest,
+        expected_owner_generation,
+        terminal_evidence,
+    )
+}
+
 /// Revoke one exact ready owner inside an already locked Service State
 /// mutation while retaining lifecycle cleanup accountability.
 pub(crate) fn revoke_legacy_owner_in_registry(
@@ -1353,6 +1414,14 @@ mod tests {
             .unwrap();
         assert!(binding_slot.is_none());
 
+        let mut terminal_effect = binding.clone();
+        assert_eq!(
+            authority
+                .authorize_effect(&mut terminal_effect)
+                .unwrap_err(),
+            "runtime_owner_generation_stale: daemon is no longer the effect-capable browser owner"
+        );
+
         let mut observation_binding = RuntimeOwnerBinding::observation_only(binding.claim.clone());
         assert_eq!(
             authority
@@ -1382,6 +1451,60 @@ mod tests {
                 .unwrap(),
             RuntimeEffectAdmission::TerminalReplacement
         );
+    }
+
+    #[test]
+    fn terminal_lane_reopens_the_same_managed_process_as_a_new_generation() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let registration = ManagedLaneRegistration {
+            logical_browser_id: "session:reopened".to_string(),
+            profile_root: std::env::temp_dir().join("agent-browser-lifecycle-reopen"),
+            daemon_session_route: "reopened".to_string(),
+            process_group_id: Some(4250),
+            process_identity: crate::process_identity::RecordedProcessIdentity {
+                pid: 4250,
+                start_token: "linux:boot:4250".to_string(),
+                executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            },
+            browser_family: "chrome".to_string(),
+            cdp_endpoint: "ws://127.0.0.1:9557/devtools/browser/reopened".to_string(),
+            target_ids: vec!["target-reopened".to_string()],
+        };
+        let binding = authority
+            .register_managed_lane(registration.clone())
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::BeginClose {
+                claim: binding.claim.clone(),
+            })
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::CompleteClose {
+                logical_browser_id: binding.claim.logical_browser_id.clone(),
+                profile_identity_digest: binding.claim.profile_identity_digest.clone(),
+                expected_owner_generation: binding.claim.owner_generation,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+            })
+            .unwrap();
+
+        let replacement = authority.register_managed_lane(registration).unwrap();
+        assert_eq!(replacement.claim.owner_generation, 2);
+        authority
+            .authorize_effect(&mut replacement.clone())
+            .unwrap();
+        let state = repository.load_snapshot().unwrap();
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["session:reopened"];
+        assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Owned
+        );
+        assert!(lifecycle.terminal_evidence.is_empty());
     }
 
     #[test]

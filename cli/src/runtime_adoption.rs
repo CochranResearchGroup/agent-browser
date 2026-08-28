@@ -1366,7 +1366,7 @@ fn runtime_profile_readback(
                 format!("runtime-profile:{}", profile.runtime_profile),
                 format!("profile-digest:{profile_digest}"),
             ];
-            if let Some(pid) = profile.browser_pid {
+            if let Some(pid) = verified_runtime_profile_pid(profile) {
                 aliases.push(format!("pid:{pid}"));
             }
             if let Some(port) = profile.devtools_port {
@@ -1417,6 +1417,15 @@ fn runtime_profile_has_observation(
         || profile.devtools_reachable
         || profile.ws_url.is_some()
         || profile.launch_record.is_some()
+}
+
+fn verified_runtime_profile_pid(
+    profile: &crate::runtime_profile::RuntimeProfileSummary,
+) -> Option<u32> {
+    profile
+        .browser_alive
+        .then_some(profile.browser_pid)
+        .flatten()
 }
 
 fn profile_owner_readback(
@@ -1712,7 +1721,7 @@ fn process_identity_readback(
         }
     }
     for profile in profiles {
-        let Some(pid) = profile.browser_pid else {
+        let Some(pid) = verified_runtime_profile_pid(profile) else {
             continue;
         };
         let seed = seeds.entry(pid).or_default();
@@ -1854,7 +1863,7 @@ fn profile_lock_readback(
                 format!("runtime-profile:{}", profile.runtime_profile),
                 format!("profile-digest:{digest}"),
             ];
-            if let Some(pid) = profile.browser_pid {
+            if let Some(pid) = verified_runtime_profile_pid(profile) {
                 aliases.push(format!("pid:{pid}"));
             }
             if let Some(port) = profile.devtools_port {
@@ -1904,7 +1913,7 @@ fn cdp_target_readback(
             format!("runtime-profile:{}", profile.runtime_profile),
             format!("profile-digest:{digest}"),
         ];
-        if let Some(pid) = profile.browser_pid {
+        if let Some(pid) = verified_runtime_profile_pid(profile) {
             aliases.push(format!("pid:{pid}"));
         }
         if let Some(port) = status.devtools_port {
@@ -4410,6 +4419,64 @@ mod tests {
         assert!(readbacks
             .iter()
             .all(|readback| readback.observations.len() == 1));
+        assert!(readbacks.iter().all(|readback| readback.observations[0]
+            .aliases
+            .iter()
+            .all(|alias| alias != "pid:424242")));
+    }
+
+    #[test]
+    fn retained_profile_pid_reuse_does_not_join_an_unrelated_live_process() {
+        use crate::native::service_model::{BrowserProcess, ServiceState};
+
+        let profile = crate::runtime_profile::RuntimeProfileSummary {
+            runtime_profile: "retained-reused-pid".to_string(),
+            user_data_dir: std::env::temp_dir()
+                .join("agent-browser-retained-reused-pid-profile")
+                .display()
+                .to_string(),
+            state_path: std::env::temp_dir()
+                .join("agent-browser-retained-reused-pid-state.json")
+                .display()
+                .to_string(),
+            configured: false,
+            default: false,
+            browser_pid: Some(std::process::id()),
+            browser_alive: false,
+            headed: Some(true),
+            launch_mode: Some("automation".to_string()),
+            devtools_port: None,
+            devtools_reachable: false,
+            ws_url: None,
+            launch_record: None,
+        };
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "current-browser".to_string(),
+            BrowserProcess {
+                id: "current-browser".to_string(),
+                pid: Some(std::process::id()),
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = process_identity_readback(
+            &state,
+            std::slice::from_ref(&profile),
+            &serde_json::json!({"sessions": []}),
+            &serde_json::json!({"runtimes": []}),
+        )
+        .unwrap();
+
+        assert_eq!(readback.observations.len(), 1);
+        assert!(readback.observations[0]
+            .aliases
+            .contains(&"browser:current-browser".to_string()));
+        assert!(readback.observations[0]
+            .aliases
+            .iter()
+            .all(|alias| alias != "runtime-profile:retained-reused-pid"));
+        assert_eq!(readback.observations[0].profile_identity_digest, None);
     }
 
     fn census_round_from_corpus(

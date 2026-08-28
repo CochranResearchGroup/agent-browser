@@ -149,8 +149,10 @@ pub(crate) fn stage_service_state_migration(
 /// Orphaned and released display or route rows are historical evidence, not
 /// live browser authority. A placeholder is allowed only when every reference
 /// to the missing browser is terminal or already-invalid, no process identity
-/// exists, any retained owner is unique and unbound from a principal, and no
-/// viewer or controller lease can still authorize interaction.
+/// exists, any retained owner is unique with no pending transfer, and no viewer
+/// or controller lease can still authorize interaction. A principal binding is
+/// preserved only when the registered principal and capability are both active
+/// and the binding still matches the exact owner generation.
 fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .display_allocations
@@ -175,10 +177,7 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
             owners.is_empty()
                 || (owners.len() == 1
                     && owners[0].pending_transfer.is_none()
-                    && !state
-                        .runtime_owner_registry
-                        .principal_bindings
-                        .contains_key(&owners[0].profile_identity_digest))
+                    && owner_principal_binding_is_migration_safe(state, owners[0]))
         })
         .filter(|browser_id| {
             !state
@@ -193,24 +192,22 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
                 .filter(|allocation| allocation.owner_browser_id.as_ref() == Some(*browser_id))
                 .collect::<Vec<_>>();
             allocations.iter().all(|allocation| {
-                allocation.boot_epoch.is_none()
-                    && allocation.readiness.as_ref().is_some_and(|readiness| {
-                        (allocation.state == "orphaned"
-                            && readiness.get("state").and_then(Value::as_str) == Some("orphaned")
-                            && readiness.get("reason").and_then(Value::as_str)
-                                == Some("owner_browser_not_ready"))
-                            || (allocation.state == "released"
-                                && readiness.get("state").and_then(Value::as_str)
-                                    == Some("released")
-                                && matches!(
-                                    readiness.get("reason").and_then(Value::as_str),
-                                    Some(
-                                        "operator_requested_close"
-                                            | "duplicate_browser_record_merged"
-                                            | "route_switch_parking"
-                                    )
-                                ))
-                    })
+                allocation.readiness.as_ref().is_some_and(|readiness| {
+                    (allocation.state == "orphaned"
+                        && readiness.get("state").and_then(Value::as_str) == Some("orphaned")
+                        && readiness.get("reason").and_then(Value::as_str)
+                            == Some("owner_browser_not_ready"))
+                        || (allocation.state == "released"
+                            && readiness.get("state").and_then(Value::as_str) == Some("released")
+                            && matches!(
+                                readiness.get("reason").and_then(Value::as_str),
+                                Some(
+                                    "operator_requested_close"
+                                        | "duplicate_browser_record_merged"
+                                        | "route_switch_parking"
+                                )
+                            ))
+                })
             })
         })
         .filter(|browser_id| {
@@ -237,7 +234,10 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
                         && route.controller_lease_id.is_none()
                         && ((route.state == "orphaned" && route.controller_epoch == 0)
                             || (route.state == "released"
-                                && route.last_provider_event.as_deref() == Some("route_released")))
+                                && matches!(
+                                    route.last_provider_event.as_deref(),
+                                    Some("route_released" | "route_released_after_browser_close")
+                                )))
                 })
         })
         .cloned()
@@ -303,6 +303,46 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
                 });
         }
     }
+}
+
+fn owner_principal_binding_is_migration_safe(
+    state: &ServiceState,
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+) -> bool {
+    let Some(binding) = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&owner.profile_identity_digest)
+    else {
+        return true;
+    };
+    state
+        .runtime_owner_registry
+        .principal_binding_is_current(Some(binding))
+        && binding.profile_identity_digest == owner.profile_identity_digest
+        && binding.owner_generation == owner.owner_generation
+        && binding.provenance
+            == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
+        && state
+            .service_principals
+            .principals
+            .get(&binding.principal_id)
+            .is_some_and(|principal| {
+                principal.state
+                    == crate::native::service_principal::ServicePrincipalState::Active
+                    && principal.provenance
+                        == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
+            })
+        && state
+            .service_principals
+            .profile_capabilities
+            .get(&binding.capability_id)
+            .is_some_and(|capability| {
+                capability.principal_id == binding.principal_id
+                    && capability.profile_id == binding.profile_id
+                    && capability.state
+                        == crate::native::service_principal::ServiceProfileCapabilityState::Active
+            })
 }
 
 /// Preserve an inert legacy lease whose profile row was never persisted.
@@ -1006,10 +1046,12 @@ mod tests {
             "displayAllocations": {
                 "display:dashboard": {
                     "id": "display:dashboard",
+                    "bootEpoch": "legacy-boot-epoch",
                     "ownerBrowserId": "session:dashboard-service-backend",
                     "ownerSessionId": "dashboard-service-backend",
                     "profileId": "bill-soylei",
                     "state": "released",
+                    "pidHints": { "browserPid": 34544 },
                     "readiness": {
                         "state": "released",
                         "reason": "operator_requested_close"
@@ -1047,11 +1089,56 @@ mod tests {
                     "viewerLeaseIds": [],
                     "controllerLeaseId": null,
                     "controllerEpoch": 4,
-                    "lastProviderEvent": "route_released"
+                    "lastProviderEvent": "route_released_after_browser_close"
                 }
             }
         })
         .to_string();
+
+        let mut state = read_service_state(&raw).unwrap();
+        let profile_identity_digest = "1".repeat(64);
+        let owner = crate::runtime_owner_transfer::ProfileOwner {
+            owner_id: "owner-dashboard-service-backend".to_string(),
+            profile_identity_digest: profile_identity_digest.clone(),
+            state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+            owner_generation: 2,
+            browser_id: "session:dashboard-service-backend".to_string(),
+            daemon_session_route: "dashboard-service-backend".to_string(),
+            process_instance_digest: "2".repeat(64),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "3".repeat(64),
+            target_set_digest: "4".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+        let registered = crate::native::service_principal::register_profile_capability(
+            &mut state.service_principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: "agent-browser-install".to_string(),
+                display_name: Some("Agent Browser installer".to_string()),
+                profile_id: "bill-soylei".to_string(),
+                registered_at: Some("2026-08-28T00:00:00Z".to_string()),
+                registered_by: Some("operator".to_string()),
+            },
+            "synthetic-installer-capability-more-than-thirty-two-characters",
+        )
+        .unwrap();
+        state
+            .runtime_owner_registry
+            .bind_principal_authority(
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: registered.principal.principal_id,
+                    profile_id: registered.capability.profile_id,
+                    profile_identity_digest,
+                    capability_id: registered.capability.capability_id,
+                    provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: 2,
+                },
+            )
+            .unwrap();
+        let raw = serde_json::to_string(&state).unwrap();
 
         let staged = stage_service_state_migration(&raw).unwrap();
         let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();

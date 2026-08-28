@@ -717,6 +717,202 @@ fn test_existing_session_rejects_retained_identity_without_current_owner() {
 }
 
 #[test]
+fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("authenticated-orphan-owner-recourse-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "odollo-fedex";
+    let session_id = "principal-profile-odollo-fedex";
+    let principal_id = "odollo-fulfillment";
+    let user_data_dir = home.join(profile_id);
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "orphaned-owner-odollo-fedex".to_string(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+            &user_data_dir,
+        )
+        .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 4,
+        browser_id: format!("session:{session_id}"),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            owner,
+        ),
+        ..ServiceState::default()
+    };
+    crate::native::service_principal::register_profile_capability(
+        &mut state.service_principals,
+        crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            principal_id: principal_id.to_string(),
+            display_name: Some("Odollo fulfillment".to_string()),
+            profile_id: profile_id.to_string(),
+            registered_at: Some("2026-08-28T00:00:00Z".to_string()),
+            registered_by: Some("operator".to_string()),
+        },
+        "synthetic-odollo-profile-capability-more-than-thirty-two-characters",
+    )
+    .unwrap();
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    let command = json!({
+        "action": "remote_view_open",
+        "runtimeProfile": profile_id,
+        "serviceName": "odollo-fulfillment",
+        "servicePrincipalId": principal_id,
+        "servicePrincipalProvenance": "registered_capability",
+    });
+    let mut options = LaunchOptions::default();
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+    assert_eq!(selection, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+
+    let mut foreign_options = LaunchOptions::default();
+    let foreign_error = apply_service_profile_selection(
+        &mut foreign_options,
+        &json!({
+            "action": "remote_view_open",
+            "runtimeProfile": profile_id,
+            "serviceName": "foreign-service",
+            "servicePrincipalId": "foreign-principal",
+            "servicePrincipalProvenance": "registered_capability",
+        }),
+        Some(session_id),
+    )
+    .unwrap_err();
+    assert_eq!(foreign_error, "existing_session_profile_identity_unproven");
+}
+
+#[test]
+fn authenticated_principal_recovers_exact_released_terminal_projection() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("authenticated-terminal-owner-recourse-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "odollo-fedex";
+    let session_id = "principal-profile-odollo-fedex";
+    let browser_id = format!("session:{session_id}");
+    let principal_id = "odollo-fulfillment";
+    let user_data_dir = home.join(profile_id);
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "released-owner-odollo-fedex".to_string(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+            &user_data_dir,
+        )
+        .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 5,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                lease: LeaseState::Released,
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![browser_id.clone()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            browser_id.clone(),
+            BrowserProcess {
+                id: browser_id,
+                profile_id: Some(profile_id.to_string()),
+                health: ServiceBrowserHealth::Degraded,
+                ..BrowserProcess::default()
+            },
+        )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            owner,
+        ),
+        ..ServiceState::default()
+    };
+    crate::native::service_principal::register_profile_capability(
+        &mut state.service_principals,
+        crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            principal_id: principal_id.to_string(),
+            display_name: Some("Odollo fulfillment".to_string()),
+            profile_id: profile_id.to_string(),
+            registered_at: Some("2026-08-28T00:00:00Z".to_string()),
+            registered_by: Some("operator".to_string()),
+        },
+        "synthetic-odollo-profile-capability-more-than-thirty-two-characters",
+    )
+    .unwrap();
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    let command = json!({
+        "action": "remote_view_open",
+        "runtimeProfile": profile_id,
+        "serviceName": "odollo-fulfillment",
+        "servicePrincipalId": principal_id,
+        "servicePrincipalProvenance": "registered_capability",
+    });
+    let mut options = LaunchOptions::default();
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+    assert_eq!(selection, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+
+    state
+        .browsers
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .pid = Some(42);
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut live_options = LaunchOptions::default();
+    let live_error =
+        apply_service_profile_selection(&mut live_options, &command, Some(session_id)).unwrap_err();
+    assert_eq!(live_error, "existing_session_profile_identity_inconsistent");
+}
+
+#[test]
 fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("registered-session-owner-exit-home");
