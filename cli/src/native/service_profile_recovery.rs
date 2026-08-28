@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::service_model::ServiceState;
+use super::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
@@ -127,6 +128,21 @@ pub(crate) struct RecoveryReceipt {
     pub(crate) compensation_result: String,
     pub(crate) final_state_revision: u64,
     pub(crate) acquisition_retry_state: ProfileAcquisitionState,
+    pub(crate) browser_id: String,
+    pub(crate) daemon_session_route: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfileAcquisitionRetryResult {
+    pub(crate) browser_id: String,
+    pub(crate) daemon_session_route: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecoveryApplyOutcome {
+    pub(crate) receipt: RecoveryReceipt,
+    pub(crate) acquisition: ProfileAcquisitionOutcome,
+    pub(crate) replayed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,6 +191,12 @@ pub(crate) fn plan_terminal_owner_recovery(
         .lifecycle_records
         .get(&owner.browser_id)
         .ok_or_else(|| "profile_recovery_lifecycle_missing".to_string())?;
+    let active_profile_lease_session_ids =
+        active_profile_lease_session_ids(state, &intent.profile_id);
+    let current_process_proven = state
+        .browsers
+        .get(&owner.browser_id)
+        .is_some_and(|browser| browser.pid.is_some());
     let exact_terminal = lifecycle.profile_identity_digest == profile_identity_digest
         && lifecycle.logical_browser_id == owner.browser_id
         && lifecycle.owner_generation == owner.owner_generation
@@ -188,6 +210,8 @@ pub(crate) fn plan_terminal_owner_recovery(
             .terminal_evidence
             .iter()
             .any(|evidence| evidence == "profile_lock_released")
+        && active_profile_lease_session_ids.is_empty()
+        && !current_process_proven
         && owner.pending_transfer.is_none();
     if !exact_terminal {
         return Ok(blocked_outcome(owner.browser_id.clone(), lifecycle));
@@ -308,6 +332,238 @@ pub(crate) fn plan_terminal_owner_recovery(
     })
 }
 
+pub(crate) fn apply_terminal_owner_recovery<R: ServiceStateRepository>(
+    repository: &R,
+    plan: &RecoveryPlan,
+    now: &str,
+    retry_acquisition: impl FnOnce(
+        &ProfileAcquisitionIntent,
+    ) -> Result<ProfileAcquisitionRetryResult, String>,
+) -> Result<RecoveryApplyOutcome, String> {
+    verify_plan_integrity(plan)?;
+    let snapshot = repository.load_snapshot()?;
+    if let Some(receipt) = snapshot.profile_recovery_receipts.get(&plan.recovery_id) {
+        return replay_outcome(plan, receipt);
+    }
+    validate_plan_preconditions(&snapshot, plan, now)?;
+
+    let acquired = retry_acquisition(&plan.original_intent)?;
+    repository.mutate(|state| {
+        if let Some(receipt) = state.profile_recovery_receipts.get(&plan.recovery_id) {
+            return replay_outcome(plan, receipt);
+        }
+        let owner = state
+            .runtime_owner_registry
+            .owner(&plan.identities.profile_identity_digest)
+            .ok_or_else(|| "profile_recovery_postcondition_owner_missing".to_string())?;
+        let expected_generation = plan
+            .identities
+            .lifecycle_owner_generation
+            .checked_add(1)
+            .ok_or_else(|| "profile_recovery_owner_generation_exhausted".to_string())?;
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get(&owner.browser_id)
+            .ok_or_else(|| "profile_recovery_postcondition_lifecycle_missing".to_string())?;
+        if owner.owner_generation != expected_generation
+            || owner.browser_id != acquired.browser_id
+            || owner.daemon_session_route != acquired.daemon_session_route
+            || lifecycle.profile_identity_digest != plan.identities.profile_identity_digest
+            || lifecycle.owner_generation != expected_generation
+            || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Ready
+            || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+        {
+            return Err("profile_recovery_postcondition_mismatch".to_string());
+        }
+        let receipt = RecoveryReceipt {
+            schema_version: PROFILE_RECOVERY_RECEIPT_SCHEMA_V1.to_string(),
+            recovery_id: plan.recovery_id.clone(),
+            plan_id: plan.plan_id.clone(),
+            terminal_result: "applied".to_string(),
+            precondition_comparison: "matched".to_string(),
+            attempted_operation_ids: plan
+                .actions
+                .iter()
+                .map(|action| action.action_id.clone())
+                .collect(),
+            compensation_result: "not_required".to_string(),
+            final_state_revision: state.runtime_owner_registry.revision,
+            acquisition_retry_state: ProfileAcquisitionState::Acquired,
+            browser_id: acquired.browser_id.clone(),
+            daemon_session_route: acquired.daemon_session_route.clone(),
+        };
+        state
+            .profile_recovery_receipts
+            .insert(plan.recovery_id.clone(), receipt.clone());
+        Ok(RecoveryApplyOutcome {
+            acquisition: acquired_outcome(&receipt),
+            receipt,
+            replayed: false,
+        })
+    })
+}
+
+fn validate_plan_preconditions(
+    state: &ServiceState,
+    plan: &RecoveryPlan,
+    now: &str,
+) -> Result<(), String> {
+    let now = chrono::DateTime::parse_from_rfc3339(now)
+        .map_err(|_| "profile_recovery_now_invalid".to_string())?;
+    let expires_at = chrono::DateTime::parse_from_rfc3339(&plan.expires_at)
+        .map_err(|_| "profile_recovery_expiry_invalid".to_string())?;
+    if now >= expires_at {
+        return Err("profile_recovery_plan_expired".to_string());
+    }
+    if state.runtime_owner_registry.revision != plan.service_state_revision {
+        return Err("profile_recovery_plan_stale".to_string());
+    }
+    let profile = state
+        .profiles
+        .get(&plan.identities.profile_id)
+        .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
+    let profile_path = profile
+        .user_data_dir
+        .as_deref()
+        .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(
+        std::path::Path::new(profile_path),
+    )?;
+    let owner = state
+        .runtime_owner_registry
+        .owner(&plan.identities.profile_identity_digest)
+        .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
+    let lifecycle = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(&plan.identities.durable_browser_id)
+        .ok_or_else(|| "profile_recovery_plan_stale".to_string())?;
+    let active_profile_lease_session_ids =
+        active_profile_lease_session_ids(state, &plan.identities.profile_id);
+    let current_process_proven = state
+        .browsers
+        .get(&plan.identities.durable_browser_id)
+        .is_some_and(|browser| browser.pid.is_some());
+    let exact = profile_digest == plan.identities.profile_identity_digest
+        && plan.original_intent.principal_id == plan.identities.principal_id
+        && plan.original_intent.profile_id == plan.identities.profile_id
+        && owner.owner_id == plan.identities.lifecycle_owner_id
+        && owner.owner_generation == plan.identities.lifecycle_owner_generation
+        && owner.browser_id == plan.identities.durable_browser_id
+        && owner.daemon_session_route == plan.identities.daemon_session_route
+        && owner.process_instance_digest == plan.identities.process_instance_digest
+        && owner.pending_transfer.is_none()
+        && lifecycle.profile_identity_digest == plan.identities.profile_identity_digest
+        && lifecycle.owner_generation == plan.identities.lifecycle_owner_generation
+        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "exact_process_exited")
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "profile_lock_released")
+        && active_profile_lease_session_ids.is_empty()
+        && !current_process_proven;
+    if !exact {
+        return Err("profile_recovery_plan_stale".to_string());
+    }
+    Ok(())
+}
+
+fn active_profile_lease_session_ids(state: &ServiceState, profile_id: &str) -> Vec<String> {
+    state
+        .sessions
+        .values()
+        .filter(|session| {
+            session.profile_id.as_deref() == Some(profile_id)
+                && matches!(
+                    session.lease,
+                    super::service_model::LeaseState::Shared
+                        | super::service_model::LeaseState::Exclusive
+                        | super::service_model::LeaseState::HumanTakeover
+                )
+        })
+        .map(|session| session.id.clone())
+        .collect()
+}
+
+fn verify_plan_integrity(plan: &RecoveryPlan) -> Result<(), String> {
+    let action = plan
+        .actions
+        .first()
+        .filter(|_| plan.actions.len() == 1)
+        .ok_or_else(|| "profile_recovery_plan_invalid".to_string())?;
+    let expected_plan_id = digest_json(&(
+        PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+        &plan.recovery_id,
+        plan.service_state_revision,
+        &plan.identities,
+        &plan.dominant_blocker,
+        action,
+        &plan.original_intent,
+        plan.created_at.as_str(),
+        plan.expires_at.as_str(),
+    ))?;
+    let expected_seal = digest_json(&(
+        &plan.plan_id,
+        &plan.recovery_id,
+        &plan.idempotency_key_digest,
+        plan.service_state_revision,
+        &plan.identities,
+        &plan.dominant_blocker,
+        &plan.evidence,
+        action,
+        &plan.original_intent,
+        plan.created_at.as_str(),
+        plan.expires_at.as_str(),
+    ))?;
+    if plan.schema_version != PROFILE_RECOVERY_PLAN_SCHEMA_V1
+        || plan.plan_id != expected_plan_id
+        || plan.integrity_seal != expected_seal
+    {
+        return Err("profile_recovery_plan_integrity_mismatch".to_string());
+    }
+    Ok(())
+}
+
+fn replay_outcome(
+    plan: &RecoveryPlan,
+    receipt: &RecoveryReceipt,
+) -> Result<RecoveryApplyOutcome, String> {
+    if receipt.plan_id != plan.plan_id
+        || receipt.recovery_id != plan.recovery_id
+        || receipt.terminal_result != "applied"
+    {
+        return Err("profile_recovery_receipt_conflict".to_string());
+    }
+    Ok(RecoveryApplyOutcome {
+        acquisition: acquired_outcome(receipt),
+        receipt: receipt.clone(),
+        replayed: true,
+    })
+}
+
+fn acquired_outcome(receipt: &RecoveryReceipt) -> ProfileAcquisitionOutcome {
+    ProfileAcquisitionOutcome {
+        schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
+        state: ProfileAcquisitionState::Acquired,
+        dominant_blocker: None,
+        automatic: true,
+        browser_id: Some(receipt.browser_id.clone()),
+        daemon_session_route: Some(receipt.daemon_session_route.clone()),
+        recovery: None,
+        next_action: None,
+        evidence: vec![RecoveryEvidence {
+            code: "recovery_receipt_persisted".to_string(),
+            subject_id: receipt.recovery_id.clone(),
+        }],
+    }
+}
+
 fn blocked_outcome(
     browser_id: String,
     lifecycle: &crate::runtime_owner_transfer::RuntimeLifecycleRecord,
@@ -350,9 +606,14 @@ fn digest_json(value: &impl Serialize) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
-    use crate::native::service_model::BrowserProfile;
+    use crate::native::runtime_lifecycle::{ManagedLaneRegistration, RuntimeLifecycleAuthority};
+    use crate::native::service_model::{
+        BrowserProcess, BrowserProfile, BrowserSession, LeaseState,
+    };
+    use crate::native::service_store::ServiceStateRepository;
     use crate::runtime_owner_transfer::{
         ProfileOwner, ProfileOwnerState, RuntimeLifecycleRecord, RuntimeOwnerRegistry,
     };
@@ -422,6 +683,32 @@ mod tests {
             agent_name: "last30days-agent".to_string(),
             task_name: "acquire-facebook-profile".to_string(),
             target_service_ids: vec!["facebook".to_string()],
+        }
+    }
+
+    #[derive(Clone)]
+    struct MemoryRepository(Arc<Mutex<ServiceState>>);
+
+    impl MemoryRepository {
+        fn new(state: ServiceState) -> Self {
+            Self(Arc::new(Mutex::new(state)))
+        }
+    }
+
+    impl ServiceStateRepository for MemoryRepository {
+        fn load_snapshot(&self) -> Result<ServiceState, String> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+
+        fn mutate<T>(
+            &self,
+            mutator: impl FnOnce(&mut ServiceState) -> Result<T, String>,
+        ) -> Result<T, String> {
+            let mut state = self.0.lock().unwrap();
+            let mut candidate = state.clone();
+            let result = mutator(&mut candidate)?;
+            *state = candidate;
+            Ok(result)
         }
     }
 
@@ -496,5 +783,178 @@ mod tests {
         );
         assert_eq!(outcome.evidence[0].code, "profile_lock_released");
         assert!(outcome.recovery.is_none());
+    }
+
+    #[test]
+    fn apply_retries_once_persists_receipt_and_replays_without_effect() {
+        let repository = MemoryRepository::new(state());
+        let plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-apply-1",
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        let profile_root = std::path::PathBuf::from("/tmp/agent-browser-p137/recovery-contract");
+        let first =
+            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
+                let authority = RuntimeLifecycleAuthority::new(&repository);
+                let binding = authority.register_managed_lane(ManagedLaneRegistration {
+                    logical_browser_id: "session:replacement-browser".to_string(),
+                    profile_root,
+                    daemon_session_route: "replacement-route".to_string(),
+                    process_group_id: Some(7137),
+                    process_identity: crate::process_identity::RecordedProcessIdentity {
+                        pid: 7137,
+                        start_token: "linux:boot:7137".to_string(),
+                        executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                        browser_family: Some("chrome".to_string()),
+                    },
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint: "ws://127.0.0.1:9731/devtools/browser/replacement".to_string(),
+                    target_ids: vec!["facebook".to_string()],
+                })?;
+                Ok(ProfileAcquisitionRetryResult {
+                    browser_id: binding.claim.logical_browser_id,
+                    daemon_session_route: binding.claim.daemon_session_route,
+                })
+            })
+            .unwrap();
+
+        assert!(!first.replayed);
+        assert_eq!(first.acquisition.state, ProfileAcquisitionState::Acquired);
+        assert_eq!(first.receipt.terminal_result, "applied");
+        assert_eq!(first.receipt.browser_id, "session:replacement-browser");
+        assert_eq!(first.receipt.daemon_session_route, "replacement-route");
+        let persisted = repository.load_snapshot().unwrap();
+        assert_eq!(
+            persisted
+                .profile_recovery_receipts
+                .get(&plan.recovery_id)
+                .unwrap(),
+            &first.receipt
+        );
+        let owner = persisted
+            .runtime_owner_registry
+            .owner(&plan.identities.profile_identity_digest)
+            .unwrap();
+        assert_eq!(owner.owner_generation, 56);
+        assert_eq!(owner.browser_id, "session:replacement-browser");
+
+        let replay =
+            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:02:00Z", |_| {
+                panic!("receipt replay must not retry acquisition")
+            })
+            .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt, first.receipt);
+    }
+
+    #[test]
+    fn stale_plan_fails_before_retry_effect() {
+        let repository = MemoryRepository::new(state());
+        let plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-stale-1",
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry.revision += 1;
+                Ok(())
+            })
+            .unwrap();
+        let retries = std::cell::Cell::new(0);
+
+        let error =
+            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
+                retries.set(retries.get() + 1);
+                Err("must not run".to_string())
+            })
+            .unwrap_err();
+
+        assert_eq!(error, "profile_recovery_plan_stale");
+        assert_eq!(retries.get(), 0);
+        assert!(repository
+            .load_snapshot()
+            .unwrap()
+            .profile_recovery_receipts
+            .is_empty());
+    }
+
+    #[test]
+    fn altered_seal_fails_before_retry_effect() {
+        let repository = MemoryRepository::new(state());
+        let mut plan = plan_terminal_owner_recovery(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-seal-1",
+        )
+        .unwrap()
+        .recovery
+        .unwrap();
+        plan.identities.daemon_session_route = "tampered-route".to_string();
+
+        let error =
+            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
+                panic!("invalid seal must fail before retry")
+            })
+            .unwrap_err();
+
+        assert_eq!(error, "profile_recovery_plan_integrity_mismatch");
+    }
+
+    #[test]
+    fn live_process_or_active_profile_lease_blocks_recovery_planning() {
+        let mut live_process = state();
+        live_process.browsers.insert(
+            "session:durable-browser".to_string(),
+            BrowserProcess {
+                id: "session:durable-browser".to_string(),
+                profile_id: Some("last30days-facebook".to_string()),
+                pid: Some(9137),
+                ..BrowserProcess::default()
+            },
+        );
+        let live_outcome = plan_terminal_owner_recovery(
+            &live_process,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-live-1",
+        )
+        .unwrap();
+        assert_eq!(live_outcome.state, ProfileAcquisitionState::Blocked);
+
+        let mut active_lease = state();
+        active_lease.sessions.insert(
+            "foreign-session".to_string(),
+            BrowserSession {
+                id: "foreign-session".to_string(),
+                principal_id: Some("principal:foreign".to_string()),
+                profile_id: Some("last30days-facebook".to_string()),
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        let lease_outcome = plan_terminal_owner_recovery(
+            &active_lease,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-lease-1",
+        )
+        .unwrap();
+        assert_eq!(lease_outcome.state, ProfileAcquisitionState::Blocked);
     }
 }

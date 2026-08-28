@@ -98,7 +98,7 @@
     "recoveryReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "recoveryId", "planId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState"],
+      "required": ["schemaVersion", "recoveryId", "planId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState", "browserId", "daemonSessionRoute"],
       "properties": {
         "schemaVersion": { "const": "agent-browser.profile-recovery-receipt.v1" },
         "recoveryId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
@@ -108,7 +108,9 @@
         "attemptedOperationIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
         "compensationResult": { "type": "string", "minLength": 1 },
         "finalStateRevision": { "type": "integer", "minimum": 0 },
-        "acquisitionRetryState": { "$ref": "#/$defs/profileAcquisitionState" }
+        "acquisitionRetryState": { "$ref": "#/$defs/profileAcquisitionState" },
+        "browserId": { "type": "string", "minLength": 1 },
+        "daemonSessionRoute": { "type": "string", "minLength": 1 }
       }
     },
     "profileAcquisitionOutcome": {

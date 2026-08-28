@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `first_packet_active_slice_a_contract_and_fixture_seam`
+Execution state: `first_packet_active_slice_b_recovery_apply_core`
 
 Lane: P137
 

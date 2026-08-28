@@ -1132,15 +1132,35 @@ fn lifecycle_replacement_decision(
             && record.cleanup_obligation_state
                 == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
     });
-    let terminal_process_absence_proven = lifecycle.is_some_and(|record| {
+    let terminal_process_exit_recorded = lifecycle.is_some_and(|record| {
         record
             .terminal_evidence
             .iter()
             .any(|evidence| evidence == "exact_process_exited")
     });
+    let current_process_proven = owner.is_some_and(|owner| {
+        service_state
+            .browsers
+            .get(&owner.browser_id)
+            .is_some_and(|browser| browser.pid.is_some())
+    });
+    let terminal_process_absence_proven = terminal_process_exit_recorded && !current_process_proven;
+    let active_profile_lease_session_ids = service_state
+        .sessions
+        .values()
+        .filter(|session| {
+            session.profile_id.as_deref() == Some(profile.id.as_str())
+                && matches!(
+                    session.lease,
+                    LeaseState::Shared | LeaseState::Exclusive | LeaseState::HumanTakeover
+                )
+        })
+        .map(|session| session.id.clone())
+        .collect::<Vec<_>>();
     let replacement_route = owner.zip(owner_lifecycle).and_then(|(owner, record)| {
         (terminal_cleanup_satisfied
             && terminal_process_absence_proven
+            && active_profile_lease_session_ids.is_empty()
             && record.logical_browser_id == owner.browser_id
             && record.owner_generation == owner.owner_generation)
             .then(|| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
@@ -1154,6 +1174,8 @@ fn lifecycle_replacement_decision(
         None if owner.is_none() => "no_lifecycle_owner",
         None => "lifecycle_owner_record_missing",
         Some(_) if replacement_route.is_some() => "terminal_cleanup_satisfied",
+        Some(_) if current_process_proven => "terminal_process_still_live",
+        Some(_) if !active_profile_lease_session_ids.is_empty() => "terminal_profile_lease_active",
         Some(_) if terminal_cleanup_satisfied => "terminal_replacement_route_inconsistent",
         Some(record)
             if record.lifecycle_state
@@ -1183,6 +1205,7 @@ fn lifecycle_replacement_decision(
         "lifecycleState": lifecycle.map(|record| record.lifecycle_state),
         "cleanupObligationState": lifecycle.map(|record| record.cleanup_obligation_state),
         "processAbsenceProven": terminal_process_absence_proven,
+        "activeProfileLeaseSessionIds": active_profile_lease_session_ids,
         "terminalEvidence": lifecycle.map(|record| record.terminal_evidence.clone()).unwrap_or_default(),
         "replacementEligible": replacement_eligible,
         "reason": reason,

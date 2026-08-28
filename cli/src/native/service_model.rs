@@ -2424,6 +2424,10 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lease_reconcile_receipts:
         BTreeMap<String, super::service_profile_lease::ProfileLeaseReconcileReceipt>,
+    /// Idempotent terminal receipts for sealed profile acquisition recoveries.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_recovery_receipts:
+        BTreeMap<String, super::service_profile_recovery::RecoveryReceipt>,
     /// Replayable dependency-ordered crash recovery transactions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) crash_regeneration_transactions:
