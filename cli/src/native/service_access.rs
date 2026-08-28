@@ -1028,6 +1028,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         lifecycle_replacement: &lifecycle_replacement,
         one_time_profile_recommendation: &one_time_profile_recommendation,
         acquisition_blocker,
+        authenticated_principal: input.authenticated_principal,
     });
     let post_seeding_probe = post_seeding_probe_decision(
         input.request,
@@ -1268,7 +1269,24 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
                 && plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
                     == Some(true)
                 && requested_session == planned_terminal_session;
-            if !exact_terminal_replacement {
+            let planned_cold_session = plan["decision"]["serviceRequest"]["request"]
+                .get("sessionName")
+                .and_then(Value::as_str);
+            let exact_authenticated_cold_route = !service_request_has_browser_hint(command)
+                && profile_reuse
+                    .get("recommendedAction")
+                    .and_then(Value::as_str)
+                    == Some("launch_new_browser")
+                && profile_reuse
+                    .get("reasons")
+                    .and_then(Value::as_array)
+                    .is_some_and(|reasons| {
+                        reasons
+                            .iter()
+                            .any(|reason| reason == "explicit_authenticated_cold_route_selected")
+                    })
+                && requested_session == planned_cold_session;
+            if !exact_terminal_replacement && !exact_authenticated_cold_route {
                 return Err("service_access_plan_incomplete_route_hints".to_string());
             }
             return Ok(());
@@ -1616,11 +1634,7 @@ fn profile_reuse_decision(
             .collect();
         same_principal_profile_mismatch_browser_ids.sort();
         same_principal_profile_mismatch_browser_ids.dedup();
-        capability_profile_mismatch = authority.profile_id != profile.id
-            && service_state.sessions.values().any(|session| {
-                session_blocks_profile_reuse(session, &profile.id)
-                    && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
-            });
+        capability_profile_mismatch = authority.profile_id != profile.id;
         if !foreign_principal_session_ids.is_empty() || capability_profile_mismatch {
             reusable_browser_ids.clear();
         }
@@ -1631,10 +1645,18 @@ fn profile_reuse_decision(
     let mut explicit_session_route_error = None;
     let mut explicit_session_route = None;
     let mut explicit_terminal_replacement_route = false;
+    let mut explicit_authenticated_cold_route = false;
     if let Some(session_name) = request.session_name.as_deref() {
         match service_state.sessions.get(session_name) {
             None if terminal_replacement_session_name == Some(session_name) => {
                 explicit_terminal_replacement_route = true;
+            }
+            None if authenticated_principal
+                .and_then(|authority| authenticated_cold_session_name(authority, profile))
+                .as_deref()
+                == Some(session_name) =>
+            {
+                explicit_authenticated_cold_route = true;
             }
             None => explicit_session_route_error = Some("explicit_session_not_found"),
             Some(session) if session.browser_ids.len() != 1 => {
@@ -1735,6 +1757,8 @@ fn profile_reuse_decision(
         reasons.push("explicit_session_route_selected");
     } else if explicit_terminal_replacement_route {
         reasons.push("explicit_session_terminal_replacement_selected");
+    } else if explicit_authenticated_cold_route {
+        reasons.push("explicit_authenticated_cold_route_selected");
     }
     reasons.sort();
     reasons.dedup();
@@ -2366,6 +2390,33 @@ struct ServiceRequestDecisionInput<'a> {
     lifecycle_replacement: &'a Value,
     one_time_profile_recommendation: &'a Value,
     acquisition_blocker: Option<&'a str>,
+    authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
+}
+
+/// Return the stable daemon route for a registered principal's first browser.
+///
+/// Cold authenticated requests must not inherit the transport's ambient
+/// `default` session because that route can retain another profile's identity.
+/// The route uses only public principal/profile identity and never includes
+/// raw capability material.
+fn authenticated_cold_session_name(
+    authority: &AuthenticatedServicePrincipal,
+    selected_profile: &BrowserProfile,
+) -> Option<String> {
+    if authority.profile_id != selected_profile.id {
+        return None;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(authority.principal_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(selected_profile.id.as_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Some(format!("principal-profile-{suffix}"))
 }
 
 fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
@@ -2435,7 +2486,24 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
             .and_then(Value::as_str)
     })
     .flatten();
-    if let Some(session_name) = request.session_name.as_deref().or(replacement_session_name) {
+    let authenticated_cold_session_name = (available
+        && profile_reuse
+            .get("recommendedAction")
+            .and_then(Value::as_str)
+            == Some("launch_new_browser"))
+    .then(|| {
+        input
+            .authenticated_principal
+            .zip(selected_profile)
+            .and_then(|(authority, profile)| authenticated_cold_session_name(authority, profile))
+    })
+    .flatten();
+    if let Some(session_name) = request
+        .session_name
+        .as_deref()
+        .or(replacement_session_name)
+        .or(authenticated_cold_session_name.as_deref())
+    {
         service_request.insert("sessionName".to_string(), json!(session_name));
     }
     if !request.target_service_ids.is_empty() {
@@ -5185,6 +5253,98 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_cold_profile_acquisition_uses_a_principal_owned_session_lane() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:odollo-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["fedex".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        let session_name = plan["decision"]["serviceRequest"]["request"]["sessionName"]
+            .as_str()
+            .expect("authenticated cold acquisition should carry a session route");
+        assert_ne!(session_name, "default");
+        assert!(session_name.starts_with("principal-profile-"));
+        assert!(crate::validation::is_valid_session_name(session_name));
+    }
+
+    #[test]
+    fn authenticated_cold_profile_session_round_trips_through_request_admission() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:odollo-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let first_plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("odollo-fedex".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+        let mut command = first_plan["decision"]["serviceRequest"]["request"].clone();
+        let expected_session = command["sessionName"].as_str().unwrap().to_string();
+
+        apply_shared_profile_route_hints_for_service_request_with_principal(
+            &state,
+            &mut command,
+            Some(&authority),
+        )
+        .unwrap();
+
+        assert_eq!(command["sessionName"], expected_session);
+        assert!(command.get("browserId").is_none());
+    }
+
+    #[test]
     fn authenticated_same_principal_reuses_its_coherent_retained_browser() {
         use crate::native::service_principal::{
             AuthenticatedServicePrincipal, ServicePrincipalProvenance,
@@ -5322,6 +5482,51 @@ mod tests {
             Value::Null
         );
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+    }
+
+    #[test]
+    fn capability_for_another_profile_cannot_authorize_a_cold_launch() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:foreign-service".to_string(),
+            profile_id: "foreign-profile".to_string(),
+            capability_id: "profile-capability-v1:foreign-profile".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("odollo-fedex".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "lifecycle_profile_identity_inconsistent"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "lifecycle_profile_identity_inconsistent"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(plan["decision"]["serviceRequest"]["request"], Value::Null);
     }
 
     #[test]

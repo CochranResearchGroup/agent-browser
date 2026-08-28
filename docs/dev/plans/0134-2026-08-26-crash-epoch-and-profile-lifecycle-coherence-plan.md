@@ -1384,3 +1384,56 @@ Do not implement migration or installer effects in Slice A.
   acceptance, idempotent reapply, and final green doctor remain downstream of
   exact authority for one fresh production presentation route and durable
   handoff.
+
+## 2026-08-27 installed provider-free consumer matrix checkpoint
+
+- The exact source candidate is installed only in the isolated development
+  runtime as generation `0.28.0-f56a4435a32c`, binary SHA-256
+  `f56a4435a32c122831d4ab2c89108d555c186e2c9215b91e9026bf11bce06aa4`.
+  Production remains selected at
+  `0.28.0-32e8c9318beb-b2bd0fba532f`. Development skill synchronization is
+  current and the three-iteration development browser launch smoke passed.
+- The first installed matrix attempt found that an authenticated cold
+  `tab_new` inherited the HTTP transport's retained `default` session and
+  failed with `existing_session_profile_identity_unproven`. Cold authenticated
+  acquisition now creates a stable `principal-profile-<digest>` daemon route
+  from public principal and profile identity, never capability material, and
+  prepares that route before relay.
+- A second installed attempt found that request admission rejected the
+  broker-generated route as `explicit_session_route_invalid`. Admission now
+  accepts only the exact deterministic cold route for the matching
+  authenticated principal and profile. Arbitrary partial route hints and
+  foreign routes remain blocked.
+- The foreign-principal control found that a capability-profile mismatch was
+  checked only when retained same-principal session evidence existed. The
+  mismatch is now unconditional: a capability bound to one profile cannot
+  cold-launch or reuse another profile. The final foreign control returned
+  `lifecycle_profile_identity_inconsistent`, included
+  `profile_capability_profile_mismatch`, and returned no copyable service
+  request.
+- Final provider-free acceptance used fresh synthetic Last30Days, Books
+  Receipts, and Odollo fulfillment identities with `stock_chrome`,
+  `local_headless`, and `about:blank`; it contacted no external provider. Each
+  cold request returned a valid handle on its own distinct profile, browser,
+  and deterministic principal session. Releasing the first handle preserved
+  the browser and session. Each subsequent access plan recommended
+  `reuse_existing_browser`, and each reconnect returned the exact same browser
+  and session without a duplicate process.
+- First-class lease readback initially reported
+  `runtime_owner_principal_binding_missing` and authorized exact `rejoin` for
+  the three live lanes. Revision-guarded rejoin with each private capability
+  advanced all three to `active`, `observationOnly: false`, owner generation
+  1, and no blocking identity axes. This is the supported operator recourse;
+  no state file was edited.
+- Exact cleanup released the reconnect handles and closed only the three
+  synthetic browsers through their own daemon routes. Final lease readback is
+  `owned_idle` for all three, with empty session and tab ids, no blockers, and
+  `cleanupObligation: satisfied`. A fresh process readback found zero matching
+  Chrome processes.
+- This closes the provider-free installed consumer matrix portion of
+  Acceptance Matrix item 30 and proves the first-class rejoin workflow. It
+  does not accept or install the candidate in production. The remaining final
+  gate is unchanged: exact authorization for one fresh production
+  presentation route and durable handoff, followed by guarded install,
+  rollback review, idempotent reapply, production installed doctor, and the
+  production-installed consumer readback.

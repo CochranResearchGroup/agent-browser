@@ -2068,9 +2068,17 @@ fn service_request_requires_relay_session_recovery(
     relay_session: &str,
     command: &Value,
 ) -> bool {
-    relay_session != default_session
-        && command.get("action").and_then(Value::as_str)
-            == Some("service_remote_view_handoff_resolve")
+    if relay_session == default_session {
+        return false;
+    }
+    let action = command.get("action").and_then(Value::as_str);
+    let authenticated_cold_profile_acquisition = action == Some("tab_new")
+        && command
+            .get("servicePrincipalId")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        && command.get("browserId").is_none();
+    action == Some("service_remote_view_handoff_resolve") || authenticated_cold_profile_acquisition
 }
 
 pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<(), String> {
@@ -2107,13 +2115,13 @@ pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<
         .await
         .map_err(|_| {
             format!(
-                "Timed out reviving remote-view daemon session '{}'",
+                "Timed out preparing service daemon session '{}'",
                 session_name
             )
         })?
         .map_err(|err| {
             format!(
-                "Failed to revive remote-view daemon session '{}': {}",
+                "Failed to prepare service daemon session '{}': {}",
                 session_name, err
             )
         })?;
@@ -2122,7 +2130,7 @@ pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<
         return Ok(());
     }
     Err(format!(
-        "Remote-view daemon session '{}' did not become ready (exit status {})",
+        "Service daemon session '{}' did not become ready (exit status {})",
         session_name, status
     ))
 }
@@ -5158,6 +5166,56 @@ mod tests {
         assert!(command["requestId"]
             .as_str()
             .is_some_and(|value| value.starts_with("http-service-request-navigate-")));
+    }
+
+    #[test]
+    fn authenticated_cold_profile_request_recovers_its_principal_owned_daemon_lane() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:odollo-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: std::collections::BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let body = r##"{
+            "action":"tab_new",
+            "runtimeProfile":"odollo-fedex",
+            "serviceName":"odollo-fulfillment",
+            "agentName":"fulfillment-agent",
+            "taskName":"fedex-tracking-lookup",
+            "url":"about:blank"
+        }"##;
+
+        let command = service_request_command_with_state_and_authority(
+            body,
+            Some(&state),
+            None,
+            "default",
+            Some(&authority),
+        )
+        .unwrap();
+        let relay_session = service_request_relay_session("default", body, &command);
+
+        assert!(relay_session.starts_with("principal-profile-"));
+        assert!(service_request_requires_relay_session_recovery(
+            "default",
+            &relay_session,
+            &command
+        ));
     }
 
     #[test]
