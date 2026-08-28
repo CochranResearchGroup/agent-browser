@@ -1132,11 +1132,17 @@ fn lifecycle_replacement_decision(
             && record.cleanup_obligation_state
                 == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
     });
+    let terminal_process_absence_proven = lifecycle.is_some_and(|record| {
+        record
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "exact_process_exited")
+    });
     let replacement_route = owner.zip(owner_lifecycle).and_then(|(owner, record)| {
-        let expected_browser_id = format!("session:{}", owner.daemon_session_route);
         (terminal_cleanup_satisfied
+            && terminal_process_absence_proven
             && record.logical_browser_id == owner.browser_id
-            && owner.browser_id == expected_browser_id)
+            && record.owner_generation == owner.owner_generation)
             .then(|| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
     });
     let replacement_eligible = match (owner, lifecycle) {
@@ -1176,6 +1182,7 @@ fn lifecycle_replacement_decision(
         "ownerGeneration": lifecycle.map(|record| record.owner_generation),
         "lifecycleState": lifecycle.map(|record| record.lifecycle_state),
         "cleanupObligationState": lifecycle.map(|record| record.cleanup_obligation_state),
+        "processAbsenceProven": terminal_process_absence_proven,
         "terminalEvidence": lifecycle.map(|record| record.terminal_evidence.clone()).unwrap_or_default(),
         "replacementEligible": replacement_eligible,
         "reason": reason,
@@ -7620,3 +7627,7 @@ pub(crate) use service_commands::*;
 #[cfg(test)]
 #[path = "service_access/plan_0134_repro_tests.rs"]
 mod plan_0134_repro_tests;
+
+#[cfg(test)]
+#[path = "service_access/plan_0137_repro_tests.rs"]
+mod plan_0137_repro_tests;

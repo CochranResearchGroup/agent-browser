@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-identity-unproven-fixture.v1",
+  "fixtureId": "odollo-contractor-portal-retained-session-identity-unproven",
+  "consumerShape": "odollo-contractor-portal-test",
+  "serviceName": "OdolloContractorPortal",
+  "profileId": "odollo-contractor-portal-test",
+  "sessionId": "odollo-contractor-portal-test",
+  "browserId": "session:odollo-contractor-portal-test",
+  "currentFailure": "existing_session_profile_identity_unproven",
+  "retainedSessionEvidence": true,
+  "currentOwnerBindingPresent": false,
+  "expectedDominantBlocker": "existing_session_profile_identity_unproven",
+  "expectedRecoveryClass": "reconcile_exact_principal_profile_identity"
+}

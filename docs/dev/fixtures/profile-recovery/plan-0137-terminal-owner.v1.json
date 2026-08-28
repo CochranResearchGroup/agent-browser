@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-terminal-owner-fixture.v1",
+  "fixtureId": "last30days-generation-55-transferred-terminal-owner",
+  "consumerShape": "last30days-facebook",
+  "serviceName": "Last30days",
+  "agentName": "last30days-agent",
+  "taskName": "acquire-facebook-profile",
+  "targetServiceId": "facebook",
+  "profileId": "last30days-facebook",
+  "profilePath": "/tmp/agent-browser-p137/last30days-facebook",
+  "principalId": "principal:last30days",
+  "ownerId": "owner:last30days-generation-55",
+  "ownerGeneration": 55,
+  "durableBrowserId": "session:last30days-facebook--last30days-facebook",
+  "daemonSessionRoute": "handoff-a79ef2887412addf",
+  "lifecycleState": "terminal",
+  "cleanupObligationState": "satisfied",
+  "terminalEvidence": [
+    "exact_process_exited",
+    "profile_lock_released"
+  ],
+  "expectedDominantBlocker": "terminal_owner_cleanup_satisfied",
+  "expectedRecoveryClass": "supersede_terminal_owner"
+}

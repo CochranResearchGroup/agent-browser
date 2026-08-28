@@ -2,9 +2,9 @@
 
 Date: 2026-08-28
 
-State: PLANNED
+State: OPEN
 
-Execution state: `campaign_ready_first_packet_frozen`
+Execution state: `first_packet_active_slice_a_contract_and_fixture_seam`
 
 Lane: P137
 
@@ -159,6 +159,12 @@ Odollo fulfillment is blocked before its own FedEx tracking-number lookup
 service can acquire its profile. Provider behavior is not the current failure
 axis. The acceptance case must prove profile acquisition independently from
 FedEx navigation or data retrieval.
+
+The Odollo contractor-portal test profile also reproduces
+`existing_session_profile_identity_unproven`: retained session evidence exists,
+but the current runtime-owner binding cannot prove the exact profile identity.
+This remains a distinct principal/profile reconciliation case and must not be
+treated as terminal-owner supersession.
 
 ### Dashboard contains fictitious browsers with no valid action
 

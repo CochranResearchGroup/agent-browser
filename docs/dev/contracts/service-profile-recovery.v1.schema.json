@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.dev/contracts/service-profile-recovery.v1.schema.json",
+  "title": "Agent Browser Service Profile Recovery v1",
+  "oneOf": [
+    { "$ref": "#/$defs/profileAcquisitionOutcome" },
+    { "$ref": "#/$defs/recoveryPlan" },
+    { "$ref": "#/$defs/recoveryReceipt" },
+    { "$ref": "#/$defs/mitigationAction" }
+  ],
+  "$defs": {
+    "profileAcquisitionState": {
+      "enum": ["acquired", "recovery_available", "blocked"]
+    },
+    "dominantBlocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "recoverable", "detail"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "recoverable": { "type": "boolean" },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "subjectId"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "subjectId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principalId", "profileId", "serviceName", "agentName", "taskName", "targetServiceIds"],
+      "properties": {
+        "principalId": { "type": "string", "minLength": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
+        "serviceName": { "type": "string", "minLength": 1 },
+        "agentName": { "type": "string", "minLength": 1 },
+        "taskName": { "type": "string", "minLength": 1 },
+        "targetServiceIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "identityJoins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principalId", "profileId", "profileIdentityDigest", "lifecycleOwnerId", "lifecycleOwnerGeneration", "durableBrowserId", "daemonSessionRoute", "processInstanceDigest"],
+      "properties": {
+        "principalId": { "type": "string", "minLength": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
+        "profileIdentityDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lifecycleOwnerId": { "type": "string", "minLength": 1 },
+        "lifecycleOwnerGeneration": { "type": "integer", "minimum": 1 },
+        "durableBrowserId": { "type": "string", "minLength": 1 },
+        "daemonSessionRoute": { "type": "string", "minLength": 1 },
+        "serviceSessionId": { "type": "string", "minLength": 1 },
+        "processInstanceDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "presentationRouteId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mitigationAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "actionId", "actionType", "effectAuthority", "preconditions", "expectedPostconditions", "compensation"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-mitigation-action.v1" },
+        "actionId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "actionType": { "enum": ["supersede_terminal_owner", "reconcile_exact_principal_profile_identity"] },
+        "effectAuthority": { "const": "exact_profile_graph" },
+        "preconditions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "expectedPostconditions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "compensation": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true }
+      }
+    },
+    "recoveryPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "planId", "recoveryId", "createdAt", "expiresAt", "idempotencyKeyDigest", "serviceStateRevision", "identities", "dominantBlocker", "evidence", "actions", "originalIntent", "integritySeal"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-recovery-plan.v1" },
+        "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "recoveryId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "idempotencyKeyDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "serviceStateRevision": { "type": "integer", "minimum": 0 },
+        "identities": { "$ref": "#/$defs/identityJoins" },
+        "dominantBlocker": { "$ref": "#/$defs/dominantBlocker" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" }, "minItems": 1 },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/mitigationAction" }, "minItems": 1 },
+        "originalIntent": { "$ref": "#/$defs/intent" },
+        "integritySeal": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "recoveryReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recoveryId", "planId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-recovery-receipt.v1" },
+        "recoveryId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "terminalResult": { "type": "string", "minLength": 1 },
+        "preconditionComparison": { "type": "string", "minLength": 1 },
+        "attemptedOperationIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "compensationResult": { "type": "string", "minLength": 1 },
+        "finalStateRevision": { "type": "integer", "minimum": 0 },
+        "acquisitionRetryState": { "$ref": "#/$defs/profileAcquisitionState" }
+      }
+    },
+    "profileAcquisitionOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "state", "automatic", "evidence"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.profile-acquisition-outcome.v1" },
+        "state": { "$ref": "#/$defs/profileAcquisitionState" },
+        "dominantBlocker": { "$ref": "#/$defs/dominantBlocker" },
+        "automatic": { "type": "boolean" },
+        "browserId": { "type": "string", "minLength": 1 },
+        "daemonSessionRoute": { "type": "string", "minLength": 1 },
+        "recovery": { "$ref": "#/$defs/recoveryPlan" },
+        "nextAction": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      }
+    }
+  }
+}

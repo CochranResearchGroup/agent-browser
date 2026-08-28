@@ -675,6 +675,14 @@ fn test_existing_session_rejects_explicit_profile_conflict() {
 
 #[test]
 fn test_existing_session_rejects_retained_identity_without_current_owner() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../docs/dev/fixtures/profile-recovery/plan-0137-odollo-contractor-portal.v1.json"
+    ))
+    .unwrap();
+    let session_id = fixture["sessionId"].as_str().unwrap();
+    let browser_id = fixture["browserId"].as_str().unwrap();
+    let profile_id = fixture["profileId"].as_str().unwrap();
+    let service_name = fixture["serviceName"].as_str().unwrap();
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("existing-owner-unproven-home");
     fs::create_dir_all(&home).unwrap();
@@ -682,20 +690,20 @@ fn test_existing_session_rejects_retained_identity_without_current_owner() {
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&ServiceState {
             sessions: BTreeMap::from([(
-                "odollo-fulfillment".to_string(),
+                session_id.to_string(),
                 BrowserSession {
-                    id: "odollo-fulfillment".to_string(),
-                    profile_id: Some("odollo-fedex".to_string()),
-                    browser_ids: vec!["browser-odollo-fedex".to_string()],
+                    id: session_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    browser_ids: vec![browser_id.to_string()],
                     ..BrowserSession::default()
                 },
             )]),
             browsers: BTreeMap::from([(
-                "browser-odollo-fedex".to_string(),
+                browser_id.to_string(),
                 BrowserProcess {
-                    id: "browser-odollo-fedex".to_string(),
-                    profile_id: Some("odollo-fedex".to_string()),
-                    active_session_ids: vec!["odollo-fulfillment".to_string()],
+                    id: browser_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    active_session_ids: vec![session_id.to_string()],
                     ..BrowserProcess::default()
                 },
             )]),
@@ -706,12 +714,16 @@ fn test_existing_session_rejects_retained_identity_without_current_owner() {
 
     let error = apply_service_profile_selection(
         &mut options,
-        &json!({ "action": "launch", "serviceName": "OdolloFulfillment" }),
-        Some("odollo-fulfillment"),
+        &json!({ "action": "launch", "serviceName": service_name }),
+        Some(session_id),
     )
     .unwrap_err();
 
-    assert_eq!(error, "existing_session_profile_identity_unproven");
+    assert_eq!(error, fixture["currentFailure"]);
+    assert_eq!(
+        fixture["expectedRecoveryClass"],
+        "reconcile_exact_principal_profile_identity"
+    );
     assert!(options.runtime_profile.is_none());
     assert!(options.profile.is_none());
 }
