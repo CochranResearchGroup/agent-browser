@@ -24,6 +24,26 @@ _Avoid_: Remote desktop link, route open
 The exclusive pending or finalized claim that prevents two acquisitions from owning the same route-bound browser lane.
 _Avoid_: Lock, checkout record
 
+**Profile acquisition intent**:
+A request by one authenticated service principal to obtain or reuse one managed browser lane for an exact profile and task without choosing internal browser, session, route, or lifecycle identities.
+_Avoid_: Launch request, session request
+
+**Dominant blocker**:
+The single current fact that determines why a profile acquisition cannot proceed, while all other relevant inconsistencies remain available as supporting evidence.
+_Avoid_: Error list, first validation failure
+
+**Recovery plan**:
+A sealed, expiring, state-revision-bound proposal for the exact transitions needed to make one inconsistent profile acquisition safe to retry.
+_Avoid_: Force unlock, repair script
+
+**Recovery receipt**:
+The durable result of checking and applying one Recovery Plan, including its preconditions, effects, compensation, terminal state, and acquisition retry outcome.
+_Avoid_: Command log, success message
+
+**Mitigation action**:
+One bounded, idempotent, authority-preserving transition owned by the recovery plane and guarded by current evidence.
+_Avoid_: Force operation, manual state edit
+
 **Retained browser**:
 A browser that remains alive across daemon or route transitions and whose existing ownership must be respected during recovery.
 _Avoid_: Orphan browser, stale browser

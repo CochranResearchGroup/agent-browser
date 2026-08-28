@@ -2,9 +2,9 @@
 
 Date: 2026-08-26
 
-State: OPEN
+State: CLOSED
 
-Execution state: `slice_k_candidate_presentation_preflight_hardened_route_authority_pending`
+Execution state: `installed_candidate_accepted_successor_plan_0137_owns_recovery_gaps`
 
 Lane: P134
 
@@ -19,6 +19,23 @@ INSTALLATION ARE AUTHORIZED. PRESENTATION-PROVIDER MUTATION STILL REQUIRES
 SEPARATE EXACT AUTHORIZATION.
 
 Current checkpoint:
+
+- Plan 0134's bounded delivery is closed at source commit `e636a250` and
+  installed generation `0.28.0-2851117fd877-04e7cf4c8b54`, binary SHA-256
+  `2851117fd8778d18ef05cadfb999a2bed82ed16e7d56206188f5bd753467f9c9`.
+  The accepted workstation transaction is terminal, runtime multiplicity is
+  steady at one dashboard, one runtime host, one executable generation, and
+  zero legacy daemons, and production presentation generation 2 has current
+  operator-visible proof.
+- Closure means the principal, lease, crash, migration, and guarded installer
+  checkpoint shipped. It does not assert that every later lifecycle shape is
+  recoverable. Plan 0137 owns the newly observed terminal route-alias defect,
+  provenance-free browser records, missing high-level acquisition recovery,
+  and CDP-free route-bound profile seeding.
+
+The remaining bullets in this section are preserved as the historical
+pre-install checkpoint. The closure checkpoint above supersedes their earlier
+statements about the then-pending production install.
 
 - Slice A consumer failures and Slice B authenticated principal authority are
   implemented and validated.
