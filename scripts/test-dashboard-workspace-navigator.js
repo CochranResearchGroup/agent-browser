@@ -513,8 +513,8 @@ assert.match(
 
 assert.match(
   navigator,
-  /const closeServiceOwnedBrowser = useCallback\(async \(node: WorkspaceNode\)[\s\S]*action: "service_browser_close"[\s\S]*params: \{ browserId \}[\s\S]*await fetchServiceStatus\(\)/,
-  'Workspace navigator Close must queue the service-owned browser close action by stable browser ID and refresh state',
+  /const closeServiceOwnedBrowser = useCallback\(async \(node: WorkspaceNode\)[\s\S]*const sessionName = node\.serviceSessionId[\s\S]*action: "service_browser_close"[\s\S]*\.\.\.browserRowCloseRoute\(browserId, sessionName\)[\s\S]*await fetchServiceStatus\(\)/,
+  'Workspace navigator Close must route to the selected browser daemon by stable browser and session identity, then refresh state',
 );
 
 assert.match(

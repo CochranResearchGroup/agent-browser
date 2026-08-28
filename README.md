@@ -332,11 +332,13 @@ profile referenced by a principal, work capability, browser, or tab still
 blocks before commit. A stale tab with an already-invalid `browser_missing`
 handle may likewise retain its evidence through an inert `not_started` browser
 placeholder and a released system-session placeholder. Terminal orphaned or
-released remote-view evidence can use the same inert placeholders when it has
-no process identity, active viewer or controller lease, principal-bound owner,
-or existing session binding. A unique unbound legacy owner is preserved as
-historical identity rather than converted into new authority. Effect-bearing
-references still block.
+released remote-view evidence can use the same inert placeholders when any
+retained process identity is confirmed absent and it has no active viewer,
+controller lease, or existing session binding. A registered principal binding
+at or behind the unique retained owner generation remains non-effect-capable
+reconciliation evidence until a live exact process is established. A unique
+unbound legacy owner remains historical identity. Effect-bearing references
+still block.
 When a live selected runtime host predates boot-epoch persistence or was
 observed on a prior boot, guarded apply re-observes its exact process, socket,
 generation, and binary and CAS-refreshes that same ingress identity before

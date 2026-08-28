@@ -2533,12 +2533,6 @@ pub(crate) fn classify_runtime(evidence: &RuntimeEvidenceSummary) -> RuntimeClas
         .iter()
         .copied()
         .collect::<std::collections::BTreeSet<_>>();
-    if unique_owner_generations.len() > 1 {
-        return decision(
-            RuntimeClassification::ConflictingOwner,
-            &["multiple_owner_generations"],
-        );
-    }
     if !evidence.observation_rounds_agree || !evidence.registry_revision_stable {
         return decision(
             RuntimeClassification::InsufficientEvidence,
@@ -2555,6 +2549,16 @@ pub(crate) fn classify_runtime(evidence: &RuntimeEvidenceSummary) -> RuntimeClas
         return decision(
             RuntimeClassification::IdleDaemon,
             &["daemon_without_live_browser"],
+        );
+    }
+    // Historical generations from a completed transfer are not competing
+    // owners once the browser observation is absent. A browserless daemon may
+    // be a shared host alias; live browser multi-generation evidence remains
+    // an activation blocker.
+    if unique_owner_generations.len() > 1 {
+        return decision(
+            RuntimeClassification::ConflictingOwner,
+            &["multiple_owner_generations"],
         );
     }
     if evidence.externally_owned {
@@ -4587,6 +4591,53 @@ mod tests {
 
     fn digest_text(value: &str) -> String {
         format!("{:x}", Sha256::digest(value.as_bytes()))
+    }
+
+    #[test]
+    fn stable_dead_transfer_history_is_stale_metadata_not_a_live_owner_conflict() {
+        let evidence = RuntimeEvidenceSummary {
+            metadata_present: true,
+            observation_rounds_agree: true,
+            registry_revision_stable: true,
+            owner_generations: vec![1, 2],
+            ..RuntimeEvidenceSummary::default()
+        };
+
+        let decision = classify_runtime(&evidence);
+        assert_eq!(
+            decision.classification,
+            RuntimeClassification::StaleMetadata
+        );
+        assert_eq!(decision.reason_codes, vec!["metadata_without_live_runtime"]);
+    }
+
+    #[test]
+    fn browserless_shared_daemon_alias_with_transfer_history_is_idle_not_conflicting() {
+        let evidence = RuntimeEvidenceSummary {
+            daemon_live: true,
+            metadata_present: true,
+            observation_rounds_agree: true,
+            registry_revision_stable: true,
+            owner_generations: vec![1, 2],
+            ..RuntimeEvidenceSummary::default()
+        };
+
+        let decision = classify_runtime(&evidence);
+        assert_eq!(decision.classification, RuntimeClassification::IdleDaemon);
+        assert_eq!(decision.reason_codes, vec!["daemon_without_live_browser"]);
+    }
+
+    #[test]
+    fn live_multi_generation_owner_evidence_remains_an_activation_blocker() {
+        let mut evidence = live_identity_fragment();
+        evidence.owner_generations = vec![1, 2];
+
+        let decision = classify_runtime(&evidence);
+        assert_eq!(
+            decision.classification,
+            RuntimeClassification::ConflictingOwner
+        );
+        assert_eq!(decision.reason_codes, vec!["multiple_owner_generations"]);
     }
 
     #[test]

@@ -137,6 +137,7 @@ import {
   type WorkspaceNodeInput,
 } from "@/lib/service-workspaces";
 import {
+  browserRowCloseRoute,
   browserRowCloseTitle,
   browserRowRepairTitle,
 } from "@/lib/service-browser-row-actions";
@@ -7940,6 +7941,7 @@ export function ServicePanel({
 
   const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
     if (!canFetch || !browser.id) return;
+    const sessionName = daemonSessionNameForBrowser(browser);
     setActingBrowserActionId(browser.id);
     setError("");
     try {
@@ -7951,7 +7953,7 @@ export function ServicePanel({
           serviceName: "agent-browser-dashboard",
           agentName: operatorIdentity.trim() || activeSession || "operator",
           taskName: "close-browser-row",
-          params: { browserId: browser.id },
+          ...browserRowCloseRoute(browser.id, sessionName),
           jobTimeoutMs: 10000,
         }),
       });

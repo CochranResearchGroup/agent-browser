@@ -130,6 +130,7 @@ pub(crate) fn stage_service_state_migration(
     }
     let mut state = read_service_state(raw).map_err(|error| error.to_string())?;
     prepare_service_state_for_persistence(&mut state)?;
+    discard_confirmed_dead_unreferenced_process_identities(&mut state);
     materialize_inert_legacy_profile_placeholders(&mut state);
     materialize_inert_legacy_remote_view_placeholders(&mut state);
     materialize_inert_legacy_browser_placeholders(&mut state);
@@ -144,15 +145,79 @@ pub(crate) fn stage_service_state_migration(
     Ok(StagedServiceStateMigration { plan, bytes })
 }
 
+/// Remove ephemeral process evidence only when it has no retained browser
+/// projection or authority edge and the current host positively reports the
+/// exact recorded process as absent. A live or indeterminate observation stays
+/// in place and fails invariant validation.
+fn discard_confirmed_dead_unreferenced_process_identities(state: &mut ServiceState) {
+    let discard = state
+        .browser_process_identities
+        .iter()
+        .filter(|(browser_id, identity)| {
+            !state.browsers.contains_key(*browser_id)
+                && !retained_browser_reference_exists(state, browser_id)
+                && matches!(
+                    crate::process_identity::recorded_process_is_running(
+                        &identity.process_identity
+                    ),
+                    Ok(false)
+                )
+        })
+        .map(|(browser_id, _)| browser_id.clone())
+        .collect::<Vec<_>>();
+    for browser_id in discard {
+        state.browser_process_identities.remove(&browser_id);
+    }
+}
+
+fn retained_browser_reference_exists(state: &ServiceState, browser_id: &str) -> bool {
+    state
+        .sessions
+        .values()
+        .any(|session| session.browser_ids.iter().any(|id| id == browser_id))
+        || state.tabs.values().any(|tab| tab.browser_id == browser_id)
+        || state
+            .display_allocations
+            .values()
+            .any(|allocation| allocation.owner_browser_id.as_deref() == Some(browser_id))
+        || state
+            .remote_view_routes
+            .values()
+            .any(|route| route.browser_id.as_deref() == Some(browser_id))
+        || state
+            .remote_view_acquisition_leases
+            .values()
+            .any(|lease| lease.browser_id == browser_id)
+        || state
+            .remote_view_handoffs
+            .values()
+            .any(|handoff| handoff.browser_id.as_deref() == Some(browser_id))
+        || state
+            .viewer_leases
+            .values()
+            .any(|lease| lease.browser_id.as_deref() == Some(browser_id))
+        || state
+            .route_pool
+            .values()
+            .any(|entry| entry.target.get("browserId").and_then(Value::as_str) == Some(browser_id))
+        || state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .any(|owner| owner.browser_id == browser_id)
+}
+
 /// Preserve the identity of an already-terminal remote-view projection.
 ///
 /// Orphaned and released display or route rows are historical evidence, not
 /// live browser authority. A placeholder is allowed only when every reference
-/// to the missing browser is terminal or already-invalid, no process identity
-/// exists, any retained owner is unique with no pending transfer, and no viewer
-/// or controller lease can still authorize interaction. A principal binding is
-/// preserved only when the registered principal and capability are both active
-/// and the binding still matches the exact owner generation.
+/// to the missing browser is terminal or already-invalid, no retained process
+/// identity still resolves to a live process, any retained owner is unique with
+/// no pending transfer, and no viewer or controller lease can still authorize
+/// interaction. A principal binding is preserved only when the registered
+/// principal and capability are both active. A binding behind the retained
+/// owner generation remains visible for first-class lease reconciliation, but
+/// cannot become effect-capable through the inert placeholder.
 fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .display_allocations
@@ -166,7 +231,7 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
         )
         .filter(|browser_id| !browser_id.trim().is_empty())
         .filter(|browser_id| !state.browsers.contains_key(*browser_id))
-        .filter(|browser_id| !state.browser_process_identities.contains_key(*browser_id))
+        .filter(|browser_id| retained_process_identity_is_inert(state, browser_id))
         .filter(|browser_id| {
             let owners = state
                 .runtime_owner_registry
@@ -244,6 +309,11 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
         .collect::<std::collections::BTreeSet<_>>();
 
     for browser_id in missing_browsers {
+        // The terminal projection checks above prove that this identity cannot
+        // authorize more work. Drop only a process identity that the current
+        // host positively reports as absent. Live and indeterminate identities
+        // remain migration blockers.
+        state.browser_process_identities.remove(&browser_id);
         let allocations = state
             .display_allocations
             .values()
@@ -305,6 +375,18 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
     }
 }
 
+fn retained_process_identity_is_inert(state: &ServiceState, browser_id: &str) -> bool {
+    state
+        .browser_process_identities
+        .get(browser_id)
+        .is_none_or(|identity| {
+            matches!(
+                crate::process_identity::recorded_process_is_running(&identity.process_identity),
+                Ok(false)
+            )
+        })
+}
+
 fn owner_principal_binding_is_migration_safe(
     state: &ServiceState,
     owner: &crate::runtime_owner_transfer::ProfileOwner,
@@ -316,11 +398,8 @@ fn owner_principal_binding_is_migration_safe(
     else {
         return true;
     };
-    state
-        .runtime_owner_registry
-        .principal_binding_is_current(Some(binding))
-        && binding.profile_identity_digest == owner.profile_identity_digest
-        && binding.owner_generation == owner.owner_generation
+    binding.profile_identity_digest == owner.profile_identity_digest
+        && binding.owner_generation <= owner.owner_generation
         && binding.provenance
             == crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability
         && state
@@ -387,8 +466,9 @@ fn materialize_inert_legacy_profile_placeholders(state: &mut ServiceState) {
 /// Preserve a stale tab record whose historical browser row was never kept.
 ///
 /// The invalid `browser_missing` handle is the migration proof that the tab
-/// cannot authorize work. Any principal, work lease, process identity, owner,
-/// or retained session reference keeps the missing browser as a hard blocker.
+/// cannot authorize work. Any principal, work lease, live or indeterminate
+/// process identity, owner, or retained session reference keeps the missing
+/// browser as a hard blocker.
 fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
     let missing_browsers = state
         .tabs
@@ -396,7 +476,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
         .map(|tab| tab.browser_id.as_str())
         .filter(|browser_id| !browser_id.trim().is_empty())
         .filter(|browser_id| !state.browsers.contains_key(*browser_id))
-        .filter(|browser_id| !state.browser_process_identities.contains_key(*browser_id))
+        .filter(|browser_id| retained_process_identity_is_inert(state, browser_id))
         .filter(|browser_id| {
             !state
                 .sessions
@@ -430,6 +510,7 @@ fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
         .collect::<std::collections::BTreeSet<_>>();
 
     for browser_id in missing_browsers {
+        state.browser_process_identities.remove(&browser_id);
         state.browsers.insert(
             browser_id.clone(),
             BrowserProcess {
@@ -952,6 +1033,68 @@ mod tests {
     }
 
     #[test]
+    fn stale_missing_browser_tab_discards_only_a_confirmed_dead_process_identity() {
+        let raw = json!({
+            "browserProcessIdentities": {
+                "session:stale": {
+                    "processIdentity": {
+                        "pid": 2_000_000_000_u32,
+                        "startToken": "definitely-absent-process"
+                    },
+                    "runtimeProfile": "stale"
+                }
+            },
+            "tabs": {
+                "target:stale": {
+                    "id": "target:stale",
+                    "browserId": "session:stale",
+                    "lifecycle": "closed",
+                    "serviceTabHandle": {
+                        "browserId": "session:stale",
+                        "tabId": "target:stale",
+                        "valid": false,
+                        "staleReason": "browser_missing"
+                    }
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:stale"]["health"],
+            "not_started"
+        );
+        assert!(migrated["browserProcessIdentities"]
+            .get("session:stale")
+            .is_none());
+    }
+
+    #[test]
+    fn unreferenced_confirmed_dead_process_identity_is_discarded() {
+        let raw = json!({
+            "browserProcessIdentities": {
+                "session:stale": {
+                    "processIdentity": {
+                        "pid": 2_000_000_000_u32,
+                        "startToken": "definitely-absent-process"
+                    },
+                    "runtimeProfile": "stale"
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert!(migrated["browserProcessIdentities"]
+            .get("session:stale")
+            .is_none());
+        assert!(migrated["browsers"].as_object().unwrap().is_empty());
+    }
+
+    #[test]
     fn orphaned_remote_view_materializes_inert_browser_and_session() {
         let raw = json!({
             "profiles": {
@@ -1003,6 +1146,59 @@ mod tests {
             migrated["sessions"]["bill-soylei"]["browserIds"],
             json!(["session:bill-soylei"])
         );
+    }
+
+    #[test]
+    fn orphaned_remote_view_discards_only_a_confirmed_dead_process_identity() {
+        let raw = json!({
+            "profiles": {
+                "candidate": { "id": "candidate", "name": "candidate" }
+            },
+            "browserProcessIdentities": {
+                "session:candidate": {
+                    "processIdentity": {
+                        "pid": 2_000_000_000_u32,
+                        "startToken": "definitely-absent-process"
+                    },
+                    "runtimeProfile": "candidate"
+                }
+            },
+            "displayAllocations": {
+                "display:candidate": {
+                    "id": "display:candidate",
+                    "ownerBrowserId": "session:candidate",
+                    "ownerSessionId": "candidate",
+                    "profileId": "candidate",
+                    "state": "orphaned",
+                    "readiness": {
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:candidate": {
+                    "id": "guacamole:candidate",
+                    "browserId": "session:candidate",
+                    "sessionId": "candidate",
+                    "state": "orphaned",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": null,
+                    "controllerEpoch": 0
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:candidate"]["health"],
+            "not_started"
+        );
+        assert!(migrated["browserProcessIdentities"]
+            .get("session:candidate")
+            .is_none());
     }
 
     #[test]
@@ -1131,13 +1327,19 @@ mod tests {
                 crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                     principal_id: registered.principal.principal_id,
                     profile_id: registered.capability.profile_id,
-                    profile_identity_digest,
+                    profile_identity_digest: profile_identity_digest.clone(),
                     capability_id: registered.capability.capability_id,
                     provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
                     owner_generation: 2,
                 },
             )
             .unwrap();
+        state
+            .runtime_owner_registry
+            .principal_bindings
+            .get_mut(&profile_identity_digest)
+            .unwrap()
+            .owner_generation = 1;
         let raw = serde_json::to_string(&state).unwrap();
 
         let staged = stage_service_state_migration(&raw).unwrap();
@@ -1149,6 +1351,11 @@ mod tests {
         assert_eq!(
             migrated["sessions"]["dashboard-service-backend"]["lease"],
             "released"
+        );
+        assert_eq!(
+            migrated["runtimeOwnerRegistry"]["principalBindings"][&profile_identity_digest]
+                ["ownerGeneration"],
+            1
         );
     }
 

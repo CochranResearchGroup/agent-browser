@@ -327,8 +327,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const closeServiceBrowser = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*action: "service_browser_close"[\s\S]*taskName: "close-browser-row"[\s\S]*params: \{ browserId: browser\.id \}[\s\S]*await fetchService\(false\)/,
-  'Browser row Close must queue the service-owned browser close request and refresh service state',
+  /const closeServiceBrowser = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\)[\s\S]*action: "service_browser_close"[\s\S]*taskName: "close-browser-row"[\s\S]*\.\.\.browserRowCloseRoute\(browser\.id, sessionName\)[\s\S]*await fetchService\(false\)/,
+  'Browser row Close must route to the selected browser daemon and refresh service state',
 );
 
 assert.match(

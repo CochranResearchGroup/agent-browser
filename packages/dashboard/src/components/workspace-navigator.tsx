@@ -66,6 +66,7 @@ import {
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { browserRowCloseRoute } from "@/lib/service-browser-row-actions";
 import { execCommand } from "@/lib/exec";
 import { fetchForeignCdpScreenshot } from "@/lib/foreign-cdp-control";
 import {
@@ -1916,6 +1917,11 @@ export function WorkspaceNavigator() {
       setServiceError("The selected service browser has no stable browser ID.");
       return;
     }
+    const sessionName = node.serviceSessionId
+      ?? node.relatedIds.serviceSessionIds[0]
+      ?? node.daemonSession
+      ?? node.relatedIds.daemonSessionNames[0]
+      ?? null;
     setWorkspaceActionLoadingId(`${node.id}:close`);
     setServiceError("");
     try {
@@ -1927,7 +1933,7 @@ export function WorkspaceNavigator() {
           serviceName: node.ownership.serviceName ?? "agent-browser-dashboard",
           agentName: node.ownership.agentName ?? "dashboard-operator",
           taskName: node.ownership.taskName ?? "workspace-close-browser",
-          params: { browserId },
+          ...browserRowCloseRoute(browserId, sessionName),
           jobTimeoutMs: 10000,
         }),
       });

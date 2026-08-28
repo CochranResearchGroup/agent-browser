@@ -187,9 +187,11 @@ browser placeholder and released system-session placeholder only when it has no
 principal, work lease, process identity, runtime owner, or existing session
 binding.
 Terminal orphaned or released remote-view evidence may use the same inert
-placeholders only without process identity, active viewer or controller leases,
-principal-bound ownership, or existing session binding. A unique unbound legacy
-owner is preserved as historical identity, not converted into new authority.
+placeholders when any retained process identity is confirmed absent and no
+active viewer, controller lease, or existing session binding remains. A
+registered principal binding at or behind the unique retained owner generation
+stays non-effect-capable reconciliation evidence until a live exact process is
+established. A unique unbound legacy owner remains historical identity.
 A live selected runtime host with a missing or prior boot epoch is re-observed
 and CAS-refreshed only when its exact process, socket, generation, and binary
 remain in the selected scope. Ambiguous or changed identity still blocks.

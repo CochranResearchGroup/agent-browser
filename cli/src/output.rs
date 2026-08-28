@@ -5608,9 +5608,12 @@ referential identity without granting authority; effect-bearing missing-profile
 references still block before commit.
 An already-invalid browser_missing tab can retain its evidence through inert
 not_started browser and released system-session placeholders. Terminal orphaned
-or released remote-view evidence can do the same only without process identity,
-active viewer or controller leases, principal-bound ownership, or existing
-session binding. Effect-bearing references still block.
+or released remote-view evidence can do the same when any retained process
+identity is confirmed absent and no active viewer, controller lease, or
+existing session binding remains. A registered principal binding at or behind
+the unique retained owner generation stays non-effect-capable reconciliation
+evidence until a live exact process is established. Effect-bearing references
+still block.
 A live selected runtime host with a missing or prior boot epoch is re-observed
 and CAS-refreshed only when its exact process, socket, generation, and binary
 remain in the selected scope. Ambiguous or changed identity still blocks.

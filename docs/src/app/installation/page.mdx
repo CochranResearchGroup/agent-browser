@@ -264,9 +264,11 @@ A stale tab whose retained handle is already invalid with
 placeholder only when no principal, work lease, process identity, runtime owner,
 or existing session binding exists.
 Terminal orphaned or released remote-view evidence may use the same inert
-placeholders when it has no process identity, active viewer or controller
-lease, principal-bound owner, or existing session binding. A unique unbound
-legacy owner remains historical identity and does not become new authority.
+placeholders when any retained process identity is confirmed absent and no
+active viewer, controller lease, or existing session binding remains. A
+registered principal binding at or behind the unique retained owner generation
+stays non-effect-capable reconciliation evidence until a live exact process is
+established. A unique unbound legacy owner remains historical identity.
 Effect-bearing references still block.
 When a live selected runtime host predates boot-epoch persistence or belongs to
 a prior boot, guarded apply re-observes its exact process, socket, generation,
