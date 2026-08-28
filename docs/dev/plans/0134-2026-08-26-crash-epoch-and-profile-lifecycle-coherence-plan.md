@@ -1457,3 +1457,10 @@ Do not implement migration or installer effects in Slice A.
   prerequisite. The live dry run still reports 35 `route_not_ready` blockers,
   zero eligible durable handoffs, and the exact fresh-presentation-handoff
   recourse action.
+- Source commit `cd5d9a42` produced release candidate SHA-256
+  `2e05584d50511aadda83312f5c6d02da4e176781b850bda65fbfad514b664e8b`
+  and isolated development generation `0.28.0-2e05584d5051`. Development
+  publication confirmed production unchanged, synchronized the development
+  skill, and passed the three-iteration browser-launch smoke. Candidate doctor
+  with both runtime environments active retained one exact production runtime
+  host and one production executable generation.
