@@ -241,6 +241,54 @@ This maintenance inconsistency is not evidence that the ready retained browser
 must be closed. It is a product defect in transaction and lease-state
 convergence.
 
+## Stock Chrome Profile Registration Follow-Up
+
+After the recovery note was drafted, BooksReceipts registered a second,
+separate durable BILL profile whose declared build is `stock_chrome`. No
+browser was launched and no authentication state was claimed.
+
+The profile mutation succeeded and profile readback reported:
+
+- class `durable_named`;
+- allocation `per_service` with one canonical shared service;
+- browser build `stock_chrome`;
+- browser host `remote_headed`;
+- keyring `real_os_keychain`;
+- authentication readiness `unknown`;
+- lease state `available`; and
+- zero holders and zero browser processes.
+
+Profile creation exposed a browser-capability registry precedence defect. MCP
+`service_browser_capability_registry_upsert` returned `upserted: true` for the
+new profile-compatibility row, but also returned `routingApplied: false`. The
+effective registry resource omitted the new row because the configured
+registry overlay replaced the persisted collection. The no-launch browser
+preflight then returned:
+
+```text
+profile_compatibility_missing_or_blocked
+```
+
+Adding the same reviewed compatibility row to the user-scoped Agent Browser
+configuration made the effective resource expose it. The repeated no-launch
+preflight then returned `validated_binding_applied`, selected executable
+`stock-chrome-wsl-stable` at `/opt/google/chrome/chrome`, selected capability
+`stock-chrome-wsl-cdp`, cited the retained passed launch evidence, and reported
+`wouldLaunch: false`.
+
+This is a product defect because a successful serialized registry mutation is
+not effective under the common configured-registry posture. The mutation
+response should either update the authoritative registry layer, merge the
+persisted row into effective state, or fail with a typed precedence blocker.
+It must not report a successful upsert that the next access plan and preflight
+cannot use.
+
+Before the final access-plan read, another workstation transaction entered
+`candidate_ready` with admission draining true. The profile and effective
+registry remained readable and valid, but effect-capable service reads and
+lease registration were correctly deferred. This handoff did not modify,
+advance, or close that transaction.
+
 ## Product Repair Contract
 
 One bounded repair should make these guarantees:
@@ -268,6 +316,9 @@ One bounded repair should make these guarantees:
 10. Recovery returns either one ready retained browser and ready durable
     handoff, or one typed blocker. It never requires the consumer to assemble
     internal route and owner fields manually.
+11. Registry mutation either changes the effective configured registry or
+    returns a typed precedence blocker. `upserted: true` cannot coexist with an
+    effective read that silently omits the row.
 
 ## Required Acceptance
 
@@ -289,6 +340,9 @@ Start with provider-free fixtures on the active crash-profile lifecycle lane:
    requested browser.
 8. Verify stale route, display, lease, and transaction records become terminal
    or historical after reconciliation.
+9. Verify a profile-compatibility upsert remains visible through the effective
+   registry and immediately satisfies the matching no-launch preflight under a
+   configured-registry overlay.
 
 After source acceptance, use an isolated development runtime and harmless page
 to prove same-profile close, relaunch, rejoin, route-bound presentation, and
