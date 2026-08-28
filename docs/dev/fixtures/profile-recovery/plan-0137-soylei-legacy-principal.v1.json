@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "soylei-legacy-principal-unproven",
+  "consumerShape": "soylei-contractor-crm",
+  "profileId": "soylei-contractor",
+  "currentFailure": "legacy_principal_unproven",
+  "principalProvenance": "unproven_legacy",
+  "expectedDominantBlocker": "legacy_principal_unproven",
+  "expectedRecoveryClass": "reconcile_exact_principal_capability"
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "soylei-runtime-owner-principal-binding-missing",
+  "consumerShape": "soylei-contractor-crm",
+  "profileId": "soylei-contractor",
+  "currentFailure": "runtime_owner_principal_binding_missing",
+  "profileOwnerPresent": true,
+  "principalBindingPresent": false,
+  "expectedDominantBlocker": "runtime_owner_principal_binding_missing",
+  "expectedRecoveryClass": "rejoin_exact_owner_principal"
+}

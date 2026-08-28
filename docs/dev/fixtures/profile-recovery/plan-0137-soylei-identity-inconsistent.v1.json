@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "soylei-existing-session-profile-identity-inconsistent",
+  "consumerShape": "soylei-contractor-crm",
+  "profileId": "soylei-contractor",
+  "currentFailure": "existing_session_profile_identity_inconsistent",
+  "retainedSessionProfileId": "soylei-contractor",
+  "runtimeOwnerProfileId": "redacted-other-profile",
+  "expectedDominantBlocker": "existing_session_profile_identity_inconsistent",
+  "expectedRecoveryClass": "repair_exact_subordinate_binding"
+}

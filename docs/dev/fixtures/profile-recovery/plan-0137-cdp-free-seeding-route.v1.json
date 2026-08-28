@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "google-cdp-free-seeding-route-unproven",
+  "consumerShape": "manual-profile-seeding",
+  "profileId": "google-manual-seeding",
+  "currentFailure": "presentation_route_identity_unproven",
+  "browserProcessPresent": true,
+  "presentationRouteBindingPresent": false,
+  "operatorVisibleState": "unknown",
+  "expectedDominantBlocker": "presentation_route_identity_unproven",
+  "expectedRecoveryClass": "acquire_route_bound_manual_seeding_handoff"
+}

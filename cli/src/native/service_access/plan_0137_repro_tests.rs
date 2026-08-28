@@ -8,6 +8,16 @@ use std::collections::BTreeMap;
 
 const P137_TERMINAL_OWNER_FIXTURE: &str =
     include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-terminal-owner.v1.json");
+const P137_BLOCKER_FIXTURES: &[&str] = &[
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-odollo-contractor-portal.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-identity-inconsistent.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-legacy-principal.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-owner-binding-missing.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-owner-generation-mismatch.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-fictitious-browser-cdp.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-fictitious-odollo-ups.v1.json"),
+    include_str!("../../../../docs/dev/fixtures/profile-recovery/plan-0137-cdp-free-seeding-route.v1.json"),
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -95,6 +105,33 @@ fn state_for_fixture(fixture: &TerminalOwnerFixture) -> ServiceState {
 
 fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
+#[test]
+fn p137_blocker_fixtures_have_one_dominant_blocker_and_recovery_class() {
+    let mut fixture_ids = std::collections::BTreeSet::new();
+    let mut failures = std::collections::BTreeSet::new();
+    for encoded in P137_BLOCKER_FIXTURES {
+        let fixture: serde_json::Value = serde_json::from_str(encoded).unwrap();
+        let fixture_id = fixture["fixtureId"].as_str().unwrap().to_string();
+        let current_failure = fixture["currentFailure"].as_str().unwrap().to_string();
+        let blocker = fixture["expectedDominantBlocker"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let recovery_class = fixture["expectedRecoveryClass"].as_str().unwrap();
+        assert!(fixture_ids.insert(fixture_id));
+        assert_eq!(current_failure, blocker);
+        assert!(!recovery_class.is_empty());
+        failures.insert(current_failure);
+    }
+    assert!(failures.contains("existing_session_profile_identity_inconsistent"));
+    assert!(failures.contains("existing_session_profile_identity_unproven"));
+    assert!(failures.contains("legacy_principal_unproven"));
+    assert!(failures.contains("runtime_owner_principal_binding_missing"));
+    assert!(failures.contains("owner_generation_or_binding_mismatch"));
+    assert!(failures.contains("live_browser_missing_pid"));
+    assert!(failures.contains("presentation_route_identity_unproven"));
 }
 
 #[test]

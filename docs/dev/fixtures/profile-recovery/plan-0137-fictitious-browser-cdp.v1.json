@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "historical-fixture-browser-cdp",
+  "consumerShape": "service-state-provenance-audit",
+  "browserId": "browser-cdp",
+  "pid": null,
+  "reportedHealth": "ready",
+  "currentFailure": "live_browser_missing_pid",
+  "provenance": "historical_fixture_shape",
+  "expectedDominantBlocker": "live_browser_missing_pid",
+  "expectedRecoveryClass": "review_exact_inert_record_retirement"
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "agent-browser.plan-0137-acquisition-blocker-fixture.v1",
+  "fixtureId": "soylei-owner-generation-or-binding-mismatch",
+  "consumerShape": "soylei-contractor-crm",
+  "profileId": "soylei-contractor",
+  "currentFailure": "owner_generation_or_binding_mismatch",
+  "runtimeOwnerGeneration": 12,
+  "principalBindingOwnerGeneration": 11,
+  "expectedDominantBlocker": "owner_generation_or_binding_mismatch",
+  "expectedRecoveryClass": "compare_and_swap_principal_owner_binding"
+}
