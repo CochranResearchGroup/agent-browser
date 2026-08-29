@@ -2,13 +2,17 @@
 
 Date: 2026-08-29
 
-State: OPEN
+State: SOURCE ACCEPTED
 
-Execution state: `slice_a_contract_and_synthetic_acceptance_active`
+Execution state: `slice_a_source_accepted_public_contract_not_started`
 
 Lane: P110 Authentication Run Slice A
 
 Source baseline: `abbfd3c995a57e35cd2b832acdcd83ca29b4cff7`
+
+Rebased integration baseline: `1c96ac6782c3e8f5519c4e6005b9f58db084b578`
+
+Source checkpoint: `d0786a5a`
 
 Branch: `plan/authentication-run-foundation`
 
@@ -157,3 +161,21 @@ The next bounded packet may persist `AuthenticationRun` in Service State and
 publish its safe create, inspect, resume, cancel, and result contract across
 all public surfaces. Live im-receipts and mail-receipts adapters remain later
 packets and require their own authority and acceptance gates.
+
+## Slice A Acceptance
+
+Slice A is source accepted at checkpoint `d0786a5a`. Nine focused synthetic
+tests pass after rebasing onto `1c96ac67`. They prove complete binding,
+watch-before-trigger ordering, unique-candidate enforcement, response-only SMS
+and email-link custody, same-profile new-tab proof, operation and challenge
+replay rejection, transition-budget exhaustion, exact-target verification,
+and absence of the OTP and URL canaries from durable and debug projections.
+
+The repository selector's strict production-target Clippy gate, safe formatting
+gate, and serialized focused tests pass. A broader optional test-target Clippy
+run surfaced pre-existing test-only warnings outside this branch; they do not
+affect the selected gate. No live browser, profile, provider, message, mailbox,
+installation, or runtime effect occurred.
+
+Detailed evidence is in
+`docs/dev/notes/0138-2026-08-29-authentication-run-provider-free-source-acceptance.md`.
