@@ -203,6 +203,8 @@ struct PresentationProviderRoute {
     #[serde(default)]
     frame_url: Option<String>,
     #[serde(default)]
+    route_descriptor: Option<serde_json::Value>,
+    #[serde(default)]
     lifecycle: Option<String>,
     state: String,
 }
@@ -337,6 +339,7 @@ impl PresentationProviderInventory {
                 connection_id: provider_route.connection_id.clone(),
                 connection_name: provider_route.connection_name.clone(),
                 frame_url: provider_route.frame_url.clone(),
+                route_descriptor: provider_route.route_descriptor.clone(),
                 control_input: Some(ControlInputProvider::ManualAttachedDesktop),
                 provider_mode: "simultaneous_view".to_string(),
                 state: "ready".to_string(),
@@ -361,6 +364,7 @@ impl PresentationProviderInventory {
                 connection_id: provider_route.connection_id.clone(),
                 connection_name: provider_route.connection_name.clone(),
                 frame_url: provider_route.frame_url.clone(),
+                route_descriptor: provider_route.route_descriptor.clone(),
                 target: json!({
                     "displayAllocationId": provider_route.display_reservation_id.clone(),
                     "displayName": state.display_allocations
@@ -619,6 +623,14 @@ mod tests {
                     "connectionName": "Agent Browser Dev RDP Route 1",
                     "displayReservationId": "development-display-1",
                     "displayName": ":21",
+                    "frameUrl": "http://127.0.0.1:8093/guacamole/#/client/fixture",
+                    "routeDescriptor": {
+                        "localEmbedUrl": "http://127.0.0.1:8093/guacamole/#/client/fixture",
+                        "dashboardEmbedUrl": "http://127.0.0.1:8093/guacamole/#/client/fixture",
+                        "publicOperatorUrl": "http://127.0.0.1:4948",
+                        "healthUrl": "http://127.0.0.1:8093/guacamole/",
+                        "externalUrl": "http://127.0.0.1:4948"
+                    },
                     "lifecycle": "warm",
                     "state": "ready"
                 },
@@ -663,6 +675,17 @@ mod tests {
         assert_eq!(
             route_pool_entry.target["displayIsolation"],
             "private_virtual_display"
+        );
+        assert_eq!(
+            route_pool_entry.route_descriptor.as_ref().unwrap()["publicOperatorUrl"],
+            "http://127.0.0.1:4948"
+        );
+        assert_eq!(
+            state.remote_view_routes["development-route-1"]
+                .route_descriptor
+                .as_ref()
+                .unwrap()["publicOperatorUrl"],
+            "http://127.0.0.1:4948"
         );
         assert_eq!(
             state.display_allocations["development-display-1"].display_isolation,
