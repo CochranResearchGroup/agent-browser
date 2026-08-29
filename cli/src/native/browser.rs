@@ -205,6 +205,7 @@ pub fn to_ai_friendly_error(error: &str) -> String {
         || lower.contains("route_pool_unavailable")
         || lower.contains("browser_window_not_visible")
         || lower.contains("display_probe_unavailable")
+        || lower.contains("operator_presentation_")
         || lower.contains("operator-visible")
     {
         return error.to_string();
@@ -3347,6 +3348,12 @@ mod tests {
     #[test]
     fn test_to_ai_friendly_error_preserves_visible_window_probe_failure() {
         let error = "browser_window_not_visible: route 'guacamole:2' display ':11' state is 'display_probe_unavailable'; probe_error='xwininfo probe failed'; visible_window_proof_attempts=21; timeoutMs=10000";
+        assert_eq!(to_ai_friendly_error(error), error);
+    }
+
+    #[test]
+    fn test_to_ai_friendly_error_preserves_operator_presentation_timeout() {
+        let error = "operator_presentation_not_ready: route 'development-route-1' display ':13' blockers=active_window_owned; visible_window_proof_attempts=21; timeoutMs=10000";
         assert_eq!(to_ai_friendly_error(error), error);
     }
 
