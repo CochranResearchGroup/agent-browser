@@ -5602,6 +5602,16 @@ same recovery-only result.
 Successful JSON output includes runtimeCensusTransaction. Use workstation
 status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
+Every workstation dry-run includes serviceStateMigrationPreview. It reads
+Service State without writing and reports exact changed IDs by record class,
+candidate-led browser contamination, preserved unknown fields, recovery-artifact
+compatibility, and the paths apply would use. Dry-run creates no backup or
+migration receipt. Apply creates an exact backup and terminal migration receipt
+only after candidate preflight and a stable runtime census. Default migration
+does not delete governed profiles, browsers, sessions, displays, routes, leases,
+handoffs, principals, capabilities, runtime owners, or lifecycle identities.
+Unknown successor fields and action types remain preserved without effect
+authority. An already advertised recovery action does not require an upgrade.
 Legacy migration materializes a persistent placeholder profile only for an
 inert session with no principal, work capability, browser, or tab. This repairs
 referential identity without granting authority; effect-bearing missing-profile

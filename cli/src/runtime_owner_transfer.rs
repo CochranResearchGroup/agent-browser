@@ -22,7 +22,7 @@ pub(crate) enum ProfileOwnerState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ProfileOwner {
     pub(crate) owner_id: String,
     pub(crate) profile_identity_digest: String,
@@ -277,7 +277,7 @@ pub(crate) enum CleanupObligationState {
 /// registry. The ledger is intentionally evidence-only in P117 Slice A; later
 /// slices route lifecycle effects through this authority.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct RuntimeLifecycleRecord {
     pub(crate) logical_browser_id: String,
     /// Host boot that authenticated process-group and launch observations.
@@ -296,7 +296,7 @@ pub(crate) struct RuntimeLifecycleRecord {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct RuntimeOwnerRegistry {
     pub(crate) revision: u64,
     pub(crate) owners: BTreeMap<String, ProfileOwner>,
@@ -312,7 +312,7 @@ pub(crate) struct RuntimeOwnerRegistry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct RuntimeOwnerPrincipalBinding {
     pub(crate) principal_id: String,
     pub(crate) profile_id: String,

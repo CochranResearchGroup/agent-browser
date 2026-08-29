@@ -489,6 +489,7 @@ mod tests {
             presentation_validation_summary: Some("ready".to_string()),
             terminal_result: Some("accepted".to_string()),
             stop_reason: None,
+            successor_fields: std::collections::BTreeMap::new(),
         }
     }
 

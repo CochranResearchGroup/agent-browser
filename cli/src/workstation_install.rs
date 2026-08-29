@@ -209,6 +209,9 @@ struct WorkstationInstallReport {
     guacamole_port: u16,
     host_plan: HostPlan,
     candidate_presentation_prerequisite: Value,
+    /// Read-only classification of the Service State migration the candidate
+    /// would stage after preflight and a stable runtime census.
+    service_state_migration_preview: Value,
     paths: WorkstationPaths,
     phases: Vec<&'static str>,
     host_prepared: bool,
@@ -2459,6 +2462,7 @@ fn run_workstation_install(args: &[String]) {
     let host_plan = build_host_plan(isolated_root, &root);
     let candidate_presentation_prerequisite =
         workstation_candidate_presentation_prerequisite(&root, &paths, isolated_root);
+    let service_state_migration_preview = workstation_service_state_migration_preview(&root);
     if !host_plan.disk_space_ready {
         let mut error = format!(
                 "workstation installation requires at least {} bytes of free disk space; {} bytes are available",
@@ -2844,6 +2848,7 @@ fn run_workstation_install(args: &[String]) {
         guacamole_port: parsed.guacamole_port,
         host_plan,
         candidate_presentation_prerequisite,
+        service_state_migration_preview,
         paths: WorkstationPaths {
             root: root.display().to_string(),
             binary: paths.binary.display().to_string(),
@@ -2875,10 +2880,61 @@ fn run_workstation_install(args: &[String]) {
         println!("  Support: {}", report.paths.support_dir);
         println!("  Units: {}", report.paths.unit_dir);
         println!("  Ready: {}", if report.ready { "yes" } else { "no" });
+        println!(
+            "  Migration: {}",
+            report
+                .service_state_migration_preview
+                .pointer("/plan/status")
+                .and_then(Value::as_str)
+                .unwrap_or("blocked")
+        );
         println!("  Next: {}", report.next_action);
     }
     if session_refresh_required {
         exit(75);
+    }
+}
+
+/// Builds the source-free Service State migration preview without creating the
+/// artifact directory, backup, receipt, or any other installed-runtime state.
+fn workstation_service_state_migration_preview(root: &Path) -> Value {
+    let state_path = root.join(".agent-browser/service/state.json");
+    let artifact_directory = root.join(".agent-browser/runtime-adoption/transaction-artifacts");
+    let raw = match fs::read_to_string(&state_path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => "{}\n".to_string(),
+        Err(error) => {
+            return serde_json::json!({
+                "schemaVersion": "agent-browser.service-state-migration-preview.v1",
+                "mutation": false,
+                "status": "blocked_unreadable",
+                "authoritativeStatePath": state_path.display().to_string(),
+                "error": error.to_string(),
+                "nextAction": "Repair Service State readability before any apply.",
+            })
+        }
+    };
+    match crate::native::service_state_migration::preview_service_state_migration(
+        &raw,
+        &state_path,
+        &artifact_directory,
+    ) {
+        Ok(preview) => serde_json::to_value(preview).unwrap_or_else(|error| {
+            serde_json::json!({
+                "schemaVersion": "agent-browser.service-state-migration-preview.v1",
+                "mutation": false,
+                "status": "blocked_serialization",
+                "error": error.to_string(),
+            })
+        }),
+        Err(error) => serde_json::json!({
+            "schemaVersion": "agent-browser.service-state-migration-preview.v1",
+            "mutation": false,
+            "status": "blocked",
+            "authoritativeStatePath": state_path.display().to_string(),
+            "error": error,
+            "nextAction": "Use a compatible candidate reader or restore the selected generation. Do not rewrite unknown state.",
+        }),
     }
 }
 
@@ -5345,6 +5401,7 @@ fn require_stable_runtime_census_with(
         presentation_validation_summary: None,
         terminal_result: None,
         stop_reason: None,
+        successor_fields: std::collections::BTreeMap::new(),
     };
 
     let census_result = collect_stable_runtime_census_with(&mut collect_round);
@@ -5459,6 +5516,10 @@ fn prepare_service_state_migration_transaction(
         "{}.state.candidate.json",
         transaction.transaction_id
     ));
+    let receipt_path = artifact_dir.join(format!(
+        "{}.state.migration-receipt.json",
+        transaction.transaction_id
+    ));
     write_private_bytes_atomic(&snapshot_path, &original)?;
     write_private_bytes_atomic(&staged_path, &staged.bytes)?;
     transaction.service_state_migration = Some(UpgradeServiceStateMigration {
@@ -5483,6 +5544,13 @@ fn prepare_service_state_migration_transaction(
         committed: false,
         rollback_ready: true,
         old_reader_compatible: staged.plan.old_reader_compatible,
+        summary: serde_json::to_value(&staged.summary)
+            .map_err(|error| format!("service_state_migration_summary_serialize_failed:{error}"))?,
+        contamination_report: staged.contamination_report,
+        backup_locator: Some(snapshot_path.display().to_string()),
+        restore_procedure: "Inspect this exact install transaction, then invoke install transactions rollback with its current revision, candidate generation, and census digest.".to_string(),
+        receipt_path: Some(receipt_path.display().to_string()),
+        successor_fields: std::collections::BTreeMap::new(),
     });
     persist_upgrade_transition(
         transaction_path,
@@ -5525,6 +5593,7 @@ fn commit_prepared_service_state_migration(
         migration.committed = true;
         migration.status = "committed_no_change".to_string();
         migration.rollback_ready = false;
+        write_service_state_migration_receipt(migration, "committed_no_change")?;
         return Ok(());
     }
     let state_path = PathBuf::from(&migration.authoritative_state_path);
@@ -5559,6 +5628,7 @@ fn commit_prepared_service_state_migration(
     write_private_bytes_atomic(&state_path, &staged)?;
     migration.committed = true;
     migration.status = "committed".to_string();
+    write_service_state_migration_receipt(migration, "committed")?;
     if let Err(error) = inject_failure("state-migration-after-commit") {
         restore_service_state_migration_record(migration)?;
         return Err(error);
@@ -5574,6 +5644,7 @@ fn restore_service_state_migration_record(
         migration.committed = false;
         migration.status = "staged_validated_no_change".to_string();
         migration.rollback_ready = false;
+        write_service_state_migration_receipt(migration, "no_change_restore_not_required")?;
         return Ok(());
     }
     if !migration.committed && migration.status != "committed" {
@@ -5605,7 +5676,34 @@ fn restore_service_state_migration_record(
     }
     migration.committed = false;
     migration.status = "rolled_back".to_string();
+    write_service_state_migration_receipt(migration, "rolled_back")?;
     Ok(())
+}
+
+fn write_service_state_migration_receipt(
+    migration: &crate::runtime_adoption::UpgradeServiceStateMigration,
+    terminal_result: &str,
+) -> Result<(), String> {
+    let Some(path) = migration.receipt_path.as_deref() else {
+        return Ok(());
+    };
+    write_private_json_atomic(
+        Path::new(path),
+        &serde_json::json!({
+            "schemaVersion": "agent-browser.service-state-migration-receipt.v1",
+            "terminalResult": terminal_result,
+            "sourceStateSchema": migration.source_state_schema,
+            "targetStateSchema": migration.target_state_schema,
+            "authoritativeStatePath": migration.authoritative_state_path,
+            "backupLocator": migration.backup_locator,
+            "snapshotSha256": migration.snapshot_sha256,
+            "stagedSha256": migration.staged_sha256,
+            "summary": migration.summary,
+            "contaminationReport": migration.contamination_report,
+            "restoreProcedure": migration.restore_procedure,
+            "recordedAt": runtime_adoption_timestamp(),
+        }),
+    )
 }
 
 fn candidate_generation_identity(
@@ -5680,6 +5778,7 @@ fn new_upgrade_transaction(
         presentation_validation_summary: None,
         terminal_result: None,
         stop_reason: None,
+        successor_fields: std::collections::BTreeMap::new(),
     }
 }
 
@@ -14642,11 +14741,38 @@ mod tests {
             crate::runtime_adoption::UpgradeTransactionState::StateMigrationValidated
         );
         assert_eq!(fs::read(&state_path).unwrap(), original);
+        let migration = transaction.service_state_migration.as_ref().unwrap();
+        assert!(migration.summary["protectedRecordRemovals"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(migration.contamination_report["defaultEffect"], "none");
+        assert!(Path::new(migration.backup_locator.as_deref().unwrap()).is_file());
+        assert!(!Path::new(migration.receipt_path.as_deref().unwrap()).exists());
         commit_prepared_service_state_migration(&mut transaction).unwrap();
         let committed: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
         assert_eq!(
             committed["schemaVersion"],
             crate::native::service_state_migration::SERVICE_STATE_SCHEMA_VERSION
+        );
+        let receipt_path = transaction
+            .service_state_migration
+            .as_ref()
+            .unwrap()
+            .receipt_path
+            .clone()
+            .unwrap();
+        let committed_receipt: Value =
+            serde_json::from_slice(&fs::read(&receipt_path).unwrap()).unwrap();
+        assert_eq!(committed_receipt["terminalResult"], "committed");
+        assert_eq!(
+            committed_receipt["backupLocator"].as_str(),
+            transaction
+                .service_state_migration
+                .as_ref()
+                .unwrap()
+                .backup_locator
+                .as_deref()
         );
 
         restore_service_state_migration_record(
@@ -14654,6 +14780,44 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(&state_path).unwrap(), original);
+        let rollback_receipt: Value =
+            serde_json::from_slice(&fs::read(&receipt_path).unwrap()).unwrap();
+        assert_eq!(rollback_receipt["terminalResult"], "rolled_back");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn workstation_migration_preview_is_source_free_and_read_only() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-install-migration-preview-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state_path = root.join(".agent-browser/service/state.json");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let original = br#"{
+  "browsers": {
+    "browser-cdp": {"id": "browser-cdp"}
+  },
+  "futureActionRecords": {
+    "future": {"actionType": "future_exact_repair"}
+  }
+}
+"#;
+        fs::write(&state_path, original).unwrap();
+
+        let preview = workstation_service_state_migration_preview(&root);
+        assert_eq!(preview["mutation"], false);
+        assert_eq!(preview["backupCreated"], false);
+        assert_eq!(preview["contaminationReport"]["defaultEffect"], "none");
+        assert_eq!(
+            preview["summary"]["unknownTopLevelFieldsPreserved"],
+            serde_json::json!(["futureActionRecords"])
+        );
+        assert_eq!(fs::read(&state_path).unwrap(), original);
+        assert!(!root
+            .join(".agent-browser/runtime-adoption/transaction-artifacts")
+            .exists());
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -14951,7 +15115,26 @@ mod tests {
                 committed: false,
                 rollback_ready: true,
                 old_reader_compatible: true,
+                summary: serde_json::json!({}),
+                contamination_report: serde_json::json!({}),
+                backup_locator: Some("snapshot.json".to_string()),
+                restore_procedure: "inspect then rollback".to_string(),
+                receipt_path: Some("migration-receipt.json".to_string()),
+                successor_fields: std::collections::BTreeMap::new(),
             });
+        transaction.successor_fields.insert(
+            "futureTerminalBookkeeping".to_string(),
+            serde_json::json!({"state": "preserve"}),
+        );
+        transaction
+            .service_state_migration
+            .as_mut()
+            .unwrap()
+            .successor_fields
+            .insert(
+                "futureMigrationBookkeeping".to_string(),
+                serde_json::json!({"state": "preserve"}),
+            );
         let path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&path, &transaction).unwrap();
 
@@ -14960,6 +15143,10 @@ mod tests {
         let legacy_projection: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert!(legacy_projection.get("runtimeHandoffs").is_none());
         assert!(legacy_projection.get("serviceStateMigration").is_none());
+        assert_eq!(
+            legacy_projection["futureTerminalBookkeeping"]["state"],
+            "preserve"
+        );
         assert_eq!(legacy_projection["revision"], 13);
         assert_eq!(
             legacy_projection["checkpoints"]
@@ -14977,6 +15164,10 @@ mod tests {
             ));
         let retained_detail: Value = serde_json::from_slice(&fs::read(detail).unwrap()).unwrap();
         assert!(retained_detail.get("serviceStateMigration").is_some());
+        assert_eq!(
+            retained_detail["serviceStateMigration"]["futureMigrationBookkeeping"]["state"],
+            "preserve"
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

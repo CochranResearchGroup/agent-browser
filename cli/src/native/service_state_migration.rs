@@ -10,6 +10,8 @@ use super::service_model::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 pub(crate) const SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-state.v2";
 pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str =
@@ -43,6 +45,59 @@ pub(crate) struct ServiceStateMigrationPlan {
 pub(crate) struct StagedServiceStateMigration {
     pub(crate) plan: ServiceStateMigrationPlan,
     pub(crate) bytes: Vec<u8>,
+    pub(crate) summary: ServiceStateMigrationSummary,
+    pub(crate) contamination_report: Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateMigrationRecordClassSummary {
+    pub(crate) before_count: usize,
+    pub(crate) after_count: usize,
+    pub(crate) added_ids: Vec<String>,
+    pub(crate) removed_ids: Vec<String>,
+    pub(crate) changed_ids: Vec<String>,
+    pub(crate) preserved_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateMigrationSummary {
+    pub(crate) record_classes: BTreeMap<String, ServiceStateMigrationRecordClassSummary>,
+    pub(crate) affected_ids: Vec<String>,
+    pub(crate) protected_record_removals: Vec<String>,
+    pub(crate) unknown_top_level_fields_preserved: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateMigrationPreview {
+    pub(crate) schema_version: &'static str,
+    pub(crate) mutation: bool,
+    pub(crate) plan: ServiceStateMigrationPlan,
+    pub(crate) summary: ServiceStateMigrationSummary,
+    pub(crate) contamination_report: Value,
+    pub(crate) recovery_artifact_compatibility: Vec<RecoveryArtifactCompatibility>,
+    pub(crate) authoritative_state_path: String,
+    pub(crate) backup_directory: String,
+    pub(crate) backup_created: bool,
+    pub(crate) restore_procedure: &'static str,
+    pub(crate) receipt_directory: String,
+    pub(crate) default_deletion_policy: &'static str,
+    pub(crate) next_action: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RecoveryArtifactCompatibility {
+    pub(crate) schema_version: &'static str,
+    pub(crate) artifact_schema_version: String,
+    pub(crate) artifact_kind: &'static str,
+    pub(crate) reader_mode: &'static str,
+    pub(crate) effect_capable: bool,
+    pub(crate) preserved: bool,
+    pub(crate) unknown_action_types: Vec<String>,
+    pub(crate) next_action: &'static str,
 }
 
 pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::Error> {
@@ -121,6 +176,8 @@ pub(crate) fn plan_service_state_migration(raw: &str) -> Result<ServiceStateMigr
 pub(crate) fn stage_service_state_migration(
     raw: &str,
 ) -> Result<StagedServiceStateMigration, String> {
+    let source: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("service_state_migration_json_invalid:{error}"))?;
     let plan = plan_service_state_migration(raw)?;
     if !plan.forward_reader_available {
         return Err(format!(
@@ -139,10 +196,350 @@ pub(crate) fn stage_service_state_migration(
     // gate. Ordinary runtime writes can update related projections in
     // multiple repository mutations and must remain able to converge them.
     validate_service_state_invariants(&state)?;
-    let mut bytes = serde_json::to_vec_pretty(&state)
+    let contamination_report = serde_json::to_value(
+        super::service_browser_retirement::detect_browser_contamination(&state),
+    )
+    .map_err(|error| format!("service_state_migration_contamination_serialize_failed:{error}"))?;
+    let mut migrated = serde_json::to_value(&state)
+        .map_err(|error| format!("service_state_migration_serialize_failed:{error}"))?;
+    let unknown_top_level_fields_preserved =
+        preserve_unknown_successor_fields(&source, &mut migrated);
+    let mut summary = summarize_service_state_migration(&source, &migrated);
+    summary.unknown_top_level_fields_preserved = unknown_top_level_fields_preserved;
+    let mut bytes = serde_json::to_vec_pretty(&migrated)
         .map_err(|error| format!("service_state_migration_serialize_failed:{error}"))?;
     bytes.push(b'\n');
-    Ok(StagedServiceStateMigration { plan, bytes })
+    Ok(StagedServiceStateMigration {
+        plan,
+        bytes,
+        summary,
+        contamination_report,
+    })
+}
+
+pub(crate) fn preview_service_state_migration(
+    raw: &str,
+    authoritative_state_path: &Path,
+    artifact_directory: &Path,
+) -> Result<ServiceStateMigrationPreview, String> {
+    let source: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("service_state_migration_json_invalid:{error}"))?;
+    let staged = stage_service_state_migration(raw)?;
+    Ok(ServiceStateMigrationPreview {
+        schema_version: "agent-browser.service-state-migration-preview.v1",
+        mutation: false,
+        plan: staged.plan,
+        summary: staged.summary,
+        contamination_report: staged.contamination_report,
+        recovery_artifact_compatibility: recovery_artifact_compatibility_from_state(&source)?,
+        authoritative_state_path: authoritative_state_path.display().to_string(),
+        backup_directory: artifact_directory.display().to_string(),
+        backup_created: false,
+        restore_procedure: "Inspect the exact install transaction, then use its current revision, candidate generation, and census digest with install transactions rollback.",
+        receipt_directory: artifact_directory.display().to_string(),
+        default_deletion_policy: "preserve_browsers_profiles_leases_displays_routes_and_handoffs",
+        next_action: "Review the contamination report and exact class diff before any apply.",
+    })
+}
+
+fn recovery_artifact_compatibility_from_state(
+    state: &Value,
+) -> Result<Vec<RecoveryArtifactCompatibility>, String> {
+    let mut results = Vec::new();
+    for pointer in ["/profileRecoveryReceipts", "/browserRetirementReceipts"] {
+        for artifact in state
+            .pointer(pointer)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flat_map(|records| records.values())
+        {
+            let raw = serde_json::to_string(artifact)
+                .map_err(|error| format!("recovery_artifact_serialize_failed:{error}"))?;
+            results.push(read_recovery_artifact_compatibility(&raw)?);
+        }
+    }
+    Ok(results)
+}
+
+/// Read plan and receipt compatibility without granting effect authority.
+/// Unknown successor fields and action types remain in caller-owned bytes;
+/// only exact current schemas with known actions are eligible for typed apply.
+pub(crate) fn read_recovery_artifact_compatibility(
+    raw: &str,
+) -> Result<RecoveryArtifactCompatibility, String> {
+    let value: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("recovery_artifact_json_invalid:{error}"))?;
+    let schema = value
+        .get("schemaVersion")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "recovery_artifact_schema_required".to_string())?;
+    let artifact_kind = if schema.contains("profile-recovery-plan") {
+        "profile_recovery_plan"
+    } else if schema.contains("profile-recovery-receipt") {
+        "profile_recovery_receipt"
+    } else if schema.contains("browser-retirement-plan") {
+        "browser_retirement_plan"
+    } else if schema.contains("browser-retirement-receipt") {
+        "browser_retirement_receipt"
+    } else {
+        "unknown_recovery_artifact"
+    };
+    let known_current_schemas = [
+        super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+        super::service_profile_recovery::PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
+        super::service_browser_retirement::BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
+        super::service_browser_retirement::BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
+    ];
+    let known_actions = [
+        "supersede_terminal_owner",
+        "reconcile_exact_principal_profile_identity",
+        "reconcile_legacy_principal",
+        "bind_owner_principal_authority",
+        "repair_owner_generation_binding",
+        "release_expired_ownerless_lease",
+        "adopt_exact_live_browser",
+        "repair_subordinate_profile_binding",
+        "repair_independent_route_identity",
+        "finalize_terminal_installation_bookkeeping",
+        "retire_inert_browser_record",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let unknown_action_types = value
+        .get("actions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|action| action.get("actionType").and_then(Value::as_str))
+        .filter(|action| !known_actions.contains(*action))
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let current = known_current_schemas.contains(&schema);
+    let reader_mode = if current {
+        "current"
+    } else if schema.ends_with(".v0") || !schema.starts_with("agent-browser.") {
+        "legacy_preserve_only"
+    } else {
+        "future_preserve_only"
+    };
+    let effect_capable =
+        current && unknown_action_types.is_empty() && artifact_kind != "unknown_recovery_artifact";
+    Ok(RecoveryArtifactCompatibility {
+        schema_version: "agent-browser.recovery-artifact-compatibility.v1",
+        artifact_schema_version: schema.to_string(),
+        artifact_kind,
+        reader_mode,
+        effect_capable,
+        preserved: true,
+        unknown_action_types,
+        next_action: if effect_capable {
+            "Use the exact typed apply path with its normal compare-and-swap checks."
+        } else {
+            "Preserve the artifact unchanged and use a compatible reader before apply."
+        },
+    })
+}
+
+const SERVICE_STATE_COLLECTIONS: [(&str, &str, bool); 17] = [
+    ("profiles", "/profiles", true),
+    ("browsers", "/browsers", true),
+    ("sessions", "/sessions", true),
+    ("tabs", "/tabs", false),
+    ("displayAllocations", "/displayAllocations", true),
+    ("remoteViewRoutes", "/remoteViewRoutes", true),
+    ("routePool", "/routePool", false),
+    (
+        "remoteViewAcquisitionLeases",
+        "/remoteViewAcquisitionLeases",
+        true,
+    ),
+    ("remoteViewHandoffs", "/remoteViewHandoffs", true),
+    ("viewerLeases", "/viewerLeases", true),
+    ("profileSeedingHandoffs", "/profileSeedingHandoffs", true),
+    ("profileRecoveryReceipts", "/profileRecoveryReceipts", false),
+    (
+        "browserRetirementReceipts",
+        "/browserRetirementReceipts",
+        false,
+    ),
+    ("principalRecords", "/servicePrincipals/principals", true),
+    (
+        "profileCapabilities",
+        "/servicePrincipals/profileCapabilities",
+        true,
+    ),
+    ("runtimeOwners", "/runtimeOwnerRegistry/owners", true),
+    (
+        "runtimeLifecycleIdentities",
+        "/runtimeOwnerRegistry/lifecycleRecords",
+        true,
+    ),
+];
+
+fn summarize_service_state_migration(
+    before: &Value,
+    after: &Value,
+) -> ServiceStateMigrationSummary {
+    let mut summary = ServiceStateMigrationSummary::default();
+    let mut affected = BTreeSet::new();
+    for (class, pointer, protected) in SERVICE_STATE_COLLECTIONS {
+        let before_records = before.pointer(pointer).and_then(Value::as_object);
+        let after_records = after.pointer(pointer).and_then(Value::as_object);
+        let before_ids = before_records
+            .into_iter()
+            .flat_map(|records| records.keys().cloned())
+            .collect::<BTreeSet<_>>();
+        let after_ids = after_records
+            .into_iter()
+            .flat_map(|records| records.keys().cloned())
+            .collect::<BTreeSet<_>>();
+        let added_ids = after_ids
+            .difference(&before_ids)
+            .cloned()
+            .collect::<Vec<_>>();
+        let removed_ids = before_ids
+            .difference(&after_ids)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut changed_ids = Vec::new();
+        let mut preserved_ids = Vec::new();
+        for id in before_ids.intersection(&after_ids) {
+            let before_value = before_records.and_then(|records| records.get(id));
+            let after_value = after_records.and_then(|records| records.get(id));
+            if before_value == after_value {
+                preserved_ids.push(id.clone());
+            } else {
+                changed_ids.push(id.clone());
+            }
+        }
+        for id in added_ids
+            .iter()
+            .chain(removed_ids.iter())
+            .chain(changed_ids.iter())
+        {
+            affected.insert(format!("{class}:{id}"));
+        }
+        if protected {
+            summary
+                .protected_record_removals
+                .extend(removed_ids.iter().map(|id| format!("{class}:{id}")));
+        }
+        summary.record_classes.insert(
+            class.to_string(),
+            ServiceStateMigrationRecordClassSummary {
+                before_count: before_ids.len(),
+                after_count: after_ids.len(),
+                added_ids,
+                removed_ids,
+                changed_ids,
+                preserved_ids,
+            },
+        );
+    }
+    summary.affected_ids = affected.into_iter().collect();
+    summary
+}
+
+fn preserve_unknown_successor_fields(source: &Value, migrated: &mut Value) -> Vec<String> {
+    let Some(source_object) = source.as_object() else {
+        return Vec::new();
+    };
+    let Some(migrated_object) = migrated.as_object_mut() else {
+        return Vec::new();
+    };
+    let known_top_level = [
+        "schemaVersion",
+        "profileLeaseSchemaVersion",
+        "controlPlane",
+        "reconciliation",
+        "events",
+        "incidents",
+        "displayAllocations",
+        "remoteViewRoutes",
+        "routePool",
+        "remoteViewAcquisitionLeases",
+        "remoteViewHandoffs",
+        "viewerLeases",
+        "presentationCapacity",
+        "profiles",
+        "servicePrincipals",
+        "profileLeaseReconcileReceipts",
+        "profileRecoveryReceipts",
+        "browserRetirementReceipts",
+        "crashRegenerationTransactions",
+        "browsers",
+        "browserProcessIdentities",
+        "runtimeOwnerRegistry",
+        "sessions",
+        "tabs",
+        "jobs",
+        "monitors",
+        "sitePolicies",
+        "providers",
+        "challenges",
+        "profileSeedingHandoffs",
+        "browserCapabilityRegistry",
+        "defaultBrowserBuild",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let collection_names = SERVICE_STATE_COLLECTIONS
+        .into_iter()
+        .filter_map(|(_, pointer, _)| pointer.strip_prefix('/').filter(|tail| !tail.contains('/')))
+        .collect::<BTreeSet<_>>();
+    let mut preserved = Vec::new();
+    for (key, source_value) in source_object {
+        if !known_top_level.contains(key.as_str()) {
+            migrated_object.insert(key.clone(), source_value.clone());
+            preserved.push(key.clone());
+            continue;
+        }
+        let Some(migrated_value) = migrated_object.get_mut(key) else {
+            continue;
+        };
+        if collection_names.contains(key.as_str()) {
+            merge_existing_record_fields(source_value, migrated_value);
+        } else {
+            merge_unknown_object_fields(source_value, migrated_value);
+        }
+    }
+    preserved.sort();
+    preserved
+}
+
+fn merge_existing_record_fields(source: &Value, migrated: &mut Value) {
+    let (Some(source_records), Some(migrated_records)) =
+        (source.as_object(), migrated.as_object_mut())
+    else {
+        return;
+    };
+    for (id, source_record) in source_records {
+        if let Some(migrated_record) = migrated_records.get_mut(id) {
+            merge_unknown_object_fields(source_record, migrated_record);
+        }
+    }
+}
+
+fn merge_unknown_object_fields(source: &Value, migrated: &mut Value) {
+    match (source, migrated) {
+        (Value::Object(source_object), Value::Object(migrated_object)) => {
+            for (key, source_value) in source_object {
+                if let Some(migrated_value) = migrated_object.get_mut(key) {
+                    merge_unknown_object_fields(source_value, migrated_value);
+                } else {
+                    migrated_object.insert(key.clone(), source_value.clone());
+                }
+            }
+        }
+        (Value::Array(source_items), Value::Array(migrated_items)) => {
+            for (source_item, migrated_item) in source_items.iter().zip(migrated_items.iter_mut()) {
+                merge_unknown_object_fields(source_item, migrated_item);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Remove ephemeral process evidence only when it has no retained browser
@@ -1403,5 +1800,105 @@ mod tests {
         assert!(stage_service_state_migration(&raw)
             .unwrap_err()
             .contains("service_state_session_browser_missing"));
+    }
+
+    #[test]
+    fn preview_reports_exact_ids_contamination_and_preserves_successor_fields() {
+        let raw = json!({
+            "profiles": {
+                "contractor": {"id": "contractor", "name": "Contractor"}
+            },
+            "browsers": {
+                "browser-cdp": {
+                    "id": "browser-cdp",
+                    "futureBrowserEvidence": {"source": "successor"},
+                    "recordProvenance": {
+                        "source": "persisted_state",
+                        "authoritySource": "legacy_unproven",
+                        "lifecycleClassification": "inert_legacy",
+                        "recommendedAction": "retire",
+                        "recordRevision": 2,
+                        "evidenceDigest": "evidence",
+                        "futureProvenanceField": "preserve"
+                    }
+                }
+            },
+            "successorActionRecords": {
+                "future-action": {"actionType": "future_exact_repair", "effectCapable": false}
+            }
+        })
+        .to_string();
+        let preview = preview_service_state_migration(
+            &raw,
+            Path::new("/runtime/service/state.json"),
+            Path::new("/runtime/transaction-artifacts"),
+        )
+        .unwrap();
+        assert!(!preview.mutation);
+        assert!(!preview.backup_created);
+        assert_eq!(preview.contamination_report["defaultEffect"], "none");
+        assert_eq!(
+            preview.contamination_report["inertBrowserIds"],
+            json!(["browser-cdp"])
+        );
+        assert!(preview.summary.protected_record_removals.is_empty());
+        assert_eq!(
+            preview.summary.unknown_top_level_fields_preserved,
+            vec!["successorActionRecords".to_string()]
+        );
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["successorActionRecords"]["future-action"]["actionType"],
+            "future_exact_repair"
+        );
+        assert_eq!(
+            migrated["browsers"]["browser-cdp"]["futureBrowserEvidence"]["source"],
+            "successor"
+        );
+        assert_eq!(
+            migrated["browsers"]["browser-cdp"]["recordProvenance"]["futureProvenanceField"],
+            "preserve"
+        );
+    }
+
+    #[test]
+    fn recovery_artifact_reader_is_forward_backward_and_mixed_version_safe() {
+        let current = json!({
+            "schemaVersion": super::super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+            "actions": [{"actionType": "retire_inert_browser_record"}],
+        })
+        .to_string();
+        let current_result = read_recovery_artifact_compatibility(&current).unwrap();
+        assert_eq!(current_result.reader_mode, "current");
+        assert!(current_result.effect_capable);
+
+        let legacy = r#"{"schemaVersion":"legacy.profile-recovery-plan.v0","legacyField":true}"#;
+        let legacy_before = legacy.as_bytes().to_vec();
+        let legacy_result = read_recovery_artifact_compatibility(legacy).unwrap();
+        assert_eq!(legacy_result.reader_mode, "legacy_preserve_only");
+        assert!(!legacy_result.effect_capable);
+        assert_eq!(legacy.as_bytes(), legacy_before);
+
+        let future = json!({
+            "schemaVersion": "agent-browser.profile-recovery-plan.v2",
+            "futureSeal": {"algorithm": "successor"},
+            "actions": [
+                {"actionType": "retire_inert_browser_record"},
+                {"actionType": "future_exact_repair", "futureGuard": true}
+            ]
+        })
+        .to_string();
+        let future_before = future.as_bytes().to_vec();
+        let future_result = read_recovery_artifact_compatibility(&future).unwrap();
+        assert_eq!(future_result.reader_mode, "future_preserve_only");
+        assert_eq!(
+            future_result.unknown_action_types,
+            vec!["future_exact_repair".to_string()]
+        );
+        assert!(!future_result.effect_capable);
+        assert!(future_result.preserved);
+        assert_eq!(future.as_bytes(), future_before);
     }
 }

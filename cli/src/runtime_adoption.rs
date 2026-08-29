@@ -5,6 +5,7 @@
 //! shapes before installer, daemon, dashboard, or browser behavior changes.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -381,7 +382,7 @@ pub(crate) fn rollback_runtime_lane_transfer(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct UpgradeTransaction {
     pub(crate) schema_version: String,
     pub(crate) transaction_id: String,
@@ -405,6 +406,10 @@ pub(crate) struct UpgradeTransaction {
     pub(crate) presentation_validation_summary: Option<String>,
     pub(crate) terminal_result: Option<String>,
     pub(crate) stop_reason: Option<String>,
+    /// Additive successor bookkeeping must survive candidate or rollback
+    /// readers that do not yet assign semantics to it.
+    #[serde(default, flatten)]
+    pub(crate) successor_fields: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -420,7 +425,7 @@ pub(crate) struct UpgradeRuntimeHandoff {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct UpgradeServiceStateMigration {
     pub(crate) schema_version: String,
     pub(crate) source_state_schema: String,
@@ -437,6 +442,19 @@ pub(crate) struct UpgradeServiceStateMigration {
     pub(crate) committed: bool,
     pub(crate) rollback_ready: bool,
     pub(crate) old_reader_compatible: bool,
+    #[serde(default)]
+    pub(crate) summary: Value,
+    #[serde(default)]
+    pub(crate) contamination_report: Value,
+    #[serde(default)]
+    pub(crate) backup_locator: Option<String>,
+    #[serde(default)]
+    pub(crate) restore_procedure: String,
+    #[serde(default)]
+    pub(crate) receipt_path: Option<String>,
+    /// Preserve additive candidate bookkeeping through mixed-version reads.
+    #[serde(default, flatten)]
+    pub(crate) successor_fields: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

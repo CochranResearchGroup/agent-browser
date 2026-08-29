@@ -104,6 +104,21 @@ agent-browser install transactions list --json
 agent-browser install transactions inspect --transaction-id upgrade-... --json
 ```
 
+Every dry-run includes <code>serviceStateMigrationPreview</code>. It reads the
+current Service State without writing and reports exact added, changed, and
+removed IDs by record class, candidate-led browser contamination findings,
+preserved unknown fields, recovery-artifact compatibility, and the paths that
+apply would use. Dry-run creates neither a backup nor a migration receipt.
+Apply stages the same migration only after candidate preflight and a stable
+runtime census. It then records the exact backup locator, restore procedure,
+before and after digests, summary, contamination report, and terminal migration
+receipt in the private transaction artifacts. The default migration never
+deletes profiles, browsers, sessions, displays, routes, leases, handoffs,
+principals, capabilities, runtime owners, or lifecycle identities. Unknown
+successor fields and action types are preserved without effect authority, so
+rollback readers retain newer terminal bookkeeping. An already advertised
+recovery action does not require an upgrade merely to apply it.
+
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
 requires at least 6 GiB of free disk capacity. JSON output exposes

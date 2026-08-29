@@ -56,7 +56,27 @@ try {
     0,
     `workstation install dry-run must succeed:\n${dryRun.stdout}${dryRun.stderr}`,
   );
-  assertJsonSuccess(dryRun.stdout, 'dry-run');
+  const dryRunPayload = assertJsonSuccess(dryRun.stdout, 'dry-run');
+  assert.equal(
+    dryRunPayload.serviceStateMigrationPreview.schemaVersion,
+    'agent-browser.service-state-migration-preview.v1',
+    'dry-run must expose the source-free Service State migration preview',
+  );
+  assert.equal(
+    dryRunPayload.serviceStateMigrationPreview.mutation,
+    false,
+    'migration preview must remain read-only',
+  );
+  assert.equal(
+    dryRunPayload.serviceStateMigrationPreview.backupCreated,
+    false,
+    'migration preview must not create a backup',
+  );
+  assert.deepEqual(
+    dryRunPayload.serviceStateMigrationPreview.summary.protectedRecordRemovals,
+    [],
+    'default migration must not remove protected records',
+  );
   assert.deepEqual(
     treeManifest(fixtureRoot, ignoredFixturePaths()),
     beforeDryRun,
@@ -183,11 +203,13 @@ try {
     'public transaction status must omit private runtime and filesystem evidence',
   );
   const firstManifest = treeManifest(installRoot, transactionLedgerPaths);
+  const firstMigrationArtifacts = readdirSync(transactionArtifactStore);
   assert.equal(
-    readdirSync(transactionArtifactStore).length,
-    2,
-    'first apply must retain the original and migrated Service State artifacts',
+    firstMigrationArtifacts.length,
+    3,
+    'first apply must retain the original, migrated, and receipted Service State artifacts',
   );
+  assertMigrationArtifactRoles(firstMigrationArtifacts, 1);
   const installedLinks = firstManifest.filter((entry) => entry.type === 'symlink');
   assert.ok(installedLinks.length > 0, 'immutable generation selection must use stable links');
   for (const entry of installedLinks) {
@@ -483,9 +505,10 @@ try {
   assert.equal(readdirSync(transactionStore).length, 2, 'second apply must write one new transaction');
   assert.equal(
     readdirSync(transactionArtifactStore).length,
-    4,
-    'second apply must retain a distinct pair of Service State artifacts',
+    6,
+    'second apply must retain a distinct Service State artifact set',
   );
+  assertMigrationArtifactRoles(readdirSync(transactionArtifactStore), 2);
   assertTransactionTerminal(transactionStore, 'accepted');
   assert.equal(
     statSync(installedBinary).ino,
@@ -858,6 +881,21 @@ function assertJsonSuccess(stdout, label) {
     assert.fail(`${label} emitted invalid JSON: ${error.message}\n${stdout}`);
   }
   assert.equal(payload.success, true, `${label} JSON must report success`);
+  return payload;
+}
+
+function assertMigrationArtifactRoles(entries, expectedPerRole) {
+  for (const suffix of [
+    '.state.before.json',
+    '.state.candidate.json',
+    '.state.migration-receipt.json',
+  ]) {
+    assert.equal(
+      entries.filter((entry) => entry.endsWith(suffix)).length,
+      expectedPerRole,
+      `migration artifacts must include ${expectedPerRole} ${suffix} file(s)`,
+    );
+  }
 }
 
 function installCommandShim(command) {

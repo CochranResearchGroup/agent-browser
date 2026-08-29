@@ -40,7 +40,17 @@ retry by killing or detaching a browser. Successful JSON output includes
 `runtimeCensusTransaction`, a private receipt under
 `~/.agent-browser/runtime-adoption/transactions/` with the census digest and
 per-runtime classifications. Host prerequisites must succeed before admission
-drain or owner transfer. On the first transactional upgrade from the legacy
+drain or owner transfer. Inspect `serviceStateMigrationPreview` on every
+dry-run. It is a no-write, source-free classification of exact record IDs,
+candidate-led browser contamination, unknown successor fields, and recovery
+artifact compatibility. It creates neither a backup nor a receipt. Apply
+creates the exact backup and terminal migration receipt only after candidate
+preflight and a stable census. Never accept a default migration that removes a
+profile, browser, session, display, route, lease, handoff, principal,
+capability, runtime owner, or lifecycle identity. Preserve unknown fields and
+action types without granting effect authority. Do not require an upgrade
+merely to run a recovery action the installed generation already advertises.
+On the first transactional upgrade from the legacy
 mutable layout, the installer seals the exact existing binary, support tree,
 and user units as the rollback generation before replacing stable entrypoints
 with generation-backed links. It restores the original files and selector if
