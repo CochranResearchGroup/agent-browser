@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_e_complete_slice_f_not_started`
+Execution state: `slice_f_complete_slice_g_not_started`
 
 Lane: P137
 
@@ -890,3 +890,43 @@ checkpoint is durable and the plan's identity model remains coherent.
   seeding executor named by the registry. Public parity and dashboard actions
   remain assigned to Slice G, migration and install compatibility to Slice H,
   and all development and production effects remain gated by Slices I and J.
+
+## Slice F Checkpoint | 2026-08-28
+
+- Objective: acquire a visible, route-bound first-authentication browser
+  without enabling DevTools and retain one opaque operator handoff.
+- Source commit: `242e5225` on `main`, pushed to `origin/main`.
+- Transaction order: the existing supervised route coordinator selects the
+  exact registered profile, plans and reserves presentation capacity, proves
+  display access, and only then invokes headed `cdp_free_launch`. Route
+  exhaustion and unregistered profiles fail before Chrome launch.
+- Visibility: manual seeding substitutes process-bound visible-window evidence
+  for a CDP target. Wrong process, absent browser window, missing display
+  socket, stale route, and unavailable Guacamole states return typed
+  `notVisible` evidence. Only `operatorVisible.state=ready` permits a visible
+  response.
+- Lifecycle: the persisted seeding handoff records the exact PID and blocks
+  profile lease and CDP actions until close. An interrupted acquire reuses the
+  existing process and opaque handoff instead of launching another Chrome or
+  checking out a second route.
+- Close and continuation: exact profile, target, handoff, route, and PID joins
+  gate process termination. Close releases the owned route, viewer,
+  controller, display, and capacity records through the existing exact route
+  release contract, advances the seeding lifecycle to
+  `seeding_closed_unverified`, and advertises attachable profile acquisition
+  separately from the authenticated-state probe. Replay converges when the
+  process or route was already released.
+- Authentication boundary: every manual-seeding response reports
+  authentication as `not_probed`; visibility is never accepted as login
+  evidence.
+- Validation: Rust formatting and strict Clippy passed; all 47 route-open tests
+  passed serially, including seven focused manual-seeding tests for ordering,
+  CDP denial, visibility failure evidence, durable handoff persistence, exact
+  close mismatch rejection, and interrupted-close replay.
+- Effects and rollback: source and provider-free scripted runtime changes only.
+  No development or production browser, profile, route, provider, process, or
+  installation effect occurred. Reverting `242e5225` restores the pre-seeding
+  coordinator.
+- Remaining gate: Slice G must publish acquire and close through every public
+  surface and add dashboard review and confirmation UX before isolated
+  development execution is eligible.
