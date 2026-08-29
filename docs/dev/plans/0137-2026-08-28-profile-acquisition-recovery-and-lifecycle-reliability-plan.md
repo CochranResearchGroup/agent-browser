@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_i_source_complete_live_acceptance_blocked_on_exact_orphan_cleanup_authority`
+Execution state: `slice_j_no_effect_preflight_blocked_on_state_compatibility_and_presentation`
 
 Lane: P137
 
@@ -618,6 +618,26 @@ effects:
 
 Real provider navigation, credentials, consent, extraction, tracking lookup,
 or downstream scheduling remain separate consumer authority.
+
+### Slice J no-effect checkpoint | 2026-08-29
+
+The reviewable preflight is recorded in
+`docs/dev/notes/0141-2026-08-29-plan-0137-slice-j-no-effect-candidate-preflight.md`.
+No production effect was applied.
+
+The exact candidate binary is frozen, but production installation is blocked:
+
+- the candidate migration preview rejects one current display-to-browser
+  relation as `service_state_display_browser_missing` and produces no migration
+  digest; and
+- the candidate presentation prerequisite has 52 `route_not_ready` blockers,
+  zero eligible handoffs, and `ready=false`.
+
+Production generation identity, candidate backup, and candidate rollback
+evidence remain intentionally uncreated because each requires an effectful
+production staging or transaction boundary. Slice J may proceed only after a
+bounded compatibility repair or explicitly authorized state reconciliation,
+fresh candidate-specific presentation proof, and a new exact effect review.
 
 ## Acceptance Matrix
 
