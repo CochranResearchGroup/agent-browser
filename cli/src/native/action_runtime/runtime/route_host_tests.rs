@@ -1081,6 +1081,55 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
     assert_eq!(options.profile.as_deref(), Some(profile_id));
 
+    let closed_tab_id = "target:closed-provider-route";
+    let closed_handle = ServiceTabHandle {
+        browser_id: format!("session:{session_id}"),
+        session_name: Some(session_id.to_string()),
+        tab_id: closed_tab_id.to_string(),
+        profile_id: Some(profile_id.to_string()),
+        lease_state: Some(LeaseState::Released),
+        owner_session_id: Some(session_id.to_string()),
+        valid: false,
+        stale_reason: Some("tab_closed".to_string()),
+        ..ServiceTabHandle::default()
+    };
+    state.sessions.get_mut(session_id).unwrap().browser_ids = vec![format!("session:{session_id}")];
+    state.browsers.insert(
+        format!("session:{session_id}"),
+        BrowserProcess {
+            id: format!("session:{session_id}"),
+            profile_id: Some(profile_id.to_string()),
+            tab_handles: vec![closed_handle.clone()],
+            ..BrowserProcess::default()
+        },
+    );
+    state.tabs.insert(
+        closed_tab_id.to_string(),
+        BrowserTab {
+            id: closed_tab_id.to_string(),
+            browser_id: format!("session:{session_id}"),
+            lifecycle: TabLifecycle::Closed,
+            owner_session_id: Some(session_id.to_string()),
+            service_tab_handle: Some(closed_handle),
+            ..BrowserTab::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut closed_projection_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let closed_projection_selection =
+        apply_service_profile_selection(&mut closed_projection_options, &command, Some(session_id))
+            .unwrap();
+    assert_eq!(closed_projection_selection, None);
+    assert_eq!(
+        closed_projection_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Exclusive;
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&state)
@@ -1092,7 +1141,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(
         apply_service_profile_selection(&mut active_lease_options, &command, Some(session_id))
             .unwrap_err(),
-        "existing_session_profile_identity_unproven"
+        "existing_session_profile_identity_inconsistent"
     );
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Released;
 
@@ -1112,7 +1161,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(
         apply_service_profile_selection(&mut missing_lock_options, &command, Some(session_id))
             .unwrap_err(),
-        "existing_session_profile_identity_unproven"
+        "existing_session_profile_identity_inconsistent"
     );
 
     state

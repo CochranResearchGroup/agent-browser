@@ -922,45 +922,64 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
             == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
         && process_absence_proven
         && profile_lock_release_proven;
-    let session_projection_absent = match state.sessions.get(session_id) {
+    let logical_browser_id = binding.claim.logical_browser_id.as_str();
+    let inert_handle = |handle: &crate::native::service_model::ServiceTabHandle| {
+        !handle.valid
+            && handle.lease_state == Some(LeaseState::Released)
+            && handle.browser_id == logical_browser_id
+            && handle.session_name.as_deref() == Some(session_id)
+            && handle.owner_session_id.as_deref() == Some(session_id)
+            && handle.profile_id.as_deref() == Some(profile_id)
+            && handle.stale_reason.is_some()
+    };
+    let session_projection_inert = match state.sessions.get(session_id) {
         None => true,
         Some(session) => {
             session.lease == LeaseState::Released
                 && session.profile_id.as_deref() == Some(profile_id)
-                && session.browser_ids.is_empty()
+                && session.browser_ids.len() <= 1
+                && session
+                    .browser_ids
+                    .iter()
+                    .all(|browser_id| browser_id == logical_browser_id)
                 && session.tab_ids.is_empty()
         }
     };
-    let owner_projection_absent = session_projection_absent
-        && !state
-            .browsers
-            .contains_key(&binding.claim.logical_browser_id)
-        && !state.browsers.values().any(|browser| {
-            browser
-                .active_session_ids
-                .iter()
-                .any(|active_session| active_session == session_id)
-                || (browser.profile_id.as_deref() == Some(profile_id)
-                    && (browser.pid.is_some()
-                        || browser.cdp_endpoint.is_some()
-                        || !browser.active_session_ids.is_empty()
-                        || browser.tab_handles.iter().any(|handle| handle.valid)))
-        })
-        && !state.tabs.values().any(|tab| {
-            tab.browser_id == binding.claim.logical_browser_id
-                || tab.owner_session_id.as_deref() == Some(session_id)
-                || tab.service_tab_handle.as_ref().is_some_and(|handle| {
-                    handle.valid
-                        && (handle.browser_id == binding.claim.logical_browser_id
-                            || handle.session_name.as_deref() == Some(session_id)
-                            || handle.profile_id.as_deref() == Some(profile_id))
-                })
-        });
+    let browser_projection_inert = state.browsers.iter().all(|(browser_id, browser)| {
+        if browser_id == logical_browser_id {
+            browser.profile_id.as_deref() == Some(profile_id)
+                && browser.pid.is_none()
+                && browser.cdp_endpoint.is_none()
+                && browser.active_session_ids.is_empty()
+                && browser.display_allocation_id.is_none()
+                && browser.tab_handles.iter().all(&inert_handle)
+        } else {
+            browser.profile_id.as_deref() != Some(profile_id)
+                && !browser
+                    .active_session_ids
+                    .iter()
+                    .any(|active_session| active_session == session_id)
+        }
+    });
+    let tab_projection_inert = state.tabs.values().all(|tab| {
+        let related = tab.browser_id == logical_browser_id
+            || tab.owner_session_id.as_deref() == Some(session_id)
+            || tab.service_tab_handle.as_ref().is_some_and(|handle| {
+                handle.browser_id == logical_browser_id
+                    || handle.session_name.as_deref() == Some(session_id)
+                    || handle.profile_id.as_deref() == Some(profile_id)
+            });
+        !related
+            || (tab.lifecycle == crate::native::service_model::TabLifecycle::Closed
+                && tab.service_tab_handle.as_ref().is_some_and(&inert_handle))
+    });
+    let owner_projection_inert =
+        session_projection_inert && browser_projection_inert && tab_projection_inert;
     let principal_projection_absent = !state
         .runtime_owner_registry
         .principal_bindings
         .contains_key(&profile_digest);
-    if !(exact_terminal_owner && owner_projection_absent && principal_projection_absent) {
+    if !(exact_terminal_owner && owner_projection_inert && principal_projection_absent) {
         return Ok(false);
     }
     options.runtime_profile = Some(profile_id.to_string());
