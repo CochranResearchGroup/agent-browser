@@ -2449,6 +2449,7 @@ pub fn route_bound_handoff_skipped_failure_cleanup(
 
 pub fn route_bound_handoff_failure_cleanup_task(
     plan: &RouteBoundHandoffFailureCleanupPlan,
+    launch: &Value,
 ) -> RouteBoundHandoffFailureCleanupTask {
     match plan {
         RouteBoundHandoffFailureCleanupPlan::CloseOpenedTab { index } => {
@@ -2458,9 +2459,20 @@ pub fn route_bound_handoff_failure_cleanup_task(
             }
         }
         RouteBoundHandoffFailureCleanupPlan::CloseNewBrowser => {
-            RouteBoundHandoffFailureCleanupTask::CloseNewBrowser {
-                command: json!({ "action": "close" }),
+            let mut command = json!({ "action": "close" });
+            for key in [
+                "browserId",
+                "sessionName",
+                "browserPid",
+                "pid",
+                "runtimeProfile",
+                "profileId",
+            ] {
+                if let Some(value) = launch.get(key) {
+                    command[key] = value.clone();
+                }
             }
+            RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command }
         }
         RouteBoundHandoffFailureCleanupPlan::SkipExistingBrowserReused { .. } => {
             RouteBoundHandoffFailureCleanupTask::Skipped {
@@ -2801,7 +2813,7 @@ pub fn begin_route_bound_handoff_failure_recovery(
         },
     )?;
     let cleanup_plan = route_bound_handoff_failure_cleanup_plan(input.launch, input.tab);
-    let cleanup_task = route_bound_handoff_failure_cleanup_task(&cleanup_plan);
+    let cleanup_task = route_bound_handoff_failure_cleanup_task(&cleanup_plan, input.launch);
     let skipped_cleanup = route_bound_handoff_skipped_failure_cleanup(&cleanup_plan);
     Ok(RouteBoundHandoffFailureRecovery {
         rollback,
@@ -4527,7 +4539,7 @@ mod tests {
     #[test]
     fn failure_cleanup_task_builds_opened_tab_close_command() {
         let plan = RouteBoundHandoffFailureCleanupPlan::CloseOpenedTab { index: 3 };
-        let task = route_bound_handoff_failure_cleanup_task(&plan);
+        let task = route_bound_handoff_failure_cleanup_task(&plan, &json!({ "reused": true }));
 
         match task {
             RouteBoundHandoffFailureCleanupTask::CloseOpenedTab { index, command } => {
@@ -4541,11 +4553,19 @@ mod tests {
     #[test]
     fn failure_cleanup_task_builds_new_browser_close_command() {
         let plan = RouteBoundHandoffFailureCleanupPlan::CloseNewBrowser;
-        let task = route_bound_handoff_failure_cleanup_task(&plan);
+        let task = route_bound_handoff_failure_cleanup_task(
+            &plan,
+            &json!({
+                "browserPid": 4242,
+                "runtimeProfile": "contractor-test",
+            }),
+        );
 
         match task {
             RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command } => {
                 assert_eq!(command["action"], "close");
+                assert_eq!(command["browserPid"], 4242);
+                assert_eq!(command["runtimeProfile"], "contractor-test");
             }
             other => panic!("unexpected cleanup task: {other:?}"),
         }
@@ -4556,7 +4576,7 @@ mod tests {
         let plan = RouteBoundHandoffFailureCleanupPlan::SkipExistingBrowserReused {
             reason: "opened tab index unavailable",
         };
-        let task = route_bound_handoff_failure_cleanup_task(&plan);
+        let task = route_bound_handoff_failure_cleanup_task(&plan, &json!({ "reused": true }));
 
         match task {
             RouteBoundHandoffFailureCleanupTask::Skipped { cleanup } => {

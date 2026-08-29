@@ -98,8 +98,12 @@ pub(crate) struct RouteBoundBrowserIdentity {
     pub(crate) browser_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) session_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "browserPid", skip_serializing_if = "Option::is_none")]
     pub(crate) pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) runtime_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) profile_id: Option<String>,
     #[serde(default, flatten)]
     pub(crate) extensions: Map<String, Value>,
 }

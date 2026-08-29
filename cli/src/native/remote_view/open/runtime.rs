@@ -8,9 +8,43 @@ use super::route_lifecycle::handle_service_remote_view_route_checkout;
 pub(crate) use super::runtime_model::*;
 use super::shared::*;
 use crate::native::action_runtime::runtime::{
-    handle_cdp_free_launch, handle_runtime_handoff_resume,
+    handle_cdp_free_launch, handle_runtime_handoff_resume, terminate_runtime_browser,
 };
 use crate::native::service_store::JsonServiceStateStore;
+
+const X11_SCENE_READY_ATTEMPTS: usize = 30;
+const X11_SCENE_READY_INTERVAL: Duration = Duration::from_millis(100);
+
+fn x11_scene_readiness_is_transient(message: &str) -> bool {
+    message.contains("X11 authoritative stacking inventory is unavailable")
+        || message.contains("X11 active window is unavailable for reversible staging")
+        || message.contains("No viewable X11 window belongs to the browser PID")
+}
+
+async fn snapshot_browser_scene_when_ready(
+    browser_pid: u32,
+    display_name: &str,
+) -> Result<crate::native::x11_scene::X11SceneSnapshot, RouteBoundRuntimeIssue> {
+    for attempt in 0..X11_SCENE_READY_ATTEMPTS {
+        match crate::native::x11_scene::snapshot_browser_scene(browser_pid, display_name) {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(message)
+                if x11_scene_readiness_is_transient(&message)
+                    && attempt + 1 < X11_SCENE_READY_ATTEMPTS =>
+            {
+                tokio::time::sleep(X11_SCENE_READY_INTERVAL).await;
+            }
+            Err(message) => {
+                return Err(route_bound_runtime_issue(
+                    "stage_visible_window",
+                    message,
+                    None,
+                ));
+            }
+        }
+    }
+    unreachable!("bounded X11 readiness loop always returns")
+}
 /// Raw browser facts observed by the coordinator. The runtime adapter does
 /// not decide whether a browser or target is reusable.
 #[derive(Debug, Clone)]
@@ -458,13 +492,48 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: CloseCreatedBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, CloseCreatedBrowserResult> {
         Box::pin(async move {
-            let _ = request.browser_identity;
-            handle_close(self.state)
-                .await
-                .and_then(CloseCreatedBrowserResult::from_compatibility)
-                .map_err(|message| {
-                    route_bound_runtime_issue("close_created_browser", message, None)
-                })
+            let identity = request.browser_identity;
+            let pid = identity.pid;
+            let runtime_profile = identity.runtime_profile.or(identity.profile_id);
+            let mut value = handle_close(self.state).await.map_err(|message| {
+                route_bound_runtime_issue("close_created_browser", message, None)
+            })?;
+            if let Some(pid) = pid {
+                let before = crate::runtime_profile::runtime_process_assessment(
+                    runtime_profile.as_deref(),
+                    pid,
+                );
+                if before.preserves_evidence() {
+                    let shutdown = terminate_runtime_browser(runtime_profile.clone(), pid).await;
+                    let after = crate::runtime_profile::runtime_process_assessment(
+                        runtime_profile.as_deref(),
+                        pid,
+                    );
+                    if after.preserves_evidence() {
+                        return Err(route_bound_runtime_issue(
+                            "close_created_browser",
+                            format!(
+                                "rollback_incomplete: exact browser PID {pid} survived cleanup ({})",
+                                after.reason
+                            ),
+                            None,
+                        ));
+                    }
+                    value["exactProcessCleanup"] = json!({
+                        "pid": pid,
+                        "runtimeProfile": runtime_profile,
+                        "state": "closed",
+                        "politeCloseAttempted": shutdown.polite_close_attempted,
+                        "politeCloseSucceeded": shutdown.polite_close_succeeded,
+                        "forceKillAttempted": shutdown.force_kill_attempted,
+                        "forceKillSucceeded": shutdown.force_kill_succeeded,
+                        "errors": shutdown.errors,
+                    });
+                }
+            }
+            CloseCreatedBrowserResult::from_compatibility(value).map_err(|message| {
+                route_bound_runtime_issue("close_created_browser", message, None)
+            })
         })
     }
     fn checkout_route(
@@ -522,11 +591,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
                         None,
                     )
                 })?;
-            let snapshot =
-                crate::native::x11_scene::snapshot_browser_scene(browser_pid, display_name)
-                    .map_err(|message| {
-                        route_bound_runtime_issue("stage_visible_window", message, None)
-                    })?;
+            let snapshot = snapshot_browser_scene_when_ready(browser_pid, display_name).await?;
             crate::native::x11_scene::stage_browser_scene(&snapshot).map_err(|message| {
                 route_bound_runtime_issue("stage_visible_window", message, None)
             })?;
@@ -570,6 +635,33 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
 mod tests {
     use super::*;
     use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    #[test]
+    fn x11_scene_readiness_retries_only_transient_publication_gaps() {
+        assert!(x11_scene_readiness_is_transient(
+            "X11 authoritative stacking inventory is unavailable"
+        ));
+        assert!(x11_scene_readiness_is_transient(
+            "No viewable X11 window belongs to the browser PID"
+        ));
+        assert!(!x11_scene_readiness_is_transient(
+            "X11 display access is denied"
+        ));
+    }
+
+    #[test]
+    fn cdp_free_launch_identity_preserves_exact_cleanup_facts() {
+        let identity = RouteBoundBrowserIdentity::from_compatibility(json!({
+            "browserPid": 4242,
+            "runtimeProfile": "contractor-test",
+            "profileId": "contractor-test",
+        }))
+        .unwrap();
+
+        assert_eq!(identity.pid, Some(4242));
+        assert_eq!(identity.runtime_profile.as_deref(), Some("contractor-test"));
+        assert_eq!(identity.profile_id.as_deref(), Some("contractor-test"));
+    }
 
     #[tokio::test]
     async fn daemon_browser_observation_uses_committed_logical_browser_identity() {
