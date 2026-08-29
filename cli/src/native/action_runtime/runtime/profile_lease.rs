@@ -123,6 +123,12 @@ pub(crate) fn service_profile_lease_metadata_for_command(
     if command.get("serviceTabHandle").is_some() {
         return Ok(None);
     }
+    // Closing an exact named session never acquires or launches a profile.
+    // Applying launch-only continuity checks here can strand an inert daemon
+    // route behind stale retained identity evidence.
+    if command.get("action").and_then(Value::as_str) == Some("close") {
+        return Ok(None);
+    }
     if command
         .get("action")
         .and_then(|value| value.as_str())

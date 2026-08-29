@@ -436,6 +436,41 @@ try {
   ]);
   assert.doesNotMatch(JSON.stringify(applied), /POSTGRES_PASSWORD|"password"/);
 
+  const restaged = stageDevelopmentPresentationProviderBundle({ env });
+  assert.equal(restaged.success, true);
+  assert.equal(restaged.state, 'refreshed_configured');
+  assert.equal(existsSync(descriptor.manifest), true);
+  const reconcilePreflight = developmentPresentationProviderSystemPreflight({
+    env,
+    run(command, args) {
+      if (command === 'docker' && args[0] === 'info') {
+        return { status: 0, stdout: '29.7.2\n', stderr: '' };
+      }
+      if (command === 'sudo') return { status: 0, stdout: 'ready\n', stderr: '' };
+      if (command === 'systemctl') return { status: 0, stdout: 'active\n', stderr: '' };
+      if (command === 'ss') return { status: 0, stdout: 'LISTEN owned\n', stderr: '' };
+      if (command === 'docker' && args[0] === 'inspect') {
+        return {
+          status: 0,
+          stdout: `${descriptor.composeProject}\ttrue\n`,
+          stderr: '',
+        };
+      }
+      if (command === 'getent') {
+        const user = args.at(-1);
+        return {
+          status: 0,
+          stdout: `${user}:x:2000:2000:agent-browser route-pool RDP session:/home/${user}:/bin/bash\n`,
+          stderr: '',
+        };
+      }
+      throw new Error(`Unexpected configured preflight command: ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.equal(reconcilePreflight.mode, 'reconcile');
+  assert.equal(reconcilePreflight.success, true);
+  assert.ok(reconcilePreflight.checks.every((check) => check.ok));
+
   rmSync(descriptor.manifest, { force: true });
   effectCalls.length = 0;
   const deferred = applyDevelopmentPresentationProvider({
@@ -479,6 +514,77 @@ try {
   assert.equal(reconciled.state, 'provider_ready_ingress_pending');
   assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
   assert.deepEqual(effectCalls, []);
+
+  effectCalls.length = 0;
+  const stoppedObservation = structuredClone(readyObservation);
+  stoppedObservation.containers.find((item) =>
+    item.name === descriptor.services.guacamole
+  ).running = false;
+  stoppedObservation.ports.guacamole.listening = false;
+  stoppedObservation.displays = [];
+  let reconcileObservation = stoppedObservation;
+  const recovered = applyDevelopmentPresentationProvider({
+    env,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      createVolume: () => effectCalls.push('create-volume'),
+      startDatabase: () => effectCalls.push('start-database'),
+      ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
+      syncConnections: () => effectCalls.push('sync-connections'),
+      startProvider: () => effectCalls.push('start-provider'),
+      grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
+      openWarmRoutes: () => {
+        effectCalls.push('open-warm-routes');
+        reconcileObservation = readyObservation;
+      },
+      observe: () => reconcileObservation,
+      grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
+      quarantine: () => effectCalls.push('quarantine'),
+    },
+  });
+  assert.equal(recovered.state, 'provider_ready_ingress_pending');
+  assert.equal(recovered.providerReady, true);
+  assert.deepEqual(effectCalls, [
+    'create-volume',
+    'start-database',
+    ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
+    'sync-connections',
+    'start-provider',
+    'grant-operator-route-access',
+    'open-warm-routes',
+    ...descriptor.routes.slice(0, descriptor.warmSlots)
+      .map((route) => `grant:${route.displayReservationId}`),
+  ]);
+
+  let configuredQuarantine = null;
+  effectCalls.length = 0;
+  assert.throws(
+    () => applyDevelopmentPresentationProvider({
+      env,
+      authorizeEffects: true,
+      deferIngress: true,
+      effects: {
+        snapshotProduction: () => ({ identity: 'production-fixture' }),
+        assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+        createVolume: () => effectCalls.push('create-volume'),
+        startDatabase: () => effectCalls.push('start-database'),
+        ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
+        syncConnections: () => effectCalls.push('sync-connections'),
+        startProvider: () => effectCalls.push('start-provider'),
+        grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
+        openWarmRoutes: () => { throw new Error('configured warm-route failure'); },
+        observe: () => stoppedObservation,
+        grantDisplayAccess: () => {},
+        quarantine: (receipt) => { configuredQuarantine = receipt; },
+      },
+    }),
+    /apply quarantined: configured warm-route failure/,
+  );
+  assert.equal(configuredQuarantine.reason, 'configured warm-route failure');
+  assert.equal(configuredQuarantine.completedSteps.includes('start-provider'), true);
 
   const scaleCalls = [];
   const scaledObservation = structuredClone(readyObservation);

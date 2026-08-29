@@ -123,7 +123,31 @@ try {
   assert.equal(laneManifest.executablePath, installed.generation.binary);
   assert.match(readFileSync(join(descriptor.systemdDir, descriptor.units[0]), 'utf8'), new RegExp(installed.generation.binary));
 
+  const additionalLaneManifestPath = join(
+    descriptor.pseudoHome,
+    '.config',
+    'agent-browser',
+    'session-supervisors',
+    'development-presentation-provider-v5-1.json',
+  );
+  writeFileSync(additionalLaneManifestPath, `${JSON.stringify({
+    schemaVersion: 'agent-browser.session-supervisor.v1',
+    session: 'development-presentation-provider-v5-1',
+    executablePath: '/stale-development-generation/bin/agent-browser',
+    executableSha256: '0'.repeat(64),
+    streamPort: 37247,
+    runtimeProfile: null,
+    fixtureExtension: { preserve: true },
+    provenance: { installedBy: 'fixture' },
+  }, null, 2)}\n`);
+  const rebound = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  const additionalLaneManifest = JSON.parse(readFileSync(additionalLaneManifestPath, 'utf8'));
+  assert.equal(additionalLaneManifest.executablePath, rebound.generation.binary);
+  assert.equal(additionalLaneManifest.executableSha256, rebound.generation.sha256);
+  assert.deepEqual(additionalLaneManifest.fixtureExtension, { preserve: true });
+
   const laneManifestBeforeRejectedInstall = readFileSync(descriptor.laneManifest, 'utf8');
+  const additionalLaneManifestBeforeRejectedInstall = readFileSync(additionalLaneManifestPath, 'utf8');
   const currentBeforeRejectedInstall = readlinkSync(descriptor.current);
   assert.throws(
     () => installDevelopmentRuntime({
@@ -136,6 +160,10 @@ try {
     /fixture production drift/,
   );
   assert.equal(readFileSync(descriptor.laneManifest, 'utf8'), laneManifestBeforeRejectedInstall);
+  assert.equal(
+    readFileSync(additionalLaneManifestPath, 'utf8'),
+    additionalLaneManifestBeforeRejectedInstall,
+  );
   assert.equal(readlinkSync(descriptor.current), currentBeforeRejectedInstall);
 
   const obsoleteGeneration = join(descriptor.generations, '0.27.0-obsolete');

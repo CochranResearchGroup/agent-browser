@@ -28,7 +28,7 @@ const RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION: &str =
     "agent-browser.runtime-lifecycle-registry.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
-const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -293,6 +293,26 @@ fn prepare_service_state_transaction(
             .map_err(|err| format!("Failed to start service state JSON serializer: {err}"))?
             .join()
             .map_err(|_| "Service state JSON serializer panicked".to_string())?
+    })
+}
+
+/// Decode an already parsed Service State value on the same bounded stack used
+/// for disk JSON. Runtime-host commands can carry large state snapshots, and
+/// serde recursion must not consume a Tokio worker's smaller stack.
+pub(crate) fn decode_service_state_value(
+    value: &serde_json::Value,
+) -> Result<ServiceState, String> {
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("service-state-json".to_string())
+            .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
+            .spawn_scoped(scope, move || {
+                serde_json::from_value::<ServiceState>(value.clone())
+                    .map_err(|err| format!("Invalid serviceState: {err}"))
+            })
+            .map_err(|err| format!("Failed to start serviceState decoder: {err}"))?
+            .join()
+            .map_err(|_| "ServiceState decoder panicked".to_string())?
     })
 }
 
@@ -1298,32 +1318,32 @@ mod tests {
                 ..ServiceState::default()
             })
             .expect("large fixture should save");
+        let embedded = serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(&path).expect("large fixture JSON should be readable"),
+        )
+        .expect("large fixture JSON should parse as a value");
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .thread_stack_size(128 * 1024)
-            .enable_all()
-            .build()
-            .expect("fixture runtime should build");
-        let loaded = runtime
-            .block_on(async move {
-                tokio::spawn(async move {
-                    let stack_pressure = [0_u8; 64 * 1024];
-                    std::hint::black_box(&stack_pressure);
-                    let result = store.load();
-                    if let Ok(state) = result.as_ref() {
-                        store
-                            .save(state)
-                            .expect("large service state should save from a constrained worker");
-                    }
-                    std::hint::black_box(&stack_pressure);
-                    result
-                })
-                .await
-                .expect("service-state loader task should not crash")
+        let runtime =
+            crate::native::daemon::build_runtime(1).expect("fixture daemon runtime should build");
+        let (decoded, loaded) = runtime.block_on(async move {
+            tokio::spawn(async move {
+                let decoded = decode_service_state_value(&embedded);
+                let result = store.load();
+                if let Ok(state) = result.as_ref() {
+                    store
+                        .save(state)
+                        .expect("large service state should save from a constrained worker");
+                }
+                (decoded, result)
             })
-            .expect("large fixture should load");
+            .await
+            .expect("service-state loader task should not crash")
+        });
 
+        let decoded = decoded.expect("large embedded fixture should decode");
+        let loaded = loaded.expect("large fixture should load from disk");
+
+        assert_eq!(decoded.remote_view_acquisition_leases.len(), 640);
         assert_eq!(loaded.remote_view_acquisition_leases.len(), 640);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }

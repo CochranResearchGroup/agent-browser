@@ -48,6 +48,21 @@ use crate::native::service_file_transfer::*;
 use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
+
+#[test]
+fn exact_close_skips_launch_only_profile_lease_selection() {
+    let command = json!({
+        "action": "close",
+        "serviceName": "development-presentation-provider",
+        "runtimeProfile": "development-presentation-provider-v5-1"
+    });
+    let metadata = service_profile_lease_metadata_for_command(
+        &command,
+        Some("development-presentation-provider-v5-1"),
+    )
+    .unwrap();
+    assert!(metadata.is_none());
+}
 use crate::native::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,
@@ -508,7 +523,11 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
     let profile_id = "odollo-fedex";
     let session_id = "odollo-fulfillment";
     let browser_id = "browser-odollo-fedex";
-    let user_data_dir = home.join(profile_id);
+    let profile_hint = profile_id;
+    let user_data_dir =
+        crate::runtime_profile::resolve_profile(Some(profile_hint), Some(profile_id))
+            .unwrap()
+            .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_digest =
         crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
@@ -531,7 +550,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
             profile_id.to_string(),
             BrowserProfile {
                 id: profile_id.to_string(),
-                user_data_dir: Some(user_data_dir.display().to_string()),
+                user_data_dir: Some(profile_hint.to_string()),
                 ..BrowserProfile::default()
             },
         )]),
@@ -578,10 +597,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
 
     assert_eq!(selected, Some(ProfileSelectionReason::ExistingOwner));
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
-    assert_eq!(
-        options.profile.as_deref(),
-        Some(user_data_dir.to_str().unwrap())
-    );
+    assert_eq!(options.profile.as_deref(), Some(profile_hint));
     let cdp_free_plan = build_cdp_free_launch_plan(
         &json!({ "action": "cdp_free_launch", "serviceName": "OdolloFulfillment" }),
         Some(session_id),
@@ -737,7 +753,11 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
     let profile_id = "odollo-fedex";
     let session_id = "principal-profile-odollo-fedex";
     let principal_id = "odollo-fulfillment";
-    let user_data_dir = home.join(profile_id);
+    let profile_hint = profile_id;
+    let user_data_dir =
+        crate::runtime_profile::resolve_profile(Some(profile_hint), Some(profile_id))
+            .unwrap()
+            .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "orphaned-owner-odollo-fedex".to_string(),
@@ -761,7 +781,7 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
             profile_id.to_string(),
             BrowserProfile {
                 id: profile_id.to_string(),
-                user_data_dir: Some(user_data_dir.display().to_string()),
+                user_data_dir: Some(profile_hint.to_string()),
                 ..BrowserProfile::default()
             },
         )]),
@@ -799,7 +819,56 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
 
     assert_eq!(selection, Some(ProfileSelectionReason::ExistingOwner));
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
-    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    assert_eq!(options.profile.as_deref(), Some(profile_hint));
+
+    state.sessions.insert(
+        session_id.to_string(),
+        BrowserSession {
+            id: session_id.to_string(),
+            service_name: Some("odollo-fulfillment".to_string()),
+            principal_id: Some(principal_id.to_string()),
+            profile_id: Some(profile_id.to_string()),
+            browser_ids: vec![format!("session:{session_id}")],
+            tab_ids: vec!["prelaunch-tab".to_string()],
+            lease: LeaseState::Exclusive,
+            ..BrowserSession::default()
+        },
+    );
+    state.tabs.insert(
+        "prelaunch-tab".to_string(),
+        BrowserTab {
+            id: "prelaunch-tab".to_string(),
+            browser_id: format!("session:{session_id}"),
+            lifecycle: TabLifecycle::Opening,
+            owner_session_id: Some(session_id.to_string()),
+            principal_id: Some(principal_id.to_string()),
+            ..BrowserTab::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut prelaunch_options = LaunchOptions::default();
+    let prelaunch_selection = apply_service_profile_selection(
+        &mut prelaunch_options,
+        &json!({
+            "action": "tab_new",
+            "profileId": profile_id,
+            "serviceName": "odollo-fulfillment",
+            "servicePrincipalId": principal_id,
+            "servicePrincipalProvenance": "registered_capability",
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(
+        prelaunch_selection,
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        prelaunch_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
 
     let mut foreign_options = LaunchOptions::default();
     let foreign_error = apply_service_profile_selection(

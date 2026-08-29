@@ -1868,6 +1868,42 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unreachable_exited_runtime_host_clears_only_exact_stale_metadata() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-stale-runtime-host-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        guard.remove("XDG_RUNTIME_DIR");
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+
+        let identity = RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "linux:missing-runtime-host".to_string(),
+            executable_path: Some("/opt/agent-browser".to_string()),
+            browser_family: None,
+        };
+        write_daemon_process_identity("logical-lane", &identity).unwrap();
+        fs::write(dir.join("runtime-host.pid"), identity.pid.to_string()).unwrap();
+        fs::write(dir.join("runtime-host.sock"), "stale").unwrap();
+
+        prepare_unreachable_endpoint_for_launch("logical-lane").unwrap();
+
+        assert!(!get_daemon_identity_path("logical-lane").exists());
+        assert!(!dir.join("runtime-host.pid").exists());
+        assert!(!dir.join("runtime-host.sock").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn test_apply_runtime_host_env_forwards_lane_and_keychain_settings() {
         let remote_env_guard = EnvGuard::new(&[

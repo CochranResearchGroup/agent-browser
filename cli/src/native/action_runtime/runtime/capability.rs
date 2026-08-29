@@ -31,8 +31,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 pub(crate) fn browser_capability_service_state(cmd: &Value) -> Result<ServiceState, String> {
     if let Some(service_state) = cmd.get("serviceState") {
-        return serde_json::from_value::<ServiceState>(service_state.clone())
-            .map_err(|err| format!("Invalid serviceState: {}", err));
+        return crate::native::service_store::decode_service_state_value(service_state);
     }
     LockedServiceStateRepository::default_json()
         .and_then(|repository| repository.load_snapshot())

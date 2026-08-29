@@ -2432,7 +2432,7 @@ struct ServiceRequestDecisionInput<'a> {
 /// `default` session because that route can retain another profile's identity.
 /// The route uses only public principal/profile identity and never includes
 /// raw capability material.
-fn authenticated_cold_session_name(
+pub(crate) fn authenticated_cold_session_name(
     authority: &AuthenticatedServicePrincipal,
     selected_profile: &BrowserProfile,
 ) -> Option<String> {

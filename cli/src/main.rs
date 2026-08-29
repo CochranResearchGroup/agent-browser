@@ -1785,7 +1785,12 @@ fn main() {
             libc::signal(libc::SIGPIPE, libc::SIG_IGN);
         }
         let session = env::var("AGENT_BROWSER_SESSION").unwrap_or_else(|_| "default".to_string());
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        let rt = native::daemon::build_runtime(
+            std::thread::available_parallelism()
+                .map(std::num::NonZeroUsize::get)
+                .unwrap_or(1),
+        )
+        .expect("Failed to create tokio runtime");
         rt.block_on(native::daemon::run_daemon(&session));
         return;
     }
@@ -1835,7 +1840,7 @@ fn main() {
     ) {
         let _ = refresh_persisted_profile_seeding_handoffs();
     }
-    let flags = parse_flags(&args);
+    let mut flags = parse_flags(&args);
     let clean = clean_args(&args);
 
     let has_help = args.iter().any(|a| a == "--help" || a == "-h");
@@ -2074,6 +2079,29 @@ fn main() {
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV).ok(),
         env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV).ok(),
     );
+
+    let authority_selected_session = match cmd.get("action").and_then(|value| value.as_str()) {
+        Some("service_profile_acquire") => {
+            native::service_profile_recovery::profile_acquisition_daemon_route(&cmd).map(Some)
+        }
+        Some("service_profile_recovery_apply") => {
+            native::service_profile_recovery::profile_recovery_apply_daemon_route(&cmd).map(Some)
+        }
+        _ => Ok(None),
+    };
+    if let Some(session) = match authority_selected_session {
+        Ok(session) => session,
+        Err(error) => {
+            if flags.json {
+                print_json_error(&error);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error);
+            }
+            exit(1);
+        }
+    } {
+        flags.session = session;
+    }
 
     // Handle --password-stdin for auth save
     if cmd.get("action").and_then(|v| v.as_str()) == Some("auth_save") {
@@ -3328,9 +3356,7 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_profile_lease_release"
                     | "service_profile_lease_reconcile_plan"
                     | "service_profile_lease_reconcile_apply"
-                    | "service_profile_acquire"
                     | "service_profile_recovery_plan"
-                    | "service_profile_recovery_apply"
                     | "service_profile_recovery_status"
                     | "service_gc"
                     | "service_prune_retained"
@@ -3544,6 +3570,20 @@ mod tests {
     fn test_command_executes_service_status_locally_before_daemon() {
         assert!(command_executes_locally_before_daemon(&json!({
             "action": "service_status"
+        })));
+    }
+
+    #[test]
+    fn profile_acquisition_runs_on_the_authority_selected_daemon_lane() {
+        assert!(!command_executes_locally_before_daemon(&json!({
+            "action": "service_profile_acquire"
+        })));
+    }
+
+    #[test]
+    fn profile_recovery_apply_runs_on_the_sealed_daemon_lane() {
+        assert!(!command_executes_locally_before_daemon(&json!({
+            "action": "service_profile_recovery_apply"
         })));
     }
 

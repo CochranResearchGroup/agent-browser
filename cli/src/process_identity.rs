@@ -401,13 +401,24 @@ fn verify_recorded_process_observation(
 }
 
 #[cfg(target_os = "linux")]
+fn pidfd_open_failure_proves_process_missing(
+    error: &std::io::Error,
+    observation: &ProcessObservation,
+) -> bool {
+    error.raw_os_error() == Some(libc::ESRCH)
+        || (error.raw_os_error() == Some(libc::EINVAL)
+            && matches!(observation, ProcessObservation::Missing))
+}
+
+#[cfg(target_os = "linux")]
 fn platform_open_verified_process(
     recorded: &RecordedProcessIdentity,
 ) -> Result<Option<VerifiedProcessTermination>, String> {
     let pidfd = unsafe { libc::syscall(libc::SYS_pidfd_open, recorded.pid as libc::pid_t, 0) };
     if pidfd < 0 {
         let error = std::io::Error::last_os_error();
-        return if error.raw_os_error() == Some(libc::ESRCH) {
+        let observation = observe_process(recorded.pid);
+        return if pidfd_open_failure_proves_process_missing(&error, &observation) {
             Ok(None)
         } else {
             Err(format!(
@@ -1184,6 +1195,39 @@ mod tests {
             browser_family: recorded.browser_family,
         };
         assert!(!recorded_process_is_running(&missing).unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pidfd_einval_is_missing_only_with_independent_process_absence() {
+        let invalid = std::io::Error::from_raw_os_error(libc::EINVAL);
+        assert!(pidfd_open_failure_proves_process_missing(
+            &invalid,
+            &ProcessObservation::Missing,
+        ));
+        assert!(!pidfd_open_failure_proves_process_missing(
+            &invalid,
+            &ProcessObservation::Failed {
+                reason: "unreadable proc entry".to_string(),
+            },
+        ));
+        assert!(!pidfd_open_failure_proves_process_missing(
+            &invalid,
+            &ProcessObservation::Observed(observed(
+                Some("linux:boot:11"),
+                Some("/opt/agent-browser"),
+            )),
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pidfd_non_absence_errors_remain_fail_closed() {
+        let denied = std::io::Error::from_raw_os_error(libc::EPERM);
+        assert!(!pidfd_open_failure_proves_process_missing(
+            &denied,
+            &ProcessObservation::Missing,
+        ));
     }
 
     #[test]

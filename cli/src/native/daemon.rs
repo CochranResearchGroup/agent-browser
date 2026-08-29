@@ -23,6 +23,18 @@ use crate::process_identity::capture_process_identity;
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
 
+/// Build the runtime host on the same bounded stack used for Service State
+/// serialization. Commands may own large parsed snapshots until dispatch
+/// finishes, so both decoding and value destruction need this stack budget.
+pub(crate) fn build_runtime(worker_threads: usize) -> Result<tokio::runtime::Runtime, String> {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .thread_stack_size(super::service_store::SERVICE_STATE_JSON_STACK_BYTES)
+        .enable_all()
+        .build()
+        .map_err(|error| format!("could not start daemon runtime: {error}"))
+}
+
 #[cfg(unix)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct UnixSocketIdentity {

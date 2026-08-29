@@ -10,6 +10,7 @@ import {
 import { join } from 'node:path';
 import {
   developmentPresentationProviderDescriptor,
+  developmentPresentationProviderManifest,
   validateDevelopmentPresentationProviderIsolation,
 } from './development-presentation-provider.js';
 import {
@@ -24,12 +25,14 @@ import {
 const MIN_AVAILABLE_MEMORY_BYTES = 8 * 1024 ** 3;
 const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
 
-/** Read-only admission for a fresh development provider transaction. */
+/** Read-only admission for a fresh or configured development provider transaction. */
 export function developmentPresentationProviderSystemPreflight({
   env = process.env,
   run = commandResult,
 } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
+  const configured = existsSync(descriptor.manifest);
+  const mode = configured ? 'reconcile' : 'fresh';
   const checks = [];
   try {
     validateDevelopmentPresentationProviderIsolation(descriptor);
@@ -61,14 +64,24 @@ export function developmentPresentationProviderSystemPreflight({
     }
     checks.push(check(`bundle:${relativePath}`, current === expected, current === null ? 'missing' : 'current'));
   }
-  checks.push(check('fresh-manifest', !existsSync(descriptor.manifest),
-    existsSync(descriptor.manifest) ? 'configured' : 'absent'));
-
-  for (const [name, port] of Object.entries(descriptor.ports)) {
-    const result = run('ss', ['-H', '-ltn', `sport = :${port}`]);
-    checks.push(check(`port-free:${name}`, result.status === 0 && !result.stdout.trim(),
-      result.stdout.trim() || commandError(result) || 'free'));
+  if (configured) {
+    let manifest = null;
+    try {
+      manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
+    } catch {
+      manifest = null;
+    }
+    checks.push(check(
+      'configured-manifest',
+      manifest !== null && JSON.stringify(manifest) ===
+        JSON.stringify(developmentPresentationProviderManifest(descriptor)),
+      manifest === null ? 'unreadable' : 'configured',
+    ));
+  } else {
+    checks.push(check('fresh-manifest', true, 'absent'));
   }
+
+  const containerObservations = new Map();
   for (const [service, name] of Object.entries(descriptor.services)) {
     const result = run('docker', [
       'inspect',
@@ -77,8 +90,24 @@ export function developmentPresentationProviderSystemPreflight({
       name,
     ]);
     const [project, running] = result.status === 0 ? result.stdout.trim().split('\t') : [];
-    const retrySafe = result.status !== 0 ||
-      (project === descriptor.composeProject && running === 'false');
+    containerObservations.set(service, { result, project, running });
+  }
+  for (const [name, port] of Object.entries(descriptor.ports)) {
+    const result = run('ss', ['-H', '-ltn', `sport = :${port}`]);
+    const listening = result.status === 0 && Boolean(result.stdout.trim());
+    const container = containerObservations.get(name);
+    const ownedListener = configured && container?.project === descriptor.composeProject &&
+      container?.running === 'true';
+    checks.push(check(
+      configured ? `port-retry-safe:${name}` : `port-free:${name}`,
+      result.status === 0 && (!listening || ownedListener),
+      listening ? ownedListener ? 'exact managed listener' : result.stdout.trim() : 'free',
+    ));
+  }
+  for (const [service, name] of Object.entries(descriptor.services)) {
+    const { result, project, running } = containerObservations.get(service);
+    const retrySafe = result.status !== 0 || (project === descriptor.composeProject &&
+      (configured || running === 'false'));
     checks.push(check(`container-retry-safe:${service}`, retrySafe,
       result.status !== 0 ? 'absent' : `${project || 'unowned'}:${running || 'unknown'}`));
   }
@@ -102,6 +131,7 @@ export function developmentPresentationProviderSystemPreflight({
   return {
     schemaVersion: 'agent-browser.development-presentation-provider-preflight.v1',
     environment: 'development',
+    mode,
     authorizesEffects: false,
     success: checks.every((item) => item.ok),
     descriptor,

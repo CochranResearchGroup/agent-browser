@@ -653,8 +653,11 @@ fn run_supervised_host(paths: &SessionSupervisorPaths) -> Result<Value, String> 
     for (name, value) in supervised_daemon_environment(manifest, &token) {
         env::set_var(name, value);
     }
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|error| format!("could not start daemon runtime: {error}"))?;
+    let runtime = crate::native::daemon::build_runtime(
+        std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1),
+    )?;
     runtime.block_on(crate::native::daemon::run_daemon(&manifest.session));
     Ok(json!({
         "schemaVersion": SUPERVISOR_SCHEMA_VERSION,

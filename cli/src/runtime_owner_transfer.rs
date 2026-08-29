@@ -1822,7 +1822,19 @@ mod tests {
         let repository = MemoryRepository::default();
         repository
             .mutate(|state| {
-                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner());
+                let current = owner();
+                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
+                state.runtime_owner_registry.lifecycle_records.insert(
+                    current.browser_id.clone(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: current.browser_id,
+                        profile_identity_digest: current.profile_identity_digest,
+                        owner_generation: current.owner_generation,
+                        lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                        cleanup_obligation_state: CleanupObligationState::Owned,
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                );
                 Ok(())
             })
             .unwrap();

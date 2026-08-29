@@ -2976,14 +2976,14 @@ mod tests {
 
     #[tokio::test]
     async fn action_and_control_plane_status_both_surface_repository_failure() {
-        let home = temp_home("service-status-repository-failure");
-        std::fs::remove_dir(&home).unwrap();
-        std::fs::write(&home, b"not a directory").unwrap();
-        let guard = EnvGuard::new(&["HOME"]);
-        guard.set("HOME", home.to_str().unwrap());
+        let state_path = JsonServiceStateStore::default_path().unwrap();
+        let service_dir = state_path.parent().unwrap();
+        let agent_browser_dir = service_dir.parent().unwrap();
+        let _ = std::fs::remove_dir_all(service_dir);
+        std::fs::create_dir_all(agent_browser_dir).unwrap();
+        std::fs::write(service_dir, b"not a directory").unwrap();
 
         let action_error = super::super::service_status_projection::handle_service_status(&json!({
-            "serviceState": {},
             "launchConfig": {},
         }))
         .await
@@ -2998,15 +2998,20 @@ mod tests {
             )
             .await;
 
-        assert!(action_error.contains("Failed to create service state directory"));
-        assert_eq!(control_response["success"], false);
-        assert!(control_response["error"]
-            .as_str()
-            .unwrap()
-            .contains("Failed to create service state directory"));
+        let is_repository_path_failure = |error: &str| {
+            error.contains("service state")
+                && (error.contains("File exists") || error.contains("Not a directory"))
+        };
+        let action_surfaces_repository_failure = is_repository_path_failure(&action_error);
+        let control_error = control_response["error"].as_str().unwrap();
+        let control_surfaces_repository_failure = is_repository_path_failure(control_error);
 
         handle.shutdown().await;
-        std::fs::remove_file(&home).unwrap();
+        std::fs::remove_file(service_dir).unwrap();
+
+        assert!(action_surfaces_repository_failure, "{action_error}");
+        assert_eq!(control_response["success"], false);
+        assert!(control_surfaces_repository_failure, "{control_error}");
     }
 
     #[tokio::test]

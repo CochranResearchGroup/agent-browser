@@ -21,6 +21,12 @@ use super::discovery::discover_cdp_url;
 
 const MAX_CHROME_STDERR_LINES: usize = 80;
 
+#[cfg(unix)]
+fn isolate_browser_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+}
+
 #[cfg(target_os = "linux")]
 static X_DISPLAY_ALLOCATION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -1152,13 +1158,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
 
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setpgid(0, 0);
-                Ok(())
-            });
-        }
+        isolate_browser_process_group(&mut cmd);
     }
 
     let child = cmd
@@ -1598,15 +1598,7 @@ fn try_launch_chrome(
     // idle blocking threads after ~10s, which kills Chrome (issue #1157).
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
-        // SAFETY: pre_exec runs between fork() and exec() in the child.
-        // setpgid is async-signal-safe.
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setpgid(0, 0);
-                Ok(())
-            });
-        }
+        isolate_browser_process_group(&mut cmd);
     }
 
     let mut child = cmd.spawn().map_err(|e| {
@@ -3062,6 +3054,21 @@ mod tests {
             .spawn()
             .unwrap();
         (executable, child)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn browser_process_group_isolated_without_a_custom_pre_exec_hook() {
+        let mut command = Command::new("/bin/sleep");
+        command.arg("30");
+        isolate_browser_process_group(&mut command);
+        let mut child = command.spawn().unwrap();
+        let pid = child.id() as libc::pid_t;
+
+        assert_eq!(unsafe { libc::getpgid(pid) }, pid);
+
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     #[cfg(windows)]

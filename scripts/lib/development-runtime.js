@@ -172,7 +172,7 @@ export function installDevelopmentRuntime({
   const before = snapshotProduction(env);
   const previousCurrent = resolvedLink(descriptor.current);
   const previousExecutable = captureStableExecutable(descriptor.executable);
-  const previousLaneManifest = captureStableExecutable(descriptor.laneManifest);
+  const previousLaneManifests = captureDevelopmentLaneManifests(dirname(descriptor.laneManifest));
   const previousUnits = new Map();
 
   mkdirSync(join(generationDir, 'bin'), { recursive: true, mode: 0o700 });
@@ -220,6 +220,23 @@ export function installDevelopmentRuntime({
       installedBy: 'agent-browser development-runtime installer',
     },
   });
+  for (const [path, content] of previousLaneManifests) {
+    if (path === descriptor.laneManifest) continue;
+    const manifest = JSON.parse(content);
+    if (manifest.schemaVersion !== 'agent-browser.session-supervisor.v1') {
+      throw new Error(`Unsupported development lane manifest schema: ${path}`);
+    }
+    writeJsonAtomic(path, {
+      ...manifest,
+      executablePath: generationBinary,
+      executableSha256: sha256,
+      provenance: {
+        packageVersion: version,
+        installedAt: new Date().toISOString(),
+        installedBy: 'agent-browser development-runtime installer',
+      },
+    });
+  }
 
   const units = renderDevelopmentUnits(descriptor, generationBinary);
   for (const [name, content] of Object.entries(units)) {
@@ -265,7 +282,10 @@ export function installDevelopmentRuntime({
       removeLink(descriptor.current);
     }
     restoreStableExecutable(descriptor.executable, previousExecutable);
-    restoreStableExecutable(descriptor.laneManifest, previousLaneManifest);
+    restoreDevelopmentLaneManifests(
+      new Set([descriptor.laneManifest, ...previousLaneManifests.keys()]),
+      previousLaneManifests,
+    );
     for (const [path, content] of previousUnits) {
       if (content === null) rmSync(path, { force: true });
       else writeFileAtomic(path, content, 0o644);
@@ -779,6 +799,25 @@ function writeFileAtomic(path, content, mode) {
 
 function writeJsonAtomic(path, value) {
   writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`, 0o600);
+}
+
+function captureDevelopmentLaneManifests(directory) {
+  const manifests = new Map();
+  if (!existsSync(directory)) return manifests;
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith('.json')) continue;
+    const path = join(directory, name);
+    if (lstatSync(path).isFile()) manifests.set(path, readFileSync(path, 'utf8'));
+  }
+  return manifests;
+}
+
+function restoreDevelopmentLaneManifests(paths, previous) {
+  for (const path of paths) {
+    const content = previous.get(path);
+    if (content === undefined) rmSync(path, { force: true });
+    else writeFileAtomic(path, content, 0o600);
+  }
 }
 
 function check(name, ok, observed) {

@@ -331,6 +331,11 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("recipe", FieldKind::Object, true, true, false),
+    ServiceRequestFieldSpec::field("handoffId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("remoteViewHandoffId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("pid", FieldKind::PositiveInteger, true, true, false),
+    ServiceRequestFieldSpec::field("expiresAt", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("plan", FieldKind::Object, true, true, false),
     ServiceRequestFieldSpec::field(
         "allowDuplicateProfileLane",
         FieldKind::Boolean,
@@ -2092,7 +2097,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 73);
+        assert_eq!(canonical_names.len(), 78);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),

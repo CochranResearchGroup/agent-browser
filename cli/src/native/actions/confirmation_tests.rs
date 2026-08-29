@@ -110,64 +110,91 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
-#[tokio::test]
-async fn test_confirm_executes_once_and_restores_confirmation_gate() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = std::env::temp_dir().join(format!(
-        "agent-browser-confirmation-close-home-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos()
-    ));
-    fs::create_dir_all(&home).expect("test home should be created");
-    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
-    let mut state = DaemonState::new();
-    state.confirm_actions = Some(ConfirmActions {
-        categories: HashSet::from(["close".to_string()]),
-    });
+#[test]
+fn test_confirm_executes_once_and_restores_confirmation_gate() {
+    std::thread::Builder::new()
+        .name("confirmation-close-test".to_string())
+        .stack_size(crate::native::service_store::SERVICE_STATE_JSON_STACK_BYTES)
+        .spawn(|| {
+            let runtime = crate::native::daemon::build_runtime(1).unwrap();
+            runtime.block_on(async {
+                let guard = EnvGuard::new(&["HOME"]);
+                let home = std::env::temp_dir().join(format!(
+                    "agent-browser-confirmation-close-home-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .expect("system clock should be after unix epoch")
+                        .as_nanos()
+                ));
+                fs::create_dir_all(&home).expect("test home should be created");
+                guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+                let mut state = DaemonState::new();
+                state.confirm_actions = Some(ConfirmActions {
+                    categories: HashSet::from(["close".to_string()]),
+                });
 
-    let pending = execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state).await;
-    assert_eq!(pending["data"]["confirmation_required"], true);
-    assert!(state.pending_confirmation.is_some());
+                let pending =
+                    execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state)
+                        .await;
+                assert_eq!(pending["data"]["confirmation_required"], true);
+                assert!(state.pending_confirmation.is_some());
 
-    let confirmed = execute_command(
-        &json!({ "id": "confirm-1", "action": "confirm" }),
-        &mut state,
-    )
-    .await;
-    assert_eq!(confirmed["success"], true);
-    assert_eq!(confirmed["data"]["confirmed"], true);
-    assert_eq!(confirmed["data"]["action"], "close");
-    assert_eq!(
-        confirmed["data"]["result"]["success"], true,
-        "confirmed close response: {confirmed}"
-    );
-    assert!(state.pending_confirmation.is_none());
-    assert!(state
-        .confirm_actions
-        .as_ref()
-        .is_some_and(|actions| actions.requires_confirmation("close")));
-    drop(state);
-    drop(guard);
-    fs::remove_dir_all(&home).expect("test home should be removed");
+                let confirmed = execute_command(
+                    &json!({ "id": "confirm-1", "action": "confirm" }),
+                    &mut state,
+                )
+                .await;
+                assert_eq!(confirmed["success"], true);
+                assert_eq!(confirmed["data"]["confirmed"], true);
+                assert_eq!(confirmed["data"]["action"], "close");
+                assert_eq!(
+                    confirmed["data"]["result"]["success"], true,
+                    "confirmed close response: {confirmed}"
+                );
+                assert!(state.pending_confirmation.is_none());
+                assert!(state
+                    .confirm_actions
+                    .as_ref()
+                    .is_some_and(|actions| actions.requires_confirmation("close")));
+                drop(state);
+                drop(guard);
+                fs::remove_dir_all(&home).expect("test home should be removed");
+            });
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
-#[tokio::test]
-async fn test_deny_clears_confirmation_without_launching_browser() {
-    let mut state = DaemonState::new();
-    state.confirm_actions = Some(ConfirmActions {
-        categories: HashSet::from(["close".to_string()]),
-    });
+#[test]
+fn test_deny_clears_confirmation_without_launching_browser() {
+    std::thread::Builder::new()
+        .name("confirmation-deny-test".to_string())
+        .stack_size(crate::native::service_store::SERVICE_STATE_JSON_STACK_BYTES)
+        .spawn(|| {
+            let runtime = crate::native::daemon::build_runtime(1).unwrap();
+            runtime.block_on(async {
+                let mut state = DaemonState::new();
+                state.confirm_actions = Some(ConfirmActions {
+                    categories: HashSet::from(["close".to_string()]),
+                });
 
-    let pending = execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state).await;
-    assert_eq!(pending["data"]["confirmation_required"], true);
+                let pending =
+                    execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state)
+                        .await;
+                assert_eq!(pending["data"]["confirmation_required"], true);
 
-    let denied = execute_command(&json!({ "id": "deny-1", "action": "deny" }), &mut state).await;
-    assert_eq!(denied["success"], true);
-    assert_eq!(denied["data"]["denied"], true);
-    assert_eq!(denied["data"]["action"], "close");
-    assert!(state.pending_confirmation.is_none());
-    assert!(state.browser.is_none());
+                let denied =
+                    execute_command(&json!({ "id": "deny-1", "action": "deny" }), &mut state).await;
+                assert_eq!(denied["success"], true);
+                assert_eq!(denied["data"]["denied"], true);
+                assert_eq!(denied["data"]["action"], "close");
+                assert!(state.pending_confirmation.is_none());
+                assert!(state.browser.is_none());
+            });
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

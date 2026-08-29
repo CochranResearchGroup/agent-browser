@@ -890,8 +890,14 @@ pub(crate) fn plan_profile_lease_reconciliation(
     if seal_key.len() < 32 || idempotency_key.trim().is_empty() {
         return Err(lease_error(ProfileLeaseFailureCode::PlanInvalid, lease_id));
     }
-    if expires_at <= now {
-        return Err(lease_error(ProfileLeaseFailureCode::PlanExpired, lease_id));
+    match rfc3339_at_or_after(now, expires_at) {
+        Ok(true) => {
+            return Err(lease_error(ProfileLeaseFailureCode::PlanExpired, lease_id));
+        }
+        Ok(false) => {}
+        Err(()) => {
+            return Err(lease_error(ProfileLeaseFailureCode::PlanInvalid, lease_id));
+        }
     }
     let boot_epoch = boot_epoch.filter(|epoch| !epoch.trim().is_empty());
     let mut proposed_transitions = state
@@ -1019,11 +1025,20 @@ pub(crate) fn apply_profile_lease_reconciliation(
             &plan.lease_id,
         ));
     }
-    if plan.expires_at.as_str() <= now {
-        return Err(lease_error(
-            ProfileLeaseFailureCode::PlanExpired,
-            &plan.lease_id,
-        ));
+    match rfc3339_at_or_after(now, &plan.expires_at) {
+        Ok(true) => {
+            return Err(lease_error(
+                ProfileLeaseFailureCode::PlanExpired,
+                &plan.lease_id,
+            ));
+        }
+        Ok(false) => {}
+        Err(()) => {
+            return Err(lease_error(
+                ProfileLeaseFailureCode::PlanInvalid,
+                &plan.lease_id,
+            ));
+        }
     }
     if plan.boot_epoch.as_deref() != current_boot_epoch {
         return Err(lease_error(
@@ -1780,7 +1795,15 @@ fn inactive_session(lease: LeaseState) -> bool {
 }
 
 fn inactive_or_expired(lease: LeaseState, expires_at: Option<&str>, now: &str) -> bool {
-    inactive_session(lease) || expires_at.is_some_and(|expires_at| expires_at <= now)
+    inactive_session(lease)
+        || expires_at
+            .is_some_and(|expires_at| rfc3339_at_or_after(now, expires_at).unwrap_or(false))
+}
+
+fn rfc3339_at_or_after(now: &str, expires_at: &str) -> Result<bool, ()> {
+    let now = chrono::DateTime::parse_from_rfc3339(now).map_err(|_| ())?;
+    let expires_at = chrono::DateTime::parse_from_rfc3339(expires_at).map_err(|_| ())?;
+    Ok(now >= expires_at)
 }
 
 fn lease_state_name(lease: LeaseState) -> &'static str {
@@ -2711,5 +2734,38 @@ mod tests {
         )
         .unwrap();
         assert!(replay.replayed);
+    }
+
+    #[test]
+    fn reconcile_plan_compares_rfc3339_instants_across_offsets() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.lease = LeaseState::Expired;
+        session.expires_at = Some("2026-08-27T11:00:00Z".to_string());
+        let stale = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        let plan = plan_profile_lease_reconciliation(
+            &state,
+            &lease_id,
+            &stale.lease_revision,
+            &authority,
+            "2026-08-27T07:00:00-05:00",
+            "2026-08-27T12:05:00Z",
+            Some("boot-epoch-1".to_string()),
+            "idempotency-offset-expiry".to_string(),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert!(plan.effect_capable);
+
+        let receipt = apply_profile_lease_reconciliation(
+            &mut state,
+            &plan,
+            &authority,
+            "2026-08-27T07:01:00-05:00",
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert_eq!(receipt.transition_count, 1);
     }
 }

@@ -122,8 +122,15 @@ fn unique_socket_dir(label: &str) -> PathBuf {
     ))
 }
 
+fn clear_default_test_service_state() {
+    if let Ok(path) = JsonServiceStateStore::default_path() {
+        let _ = fs::remove_file(path);
+    }
+}
+
 #[tokio::test]
 async fn test_service_reconcile_records_then_compacts_unreachable_browser_health() {
+    clear_default_test_service_state();
     let home = unique_socket_dir("service-reconcile-home");
     fs::create_dir_all(&home).unwrap();
     let guard = EnvGuard::new(&["HOME"]);
@@ -175,10 +182,12 @@ async fn test_service_reconcile_records_then_compacts_unreachable_browser_health
         .events
         .iter()
         .any(|event| event.kind == ServiceEventKind::Reconciliation));
+    clear_default_test_service_state();
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]
 async fn test_service_reconcile_reports_remote_view_repair_summary() {
+    clear_default_test_service_state();
     let home = unique_socket_dir("service-reconcile-remote-view-home");
     fs::create_dir_all(&home).unwrap();
     let guard = EnvGuard::new(&["HOME"]);
@@ -253,11 +262,13 @@ async fn test_service_reconcile_reports_remote_view_repair_summary() {
         result["data"]["service_state"]["events"][0]["details"]["remoteView"],
         result["data"]["remoteViewRepair"]
     );
+    clear_default_test_service_state();
     let _ = fs::remove_dir_all(&home);
 }
 #[cfg(unix)]
 #[tokio::test]
 async fn test_service_reconcile_refreshes_stale_available_route_pool_definition() {
+    clear_default_test_service_state();
     let home = unique_socket_dir("service-reconcile-authoritative-route-pool-home");
     fs::create_dir_all(&home).unwrap();
     let guard = EnvGuard::new(&["HOME"]);
@@ -306,10 +317,12 @@ async fn test_service_reconcile_refreshes_stale_available_route_pool_definition(
     assert_eq!(route.route_id, "guacamole:1");
     assert_eq!(route.connection_id.as_deref(), Some("1"));
     assert_eq!(route.target["displayName"], ":11");
+    clear_default_test_service_state();
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]
 async fn test_service_reconcile_does_not_replace_active_conflicting_route_pool_definition() {
+    clear_default_test_service_state();
     let home = unique_socket_dir("service-reconcile-active-route-pool-home");
     fs::create_dir_all(&home).unwrap();
     let guard = EnvGuard::new(&["HOME"]);
@@ -340,5 +353,6 @@ async fn test_service_reconcile_does_not_replace_active_conflicting_route_pool_d
         result["data"]["service_state"]["routePool"]["guacamole-rdp-a"]["currentRouteAllocationId"],
         "guacamole:4"
     );
+    clear_default_test_service_state();
     let _ = fs::remove_dir_all(&home);
 }

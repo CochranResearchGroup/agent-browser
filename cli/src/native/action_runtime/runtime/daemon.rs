@@ -592,6 +592,20 @@ pub(crate) fn insert_planned_param_if_missing(
         params.insert(key.to_string(), value.clone());
     }
 }
+fn resolved_service_profile_identity_path(
+    profile_hint: Option<&str>,
+    profile_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    match profile_hint {
+        Some(profile_hint) => Ok(crate::runtime_profile::resolve_profile(
+            Some(profile_hint),
+            Some(profile_id),
+        )?
+        .user_data_dir),
+        None => crate::runtime_profile::runtime_profile_user_data_dir(profile_id),
+    }
+}
+
 pub(crate) fn apply_service_profile_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
@@ -763,13 +777,8 @@ fn apply_existing_session_profile_selection(
         .profiles
         .get(profile_id)
         .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
-    let user_data_dir = profile
-        .user_data_dir
-        .as_deref()
-        .map(std::path::PathBuf::from)
-        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
-            profile_id,
-        )?);
+    let user_data_dir =
+        resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), profile_id)?;
     let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
     if profile_digest != binding.claim.profile_identity_digest {
         return Err("existing_session_profile_identity_inconsistent".to_string());
@@ -795,9 +804,10 @@ fn apply_existing_session_profile_selection(
         return Err("explicit_profile_conflicts_with_current_owner".to_string());
     }
     if let Some(requested_path) = options.profile.as_deref() {
-        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
-            std::path::Path::new(requested_path),
-        )?;
+        let requested_path =
+            resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
+        let requested_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?;
         if requested_digest != binding.claim.profile_identity_digest {
             return Err("explicit_profile_conflicts_with_current_owner".to_string());
         }
@@ -868,13 +878,8 @@ fn apply_authenticated_orphaned_owner_recourse(
     if !principal_active || capability.is_none() {
         return Ok(false);
     }
-    let user_data_dir = profile
-        .user_data_dir
-        .as_deref()
-        .map(std::path::PathBuf::from)
-        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
-            &profile_id,
-        )?);
+    let user_data_dir =
+        resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), &profile_id)?;
     let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
     let principal_binding = state
         .runtime_owner_registry
@@ -916,6 +921,64 @@ fn apply_authenticated_orphaned_owner_recourse(
                 && browser.active_session_ids.is_empty()
                 && browser.tab_handles.iter().all(|handle| !handle.valid)
         });
+    let owner_projection_session_only = !state
+        .browsers
+        .contains_key(&binding.claim.logical_browser_id)
+        && state.sessions.get(session_id).is_some_and(|session| {
+            let tab_refs_are_prelaunch =
+                session
+                    .tab_ids
+                    .iter()
+                    .all(|tab_id| match state.tabs.get(tab_id) {
+                        Some(tab) => {
+                            let handle_is_prelaunch =
+                                tab.service_tab_handle.as_ref().is_none_or(|handle| {
+                                    handle.browser_id == binding.claim.logical_browser_id
+                                        && handle.session_name.as_deref() == Some(session_id)
+                                        && handle.tab_id == tab.id
+                                        && handle.target_id.is_none()
+                                        && handle.profile_id.as_deref() == Some(profile_id.as_str())
+                                        && handle.owner_session_id.as_deref() == Some(session_id)
+                                        && !handle.valid
+                                        && handle.stale_reason.as_deref() == Some("browser_missing")
+                                });
+                            tab.browser_id == binding.claim.logical_browser_id
+                                && tab.owner_session_id.as_deref() == Some(session_id)
+                                && tab
+                                    .principal_id
+                                    .as_deref()
+                                    .is_none_or(|retained_principal| {
+                                        retained_principal == principal_id
+                                    })
+                                && matches!(
+                                    tab.lifecycle,
+                                    TabLifecycle::Unknown | TabLifecycle::Opening
+                                )
+                                && tab.target_id.is_none()
+                                && handle_is_prelaunch
+                        }
+                        None => {
+                            command.get("action").and_then(Value::as_str) == Some("tab_new")
+                                && session.tab_ids.len() == 1
+                        }
+                    });
+            session.profile_id.as_deref() == Some(profile_id.as_str())
+                && (session.browser_ids.is_empty()
+                    || (session.browser_ids.len() == 1
+                        && session.browser_ids.first().map(String::as_str)
+                            == Some(binding.claim.logical_browser_id.as_str())))
+                && tab_refs_are_prelaunch
+                && session
+                    .principal_id
+                    .as_deref()
+                    .is_none_or(|retained_principal| retained_principal == principal_id)
+                && !state.browsers.values().any(|browser| {
+                    browser
+                        .active_session_ids
+                        .iter()
+                        .any(|active_session| active_session == session_id)
+                })
+        });
     let competing_live_profile_projection = state.browsers.values().any(|browser| {
         browser.id != binding.claim.logical_browser_id
             && browser.profile_id.as_deref() == Some(profile_id.as_str())
@@ -924,15 +987,18 @@ fn apply_authenticated_orphaned_owner_recourse(
                 || !browser.active_session_ids.is_empty()
                 || browser.tab_handles.iter().any(|handle| handle.valid))
     });
-    if (!owner_projection_absent && !owner_projection_inert)
+    let profile_identity_mismatch = binding.claim.profile_identity_digest != profile_digest;
+    let daemon_route_mismatch = binding.claim.daemon_session_route != session_id;
+    let principal_binding_mismatch = principal_binding.is_some_and(|principal_binding| {
+        principal_binding.principal_id != principal_id
+            || principal_binding.profile_id != profile_id
+            || principal_binding.owner_generation != binding.claim.owner_generation
+    });
+    if (!owner_projection_absent && !owner_projection_inert && !owner_projection_session_only)
         || competing_live_profile_projection
-        || binding.claim.profile_identity_digest != profile_digest
-        || binding.claim.daemon_session_route != session_id
-        || principal_binding.is_some_and(|principal_binding| {
-            principal_binding.principal_id != principal_id
-                || principal_binding.profile_id != profile_id
-                || principal_binding.owner_generation != binding.claim.owner_generation
-        })
+        || profile_identity_mismatch
+        || daemon_route_mismatch
+        || principal_binding_mismatch
     {
         return Ok(false);
     }

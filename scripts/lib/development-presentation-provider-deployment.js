@@ -109,8 +109,13 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
 export function stageDevelopmentPresentationProviderBundle({ env = process.env } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
-  if (existsSync(descriptor.manifest)) {
-    throw new Error('Configured development provider requires reconciled update, not bundle staging');
+  const configured = existsSync(descriptor.manifest);
+  if (configured) {
+    const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
+    const expected = developmentPresentationProviderManifest(descriptor);
+    if (JSON.stringify(manifest) !== JSON.stringify(expected)) {
+      throw new Error('Configured development provider manifest drifted');
+    }
   }
   const sourceRoot = resolve(
     env.AGENT_BROWSER_DEV_GUACAMOLE_ASSET_SOURCE || 'cli/assets/workstation/guacamole',
@@ -155,6 +160,7 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
   return {
     success: true,
     environment: 'development',
+    state: configured ? 'refreshed_configured' : 'staged_unconfigured',
     authorizesProviderEffects: false,
     root: descriptor.root,
     files: Object.fromEntries(files.map((relativePath) => [
@@ -215,14 +221,52 @@ export function applyDevelopmentPresentationProvider({
       throw new Error('Configured development provider manifest drifted');
     }
     const productionBefore = effects.snapshotProduction();
-    const observation = effects.observe(descriptor);
-    const readinessChecks = evaluateDevelopmentPresentationProviderObservation(
+    const startedAt = new Date().toISOString();
+    let observation = effects.observe(descriptor);
+    let readinessChecks = evaluateDevelopmentPresentationProviderObservation(
       descriptor,
       observation,
     );
+    const completedSteps = [];
+    try {
+    if (readinessChecks.some((check) => !check.ok)) {
+      const routeSecrets = loadDevelopmentRouteSecrets(descriptor);
+      effects.createVolume(descriptor);
+      completedSteps.push('create-volume');
+      effects.startDatabase(descriptor);
+      completedSteps.push('start-database');
+      for (const route of descriptor.routes) {
+        const secret = routeSecrets.find((candidate) => candidate.id === route.routeId);
+        effects.ensureRouteUser(route, secret.password, descriptor);
+        completedSteps.push(`ensure-user:${route.routeId}`);
+      }
+      effects.syncConnections(descriptor, routeSecrets);
+      completedSteps.push('sync-connections');
+      effects.startProvider(descriptor);
+      completedSteps.push('start-provider');
+      effects.grantOperatorRouteAccess(descriptor);
+      completedSteps.push('grant-operator-route-access');
+      effects.openWarmRoutes(descriptor);
+      completedSteps.push('open-warm-routes');
+      const stagedObservation = effects.observe(descriptor);
+      const stagedChecks = evaluateDevelopmentPresentationProviderObservation(
+        descriptor,
+        stagedObservation,
+      );
+      assertChecks(stagedChecks, 'Configured development provider did not become capture-ready');
+      for (const display of stagedObservation.displays) {
+        effects.grantDisplayAccess(display, descriptor);
+        completedSteps.push(`grant:${display.displayReservationId}`);
+      }
+      observation = effects.observe(descriptor);
+      readinessChecks = evaluateDevelopmentPresentationProviderObservation(
+        descriptor,
+        observation,
+      );
+    }
     assertChecks(readinessChecks, 'Configured development provider reconciliation failed');
     writeProviderAuthority(descriptor, observation);
-    const completedSteps = ['reconcile-provider-authority'];
+    completedSteps.push('reconcile-provider-authority');
     if (!deferIngress) {
       effects.publishIngress(descriptor, observation);
       completedSteps.push('publish-ingress');
@@ -232,7 +276,7 @@ export function applyDevelopmentPresentationProvider({
     const state = deferIngress ? 'provider_ready_ingress_pending' : 'applied';
     const receipt = writeDeploymentReceipt(descriptor, {
       state,
-      startedAt: new Date().toISOString(),
+      startedAt,
       completedAt: new Date().toISOString(),
       completedSteps,
       productionUnchanged: true,
@@ -248,6 +292,29 @@ export function applyDevelopmentPresentationProvider({
       completedSteps,
       receipt,
     };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      let productionUnchanged = false;
+      try {
+        const productionAfter = effects.snapshotProduction();
+        effects.assertProductionUnchanged(productionBefore, productionAfter);
+        productionUnchanged = true;
+      } catch {
+        productionUnchanged = false;
+      }
+      effects.quarantine({ descriptor, completedSteps, reason: message });
+      const receipt = writeDeploymentReceipt(descriptor, {
+        state: 'quarantined',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        completedSteps,
+        productionUnchanged,
+        error: message,
+      });
+      const failure = new Error(`Development provider apply quarantined: ${message}`);
+      failure.receipt = receipt;
+      throw failure;
+    }
   }
   stageDevelopmentPresentationProviderBundle({ env });
   prepareDevelopmentPresentationProviderSecrets({ env });
