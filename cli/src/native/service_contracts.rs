@@ -851,6 +851,8 @@ pub fn service_contracts_metadata() -> Value {
                     "statusHelper": "getServiceProfileRecoveryStatus",
                 },
                 "firstEffectCapableClass": "supersede_terminal_owner",
+                "mitigationActions": super::service_profile_recovery::mitigation_action_registry(),
+                "dominantBlockerOrder": super::service_profile_recovery::profile_blocker_dominance_order(),
                 "noLaunch": false,
             },
             "serviceMonitorRunDueResponse": {

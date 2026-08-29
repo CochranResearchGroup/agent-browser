@@ -41,6 +41,38 @@ pub(crate) enum ProfileAcquisitionState {
 pub(crate) enum MitigationActionType {
     SupersedeTerminalOwner,
     ReconcileExactPrincipalProfileIdentity,
+    ReconcileLegacyPrincipal,
+    BindOwnerPrincipalAuthority,
+    RepairOwnerGenerationBinding,
+    ReleaseExpiredOwnerlessLease,
+    AdoptExactLiveBrowser,
+    RepairSubordinateProfileBinding,
+    RepairIndependentRouteIdentity,
+    FinalizeTerminalInstallationBookkeeping,
+    RetireInertBrowserRecord,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MitigationApplyPosture {
+    AutomaticConclusive,
+    ReviewedExactGraph,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MitigationActionDescriptor {
+    pub(crate) action_type: MitigationActionType,
+    pub(crate) recovery_class: String,
+    /// Existing or planned server-owned action that performs the guarded
+    /// mutation. Clients must discover this value instead of deriving an
+    /// executor from blocker text.
+    pub(crate) executor_action: String,
+    pub(crate) apply_posture: MitigationApplyPosture,
+    pub(crate) effect_authority: RecoveryEffectAuthority,
+    pub(crate) blocker_codes: Vec<String>,
+    pub(crate) preconditions: Vec<String>,
+    pub(crate) compensation: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +212,217 @@ pub(crate) struct ProfileAcquisitionOutcome {
     pub(crate) evidence: Vec<RecoveryEvidence>,
 }
 
+/// Return the server-owned mitigation registry. Clients discover new actions
+/// from this contract and never infer effect authority from reason-code text.
+pub(crate) fn mitigation_action_registry() -> Vec<MitigationActionDescriptor> {
+    vec![
+        descriptor(
+            MitigationActionType::SupersedeTerminalOwner,
+            "supersede_terminal_owner",
+            "service_profile_acquire",
+            MitigationApplyPosture::AutomaticConclusive,
+            &[
+                "terminal_replacement_route_inconsistent",
+                "terminal_owner_cleanup_satisfied",
+            ],
+            &[
+                "terminal_cleanup_satisfied",
+                "exact_process_absence_proven",
+                "foreign_lease_absent",
+            ],
+            &["retain_exact_cleanup_obligation_on_uncertain_effect"],
+        ),
+        descriptor(
+            MitigationActionType::ReconcileExactPrincipalProfileIdentity,
+            "reconcile_exact_principal_profile_identity",
+            "service_profile_acquire",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &[
+                "existing_session_profile_identity_unproven",
+                "existing_session_profile_identity_inconsistent",
+            ],
+            &[
+                "profile_capability_current",
+                "current_process_identity_matches",
+                "foreign_principal_absent",
+            ],
+            &["retain_existing_binding_on_compare_and_swap_failure"],
+        ),
+        descriptor(
+            MitigationActionType::RepairSubordinateProfileBinding,
+            "repair_exact_subordinate_binding",
+            "service_profile_lease_reconcile_apply",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["existing_session_profile_identity_inconsistent"],
+            &[
+                "profile_capability_current",
+                "browser_session_profile_join_unique",
+            ],
+            &["preserve_subordinate_work_as_blocked"],
+        ),
+        descriptor(
+            MitigationActionType::ReconcileLegacyPrincipal,
+            "reconcile_exact_principal_capability",
+            "service_profile_lease_rejoin",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["legacy_principal_unproven"],
+            &["profile_capability_current", "one_exact_uncontested_owner"],
+            &["preserve_legacy_principal_evidence"],
+        ),
+        descriptor(
+            MitigationActionType::BindOwnerPrincipalAuthority,
+            "rejoin_exact_owner_principal",
+            "service_profile_lease_rejoin",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["runtime_owner_principal_binding_missing"],
+            &[
+                "owner_ready",
+                "owner_generation_current",
+                "profile_capability_current",
+            ],
+            &["leave_owner_unbound_on_compare_and_swap_failure"],
+        ),
+        descriptor(
+            MitigationActionType::RepairOwnerGenerationBinding,
+            "compare_and_swap_principal_owner_binding",
+            "service_profile_lease_reconcile_apply",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["owner_generation_or_binding_mismatch"],
+            &[
+                "same_principal_profile_capability",
+                "new_owner_generation_ready",
+            ],
+            &["preserve_prior_binding_on_stale_generation"],
+        ),
+        descriptor(
+            MitigationActionType::ReleaseExpiredOwnerlessLease,
+            "release_expired_ownerless_lease",
+            "service_profile_lease_release",
+            MitigationApplyPosture::AutomaticConclusive,
+            &["expired_ownerless_lease"],
+            &["lease_expired", "owner_absent", "subordinate_work_absent"],
+            &["restore_exact_lease_from_receipt_on_persistence_failure"],
+        ),
+        descriptor(
+            MitigationActionType::AdoptExactLiveBrowser,
+            "adopt_exact_live_browser",
+            "external_byop_adopt",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["exact_live_browser_unowned"],
+            &[
+                "process_identity_current",
+                "profile_identity_exact",
+                "foreign_owner_absent",
+            ],
+            &["remove_only_new_owner_binding_on_adoption_failure"],
+        ),
+        descriptor(
+            MitigationActionType::RepairSubordinateProfileBinding,
+            "repair_subordinate_browser_session_profile_binding",
+            "service_profile_lease_reconcile_apply",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["subordinate_browser_session_profile_mismatch"],
+            &[
+                "principal_authority_current",
+                "browser_session_profile_join_unique",
+            ],
+            &["preserve_subordinate_work_as_blocked"],
+        ),
+        descriptor(
+            MitigationActionType::RepairIndependentRouteIdentity,
+            "acquire_route_bound_manual_seeding_handoff",
+            "service_profile_manual_seeding_acquire",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &[
+                "presentation_route_identity_unproven",
+                "independent_route_stale",
+            ],
+            &["browser_identity_exact", "route_unreferenced_or_same_owner"],
+            &["restore_prior_route_binding_or_quarantine_exact_route"],
+        ),
+        descriptor(
+            MitigationActionType::FinalizeTerminalInstallationBookkeeping,
+            "finalize_terminal_installation_bookkeeping",
+            "install_transactions_close",
+            MitigationApplyPosture::AutomaticConclusive,
+            &["terminal_installation_transaction"],
+            &[
+                "installation_effect_terminal",
+                "selected_generation_unchanged",
+            ],
+            &["retain_exact_install_recovery_obligation"],
+        ),
+        descriptor(
+            MitigationActionType::RetireInertBrowserRecord,
+            "review_exact_inert_record_retirement",
+            "service_browser_retirement_apply",
+            MitigationApplyPosture::ReviewedExactGraph,
+            &["live_browser_missing_pid", "fixture_shaped_browser_record"],
+            &[
+                "process_authority_absent",
+                "managed_runtime_authority_absent",
+                "references_absent",
+            ],
+            &["replay_receipt_without_broad_cleanup"],
+        ),
+    ]
+}
+
+pub(crate) fn profile_blocker_dominance_order() -> &'static [&'static str] {
+    &[
+        "live_foreign_principal_authority",
+        "existing_session_profile_identity_inconsistent",
+        "existing_session_profile_identity_unproven",
+        "legacy_principal_unproven",
+        "runtime_owner_principal_binding_missing",
+        "owner_generation_or_binding_mismatch",
+        "subordinate_browser_session_profile_mismatch",
+        "expired_ownerless_lease",
+        "presentation_route_identity_unproven",
+        "terminal_installation_transaction",
+    ]
+}
+
+pub(crate) fn dominant_profile_blocker<'a>(
+    codes: impl IntoIterator<Item = &'a str>,
+) -> Option<String> {
+    let codes = codes.into_iter().collect::<std::collections::BTreeSet<_>>();
+    profile_blocker_dominance_order()
+        .iter()
+        .find(|candidate| codes.contains(**candidate))
+        .map(|value| (*value).to_string())
+}
+
+fn descriptor(
+    action_type: MitigationActionType,
+    recovery_class: &str,
+    executor_action: &str,
+    apply_posture: MitigationApplyPosture,
+    blocker_codes: &[&str],
+    preconditions: &[&str],
+    compensation: &[&str],
+) -> MitigationActionDescriptor {
+    MitigationActionDescriptor {
+        action_type,
+        recovery_class: recovery_class.to_string(),
+        executor_action: executor_action.to_string(),
+        apply_posture,
+        effect_authority: RecoveryEffectAuthority::ExactProfileGraph,
+        blocker_codes: blocker_codes
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
+        preconditions: preconditions
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
+        compensation: compensation
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
+    }
+}
+
 /// Classify one authenticated profile acquisition intent without performing
 /// browser, route, or repository effects. The caller supplies identity from
 /// the capability authentication layer, never from caller-authored labels.
@@ -242,7 +485,8 @@ pub(crate) fn plan_profile_acquisition(
         if let Some(binding) = binding {
             if binding.principal_id != intent.principal_id {
                 return Ok(blocked_outcome_with_recourse(
-                    "live_foreign_principal_authority",
+                    &dominant_profile_blocker(["live_foreign_principal_authority"])
+                        .expect("foreign principal blocker is in the dominance registry"),
                     false,
                     "A different authenticated principal has current process-backed authority for this profile.",
                     "wait_or_coordinate_with_current_principal",
@@ -1466,6 +1710,66 @@ mod tests {
             outcome.recovery.unwrap().actions[0].action_type,
             MitigationActionType::ReconcileExactPrincipalProfileIdentity
         );
+    }
+
+    #[test]
+    fn mitigation_registry_covers_every_plan_0137_fixture_recovery_class() {
+        let fixtures = [
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-terminal-owner.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-odollo-contractor-portal.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-identity-inconsistent.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-legacy-principal.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-owner-binding-missing.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-soylei-owner-generation-mismatch.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-fictitious-browser-cdp.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-fictitious-odollo-ups.v1.json"),
+            include_str!("../../../docs/dev/fixtures/profile-recovery/plan-0137-cdp-free-seeding-route.v1.json"),
+        ];
+        let registry = mitigation_action_registry();
+        for encoded in fixtures {
+            let fixture: Value = serde_json::from_str(encoded).unwrap();
+            let recovery_class = fixture["expectedRecoveryClass"].as_str().unwrap();
+            assert!(
+                registry
+                    .iter()
+                    .any(|descriptor| descriptor.recovery_class == recovery_class),
+                "missing registry action for {recovery_class}"
+            );
+        }
+    }
+
+    #[test]
+    fn mitigation_dominance_keeps_live_foreign_authority_above_recoverable_defects() {
+        assert_eq!(
+            dominant_profile_blocker([
+                "expired_ownerless_lease",
+                "runtime_owner_principal_binding_missing",
+                "live_foreign_principal_authority",
+            ])
+            .as_deref(),
+            Some("live_foreign_principal_authority")
+        );
+    }
+
+    #[test]
+    fn mitigation_registry_classifies_every_dominant_blocker_with_exact_scope() {
+        let registry = mitigation_action_registry();
+        for blocker in profile_blocker_dominance_order() {
+            if *blocker == "live_foreign_principal_authority" {
+                continue;
+            }
+            let descriptors = registry
+                .iter()
+                .filter(|descriptor| descriptor.blocker_codes.iter().any(|code| code == blocker))
+                .collect::<Vec<_>>();
+            assert!(!descriptors.is_empty(), "actionless blocker: {blocker}");
+            assert!(descriptors.iter().all(|descriptor| {
+                descriptor.effect_authority == RecoveryEffectAuthority::ExactProfileGraph
+                    && !descriptor.executor_action.is_empty()
+                    && !descriptor.preconditions.is_empty()
+                    && !descriptor.compensation.is_empty()
+            }));
+        }
     }
 
     #[test]
