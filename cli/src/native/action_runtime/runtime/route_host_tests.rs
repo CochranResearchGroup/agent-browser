@@ -1049,6 +1049,15 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
                 ..BrowserProfile::default()
             },
         )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                lease: LeaseState::Released,
+                profile_id: Some(profile_id.to_string()),
+                ..BrowserSession::default()
+            },
+        )]),
         runtime_owner_registry,
         ..ServiceState::default()
     };
@@ -1070,6 +1079,21 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(selection, None);
     assert_eq!(options.runtime_profile, None);
     assert_eq!(options.profile.as_deref(), Some(profile_id));
+
+    state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Exclusive;
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut active_lease_options = LaunchOptions {
+        profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(&mut active_lease_options, &command, Some(session_id))
+            .unwrap_err(),
+        "existing_session_profile_identity_unproven"
+    );
+    state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Released;
 
     state
         .runtime_owner_registry
@@ -1118,7 +1142,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(
         apply_service_profile_selection(&mut live_projection_options, &command, Some(session_id))
             .unwrap_err(),
-        "existing_session_profile_identity_unproven"
+        "existing_session_profile_identity_inconsistent"
     );
 }
 

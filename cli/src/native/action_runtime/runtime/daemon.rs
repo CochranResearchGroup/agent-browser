@@ -912,7 +912,16 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
             == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
         && process_absence_proven
         && profile_lock_release_proven;
-    let owner_projection_absent = !state.sessions.contains_key(session_id)
+    let session_projection_absent = match state.sessions.get(session_id) {
+        None => true,
+        Some(session) => {
+            session.lease == LeaseState::Released
+                && session.profile_id.as_deref() == Some(profile_id)
+                && session.browser_ids.is_empty()
+                && session.tab_ids.is_empty()
+        }
+    };
+    let owner_projection_absent = session_projection_absent
         && !state
             .browsers
             .contains_key(&binding.claim.logical_browser_id)
