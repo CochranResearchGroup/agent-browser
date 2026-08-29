@@ -917,13 +917,18 @@ fn service_profile_lease_reconcile_tool_schema(operation: &str, title: &str) -> 
 
 fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
     let required = match operation {
+        "acquire" => vec!["profileId", "profileCapability"],
         "plan" => vec!["profileId", "profileCapability", "expiresAt"],
         "apply" => vec!["profileCapability", "plan"],
         "status" => vec!["recoveryId", "profileCapability"],
         _ => Vec::new(),
     };
     json!({
-        "name": format!("service_profile_recovery_{operation}"),
+        "name": if operation == "acquire" {
+            "service_profile_acquire".to_string()
+        } else {
+            format!("service_profile_recovery_{operation}")
+        },
         "title": title,
         "description": format!("{title}. The profile capability is ephemeral and never persisted or returned. Only the exact terminal-owner recovery class is effect-capable in this first vertical."),
         "inputSchema": {
@@ -940,6 +945,7 @@ fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
                 "serviceName": { "type": "string" },
                 "agentName": { "type": "string" },
                 "taskName": { "type": "string" }
+                ,"automaticRecovery": { "type": "boolean" }
             },
             "required": required
         }
@@ -3257,6 +3263,7 @@ fn service_mcp_tools() -> Vec<Value> {
             "apply",
             "Apply an exact sealed profile lease reconciliation plan",
         ),
+        service_profile_recovery_tool_schema("acquire", "Acquire an authenticated service profile"),
         service_profile_recovery_tool_schema("plan", "Plan profile acquisition recovery"),
         service_profile_recovery_tool_schema("apply", "Apply profile acquisition recovery"),
         service_profile_recovery_tool_schema("status", "Read profile recovery status"),
@@ -5325,7 +5332,8 @@ fn call_service_mcp_tool(
         "service_profile_lease_reconcile_plan" | "service_profile_lease_reconcile_apply" => {
             call_service_profile_lease_reconcile(name, arguments, session)
         }
-        "service_profile_recovery_plan"
+        "service_profile_acquire"
+        | "service_profile_recovery_plan"
         | "service_profile_recovery_apply"
         | "service_profile_recovery_status" => {
             call_service_profile_recovery(name, arguments, session)
@@ -5953,6 +5961,11 @@ fn call_service_profile_recovery(
         .get("plan")
         .filter(|value| value.is_object())
         .cloned();
+    if action == "service_profile_acquire" && profile_id.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_acquire requires profileId",
+        ));
+    }
     if action.ends_with("_plan") && (profile_id.is_none() || expires_at.is_none()) {
         return Err(JsonRpcError::invalid_params(
             "service_profile_recovery_plan requires profileId and expiresAt",
@@ -5989,6 +6002,9 @@ fn call_service_profile_recovery(
     }
     if let Some(target_service_ids) = arguments.get("targetServiceIds") {
         command["targetServiceIds"] = target_service_ids.clone();
+    }
+    if let Some(automatic_recovery) = arguments.get("automaticRecovery") {
+        command["automaticRecovery"] = automatic_recovery.clone();
     }
     if let Some(plan) = plan {
         command["plan"] = plan;

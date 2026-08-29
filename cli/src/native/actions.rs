@@ -308,6 +308,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_profile_lease_release"
             | "service_profile_lease_reconcile_plan"
             | "service_profile_lease_reconcile_apply"
+            | "service_profile_acquire"
             | "service_profile_recovery_plan"
             | "service_profile_recovery_apply"
             | "service_profile_recovery_status"
@@ -883,6 +884,9 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             }
             "service_profile_lease_reconcile_apply" => {
                 handle_service_profile_lease_command(cmd).await
+            }
+            "service_profile_acquire" => {
+                handle_service_profile_recovery_command(cmd, state).await
             }
             "service_profile_recovery_plan" => {
                 handle_service_profile_recovery_command(cmd, state).await

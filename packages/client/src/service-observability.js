@@ -48,6 +48,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryPlanResponse} ServiceProfileRecoveryPlanResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryApplyResponse} ServiceProfileRecoveryApplyResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryStatusResponse} ServiceProfileRecoveryStatusResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquireOptions} ServiceProfileAcquireOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquireResponse} ServiceProfileAcquireResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseMutationResponse} ServiceProfileLeaseMutationResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
@@ -1023,6 +1025,21 @@ export function planServiceProfileRecovery({
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
     '/api/service/recovery/plan',
     { profileId, expiresAt, ...(idempotencyKey ? { idempotencyKey } : {}), ...(targetServiceIds ? { targetServiceIds } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileAcquireOptions} options @returns {Promise<ServiceProfileAcquireResponse>} */
+export function acquireServiceProfile({
+  profileId, profileCapability, expiresAt, idempotencyKey, targetServiceIds, automaticRecovery, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(profileId, 'acquireServiceProfile');
+  if (!profileCapability) {
+    throw new TypeError('acquireServiceProfile requires profileId and profileCapability');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    '/api/service/profiles/acquire',
+    { profileId, ...(expiresAt ? { expiresAt } : {}), ...(idempotencyKey ? { idempotencyKey } : {}), ...(targetServiceIds ? { targetServiceIds } : {}), ...(typeof automaticRecovery === 'boolean' ? { automaticRecovery } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
   );
 }
 

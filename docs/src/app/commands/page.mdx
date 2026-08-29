@@ -773,6 +773,16 @@ rejects a same-profile retained browser or lease conflict.
 
 `service leases` is the no-launch first-class lease view. The same collection is available from HTTP <code>GET /api/service/profile-leases</code>, MCP <code>agent-browser://profile-leases</code>, and generated helpers <code>getServiceProfileLeases()</code> and <code>findServiceProfileLease()</code>. Records report authenticated principal authority, exact owner generation, subordinate session and tab work, blocking identity axes, authorized actions, typed continuity recourse, and doctor findings. Use <code>service leases doctor</code>, <code>service leases &lt;id&gt; inspect</code>, or <code>service leases &lt;id&gt; explain</code> for focused diagnosis. Registration writes a new capability only to the absolute private path supplied with <code>--capability-out</code> and can happen before or after first launch. Rejoin, renew, and release require the exact current <code>--revision</code> and read the capability from <code>--capability-file</code>. When a pre-registered capability later has one exact uncontested ready owner session, or a registered lease is blocked by <code>unproven_session_authority</code>, with or without <code>owner_generation_or_binding_mismatch</code>, and authorizes <code>rejoin</code>, supply <code>--expires-at &lt;rfc3339&gt;</code> with rejoin. The operation may establish the missing binding or compare-and-swap the same principal, profile, and capability binding to a newer current ready owner generation, then binds only the unique exact live session and its same-browser active tabs. After an unexpected browser exit, a non-expired registered session work lease preserves exact profile selection until replay establishes the next owner generation. Labels, expired work, and legacy observations remain insufficient. Ambiguous sessions, mismatched browsers, and foreign principals fail closed. The raw capability is never accepted on the command line or retained in Service State. HTTP mutations require an <code>Authorization: Bearer</code> header. MCP mutation tools accept <code>profileCapability</code> only as an ephemeral argument. Legacy retained evidence remains observation-only and cannot gain authority from service, agent, or task labels.
 
+`service recovery acquire --profile-id <id> --capability-file <path>` is the
+high-level capability-bound entry point. It returns `acquired`,
+`recovery_available`, or `blocked` and does not accept a client-selected daemon
+route. Exact current ownership by the same principal is reused. Only a fully
+proven terminal-owner action is applied automatically before one acquisition
+retry. A live foreign principal remains hard blocked. Unproven profile identity
+returns a reviewed reconciliation plan without launching another browser. HTTP
+uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`,
+and generated clients use `acquireServiceProfile()`.
+
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner
 with satisfied cleanup, proven process exit, a released profile lock, and no

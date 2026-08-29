@@ -263,7 +263,9 @@ pub(super) async fn handle_http_request(
         let body_str = full_body.as_deref().unwrap_or("");
         if matches!(
             path,
-            "/api/service/recovery/plan" | "/api/service/recovery/apply"
+            "/api/service/profiles/acquire"
+                | "/api/service/recovery/plan"
+                | "/api/service/recovery/apply"
         ) {
             let capability = match profile_capability_bearer(&headers) {
                 Ok(capability) => capability,
@@ -272,7 +274,9 @@ pub(super) async fn handle_http_request(
                     return;
                 }
             };
-            let operation = if path.ends_with("/plan") {
+            let operation = if path.ends_with("/acquire") {
+                "acquire"
+            } else if path.ends_with("/plan") {
                 "plan"
             } else {
                 "apply"
@@ -3445,6 +3449,7 @@ fn service_profile_recovery_http_command(
 ) -> Result<(Value, Option<String>), String> {
     let input = parse_service_config_body(body, "profile recovery")?;
     let action = match operation {
+        "acquire" => "service_profile_acquire",
         "plan" => "service_profile_recovery_plan",
         "apply" => "service_profile_recovery_apply",
         _ => return Err("profile_recovery_operation_invalid".to_string()),
@@ -3463,6 +3468,7 @@ fn service_profile_recovery_http_command(
         "serviceName",
         "agentName",
         "taskName",
+        "automaticRecovery",
     ] {
         if let Some(value) = input.get(field) {
             command[field] = value.clone();
@@ -3473,6 +3479,9 @@ fn service_profile_recovery_http_command(
             || !command.get("expiresAt").is_some_and(Value::is_string))
     {
         return Err("profile_recovery_plan_profile_and_expiry_required".to_string());
+    }
+    if operation == "acquire" && !command.get("profileId").is_some_and(Value::is_string) {
+        return Err("profile_acquisition_profile_required".to_string());
     }
     if operation == "apply" && !command.get("plan").is_some_and(Value::is_object) {
         return Err("profile_recovery_plan_required".to_string());

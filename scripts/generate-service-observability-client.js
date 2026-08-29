@@ -1255,6 +1255,7 @@ export interface ServiceProfileRecoveryReceipt extends Record<string, unknown> {
   terminalResult: string;
 }
 export interface ServiceProfileRecoveryPlanResponse { outcome: { recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
+export interface ServiceProfileAcquireResponse { outcome: { state: 'acquired' | 'recovery_available' | 'blocked'; automatic: boolean; recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
 export interface ServiceProfileRecoveryApplyResponse { outcome: Record<string, unknown>; receipt: ServiceProfileRecoveryReceipt; replayed: boolean; }
 export interface ServiceProfileRecoveryStatusResponse { recoveryId: string; state: string; receipt: ServiceProfileRecoveryReceipt | null; }
 
@@ -1890,6 +1891,17 @@ export interface ServiceProfileRecoveryPlanOptions extends ServiceObservabilityH
   expiresAt: string;
   idempotencyKey?: string;
   targetServiceIds?: string[];
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+export interface ServiceProfileAcquireOptions extends ServiceObservabilityHttpOptions {
+  profileId: string;
+  profileCapability: string;
+  expiresAt?: string;
+  idempotencyKey?: string;
+  targetServiceIds?: string[];
+  automaticRecovery?: boolean;
   serviceName?: string;
   agentName?: string;
   taskName?: string;
@@ -3117,6 +3129,7 @@ export declare function releaseServiceProfileLease(options: ServiceProfileLeaseM
 export declare function planServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcilePlanOptions): Promise<ServiceProfileLeaseReconcilePlanResponse>;
 export declare function applyServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcileApplyOptions): Promise<ServiceProfileLeaseReconcileApplyResponse>;
 export declare function planServiceProfileRecovery(options: ServiceProfileRecoveryPlanOptions): Promise<ServiceProfileRecoveryPlanResponse>;
+export declare function acquireServiceProfile(options: ServiceProfileAcquireOptions): Promise<ServiceProfileAcquireResponse>;
 export declare function applyServiceProfileRecovery(options: ServiceProfileRecoveryApplyOptions): Promise<ServiceProfileRecoveryApplyResponse>;
 export declare function getServiceProfileRecoveryStatus(options: ServiceProfileRecoveryStatusOptions): Promise<ServiceProfileRecoveryStatusResponse>;
 export declare function findServiceDisplayAllocation(records: ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined, id: string): ServiceDisplayAllocationRecord | null;

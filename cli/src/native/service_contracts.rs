@@ -24,6 +24,7 @@ pub const SERVICE_VIEWER_LEASES_HTTP_ROUTE: &str = "/api/service/viewer-leases";
 pub const SERVICE_PROFILE_LEASES_HTTP_ROUTE: &str = "/api/service/profile-leases";
 pub const SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE: &str = "/api/service/recovery/plan";
 pub const SERVICE_PROFILE_RECOVERY_APPLY_HTTP_ROUTE: &str = "/api/service/recovery/apply";
+pub const SERVICE_PROFILE_ACQUIRE_HTTP_ROUTE: &str = "/api/service/profiles/acquire";
 pub const SERVICE_PROFILE_RECOVERY_STATUS_HTTP_ROUTE_TEMPLATE: &str =
     "/api/service/recovery/{recovery_id}";
 pub const SERVICE_REMEDIES_APPLY_HTTP_ROUTE: &str = "/api/service/remedies/apply";
@@ -829,12 +830,14 @@ pub fn service_contracts_metadata() -> Value {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaPath": "docs/dev/contracts/service-profile-recovery.v1.schema.json",
                 "http": {
+                    "acquire": SERVICE_PROFILE_ACQUIRE_HTTP_ROUTE,
                     "plan": SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE,
                     "apply": SERVICE_PROFILE_RECOVERY_APPLY_HTTP_ROUTE,
                     "status": SERVICE_PROFILE_RECOVERY_STATUS_HTTP_ROUTE_TEMPLATE,
                     "authentication": "Authorization: Bearer <profile-capability>",
                 },
                 "mcp": {
+                    "acquireTool": "service_profile_acquire",
                     "planTool": "service_profile_recovery_plan",
                     "applyTool": "service_profile_recovery_apply",
                     "statusTool": "service_profile_recovery_status",
@@ -842,6 +845,7 @@ pub fn service_contracts_metadata() -> Value {
                     "ephemeral": true,
                 },
                 "client": {
+                    "acquireHelper": "acquireServiceProfile",
                     "planHelper": "planServiceProfileRecovery",
                     "applyHelper": "applyServiceProfileRecovery",
                     "statusHelper": "getServiceProfileRecoveryStatus",

@@ -3328,6 +3328,7 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_profile_lease_release"
                     | "service_profile_lease_reconcile_plan"
                     | "service_profile_lease_reconcile_apply"
+                    | "service_profile_acquire"
                     | "service_profile_recovery_plan"
                     | "service_profile_recovery_apply"
                     | "service_profile_recovery_status"
@@ -3517,6 +3518,7 @@ mod tests {
             "service_profile_lease_release",
             "service_profile_lease_reconcile_plan",
             "service_profile_lease_reconcile_apply",
+            "service_profile_acquire",
             "service_profile_recovery_plan",
             "service_profile_recovery_apply",
             "service_profile_recovery_status",

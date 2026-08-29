@@ -82,7 +82,7 @@ pub fn gen_id() -> String {
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
 const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
-const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
+const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <acquire --profile-id <id> --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
@@ -371,6 +371,7 @@ fn parse_service_profile_recovery(
 ) -> Result<Value, ParseError> {
     let operation = rest.get(1).copied().unwrap_or("");
     let action = match operation {
+        "acquire" => "service_profile_acquire",
         "plan" => "service_profile_recovery_plan",
         "apply" => "service_profile_recovery_apply",
         "status" => "service_profile_recovery_status",
@@ -386,8 +387,10 @@ fn parse_service_profile_recovery(
         "action": action,
         "serviceState": flags.service_state.clone(),
     });
-    if let Some(session_name) = flags.session_name.as_ref() {
-        command["sessionName"] = json!(session_name);
+    if operation != "acquire" {
+        if let Some(session_name) = flags.session_name.as_ref() {
+            command["sessionName"] = json!(session_name);
+        }
     }
     let mut index = 2;
     if operation == "status" {
@@ -439,6 +442,7 @@ fn parse_service_profile_recovery(
         index += 2;
     }
     let required = match operation {
+        "acquire" => &["profileId", "profileCapabilityFile"][..],
         "plan" => &["profileId", "profileCapabilityFile", "expiresAt"][..],
         "apply" => &["planFile", "profileCapabilityFile", "sessionName"][..],
         "status" => &["recoveryId", "profileCapabilityFile"][..],
@@ -9384,6 +9388,14 @@ mod tests {
 
     #[test]
     fn test_service_profile_recovery_plan_apply_and_status() {
+        let acquire = parse_command(
+            &args("service recovery acquire --profile-id last30days-facebook-state --capability-file /tmp/profile.cap"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(acquire["action"], "service_profile_acquire");
+        assert!(acquire.get("sessionName").is_none());
+
         let plan = parse_command(
             &args("service recovery plan --profile-id last30days-facebook-state --capability-file /tmp/profile.cap --expires-at 2026-08-28T12:05:00Z --idempotency-key recovery-1 --target-service-id facebook --service-name Last30days"),
             &default_flags(),

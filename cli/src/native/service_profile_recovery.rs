@@ -49,6 +49,12 @@ pub(crate) enum RecoveryEffectAuthority {
     ExactProfileGraph,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AcquisitionRecoveryPolicy {
+    PlanOnly,
+    AutoApplyConclusive,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProfileAcquisitionIntent {
@@ -174,6 +180,178 @@ pub(crate) struct ProfileAcquisitionOutcome {
     pub(crate) evidence: Vec<RecoveryEvidence>,
 }
 
+/// Classify one authenticated profile acquisition intent without performing
+/// browser, route, or repository effects. The caller supplies identity from
+/// the capability authentication layer, never from caller-authored labels.
+pub(crate) fn plan_profile_acquisition(
+    state: &ServiceState,
+    intent: ProfileAcquisitionIntent,
+    created_at: &str,
+    expires_at: &str,
+    idempotency_key: &str,
+    seal_key: &[u8],
+) -> Result<ProfileAcquisitionOutcome, String> {
+    let profile = state
+        .profiles
+        .get(&intent.profile_id)
+        .ok_or_else(|| "profile_recovery_profile_missing".to_string())?;
+    let profile_path = profile
+        .user_data_dir
+        .as_deref()
+        .ok_or_else(|| "profile_recovery_identity_unavailable".to_string())?;
+    let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+        std::path::Path::new(profile_path),
+    )?;
+    let owner = state.runtime_owner_registry.owner(&profile_identity_digest);
+    let Some(owner) = owner else {
+        return Ok(blocked_outcome_with_recourse(
+            "runtime_owner_missing",
+            true,
+            "No lifecycle owner is registered for the exact profile identity.",
+            "register_exact_profile_owner",
+            Vec::new(),
+        ));
+    };
+    let lifecycle = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(&owner.browser_id);
+    let Some(lifecycle) = lifecycle else {
+        return Ok(blocked_outcome_with_recourse(
+            "runtime_owner_lifecycle_missing",
+            true,
+            "The exact lifecycle owner has no matching lifecycle record.",
+            "inspect_or_reconcile_exact_profile_graph",
+            vec![RecoveryEvidence {
+                code: "lifecycle_record_missing".to_string(),
+                subject_id: owner.browser_id.clone(),
+            }],
+        ));
+    };
+    let process_proven = state
+        .browsers
+        .get(&owner.browser_id)
+        .and_then(|browser| browser.pid)
+        .is_some();
+    let binding = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&profile_identity_digest);
+
+    if process_proven && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready {
+        if let Some(binding) = binding {
+            if binding.principal_id != intent.principal_id {
+                return Ok(blocked_outcome_with_recourse(
+                    "live_foreign_principal_authority",
+                    false,
+                    "A different authenticated principal has current process-backed authority for this profile.",
+                    "wait_or_coordinate_with_current_principal",
+                    vec![
+                        RecoveryEvidence {
+                            code: "current_process_proven".to_string(),
+                            subject_id: owner.browser_id.clone(),
+                        },
+                        RecoveryEvidence {
+                            code: "foreign_principal_binding_current".to_string(),
+                            subject_id: binding.principal_id.clone(),
+                        },
+                    ],
+                ));
+            }
+            if binding.profile_id == intent.profile_id
+                && binding.owner_generation == owner.owner_generation
+                && lifecycle.profile_identity_digest == profile_identity_digest
+                && lifecycle.owner_generation == owner.owner_generation
+            {
+                return Ok(ProfileAcquisitionOutcome {
+                    schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
+                    state: ProfileAcquisitionState::Acquired,
+                    dominant_blocker: None,
+                    automatic: false,
+                    browser_id: Some(owner.browser_id.clone()),
+                    daemon_session_route: Some(owner.daemon_session_route.clone()),
+                    recovery: None,
+                    next_action: None,
+                    evidence: vec![
+                        RecoveryEvidence {
+                            code: "current_process_proven".to_string(),
+                            subject_id: owner.browser_id.clone(),
+                        },
+                        RecoveryEvidence {
+                            code: "principal_binding_current".to_string(),
+                            subject_id: binding.principal_id.clone(),
+                        },
+                    ],
+                });
+            }
+        }
+        return plan_principal_reconciliation(
+            state,
+            intent,
+            profile_identity_digest,
+            owner,
+            binding.is_some(),
+            created_at,
+            expires_at,
+            idempotency_key,
+            seal_key,
+        );
+    }
+
+    plan_terminal_owner_recovery(
+        state,
+        intent,
+        created_at,
+        expires_at,
+        idempotency_key,
+        seal_key,
+    )
+}
+
+/// Coordinate planning and the one conclusive automatic recovery class. A
+/// successful recovery always retries the original acquisition intent exactly
+/// once through the supplied effect boundary.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn coordinate_profile_acquisition<R, F, Fut>(
+    repository: &R,
+    intent: ProfileAcquisitionIntent,
+    created_at: &str,
+    expires_at: &str,
+    idempotency_key: &str,
+    seal_key: &[u8],
+    policy: AcquisitionRecoveryPolicy,
+    retry_acquisition: F,
+) -> Result<ProfileAcquisitionOutcome, String>
+where
+    R: ServiceStateRepository,
+    F: FnOnce(ProfileAcquisitionIntent) -> Fut,
+    Fut: Future<Output = Result<ProfileAcquisitionRetryResult, String>>,
+{
+    let outcome = plan_profile_acquisition(
+        &repository.load_snapshot()?,
+        intent,
+        created_at,
+        expires_at,
+        idempotency_key,
+        seal_key,
+    )?;
+    if policy != AcquisitionRecoveryPolicy::AutoApplyConclusive {
+        return Ok(outcome);
+    }
+    let Some(plan) = outcome.recovery.as_ref() else {
+        return Ok(outcome);
+    };
+    let conclusive = plan.actions.len() == 1
+        && plan.actions[0].action_type == MitigationActionType::SupersedeTerminalOwner
+        && plan.dominant_blocker.code == "terminal_owner_cleanup_satisfied";
+    if !conclusive {
+        return Ok(outcome);
+    }
+    apply_terminal_owner_recovery(repository, plan, created_at, seal_key, retry_acquisition)
+        .await
+        .map(|applied| applied.acquisition)
+}
+
 /// Executes the no-launch plan and status operations, or the exact
 /// terminal-owner apply operation, for the public recovery command surface.
 /// The raw profile capability is consumed only for authentication and plan
@@ -183,6 +361,7 @@ pub(crate) async fn handle_service_profile_recovery_command(
     daemon_state: &mut DaemonState,
 ) -> Result<Value, String> {
     match required_command_string(command, "action")? {
+        "service_profile_acquire" => acquire_profile_command(command, daemon_state).await,
         "service_profile_recovery_plan" => plan_profile_recovery_command(command),
         "service_profile_recovery_status" => status_profile_recovery_command(command),
         "service_profile_recovery_apply" => {
@@ -190,6 +369,79 @@ pub(crate) async fn handle_service_profile_recovery_command(
         }
         action => Err(format!("Unsupported profile recovery command: {action}")),
     }
+}
+
+async fn acquire_profile_command(
+    command: &Value,
+    daemon_state: &mut DaemonState,
+) -> Result<Value, String> {
+    if command.get("sessionName").is_some() {
+        return Err("profile_acquisition_client_route_forbidden".to_string());
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let profile_id = required_command_string(command, "profileId")?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let authority = authenticate_profile_capability(
+        &snapshot.service_principals,
+        &raw_capability,
+        Some(profile_id),
+    )
+    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    let intent = ProfileAcquisitionIntent {
+        principal_id: authority.principal_id,
+        profile_id: authority.profile_id,
+        service_name: optional_command_string(command, "serviceName").unwrap_or_default(),
+        agent_name: optional_command_string(command, "agentName").unwrap_or_default(),
+        task_name: optional_command_string(command, "taskName").unwrap_or_default(),
+        target_service_ids: optional_command_string_array(command, "targetServiceIds")?,
+    };
+    let created_at = service_now_timestamp();
+    let expires_at = optional_command_string(command, "expiresAt").unwrap_or_else(|| {
+        (chrono::Utc::now() + chrono::Duration::minutes(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    });
+    let idempotency_key = optional_command_string(command, "idempotencyKey")
+        .unwrap_or_else(|| format!("profile-acquisition-{}", uuid::Uuid::new_v4()));
+    let policy = if command
+        .get("automaticRecovery")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
+        AcquisitionRecoveryPolicy::AutoApplyConclusive
+    } else {
+        AcquisitionRecoveryPolicy::PlanOnly
+    };
+    let outcome = coordinate_profile_acquisition(
+        &repository,
+        intent,
+        &created_at,
+        &expires_at,
+        &idempotency_key,
+        raw_capability.as_bytes(),
+        policy,
+        |intent| async move {
+            let retry_command = json!({
+                "action": "tab_new",
+                "profileId": intent.profile_id,
+                "serviceName": intent.service_name,
+                "agentName": intent.agent_name,
+                "taskName": intent.task_name,
+                "targetServiceIds": intent.target_service_ids,
+                "sessionName": daemon_state.session_id,
+            });
+            auto_launch(daemon_state, &retry_command).await?;
+            if daemon_state.browser.is_none() {
+                return Err("profile_acquisition_retry_missing_browser".to_string());
+            }
+            Ok(ProfileAcquisitionRetryResult {
+                browser_id: service_browser_id(&daemon_state.session_id),
+                daemon_session_route: daemon_state.session_id.clone(),
+            })
+        },
+    )
+    .await?;
+    Ok(json!({ "outcome": outcome }))
 }
 
 fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
@@ -384,6 +636,130 @@ fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<Str
                 .ok_or_else(|| format!("profile_recovery_{field}_invalid"))
         })
         .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plan_principal_reconciliation(
+    state: &ServiceState,
+    intent: ProfileAcquisitionIntent,
+    profile_identity_digest: String,
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+    binding_present: bool,
+    created_at: &str,
+    expires_at: &str,
+    idempotency_key: &str,
+    seal_key: &[u8],
+) -> Result<ProfileAcquisitionOutcome, String> {
+    if seal_key.len() < 32 || idempotency_key.trim().is_empty() {
+        return Err("profile_recovery_plan_invalid".to_string());
+    }
+    let blocker_code = if binding_present {
+        "existing_session_profile_identity_inconsistent"
+    } else {
+        "existing_session_profile_identity_unproven"
+    };
+    let identities = RecoveryIdentityJoins {
+        principal_id: intent.principal_id.clone(),
+        profile_id: intent.profile_id.clone(),
+        profile_identity_digest,
+        lifecycle_owner_id: owner.owner_id.clone(),
+        lifecycle_owner_generation: owner.owner_generation,
+        durable_browser_id: owner.browser_id.clone(),
+        daemon_session_route: owner.daemon_session_route.clone(),
+        service_session_id: state.sessions.values().find_map(|session| {
+            session
+                .browser_ids
+                .iter()
+                .any(|browser_id| browser_id == &owner.browser_id)
+                .then(|| session.id.clone())
+        }),
+        process_instance_digest: owner.process_instance_digest.clone(),
+        presentation_route_id: None,
+    };
+    let blocker = DominantBlocker {
+        code: blocker_code.to_string(),
+        recoverable: true,
+        detail: "The process-backed browser exists, but its exact authenticated principal and profile binding requires reviewed reconciliation."
+            .to_string(),
+    };
+    let evidence = vec![
+        RecoveryEvidence {
+            code: "current_process_proven".to_string(),
+            subject_id: owner.browser_id.clone(),
+        },
+        RecoveryEvidence {
+            code: blocker_code.to_string(),
+            subject_id: owner.browser_id.clone(),
+        },
+    ];
+    let action = MitigationAction {
+        schema_version: PROFILE_MITIGATION_ACTION_SCHEMA_V1.to_string(),
+        action_id: digest_json(&(
+            "reconcile_exact_principal_profile_identity",
+            state.runtime_owner_registry.revision,
+            &identities,
+        ))?,
+        action_type: MitigationActionType::ReconcileExactPrincipalProfileIdentity,
+        effect_authority: RecoveryEffectAuthority::ExactProfileGraph,
+        preconditions: vec![
+            "profile_capability_current".to_string(),
+            "profile_identity_digest_matches".to_string(),
+            "owner_generation_matches".to_string(),
+            "current_process_identity_matches".to_string(),
+            "foreign_principal_absent".to_string(),
+        ],
+        expected_postconditions: vec![
+            "principal_profile_binding_current".to_string(),
+            "existing_browser_preserved".to_string(),
+            "duplicate_launch_absent".to_string(),
+        ],
+        compensation: vec!["retain_existing_binding_on_compare_and_swap_failure".to_string()],
+    };
+    let idempotency_key_digest = digest_text(idempotency_key);
+    let recovery_id = digest_json(&(
+        "profile-recovery",
+        &identities.profile_identity_digest,
+        identities.lifecycle_owner_generation,
+        &idempotency_key_digest,
+    ))?;
+    let plan_id = digest_json(&(
+        PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+        &recovery_id,
+        state.runtime_owner_registry.revision,
+        &identities,
+        &blocker,
+        &action,
+        &intent,
+        created_at,
+        expires_at,
+    ))?;
+    let mut plan = RecoveryPlan {
+        schema_version: PROFILE_RECOVERY_PLAN_SCHEMA_V1.to_string(),
+        plan_id,
+        recovery_id,
+        created_at: created_at.to_string(),
+        expires_at: expires_at.to_string(),
+        idempotency_key_digest,
+        service_state_revision: state.runtime_owner_registry.revision,
+        identities,
+        dominant_blocker: blocker.clone(),
+        evidence: evidence.clone(),
+        actions: vec![action],
+        original_intent: intent,
+        integrity_seal: String::new(),
+    };
+    plan.integrity_seal = seal_recovery_plan(&plan, seal_key)?;
+    Ok(ProfileAcquisitionOutcome {
+        schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
+        state: ProfileAcquisitionState::RecoveryAvailable,
+        dominant_blocker: Some(blocker),
+        automatic: false,
+        browser_id: None,
+        daemon_session_route: None,
+        recovery: Some(plan),
+        next_action: Some("review_recovery_plan".to_string()),
+        evidence,
+    })
 }
 
 pub(crate) fn plan_terminal_owner_recovery(
@@ -822,6 +1198,30 @@ fn blocked_outcome(
     }
 }
 
+fn blocked_outcome_with_recourse(
+    code: &str,
+    recoverable: bool,
+    detail: &str,
+    next_action: &str,
+    evidence: Vec<RecoveryEvidence>,
+) -> ProfileAcquisitionOutcome {
+    ProfileAcquisitionOutcome {
+        schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
+        state: ProfileAcquisitionState::Blocked,
+        dominant_blocker: Some(DominantBlocker {
+            code: code.to_string(),
+            recoverable,
+            detail: detail.to_string(),
+        }),
+        automatic: false,
+        browser_id: None,
+        daemon_session_route: None,
+        recovery: None,
+        next_action: Some(next_action.to_string()),
+        evidence,
+    }
+}
+
 fn digest_text(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
@@ -943,6 +1343,129 @@ mod tests {
 
     fn seal_key() -> &'static [u8] {
         b"synthetic-profile-capability-seal-key-with-at-least-thirty-two-bytes"
+    }
+
+    fn ready_state(principal_id: &str, include_binding: bool) -> ServiceState {
+        let mut state = state();
+        let profile_identity_digest = state
+            .runtime_owner_registry
+            .owners
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .get(&profile_identity_digest)
+            .unwrap()
+            .clone();
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut(&owner.browser_id)
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+        lifecycle.terminal_evidence.clear();
+        state.browsers.insert(
+            owner.browser_id.clone(),
+            BrowserProcess {
+                id: owner.browser_id.clone(),
+                pid: Some(7137),
+                ..BrowserProcess::default()
+            },
+        );
+        if include_binding {
+            state.runtime_owner_registry.principal_bindings.insert(
+                profile_identity_digest.clone(),
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: principal_id.to_string(),
+                    profile_id: "last30days-facebook".to_string(),
+                    profile_identity_digest,
+                    capability_id: "capability:test".to_string(),
+                    provenance:
+                        crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: owner.owner_generation,
+                },
+            );
+        }
+        state
+    }
+
+    #[test]
+    fn acquisition_coordinator_reuses_current_process_backed_principal_lane() {
+        let state = ready_state("principal:last30days", true);
+        let outcome = plan_profile_acquisition(
+            &state,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-ready",
+            seal_key(),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.state, ProfileAcquisitionState::Acquired);
+        assert_eq!(
+            outcome.browser_id.as_deref(),
+            Some("session:durable-browser")
+        );
+        assert_eq!(
+            outcome.daemon_session_route.as_deref(),
+            Some("handoff-a79ef2887412addf")
+        );
+        assert!(outcome.recovery.is_none());
+    }
+
+    #[test]
+    fn acquisition_coordinator_hard_blocks_current_foreign_principal() {
+        let state = ready_state("principal:foreign", true);
+        let outcome = plan_profile_acquisition(
+            &state,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-foreign",
+            seal_key(),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.state, ProfileAcquisitionState::Blocked);
+        assert_eq!(
+            outcome.dominant_blocker.unwrap().code,
+            "live_foreign_principal_authority"
+        );
+        assert_eq!(
+            outcome.next_action.as_deref(),
+            Some("wait_or_coordinate_with_current_principal")
+        );
+        assert!(outcome.recovery.is_none());
+    }
+
+    #[test]
+    fn acquisition_coordinator_offers_reviewed_identity_reconciliation_without_launch() {
+        let state = ready_state("principal:last30days", false);
+        let outcome = plan_profile_acquisition(
+            &state,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-unproven",
+            seal_key(),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.state, ProfileAcquisitionState::RecoveryAvailable);
+        assert!(!outcome.automatic);
+        assert_eq!(
+            outcome.dominant_blocker.unwrap().code,
+            "existing_session_profile_identity_unproven"
+        );
+        assert_eq!(
+            outcome.recovery.unwrap().actions[0].action_type,
+            MitigationActionType::ReconcileExactPrincipalProfileIdentity
+        );
     }
 
     #[test]
@@ -1099,6 +1622,60 @@ mod tests {
         .unwrap();
         assert!(replay.replayed);
         assert_eq!(replay.receipt, first.receipt);
+    }
+
+    #[tokio::test]
+    async fn coordinator_auto_applies_only_conclusive_terminal_recovery_and_retries_once() {
+        let repository = MemoryRepository::new(state());
+        let profile_root = std::path::PathBuf::from("/tmp/agent-browser-p137/recovery-contract");
+        let outcome = coordinate_profile_acquisition(
+            &repository,
+            intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "request-coordinate-1",
+            seal_key(),
+            AcquisitionRecoveryPolicy::AutoApplyConclusive,
+            |_| async {
+                let authority = RuntimeLifecycleAuthority::new(&repository);
+                let binding = authority.register_managed_lane(ManagedLaneRegistration {
+                    logical_browser_id: "session:coordinator-browser".to_string(),
+                    profile_root,
+                    daemon_session_route: "coordinator-route".to_string(),
+                    process_group_id: Some(8137),
+                    process_identity: crate::process_identity::RecordedProcessIdentity {
+                        pid: 8137,
+                        start_token: "linux:boot:8137".to_string(),
+                        executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                        browser_family: Some("chrome".to_string()),
+                    },
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint: "ws://127.0.0.1:9831/devtools/browser/replacement".to_string(),
+                    target_ids: vec!["facebook".to_string()],
+                })?;
+                Ok(ProfileAcquisitionRetryResult {
+                    browser_id: binding.claim.logical_browser_id,
+                    daemon_session_route: binding.claim.daemon_session_route,
+                })
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.state, ProfileAcquisitionState::Acquired);
+        assert!(outcome.automatic);
+        assert_eq!(
+            outcome.browser_id.as_deref(),
+            Some("session:coordinator-browser")
+        );
+        assert_eq!(
+            repository
+                .load_snapshot()
+                .unwrap()
+                .profile_recovery_receipts
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]
