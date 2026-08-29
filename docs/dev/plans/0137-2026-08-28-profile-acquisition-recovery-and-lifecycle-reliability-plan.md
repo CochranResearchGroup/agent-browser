@@ -1030,9 +1030,9 @@ checkpoint is durable and the plan's identity model remains coherent.
 - Objective: validate acquisition, recovery, lifecycle, and development
   installation continuity, then exercise isolated provider-backed manual
   seeding without borrowing production identity or authority.
-- Source commit: `85f2313c` on `main`. This commit is newer than the currently
-  installed development candidate and must be rebuilt before acceptance
-  resumes.
+- Source commit: `85f2313c` on `main`. Its optimized binary is installed as
+  development generation `0.28.0-ce286300560d` with SHA-256
+  `ce286300560dbb0a785d0fbe689c1495a83d00c9800bc469604ad80096a8aeed`.
 - Authority routing: profile acquisition and sealed recovery apply now execute
   on the selected persistent daemon route. Recovery preserves the authenticated
   principal and provenance through its single retry, and terminal-owner
@@ -1055,12 +1055,13 @@ checkpoint is durable and the plan's identity model remains coherent.
   development runtime and provider fixtures passed. The workstation install,
   host, VM harness, Guacamole asset, PostgreSQL durability, and route-user
   fixtures had already passed against the same installer changes.
-- Isolated development evidence: candidate generation
-  `0.28.0-92914c43d9e6` installed without changing the production selected
-  generation. Three disposable development browser launch, URL read, close,
-  and residue iterations passed. Provider plan, stage, and preflight passed,
-  including exact stopped containers, free route ports, route users, helper,
-  XRDP, and resource checks.
+- Isolated development evidence: the current source candidate installed without
+  changing production selected generation
+  `0.28.0-2851117fd877-04e7cf4c8b54`. Three fresh disposable development
+  browser launch, URL read, close, and residue iterations passed on the current
+  candidate. Provider plan and secret-free stage completed without authorizing
+  effects. Provider preflight passed, including exact stopped containers, free
+  route ports, route users, helper, XRDP, bundle identity, and resource checks.
 - Quarantined provider apply: the first route-bound provider apply stopped at
   `existing_session_profile_identity_unproven` for profile
   `development-presentation-provider-v5-1`. The transaction rolled the provider
@@ -1076,13 +1077,13 @@ checkpoint is durable and the plan's identity model remains coherent.
 - Effects and hard stop: no signal, force close, broad cleanup, provider retry,
   manual authentication, ingress publication, production installation, or
   production state mutation was performed. The fresh OS census also confirmed
-  that the unrelated production Guacamole stack remains running and the
-  development dashboard remains on the prior isolated candidate generation.
+  that the unrelated production Guacamole stack remains running. The
+  development dashboard, backend, runtime host, lane manifests, and
+  development-only skill now resolve to the current isolated candidate.
 - Remaining gate: an operator must explicitly authorize targeted termination
   of only PID and process group `62232` after executable, start time, profile
   path, and lock ownership are revalidated. After verified exit and profile
-  lock release, rebuild and install `85f2313c` in development, rerun provider
-  apply, complete one route-bound CDP-free manual seed without credentials,
-  record acquisition, presentation, and authentication as separate axes, and
-  take the final post-acceptance OS census. Slice J remains ineligible until all
-  of those Slice I gates pass.
+  lock release, rerun provider apply, complete one route-bound CDP-free manual
+  seed without credentials, record acquisition, presentation, and
+  authentication as separate axes, and take the final post-acceptance OS
+  census. Slice J remains ineligible until all of those Slice I gates pass.
