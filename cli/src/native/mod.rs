@@ -6,6 +6,8 @@ pub mod auth;
 #[allow(dead_code)]
 pub mod auth_workflow;
 #[allow(dead_code)]
+pub(crate) mod authentication_run;
+#[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
 pub mod browser_context;
