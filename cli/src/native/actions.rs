@@ -118,7 +118,8 @@ use super::recording::{
     handle_video_start, handle_video_stop,
 };
 use super::remote_view::open::{
-    handle_remote_view_open, handle_service_remote_view_browser_reattach,
+    handle_remote_view_open, handle_service_profile_manual_seeding_acquire,
+    handle_service_profile_manual_seeding_close, handle_service_remote_view_browser_reattach,
     handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
     route_bound_open_attribution_from_authenticated_dispatch,
@@ -249,6 +250,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_status"
             | "view_takeover"
             | "remote_view_open"
+            | "service_profile_manual_seeding_acquire"
+            | "service_profile_manual_seeding_close"
             | "service_remote_view_handoff_resolve"
             | "service_remote_view_route_preflight"
             | "service_remote_view_browser_reattach"
@@ -332,6 +335,46 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "tab_handle_release"
             | "file_transfer"
     )
+}
+
+fn active_manual_seeding_cdp_blocker(cmd: &Value, state: &DaemonState) -> Option<String> {
+    let repository =
+        crate::native::service_store::LockedServiceStateRepository::default_json().ok()?;
+    let service_state =
+        crate::native::service_store::ServiceStateRepository::load_snapshot(&repository).ok()?;
+    let active_browser_id = super::action_runtime::runtime::service_browser_id(&state.session_id);
+    let profile_id = cmd
+        .get("profileId")
+        .or_else(|| cmd.get("runtimeProfile"))
+        .or_else(|| cmd.get("profile"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            service_state
+                .browsers
+                .get(&active_browser_id)
+                .and_then(|browser| browser.profile_id.clone())
+        })?;
+    service_state
+        .profile_seeding_handoffs
+        .values()
+        .find(|handoff| {
+            handoff.profile_id == profile_id && handoff.state.blocks_profile_lease()
+        })
+        .map(|handoff| {
+            format!(
+                "manual_seeding_cdp_action_denied: action requires DevTools while profile '{}' is in '{}' lifecycle state; close PID {} through the exact manual-seeding handoff first",
+                profile_id,
+                serde_json::to_value(handoff.state)
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_string))
+                    .unwrap_or_else(|| "manual_seeding".to_string()),
+                handoff
+                    .pid
+                    .map(|pid| pid.to_string())
+                    .unwrap_or_else(|| "unknown".to_string())
+            )
+        })
 }
 
 pub(crate) fn active_target_binding(state: &DaemonState) -> Option<String> {
@@ -585,6 +628,11 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     }
     let skip_launch = action_skips_browser_launch(action)
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
+    if !skip_launch {
+        if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
+            return error_response(&id, &blocker);
+        }
+    }
     let mut cold_owned_launch = false;
     if !skip_launch {
         let stale_state = detect_browser_stale_state(state).await;
@@ -749,6 +797,13 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "remote_view_open" => {
                 let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
                 handle_remote_view_open(cmd, state, attribution).await
+            }
+            "service_profile_manual_seeding_acquire" => {
+                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
+                handle_service_profile_manual_seeding_acquire(cmd, state, attribution).await
+            }
+            "service_profile_manual_seeding_close" => {
+                handle_service_profile_manual_seeding_close(cmd, state).await
             }
             "service_remote_view_handoff_resolve" => {
                 let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);

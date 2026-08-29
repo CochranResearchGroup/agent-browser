@@ -7,7 +7,9 @@ use super::proof::remote_view_open_visible_window_proof;
 use super::route_lifecycle::handle_service_remote_view_route_checkout;
 pub(crate) use super::runtime_model::*;
 use super::shared::*;
-use crate::native::action_runtime::runtime::handle_runtime_handoff_resume;
+use crate::native::action_runtime::runtime::{
+    handle_cdp_free_launch, handle_runtime_handoff_resume,
+};
 use crate::native::service_store::JsonServiceStateStore;
 /// Raw browser facts observed by the coordinator. The runtime adapter does
 /// not decide whether a browser or target is reusable.
@@ -84,6 +86,13 @@ pub(crate) trait RouteBoundOpenRuntime {
         request: AdoptRetainedBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation>;
     fn launch_browser(
+        &mut self,
+        request: LaunchBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult>;
+    /// Launch headed stock Chrome on an already-reserved display without
+    /// opening a DevTools endpoint. Manual seeding is the only coordinator
+    /// path that invokes this effect.
+    fn launch_cdp_free_browser(
         &mut self,
         request: LaunchBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult>;
@@ -325,6 +334,23 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             }
             LaunchBrowserResult::from_compatibility(value)
                 .map_err(|message| route_bound_runtime_issue("launch_browser", message, None))
+        })
+    }
+    fn launch_cdp_free_browser(
+        &mut self,
+        request: LaunchBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult> {
+        Box::pin(async move {
+            let mut command = request.command.into_value();
+            command["action"] = Value::String("cdp_free_launch".to_string());
+            let value = handle_cdp_free_launch(&command, self.state)
+                .await
+                .map_err(|message| {
+                    route_bound_runtime_issue("launch_cdp_free_browser", message, Some(&command))
+                })?;
+            LaunchBrowserResult::from_compatibility(value).map_err(|message| {
+                route_bound_runtime_issue("launch_cdp_free_browser", message, None)
+            })
         })
     }
     fn refresh_targets(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {

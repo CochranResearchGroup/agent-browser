@@ -319,3 +319,39 @@ async fn test_credentials_roundtrip_via_actions() {
     let result = execute_command(&del_cmd, &mut state).await;
     assert_eq!(result["success"], true);
 }
+
+#[test]
+fn manual_seeding_lifecycle_denies_cdp_action_before_auto_launch() {
+    let state = DaemonState::new();
+    let browser_id = crate::native::action_runtime::runtime::service_browser_id(&state.session_id);
+    let path = JsonServiceStateStore::default_path().unwrap();
+    JsonServiceStateStore::new(path)
+        .save(&ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                browser_id.clone(),
+                BrowserProcess {
+                    id: browser_id,
+                    profile_id: Some("manual-cdp-block".to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            profile_seeding_handoffs: std::collections::BTreeMap::from([(
+                "manual-cdp-block:google".to_string(),
+                crate::native::service_model::ProfileSeedingHandoffRecord {
+                    id: "manual-cdp-block:google".to_string(),
+                    profile_id: "manual-cdp-block".to_string(),
+                    target_service_id: "google".to_string(),
+                    state: ProfileSeedingHandoffState::SeedingWaitingForClose,
+                    pid: Some(4242),
+                    ..crate::native::service_model::ProfileSeedingHandoffRecord::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+
+    let blocker = active_manual_seeding_cdp_blocker(&json!({"action": "snapshot"}), &state)
+        .expect("manual seeding must block CDP actions");
+    assert!(blocker.starts_with("manual_seeding_cdp_action_denied:"));
+    assert!(blocker.contains("manual-cdp-block"));
+}

@@ -410,6 +410,95 @@ pub fn route_bound_handoff_operator_visible(
     })
 }
 
+/// Build operator-visible evidence for a CDP-free manual-seeding browser.
+/// The process-bound window replaces the CDP target component; this function
+/// deliberately emits no authentication claim.
+pub fn route_bound_manual_seeding_operator_visible(
+    route_binding: &RemoteViewRouteBinding,
+    browser_id: &str,
+    session_name: &str,
+    browser_pid: Option<u32>,
+    visible_window_proof: Option<&Value>,
+) -> Value {
+    let mut result = route_bound_handoff_operator_visible(
+        route_binding,
+        browser_id,
+        session_name,
+        visible_window_proof,
+        None,
+        None,
+    );
+    let proof_state = visible_window_proof
+        .and_then(|proof| proof.get("state"))
+        .and_then(Value::as_str)
+        .unwrap_or("not_checked");
+    let process_state = if browser_pid.is_some() && proof_state == "ready" {
+        "ready"
+    } else {
+        "not_ready"
+    };
+    let route_state = route_bound_handoff_route_state(route_binding);
+    let guacamole_state = route_bound_handoff_guacamole_state(route_binding);
+    let operator_access_state = route_bound_handoff_operator_access(route_binding)
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("not_checked")
+        .to_string();
+    let operator_state = remote_view_operator_visible_state(
+        route_state,
+        proof_state,
+        process_state,
+        guacamole_state,
+        &operator_access_state,
+    );
+    result["state"] = Value::String(operator_state.clone());
+    result["target"] = json!({
+        "state": "not_applicable",
+        "reason": "manual_seeding_has_no_cdp_target",
+    });
+    result["manualSeedingProcess"] = json!({
+        "state": process_state,
+        "pid": browser_pid,
+        "identitySource": "process_bound_visible_window_proof",
+    });
+    result["authentication"] = json!({
+        "state": "not_probed",
+        "reason": "visibility_is_not_authentication_evidence",
+    });
+    if operator_state != "ready" {
+        let code = if browser_pid.is_none() {
+            "process_identity_unproven"
+        } else if proof_state != "ready" {
+            proof_state
+        } else if route_binding.route_id.trim().is_empty()
+            || route_binding
+                .route_pool_entry_state
+                .as_deref()
+                .is_some_and(|state| !matches!(state, "available" | "checked_out"))
+        {
+            "stale_or_unready_route"
+        } else if guacamole_state != "ready" {
+            "guacamole_unavailable"
+        } else if route_state != "ready" {
+            "stale_or_unready_route"
+        } else if operator_access_state != "ready" {
+            "public_operator_unavailable"
+        } else {
+            "operator_visibility_unproven"
+        };
+        result["notVisible"] = json!({
+            "code": code,
+            "state": operator_state,
+            "processState": process_state,
+            "proofState": proof_state,
+            "routeState": route_state,
+            "guacamoleState": guacamole_state,
+            "operatorAccessState": operator_access_state,
+        });
+    }
+    result
+}
+
 fn route_bound_handoff_operator_access(route_binding: &RemoteViewRouteBinding) -> Value {
     let public_url = route_descriptor_url(route_binding, "publicOperatorUrl");
     let dashboard_url = route_descriptor_url(route_binding, "dashboardEmbedUrl");

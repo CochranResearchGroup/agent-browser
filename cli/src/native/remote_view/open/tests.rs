@@ -116,6 +116,24 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         })
     }
 
+    fn launch_cdp_free_browser(
+        &mut self,
+        _request: LaunchBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult> {
+        Box::pin(async move {
+            self.events.lock().unwrap().push("launch_cdp_free_browser");
+            match self.launch_issue.clone() {
+                Some(issue) => Err(issue),
+                None => Ok(LaunchBrowserResult::from_compatibility(json!({
+                    "launched": true,
+                    "mode": "cdp_free_launch",
+                    "browserPid": 4242,
+                }))
+                .unwrap()),
+            }
+        })
+    }
+
     fn refresh_targets(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(async move {
             self.events.lock().unwrap().push("refresh_targets");
@@ -821,6 +839,112 @@ async fn coordinator_returns_typed_planned_outcome_without_launching_a_browser()
     let _ = std::fs::remove_dir_all(root);
 }
 
+#[tokio::test]
+async fn manual_seeding_route_exhaustion_stops_before_cdp_free_launch() {
+    let repository = StaticRepository {
+        state: ServiceState::default(),
+    };
+    let request = RouteBoundDirectOpenRequest::from_compatibility_command(
+        json!({
+            "action": "service_profile_manual_seeding_acquire",
+            "manualSeeding": true,
+            "runtimeProfile": "google-seeding",
+            "targetServiceId": "google",
+            "provider": "rdp_gateway",
+            "url": "https://accounts.google.com/"
+        }),
+        Some("manual-seeding-test".to_string()),
+        authorized_attribution(),
+    )
+    .unwrap();
+    let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
+    let mut runtime = ScriptedRuntime::new();
+
+    let result = RouteBoundOpenCoordinator::open(
+        RouteBoundOpenInvocation::direct(request),
+        &mut runtime,
+        &repository,
+        &supervisor,
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert_eq!(*runtime.events.lock().unwrap(), vec!["observe_browser"]);
+}
+
+#[test]
+fn manual_seeding_visibility_requires_process_bound_ready_proof_without_auth_claim() {
+    let mut binding = test_binding();
+    binding.route_pool_entry_id = Some("pool-manual".to_string());
+    binding.route_pool_entry_state = Some("available".to_string());
+    let visible = route_bound_manual_seeding_operator_visible(
+        &binding,
+        "browser-manual",
+        "session-manual",
+        Some(4242),
+        Some(&json!({"state": "ready"})),
+    );
+    assert_eq!(visible["state"], "ready");
+    assert_eq!(visible["manualSeedingProcess"]["state"], "ready");
+    assert_eq!(visible["target"]["state"], "not_applicable");
+    assert_eq!(visible["authentication"]["state"], "not_probed");
+
+    let absent_process = route_bound_manual_seeding_operator_visible(
+        &binding,
+        "browser-manual",
+        "session-manual",
+        None,
+        Some(&json!({"state": "ready"})),
+    );
+    assert_ne!(absent_process["state"], "ready");
+    assert_eq!(
+        absent_process["notVisible"]["code"],
+        "process_identity_unproven"
+    );
+
+    for proof_state in [
+        "wrong_process",
+        "browser_window_absent",
+        "display_socket_unavailable",
+    ] {
+        let not_visible = route_bound_manual_seeding_operator_visible(
+            &binding,
+            "browser-manual",
+            "session-manual",
+            Some(4242),
+            Some(&json!({"state": proof_state})),
+        );
+        assert_ne!(not_visible["state"], "ready");
+        assert_eq!(not_visible["notVisible"]["code"], proof_state);
+    }
+
+    let mut stale_route = binding.clone();
+    stale_route.route_id.clear();
+    stale_route.route_pool_entry_state = Some("quarantined".to_string());
+    stale_route.frame_url = None;
+    stale_route.external_url = None;
+    let not_visible = route_bound_manual_seeding_operator_visible(
+        &stale_route,
+        "browser-manual",
+        "session-manual",
+        Some(4242),
+        Some(&json!({"state": "ready"})),
+    );
+    assert_eq!(not_visible["notVisible"]["code"], "stale_or_unready_route");
+
+    let mut unavailable_guacamole = binding;
+    unavailable_guacamole.frame_url = None;
+    unavailable_guacamole.external_url = None;
+    let not_visible = route_bound_manual_seeding_operator_visible(
+        &unavailable_guacamole,
+        "browser-manual",
+        "session-manual",
+        Some(4242),
+        Some(&json!({"state": "ready"})),
+    );
+    assert_eq!(not_visible["notVisible"]["code"], "guacamole_unavailable");
+}
+
 #[test]
 fn durable_handoff_observation_accepts_reacquired_intent_target() {
     let handoff = RemoteViewHandoff {
@@ -1165,6 +1289,220 @@ async fn coordinator_returns_typed_opened_outcome_from_scripted_effects() {
     );
 
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn manual_seeding_uses_reserved_route_before_cdp_free_launch_and_persists_handoff() {
+    let root = std::env::temp_dir().join(format!(
+        "agent-browser-manual-seeding-opened-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let state_path = root.join("state.json");
+    let store = JsonServiceStateStore::new(&state_path);
+    store
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                "google-seeding".to_string(),
+                BrowserProfile {
+                    id: "google-seeding".to_string(),
+                    name: "Google manual seeding".to_string(),
+                    user_data_dir: Some(root.join("profile").to_string_lossy().into_owned()),
+                    target_service_ids: vec!["google".to_string()],
+                    persistent: true,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "pool-a".to_string(),
+                RoutePoolEntry {
+                    id: "pool-a".to_string(),
+                    route_id: "route-a".to_string(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    frame_url: Some(
+                        "https://dashboard.example/guacamole/#/client/route-a".to_string(),
+                    ),
+                    external_url: Some("https://guac.example/#/client/route-a".to_string()),
+                    route_descriptor: Some(json!({
+                        "publicOperatorUrl": "https://dashboard.example/remote-view",
+                    })),
+                    target: json!({
+                        "displayName": ":31",
+                        "displayIsolation": "shared_display",
+                        "routeUser": "agent-browser-rdp-a",
+                        "displayAccess": {"state": "ready"}
+                    }),
+                    provider_mode: "single_controller".to_string(),
+                    state: "available".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let repository = FixtureRepository {
+        repository: LockedServiceStateRepository::new(store.clone()),
+    };
+    let request = RouteBoundDirectOpenRequest::from_compatibility_command(
+        json!({
+            "action": "service_profile_manual_seeding_acquire",
+            "manualSeeding": true,
+            "remoteViewHandoffId": "manual-seeding-a",
+            "routePoolEntryId": "pool-a",
+            "provider": "rdp_gateway",
+            "runtimeProfile": "google-seeding",
+            "targetServiceId": "google",
+            "url": "https://accounts.google.com/"
+        }),
+        Some("manual-seeding-a".to_string()),
+        authorized_attribution(),
+    )
+    .unwrap();
+    let supervisor = RouteBoundOpenSupervisor::system(Some(10_000), None);
+    let mut runtime = ScriptedRuntime::new();
+
+    let outcome = RouteBoundOpenCoordinator::open(
+        RouteBoundOpenInvocation::direct(request),
+        &mut runtime,
+        &repository,
+        &supervisor,
+    )
+    .await
+    .unwrap();
+    let opened = match outcome {
+        RouteBoundOpenOutcome::Opened { opened } => opened.into_value(),
+        other => panic!("unexpected manual-seeding outcome: {other:?}"),
+    };
+
+    let events = runtime.events.lock().unwrap().clone();
+    assert_eq!(
+        events,
+        vec![
+            "observe_browser",
+            "ensure_display_access",
+            "launch_cdp_free_browser",
+            "observe_visible_window",
+            "observe_operator_access",
+            "checkout_route",
+        ]
+    );
+    assert_eq!(opened["operatorVisible"]["state"], "ready");
+    assert_eq!(opened["lifecycleState"], "manual_seeding");
+    assert_eq!(opened["cdpAttachmentAllowed"], false);
+    assert_eq!(opened["authentication"]["state"], "not_probed");
+    assert_eq!(
+        opened["handoffUrl"],
+        "https://dashboard.example/remote-view/manual-seeding-a"
+    );
+
+    let persisted = store.load().unwrap();
+    let lifecycle = &persisted.profile_seeding_handoffs["google-seeding:google"];
+    assert_eq!(
+        lifecycle.state,
+        crate::native::service_model::ProfileSeedingHandoffState::SeedingWaitingForClose
+    );
+    assert_eq!(lifecycle.pid, Some(4242));
+    assert!(persisted
+        .remote_view_handoffs
+        .contains_key("manual-seeding-a"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn manual_seeding_close_replay_advances_to_separate_auth_probe_without_broad_cleanup() {
+    let state_path = JsonServiceStateStore::default_path().unwrap();
+    let store = JsonServiceStateStore::new(&state_path);
+    let profile_id = "manual-close-profile";
+    let target_service_id = "google";
+    let handoff_id = "manual-close-handoff";
+    let route_id = "manual-close-route";
+    let pid = u32::MAX - 7;
+    store
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                profile_id.to_string(),
+                BrowserProfile {
+                    id: profile_id.to_string(),
+                    name: "Manual close profile".to_string(),
+                    persistent: true,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            profile_seeding_handoffs: BTreeMap::from([(
+                format!("{profile_id}:{target_service_id}"),
+                crate::native::service_model::ProfileSeedingHandoffRecord {
+                    id: format!("{profile_id}:{target_service_id}"),
+                    profile_id: profile_id.to_string(),
+                    target_service_id: target_service_id.to_string(),
+                    state: crate::native::service_model::ProfileSeedingHandoffState::SeedingWaitingForClose,
+                    pid: Some(pid),
+                    ..crate::native::service_model::ProfileSeedingHandoffRecord::default()
+                },
+            )]),
+            remote_view_handoffs: BTreeMap::from([(
+                handoff_id.to_string(),
+                RemoteViewHandoff {
+                    id: handoff_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    last_route_id: Some(route_id.to_string()),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                route_id.to_string(),
+                RemoteViewRoute {
+                    id: route_id.to_string(),
+                    state: "released".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+
+    let mismatch = handle_service_profile_manual_seeding_close(
+        &json!({
+            "profileId": profile_id,
+            "targetServiceId": target_service_id,
+            "handoffId": handoff_id,
+            "pid": pid - 1,
+        }),
+        &DaemonState::new(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(mismatch, "manual_seeding_close_pid_mismatch");
+
+    let result = handle_service_profile_manual_seeding_close(
+        &json!({
+            "profileId": profile_id,
+            "targetServiceId": target_service_id,
+            "handoffId": handoff_id,
+            "pid": pid,
+        }),
+        &DaemonState::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result["closed"], true);
+    assert_eq!(result["routeRelease"]["replayed"], true);
+    assert_eq!(
+        result["attachableRelaunch"]["action"],
+        "service_profile_acquire"
+    );
+    assert_eq!(
+        result["authenticationProbe"]["visibilityAcceptedAsAuthentication"],
+        false
+    );
+    let persisted = store.load().unwrap();
+    assert_eq!(
+        persisted.profile_seeding_handoffs[&format!("{profile_id}:{target_service_id}")].state,
+        crate::native::service_model::ProfileSeedingHandoffState::SeedingClosedUnverified
+    );
 }
 
 #[test]

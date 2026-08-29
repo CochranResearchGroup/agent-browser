@@ -15,7 +15,9 @@ use super::planner::{
     remote_view_open_should_reuse_current_browser_for_durable_resolution,
     service_remote_view_acquisition_plan_from_state,
 };
-use super::route_lifecycle::service_remote_view_timestamp;
+use super::route_lifecycle::{
+    handle_service_remote_view_route_release, service_remote_view_timestamp,
+};
 use super::runtime::{
     AdoptRetainedBrowserRequest, CheckoutRouteRequest, DaemonRouteBoundOpenRepository,
     DaemonRouteBoundOpenRuntime, DisplayAccessRequest, FocusTargetRequest, LaunchBrowserRequest,
@@ -25,7 +27,14 @@ use super::runtime::{
 use super::runtime_model::*;
 use super::shared::*;
 use super::target::route_bound_open_acquire_target;
+use crate::native::action_runtime::runtime::terminate_runtime_browser;
 use crate::native::remote_view::RemoteViewOpenIntent;
+use crate::native::service_config::{
+    record_profile_seeding_handoff_launch, update_profile_seeding_handoff,
+    ProfileSeedingHandoffUpdate,
+};
+use crate::native::service_model::{profile_seeding_handoff_id, ProfileSeedingHandoffState};
+use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::ProfileOwnerState;
 /// Transport-neutral attribution supplied after the ingress has authorized a
 /// route-bound open. Cookies, headers, and transport sessions never cross this
@@ -136,6 +145,7 @@ pub(crate) struct RouteBoundDirectOpenRequest {
     prefer_existing_browser: bool,
     retained_handoff: Option<RemoteViewHandoff>,
     require_retained_browser: bool,
+    manual_seeding: bool,
     dashboard_deployment_generation: Option<String>,
 }
 
@@ -164,6 +174,12 @@ impl RouteBoundDirectOpenRequest {
         }
         let intent = normalize_remote_view_open_intent(&command)?;
         let dry_run = remote_view_open_dry_run(&command);
+        let manual_seeding = command
+            .get("manualSeeding")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || command.get("action").and_then(Value::as_str)
+                == Some("service_profile_manual_seeding_acquire");
         Ok(Self {
             command: RouteBoundOpenCommand {
                 record: RouteBoundCommandRecord::from_compatibility(command, "route_bound_open")?,
@@ -174,6 +190,7 @@ impl RouteBoundDirectOpenRequest {
             prefer_existing_browser: false,
             retained_handoff: None,
             require_retained_browser: false,
+            manual_seeding,
             dashboard_deployment_generation: attribution.dashboard_deployment_generation,
         })
     }
@@ -375,6 +392,193 @@ pub(crate) async fn handle_remote_view_open(
         .await?
         .into_compatibility_result()
 }
+
+/// Acquire one route-bound, CDP-free manual-seeding browser. The opaque
+/// handoff id is server generated when the authenticated ingress did not
+/// already bind one to a service job.
+pub(crate) async fn handle_service_profile_manual_seeding_acquire(
+    cmd: &Value,
+    state: &mut DaemonState,
+    attribution: RouteBoundOpenAttribution,
+) -> Result<Value, String> {
+    let profile_id = optional_command_string(cmd, "profileId")
+        .or_else(|| optional_command_string(cmd, "runtimeProfile"))
+        .ok_or_else(|| "service_profile_manual_seeding_acquire requires profileId".to_string())?;
+    let target_service_id = optional_command_string(cmd, "targetServiceId").ok_or_else(|| {
+        "service_profile_manual_seeding_acquire requires targetServiceId".to_string()
+    })?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    if !snapshot.profiles.contains_key(&profile_id) {
+        return Err(format!(
+            "manual_seeding_profile_not_registered: register managed profile '{profile_id}' before route acquisition"
+        ));
+    }
+    let lifecycle_id = profile_seeding_handoff_id(&profile_id, &target_service_id);
+    if let Some(lifecycle) = snapshot.profile_seeding_handoffs.get(&lifecycle_id) {
+        let process_is_current = lifecycle.pid.is_some_and(|pid| {
+            crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), pid)
+                .preserves_evidence()
+        });
+        if lifecycle.state.blocks_profile_lease() && process_is_current {
+            let handoff = snapshot
+                .remote_view_handoffs
+                .values()
+                .filter(|handoff| handoff.profile_id.as_deref() == Some(profile_id.as_str()))
+                .max_by(|left, right| left.updated_at.cmp(&right.updated_at));
+            return Ok(json!({
+                "status": "manual_seeding_in_progress",
+                "reused": true,
+                "profileId": profile_id,
+                "targetServiceId": target_service_id,
+                "pid": lifecycle.pid,
+                "handoffId": handoff.map(|handoff| handoff.id.as_str()),
+                "handoffUrl": handoff.and_then(|handoff| handoff.handoff_url.as_deref()),
+                "operatorVisible": {
+                    "state": "not_checked",
+                    "reason": "reopen_the_existing_opaque_handoff_for_current_visibility",
+                },
+                "authentication": {
+                    "state": "not_probed",
+                    "reason": "visibility_is_not_authentication_evidence",
+                },
+                "nextAction": "reopen_existing_manual_seeding_handoff",
+            }));
+        }
+    }
+    let mut command = cmd.clone();
+    command["manualSeeding"] = Value::Bool(true);
+    command["runtimeProfile"] = Value::String(profile_id);
+    command["targetServiceId"] = Value::String(target_service_id);
+    if optional_command_string(&command, "remoteViewHandoffId").is_none()
+        && optional_command_string(&command, "serviceJobId").is_none()
+    {
+        command["remoteViewHandoffId"] =
+            Value::String(format!("manual-seeding-{}", uuid::Uuid::new_v4().simple()));
+    }
+    handle_remote_view_open(&command, state, attribution).await
+}
+
+/// Close the exact detached manual-seeding process, release only the route
+/// graph owned by its opaque handoff, and advance the profile lease to the
+/// post-close verification boundary. Replays converge when either the process
+/// or route was already released by an interrupted first attempt.
+pub(crate) async fn handle_service_profile_manual_seeding_close(
+    cmd: &Value,
+    state: &DaemonState,
+) -> Result<Value, String> {
+    let profile_id = optional_command_string(cmd, "profileId")
+        .or_else(|| optional_command_string(cmd, "runtimeProfile"))
+        .ok_or_else(|| "service_profile_manual_seeding_close requires profileId".to_string())?;
+    let target_service_id = optional_command_string(cmd, "targetServiceId").ok_or_else(|| {
+        "service_profile_manual_seeding_close requires targetServiceId".to_string()
+    })?;
+    let handoff_id = optional_command_string(cmd, "handoffId")
+        .or_else(|| optional_command_string(cmd, "remoteViewHandoffId"))
+        .ok_or_else(|| "service_profile_manual_seeding_close requires handoffId".to_string())?;
+    let expected_pid = cmd
+        .get("pid")
+        .and_then(Value::as_u64)
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| "service_profile_manual_seeding_close requires pid".to_string())?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let lifecycle_id = profile_seeding_handoff_id(&profile_id, &target_service_id);
+    let lifecycle = snapshot
+        .profile_seeding_handoffs
+        .get(&lifecycle_id)
+        .cloned()
+        .ok_or_else(|| format!("manual seeding lifecycle not found: {lifecycle_id}"))?;
+    if lifecycle.pid != Some(expected_pid) {
+        return Err("manual_seeding_close_pid_mismatch".to_string());
+    }
+    let handoff = snapshot
+        .remote_view_handoffs
+        .get(&handoff_id)
+        .cloned()
+        .ok_or_else(|| format!("manual seeding handoff not found: {handoff_id}"))?;
+    if handoff.profile_id.as_deref() != Some(profile_id.as_str()) {
+        return Err("manual_seeding_close_profile_mismatch".to_string());
+    }
+    let route_id = handoff
+        .last_route_id
+        .clone()
+        .ok_or_else(|| "manual_seeding_close_route_missing".to_string())?;
+
+    let before =
+        crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), expected_pid);
+    let shutdown = if before.preserves_evidence() {
+        terminate_runtime_browser(Some(profile_id.clone()), expected_pid).await
+    } else {
+        BrowserShutdownOutcome::default()
+    };
+    let after =
+        crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), expected_pid);
+    if after.preserves_evidence() {
+        return Err(format!(
+            "manual_seeding_close_process_survived:pid={expected_pid}:reason={}",
+            after.reason
+        ));
+    }
+
+    let route_release = if snapshot
+        .remote_view_routes
+        .get(&route_id)
+        .is_some_and(|route| route.state == "released")
+    {
+        json!({ "status": "released", "routeId": route_id, "replayed": true })
+    } else {
+        handle_service_remote_view_route_release(
+            &json!({
+                "action": "service_remote_view_route_release",
+                "routeId": route_id,
+                "releaseDisplayAllocation": true,
+            }),
+            state,
+        )
+        .await?
+    };
+    let lifecycle = repository.mutate(|service_state| {
+        update_profile_seeding_handoff(
+            service_state,
+            &profile_id,
+            ProfileSeedingHandoffUpdate {
+                target_service_id: Some(target_service_id.clone()),
+                state: Some(ProfileSeedingHandoffState::SeedingClosedUnverified),
+                closed_at: Some(service_remote_view_timestamp()),
+                actor: Some("agent-browser".to_string()),
+                note: Some("exact_manual_seeding_browser_closed".to_string()),
+                ..ProfileSeedingHandoffUpdate::default()
+            },
+        )
+    })?;
+    Ok(json!({
+        "closed": true,
+        "profileId": profile_id,
+        "targetServiceId": target_service_id,
+        "handoffId": handoff_id,
+        "pid": expected_pid,
+        "shutdown": {
+            "politeCloseAttempted": shutdown.polite_close_attempted,
+            "politeCloseSucceeded": shutdown.polite_close_succeeded,
+            "forceKillAttempted": shutdown.force_kill_attempted,
+            "forceKillSucceeded": shutdown.force_kill_succeeded,
+            "errors": shutdown.errors,
+        },
+        "routeRelease": route_release,
+        "lifecycle": lifecycle,
+        "attachableRelaunch": {
+            "action": "service_profile_acquire",
+            "profileId": profile_id,
+            "targetServiceIds": [target_service_id],
+        },
+        "authenticationProbe": {
+            "action": "service_profile_freshness_update",
+            "state": "separate_required_probe",
+            "visibilityAcceptedAsAuthentication": false,
+        },
+    }))
+}
 pub(crate) async fn handle_service_remote_view_handoff_resolve(
     cmd: &Value,
     state: &mut DaemonState,
@@ -418,6 +622,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
     let prefer_existing_browser = request.prefer_existing_browser;
     let retained_handoff = request.retained_handoff;
     let require_retained_browser = request.require_retained_browser;
+    let manual_seeding = request.manual_seeding;
     let dashboard_deployment_generation = request.dashboard_deployment_generation;
     let mut initial_browser = supervisor
         .forward("observe_browser", runtime.observe_browser())
@@ -476,6 +681,13 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         .session_name
         .clone()
         .unwrap_or_else(|| initial_browser.session_id.clone());
+    if manual_seeding && initial_browser.browser_present {
+        return Err(RouteBoundRuntimeIssue::EffectFailed {
+            operation: "validate_manual_seeding_lane",
+            message: "manual_seeding_requires_idle_daemon_lane: close or choose an idle authenticated daemon lane before reserving presentation capacity".to_string(),
+        }
+        .into());
+    }
     let mut service_state = supervisor
         .forward(
             "repository_load_snapshot",
@@ -551,22 +763,27 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             None,
             tab_command.get("url").and_then(Value::as_str),
         );
+        let mut planned =
+            planned_route_bound_handoff_response(RouteBoundHandoffPlannedResponseInput {
+                intent: &intent,
+                route_binding: &route_binding,
+                acquisition_plan: &acquisition_plan,
+                browser_id: &browser_id,
+                session_name: &session_id,
+                managed_one_time_profile: &managed_one_time_profile,
+                one_time_profile_warning: &one_time_profile_warning,
+                operator_visible: &operator_visible,
+                launch_command: &launch_command,
+                tab_command: &tab_command,
+                checkout_command: &checkout_command,
+            });
+        if manual_seeding {
+            planned["lifecycleState"] = Value::String("manual_seeding".to_string());
+            planned["cdpAttachmentAllowed"] = Value::Bool(false);
+            planned["launchCommand"]["action"] = Value::String("cdp_free_launch".to_string());
+        }
         return Ok(RouteBoundDirectOpenResult::Planned(
-            RouteBoundOpenDocument::from_compatibility(planned_route_bound_handoff_response(
-                RouteBoundHandoffPlannedResponseInput {
-                    intent: &intent,
-                    route_binding: &route_binding,
-                    acquisition_plan: &acquisition_plan,
-                    browser_id: &browser_id,
-                    session_name: &session_id,
-                    managed_one_time_profile: &managed_one_time_profile,
-                    one_time_profile_warning: &one_time_profile_warning,
-                    operator_visible: &operator_visible,
-                    launch_command: &launch_command,
-                    tab_command: &tab_command,
-                    checkout_command: &checkout_command,
-                },
-            ))?,
+            RouteBoundOpenDocument::from_compatibility(planned)?,
         ));
     }
     supervisor
@@ -648,12 +865,13 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         }
     }
     .into_value();
-    let reused_current_browser = remote_view_open_should_reuse_current_browser(
-        &acquisition_plan,
-        &initial_browser,
-        &browser_id,
-        &session_id,
-    ) || reuse_durable_browser;
+    let reused_current_browser = !manual_seeding
+        && (remote_view_open_should_reuse_current_browser(
+            &acquisition_plan,
+            &initial_browser,
+            &browser_id,
+            &session_id,
+        ) || reuse_durable_browser);
     let launch = if reused_current_browser {
         route_bound_handoff_reused_browser_launch_result(&route_binding, &browser_id, &session_id)
     } else {
@@ -662,12 +880,23 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             &initial_browser,
             &intent,
         );
+        let launch_future = if manual_seeding {
+            runtime.launch_cdp_free_browser(LaunchBrowserRequest {
+                command: LaunchBrowserCommand::from_compatibility(launch_command.clone())?,
+            })
+        } else {
+            runtime.launch_browser(LaunchBrowserRequest {
+                command: LaunchBrowserCommand::from_compatibility(effective_launch_command)?,
+            })
+        };
         match supervisor
             .forward(
-                "launch_browser",
-                runtime.launch_browser(LaunchBrowserRequest {
-                    command: LaunchBrowserCommand::from_compatibility(effective_launch_command)?,
-                }),
+                if manual_seeding {
+                    "launch_cdp_free_browser"
+                } else {
+                    "launch_browser"
+                },
+                launch_future,
             )
             .await
         {
@@ -706,30 +935,69 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             }
         }
     };
-    let tab = match route_bound_open_acquire_target(
-        &tab_command,
-        runtime,
-        supervisor,
-        &service_state,
-        &browser_id,
-        &session_id,
-        reused_current_browser,
-    )
-    .await
-    {
-        Ok(tab) => tab,
-        Err(error) => {
+    let launched_browser_pid = initial_browser.browser_pid.or_else(|| {
+        launch
+            .get("browserPid")
+            .or_else(|| launch.get("pid"))
+            .and_then(Value::as_u64)
+            .and_then(|pid| u32::try_from(pid).ok())
+    });
+    if manual_seeding {
+        let profile_id = intent
+            .runtime_profile
+            .as_deref()
+            .or(intent.profile.as_deref())
+            .ok_or_else(|| RouteBoundRuntimeIssue::EffectFailed {
+                operation: "record_manual_seeding_lifecycle",
+                message: "manual_seeding_profile_identity_missing".to_string(),
+            })?;
+        let target_service_id =
+            optional_command_string(&cmd, "targetServiceId").ok_or_else(|| {
+                RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "record_manual_seeding_lifecycle",
+                    message: "manual_seeding_target_service_missing".to_string(),
+                }
+            })?;
+        let browser_pid =
+            launched_browser_pid.ok_or_else(|| RouteBoundRuntimeIssue::EffectFailed {
+                operation: "record_manual_seeding_lifecycle",
+                message: "manual_seeding_process_identity_missing".to_string(),
+            })?;
+        if let Err(error) = supervisor
+            .forward(
+                "repository_record_manual_seeding_lifecycle",
+                repository.execute(
+                    "repository_record_manual_seeding_lifecycle",
+                    supervisor.forward_repository_lock_timeout(),
+                    |repository| {
+                        repository.mutate(|state| {
+                            record_profile_seeding_handoff_launch(
+                                state,
+                                profile_id,
+                                &target_service_id,
+                                browser_pid,
+                                Some("agent-browser".to_string()),
+                                Some("route_bound_cdp_free_manual_seeding".to_string()),
+                            )
+                        })
+                    },
+                ),
+            )
+            .await
+        {
             let error_message = error.compatibility_message().to_string();
-            let failure_context = route_bound_handoff_tab_open_failure();
+            let failure_context = route_bound_handoff_launch_failure_cleanup(
+                "manual_seeding_lifecycle_persist_failed",
+            );
             let failure = remote_view_open_rollback_failure_after_cleanup(
                 runtime,
                 supervisor,
                 RemoteViewOpenFailureCleanupInput {
                     repository,
                     lease: &acquisition_lease,
-                    phase: failure_context.phase,
+                    phase: "manual_seeding_lifecycle_persist_failed",
                     error: &error_message,
-                    rollback_cleanup: &failure_context.cleanup,
+                    rollback_cleanup: &failure_context,
                     launch: &launch,
                     tab: None,
                 },
@@ -737,46 +1005,96 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
-                failure_context.phase,
+                "manual_seeding_lifecycle_persist_failed",
                 failure.rollback,
                 &failure.summary,
             ));
         }
-    };
-    let focus_command = route_bound_handoff_focus_command(&cmd, &tab, &session_id);
-    let focus = match supervisor
-        .forward(
-            "focus_target",
-            runtime.focus_target(FocusTargetRequest {
-                command: FocusTargetCommand::from_compatibility(focus_command)?,
-            }),
+    }
+    let tab = if manual_seeding {
+        json!({
+            "mode": "manual_seeding",
+            "url": intent.url,
+            "profileId": intent.runtime_profile.as_ref().or(intent.profile.as_ref()),
+            "cdpAttached": false,
+        })
+    } else {
+        match route_bound_open_acquire_target(
+            &tab_command,
+            runtime,
+            supervisor,
+            &service_state,
+            &browser_id,
+            &session_id,
+            reused_current_browser,
         )
         .await
-    {
-        Ok(focus) => focus.into_value(),
-        Err(error) => {
-            let error_message = error.compatibility_message().to_string();
-            let failure_context = route_bound_handoff_focus_failure();
-            let failure = remote_view_open_rollback_failure_after_cleanup(
-                runtime,
-                supervisor,
-                RemoteViewOpenFailureCleanupInput {
-                    repository,
-                    lease: &acquisition_lease,
-                    phase: failure_context.phase,
-                    error: &error_message,
-                    rollback_cleanup: &failure_context.cleanup,
-                    launch: &launch,
-                    tab: Some(&tab),
-                },
+        {
+            Ok(tab) => tab,
+            Err(error) => {
+                let error_message = error.compatibility_message().to_string();
+                let failure_context = route_bound_handoff_tab_open_failure();
+                let failure = remote_view_open_rollback_failure_after_cleanup(
+                    runtime,
+                    supervisor,
+                    RemoteViewOpenFailureCleanupInput {
+                        repository,
+                        lease: &acquisition_lease,
+                        phase: failure_context.phase,
+                        error: &error_message,
+                        rollback_cleanup: &failure_context.cleanup,
+                        launch: &launch,
+                        tab: None,
+                    },
+                )
+                .await?;
+                return Err(route_bound_execution_error_with_cleanup(
+                    error,
+                    failure_context.phase,
+                    failure.rollback,
+                    &failure.summary,
+                ));
+            }
+        }
+    };
+    let focus = if manual_seeding {
+        json!({ "state": "not_applicable", "reason": "manual_seeding_has_no_cdp_target" })
+    } else {
+        let focus_command = route_bound_handoff_focus_command(&cmd, &tab, &session_id);
+        match supervisor
+            .forward(
+                "focus_target",
+                runtime.focus_target(FocusTargetRequest {
+                    command: FocusTargetCommand::from_compatibility(focus_command)?,
+                }),
             )
-            .await?;
-            return Err(route_bound_execution_error_with_cleanup(
-                error,
-                failure_context.phase,
-                failure.rollback,
-                &failure.summary,
-            ));
+            .await
+        {
+            Ok(focus) => focus.into_value(),
+            Err(error) => {
+                let error_message = error.compatibility_message().to_string();
+                let failure_context = route_bound_handoff_focus_failure();
+                let failure = remote_view_open_rollback_failure_after_cleanup(
+                    runtime,
+                    supervisor,
+                    RemoteViewOpenFailureCleanupInput {
+                        repository,
+                        lease: &acquisition_lease,
+                        phase: failure_context.phase,
+                        error: &error_message,
+                        rollback_cleanup: &failure_context.cleanup,
+                        launch: &launch,
+                        tab: Some(&tab),
+                    },
+                )
+                .await?;
+                return Err(route_bound_execution_error_with_cleanup(
+                    error,
+                    failure_context.phase,
+                    failure.rollback,
+                    &failure.summary,
+                ));
+            }
         }
     };
     let visible_window_proof = match supervisor
@@ -784,12 +1102,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             "observe_visible_window",
             runtime.observe_visible_window(VisibleWindowRequest {
                 binding: route_binding.clone(),
-                browser_pid: initial_browser.browser_pid.or_else(|| {
-                    launch
-                        .get("browserPid")
-                        .and_then(Value::as_u64)
-                        .and_then(|pid| u32::try_from(pid).ok())
-                }),
+                browser_pid: launched_browser_pid,
             }),
         )
         .await
@@ -832,14 +1145,24 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         route_binding,
         operator_access.map(OperatorAccessResult::into_value),
     );
-    let operator_visible = route_bound_handoff_operator_visible(
-        &route_binding,
-        &browser_id,
-        &session_id,
-        Some(&visible_window_proof),
-        Some(&tab),
-        tab_command.get("url").and_then(Value::as_str),
-    );
+    let operator_visible = if manual_seeding {
+        route_bound_manual_seeding_operator_visible(
+            &route_binding,
+            &browser_id,
+            &session_id,
+            launched_browser_pid,
+            Some(&visible_window_proof),
+        )
+    } else {
+        route_bound_handoff_operator_visible(
+            &route_binding,
+            &browser_id,
+            &session_id,
+            Some(&visible_window_proof),
+            Some(&tab),
+            tab_command.get("url").and_then(Value::as_str),
+        )
+    };
     if let Some(handoff_failure) = route_bound_handoff_operator_visible_failure_if_not_ready(
         &route_binding,
         &browser_id,
@@ -915,8 +1238,10 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             browser_id: &browser_id,
             session_name: &session_id,
             pre_checkout_operator_visible: &operator_visible,
-            tab: Some(&tab),
-            expected_url: tab_command.get("url").and_then(Value::as_str),
+            tab: (!manual_seeding).then_some(&tab),
+            expected_url: (!manual_seeding)
+                .then(|| tab_command.get("url").and_then(Value::as_str))
+                .flatten(),
         },
         |final_route_binding| {
             let final_route_binding = route_binding_with_operator_access(
@@ -927,14 +1252,24 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                     .and_then(|readiness| readiness.get("operatorAccess"))
                     .cloned(),
             );
-            route_bound_handoff_operator_visible(
-                &final_route_binding,
-                &browser_id,
-                &session_id,
-                Some(&visible_window_proof),
-                Some(&tab),
-                tab_command.get("url").and_then(Value::as_str),
-            )
+            if manual_seeding {
+                route_bound_manual_seeding_operator_visible(
+                    &final_route_binding,
+                    &browser_id,
+                    &session_id,
+                    launched_browser_pid,
+                    Some(&visible_window_proof),
+                )
+            } else {
+                route_bound_handoff_operator_visible(
+                    &final_route_binding,
+                    &browser_id,
+                    &session_id,
+                    Some(&visible_window_proof),
+                    Some(&tab),
+                    tab_command.get("url").and_then(Value::as_str),
+                )
+            }
         },
     );
     if let Some(handoff_failure) = post_checkout.failure.as_ref() {
@@ -995,6 +1330,18 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             ),
         )
         .await?;
+    let mut opened = opened;
+    if manual_seeding {
+        opened["lifecycleState"] = Value::String("manual_seeding".to_string());
+        opened["cdpAttachmentAllowed"] = Value::Bool(false);
+        opened["authentication"] = json!({
+            "state": "not_probed",
+            "reason": "visibility_is_not_authentication_evidence",
+        });
+        opened["nextAction"] = Value::String(
+            "complete_sign_in_close_exact_browser_then_probe_authentication".to_string(),
+        );
+    }
     Ok(RouteBoundDirectOpenResult::Opened(
         RouteBoundOpenDocument::from_compatibility(opened)?,
     ))
