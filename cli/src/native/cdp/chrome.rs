@@ -1101,6 +1101,33 @@ pub struct ManualChromeLaunch {
     pub devtools_port: Option<u16>,
 }
 
+fn retain_manual_child_for_reaping(child: Child, pid: u32) -> Result<(), String> {
+    let child = std::sync::Arc::new(std::sync::Mutex::new(Some(child)));
+    let reaper_child = std::sync::Arc::clone(&child);
+    match std::thread::Builder::new()
+        .name(format!("manual-chrome-reaper-{pid}"))
+        .spawn(move || {
+            if let Ok(mut child) = reaper_child.lock() {
+                if let Some(mut child) = child.take() {
+                    let _ = child.wait();
+                }
+            }
+        }) {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            if let Ok(mut child) = child.lock() {
+                if let Some(mut child) = child.take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+            Err(format!(
+                "Failed to retain manual Chrome PID {pid} for child reaping: {error}"
+            ))
+        }
+    }
+}
+
 pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLaunch, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
@@ -1253,7 +1280,12 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
             return Err(error);
         }
     }
-    drop(child);
+    if let Err(error) = retain_manual_child_for_reaping(child, pid) {
+        if let Some(runtime_profile_name) = runtime_profile.as_deref() {
+            let _ = crate::runtime_profile::clear_runtime_state(runtime_profile_name);
+        }
+        return Err(error);
+    }
 
     Ok(ManualChromeLaunch {
         pid,
@@ -3552,6 +3584,24 @@ mod tests {
         assert!(outcome.controlled_relaunch_ready());
         assert!(std::fs::symlink_metadata(dir.join("SingletonLock")).is_err());
         assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn detached_manual_child_is_reaped_after_exit() {
+        let child = spawn_noop_child();
+        let pid = child.id();
+
+        retain_manual_child_for_reaping(child, pid).unwrap();
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while Path::new(&format!("/proc/{pid}")).exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "detached child PID {pid} remained present after exit"
+        );
     }
 
     #[cfg(unix)]
