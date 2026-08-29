@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 07d8676de7e7eba8efa00fe030109963768d3b8b
+    checkpoint: e74dda166f2cd57f1c9c458777812798ceba2735
     remote_ref: refs/remotes/origin/plan/authentication-run-foundation
     integration: merge
     dependencies: []
@@ -22,7 +22,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 20c92743608ff7e38074c14f72cc903adcceec09
+    checkpoint: 2c08ed6eb62a6ed00e24d78953320e455b15a4e1
     remote_ref: refs/remotes/origin/plan/crash-profile-lifecycle-coherence
     integration: merge
     dependencies: []
