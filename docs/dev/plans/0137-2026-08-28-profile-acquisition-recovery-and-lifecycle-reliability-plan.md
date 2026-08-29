@@ -1069,11 +1069,14 @@ checkpoint is durable and the plan's identity model remains coherent.
   duplicate browser or mutate production.
 - Fresh blocker evidence: PID and process group `62232` still execute
   `/opt/google/chrome/chrome`, started August 29, 2026 at 00:22 CDT, with the
-  exact v5-1 development profile path. Current Service State has no owner,
-  lifecycle, browser, or session record that authorizes that process. The lease
-  remains observation-only with
-  `runtime_owner_principal_binding_missing`, and the exact reconciliation plan
-  remains non-effect-capable with `no_safe_reconciliation_transition`.
+  exact v5-1 development profile path, and Chrome's `SingletonLock` still names
+  that PID. Current Service State projects a ready owner and an owned `closing`
+  lifecycle for process group `62232`, but it has no principal binding, browser
+  process identity, browser row, or session row that completes the authority
+  join. The lease remains observation-only with
+  `runtime_owner_principal_binding_missing`; its profile identity digest also
+  differs from the lifecycle owner's digest. It authorizes only read and
+  reconciliation-plan actions, not close, release, apply, or cleanup.
 - Effects and hard stop: no signal, force close, broad cleanup, provider retry,
   manual authentication, ingress publication, production installation, or
   production state mutation was performed. The fresh OS census also confirmed
