@@ -805,10 +805,22 @@ fn apply_existing_session_profile_selection(
             return Err("existing_session_profile_identity_inconsistent".to_string());
         }
     }
+    let exact_command_profile_overrides_inherited_default = command.get("runtimeProfile").is_none()
+        && command.get("profileId").is_none()
+        && optional_command_or_params_string(command, "profile")
+            .map(|requested_profile| {
+                resolved_service_profile_identity_path(Some(&requested_profile), profile_id)
+                    .and_then(|requested_path| {
+                        crate::runtime_profile::canonical_profile_identity_digest(&requested_path)
+                    })
+                    .is_ok_and(|requested_digest| requested_digest == profile_digest)
+            })
+            .unwrap_or(false);
     if options
         .runtime_profile
         .as_deref()
         .is_some_and(|requested| requested != profile_id)
+        && !exact_command_profile_overrides_inherited_default
     {
         return Err("explicit_profile_conflicts_with_current_owner".to_string());
     }

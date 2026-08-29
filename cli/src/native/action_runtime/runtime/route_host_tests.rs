@@ -611,6 +611,30 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         cdp_free_plan.metadata.profile_selection_reason,
         Some(ProfileSelectionReason::ExistingOwner)
     );
+
+    let mut inherited_default_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        profile: Some(profile_id.to_string()),
+        ..LaunchOptions::default()
+    };
+    let inherited_default_selection = apply_service_profile_selection(
+        &mut inherited_default_options,
+        &json!({
+            "action": "navigate",
+            "profile": profile_id,
+            "serviceName": "OdolloFulfillment"
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(
+        inherited_default_selection,
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        inherited_default_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
 }
 
 #[test]
