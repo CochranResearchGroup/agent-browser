@@ -844,7 +844,12 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     ) {
         return Ok(false);
     }
-    let Some(profile_id) = options.runtime_profile.as_deref() else {
+    let Some(profile_id) = options.runtime_profile.as_deref().or_else(|| {
+        options
+            .profile
+            .as_deref()
+            .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
+    }) else {
         return Ok(false);
     };
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")

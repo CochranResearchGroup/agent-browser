@@ -1002,7 +1002,9 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     let profile_id = "development-presentation-provider-v5-1";
     let session_id = profile_id;
     let browser_id = format!("session:{session_id}");
-    let user_data_dir = home.join("provider-profile");
+    let user_data_dir = crate::runtime_profile::resolve_profile(Some(profile_id), Some(profile_id))
+        .unwrap()
+        .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
         crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
@@ -1043,7 +1045,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
             profile_id.to_string(),
             BrowserProfile {
                 id: profile_id.to_string(),
-                user_data_dir: Some(user_data_dir.display().to_string()),
+                user_data_dir: Some(profile_id.to_string()),
                 ..BrowserProfile::default()
             },
         )]),
@@ -1059,16 +1061,15 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         "serviceName": "development-presentation-provider",
     });
     let mut options = LaunchOptions {
-        runtime_profile: Some(profile_id.to_string()),
-        profile: Some(user_data_dir.display().to_string()),
+        profile: Some(profile_id.to_string()),
         ..LaunchOptions::default()
     };
     let selection =
         apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
 
     assert_eq!(selection, None);
-    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
-    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    assert_eq!(options.runtime_profile, None);
+    assert_eq!(options.profile.as_deref(), Some(profile_id));
 
     state
         .runtime_owner_registry
@@ -1080,8 +1081,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         .save(&state)
         .unwrap();
     let mut missing_lock_options = LaunchOptions {
-        runtime_profile: Some(profile_id.to_string()),
-        profile: Some(user_data_dir.display().to_string()),
+        profile: Some(profile_id.to_string()),
         ..LaunchOptions::default()
     };
     assert_eq!(
@@ -1112,8 +1112,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         .save(&state)
         .unwrap();
     let mut live_projection_options = LaunchOptions {
-        runtime_profile: Some(profile_id.to_string()),
-        profile: Some(user_data_dir.display().to_string()),
+        profile: Some(profile_id.to_string()),
         ..LaunchOptions::default()
     };
     assert_eq!(
