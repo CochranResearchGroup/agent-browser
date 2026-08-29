@@ -14,6 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 import {
   developmentPresentationProviderManifest,
   developmentPresentationProviderDescriptor,
+  developmentPresentationProviderManifestCompatible,
   evaluateDevelopmentPresentationProviderObservation,
   validateDevelopmentPresentationProviderIsolation,
 } from './development-presentation-provider.js';
@@ -113,7 +114,7 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
   if (configured) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
     const expected = developmentPresentationProviderManifest(descriptor);
-    if (JSON.stringify(manifest) !== JSON.stringify(expected)) {
+    if (!developmentPresentationProviderManifestCompatible(manifest, expected)) {
       throw new Error('Configured development provider manifest drifted');
     }
   }
@@ -217,7 +218,7 @@ export function applyDevelopmentPresentationProvider({
   if (existsSync(descriptor.manifest)) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
     const expected = developmentPresentationProviderManifest(descriptor);
-    if (JSON.stringify(manifest) !== JSON.stringify(expected)) {
+    if (!developmentPresentationProviderManifestCompatible(manifest, expected)) {
       throw new Error('Configured development provider manifest drifted');
     }
     const productionBefore = effects.snapshotProduction();

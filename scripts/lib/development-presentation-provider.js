@@ -200,6 +200,15 @@ export function developmentPresentationProviderManifest(descriptor) {
   };
 }
 
+export function developmentPresentationProviderManifestCompatible(manifest, expected) {
+  if (JSON.stringify(manifest) === JSON.stringify(expected)) return true;
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return false;
+  if (Object.hasOwn(manifest, 'publicOperatorUrl')) return false;
+  const expectedWithoutPublicOperatorUrl = { ...expected };
+  delete expectedWithoutPublicOperatorUrl.publicOperatorUrl;
+  return JSON.stringify(manifest) === JSON.stringify(expectedWithoutPublicOperatorUrl);
+}
+
 export function developmentPresentationProviderStatus({ env = process.env, probe = null } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   const required = env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED === '1';
@@ -221,7 +230,8 @@ export function developmentPresentationProviderStatus({ env = process.env, probe
   }
   const manifest = readJson(descriptor.manifest);
   const expected = developmentPresentationProviderManifest(descriptor);
-  const matches = manifest !== null && JSON.stringify(manifest) === JSON.stringify(expected);
+  const matches = manifest !== null &&
+    developmentPresentationProviderManifestCompatible(manifest, expected);
   if (!matches || isolationError) {
     return {
       descriptor,

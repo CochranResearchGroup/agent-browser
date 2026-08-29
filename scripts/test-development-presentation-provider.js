@@ -9,6 +9,7 @@ import {
   DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA,
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
+  developmentPresentationProviderManifestCompatible,
   developmentAgentSkillStatus,
   doctorDevelopmentPresentationProvider,
   synchronizeDevelopmentAgentSkill,
@@ -66,6 +67,20 @@ try {
   assert.equal(descriptor.ports.guacd, 4823);
   assert.equal(descriptor.ports.postgres, 55433);
   assert.equal(descriptor.publicOperatorUrl, 'http://127.0.0.1:4948');
+  const currentManifest = developmentPresentationProviderManifest(descriptor);
+  const legacyManifest = { ...currentManifest };
+  delete legacyManifest.publicOperatorUrl;
+  assert.equal(
+    developmentPresentationProviderManifestCompatible(legacyManifest, currentManifest),
+    true,
+  );
+  assert.equal(
+    developmentPresentationProviderManifestCompatible(
+      { ...legacyManifest, composeProject: 'foreign-provider' },
+      currentManifest,
+    ),
+    false,
+  );
   assert.deepEqual(descriptor.rdpTarget, {
     host: 'host.docker.internal',
     port: 3389,
