@@ -63,6 +63,27 @@ fn exact_close_skips_launch_only_profile_lease_selection() {
     .unwrap();
     assert!(metadata.is_none());
 }
+
+#[test]
+fn named_profile_alias_matches_active_runtime_profile() {
+    let active_path = Path::new("/tmp/agent-browser-work-profile/user-data");
+    assert!(active_browser_profile_mismatch_message(
+        None,
+        Some("work-profile"),
+        Some("work-profile"),
+        Some(active_path),
+        "work-session",
+    )
+    .is_none());
+    assert!(active_browser_profile_mismatch_message(
+        None,
+        Some("different-profile"),
+        Some("work-profile"),
+        Some(active_path),
+        "work-session",
+    )
+    .is_some());
+}
 use crate::native::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,

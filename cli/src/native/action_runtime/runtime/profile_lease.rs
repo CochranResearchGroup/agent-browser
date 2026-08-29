@@ -463,6 +463,11 @@ pub(crate) fn active_browser_profile_mismatch_message(
             return None;
         }
     }
+    if let (Some(requested), Some(active)) = (requested_profile, active_runtime_profile) {
+        if requested == active {
+            return None;
+        }
+    }
     if let (Some(requested), Some(active)) = (requested_profile, active_user_data_dir) {
         if pathish_eq(requested, active) {
             return None;
