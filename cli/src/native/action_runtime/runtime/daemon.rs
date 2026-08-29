@@ -849,7 +849,10 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     };
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
         .or_else(|| optional_command_or_params_string(command, "profileId"));
-    if command_profile_id.as_deref() != Some(profile_id) {
+    if command_profile_id
+        .as_deref()
+        .is_some_and(|command_profile_id| command_profile_id != profile_id)
+    {
         return Ok(false);
     }
     let Some(profile) = state.profiles.get(profile_id) else {
