@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_g_complete_slice_h_not_started`
+Execution state: `slice_h_complete_slice_i_not_started`
 
 Lane: P137
 
@@ -974,3 +974,53 @@ checkpoint is durable and the plan's identity model remains coherent.
 - Remaining gate: Slice H must prove source-free migration, mixed-version
   compatibility, rollback, and installation contract behavior before isolated
   development acceptance begins.
+
+## Slice H Checkpoint | 2026-08-28
+
+- Objective: make candidate migration inspectable and reversible without
+  amplifying damaged Service State or dropping successor bookkeeping.
+- Source commit: `216b3a4d` on `main`.
+- Source-free discovery: every workstation dry run now emits
+  `serviceStateMigrationPreview` with no write, backup, receipt, host-command,
+  or artifact-directory effect. The preview reports exact added, removed,
+  changed, and preserved IDs across 17 record classes plus the candidate-led
+  browser contamination report.
+- Migration safety: staging preserves unknown top-level and surviving nested
+  successor fields. Protected record removals are explicit and empty for the
+  accepted fixtures. Profiles, browsers, sessions, displays, routes, leases,
+  handoffs, principals, capabilities, runtime owners, and lifecycle identities
+  are not default deletion targets.
+- Mixed-version compatibility: upgrade transactions, migration records,
+  browser provenance, and runtime-owner lifecycle records tolerate additive
+  successor fields. Current, legacy, and future recovery artifacts receive a
+  read-only compatibility classification; unknown action types remain
+  preserve-only and cannot acquire effect authority. Older terminal projections
+  retain unknown top-level bookkeeping while the private detail artifact keeps
+  candidate-era migration fields.
+- Transactional apply and rollback: candidate preparation retains exact before
+  and candidate bytes, backup locator, before and after digests, restore
+  procedure, summary, and contamination report. Commit and rollback write one
+  private terminal migration receipt. Existing selector, runtime-owner transfer,
+  ingress, rollback, failure injection, and interrupted-resume paths remain in
+  the workstation transaction engine.
+- Public synchronization: CLI help, README, packaged repository skill,
+  installation docs, inline Rust documentation, and the source-free workstation
+  fixture describe and enforce the same preview, backup, receipt, preservation,
+  and no-upgrade-for-advertised-recovery boundaries. The shared installed skill
+  was deliberately not overwritten during source validation; development skill
+  publication belongs to Slice I.
+- Validation: diff hygiene and Rust formatting passed; strict Clippy passed; all
+  20 Service State migration-filtered tests and all 116 workstation installer
+  tests passed serially. The source-free workstation fixture, isolated host
+  provision fixture, fresh-workstation VM harness contract, Guacamole asset and
+  PostgreSQL durability contracts, route-specific user sync, remote-view docs
+  gate, and docs production build passed.
+- Effects and exclusions: source changes and disposable provider-free fixtures
+  only. No production or development browser, profile, route, provider, process,
+  selected generation, shared installed skill, or workstation installation was
+  changed. Current production-state dry run and installation remain Slice J
+  gates, not evidence claimed by this checkpoint.
+- Remaining gate: Slice I must publish the isolated development candidate and
+  prove disposable launch residue, CDP-free manual seeding, separated readiness
+  axes, and a fresh post-acceptance OS resource census before any production
+  candidate is eligible.
