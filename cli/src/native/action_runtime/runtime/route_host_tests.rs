@@ -1070,7 +1070,10 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         "profile": profile_id,
         "serviceName": "development-presentation-provider",
     });
-    let mut options = LaunchOptions::default();
+    let mut options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
     let selection =
         apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
 

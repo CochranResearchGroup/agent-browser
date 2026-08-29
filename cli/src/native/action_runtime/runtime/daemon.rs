@@ -847,18 +847,17 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
         .or_else(|| optional_command_or_params_string(command, "profileId"));
     let command_profile = optional_command_or_params_string(command, "profile");
-    let Some(profile_id) = options
-        .runtime_profile
+    let Some(profile_id) = command_profile_id
         .as_deref()
         .or_else(|| {
-            options
-                .profile
+            command_profile
                 .as_deref()
                 .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
         })
-        .or(command_profile_id.as_deref())
+        .or(options.runtime_profile.as_deref())
         .or_else(|| {
-            command_profile
+            options
+                .profile
                 .as_deref()
                 .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
         })
