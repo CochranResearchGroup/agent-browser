@@ -840,7 +840,7 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
 ) -> Result<bool, String> {
     if !matches!(
         command.get("action").and_then(Value::as_str),
-        Some("remote_view_open" | "launch")
+        Some("remote_view_open" | "launch" | "navigate")
     ) {
         return Ok(false);
     }

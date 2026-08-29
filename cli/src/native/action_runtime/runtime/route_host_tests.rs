@@ -1057,7 +1057,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         .unwrap();
 
     let command = json!({
-        "action": "remote_view_open",
+        "action": "navigate",
         "serviceName": "development-presentation-provider",
     });
     let mut options = LaunchOptions {
