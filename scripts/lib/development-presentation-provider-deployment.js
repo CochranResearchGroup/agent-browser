@@ -738,13 +738,21 @@ export function writeProviderAuthority(descriptor, observation) {
     const clientId = connectionId
       ? Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64')
       : null;
+    const frameUrl = clientId
+      ? `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/#/client/${clientId}`
+      : null;
     return {
       ...route,
       connectionId,
       displayName: displays.get(route.displayReservationId)?.displayName || null,
-      frameUrl: clientId
-        ? `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/#/client/${clientId}`
-        : null,
+      frameUrl,
+      routeDescriptor: {
+        localEmbedUrl: frameUrl,
+        dashboardEmbedUrl: frameUrl,
+        publicOperatorUrl: descriptor.publicOperatorUrl,
+        healthUrl: frameUrl,
+        externalUrl: descriptor.publicOperatorUrl,
+      },
       state: displays.get(route.displayReservationId)?.ready === true ? 'ready' : 'absent',
     };
   });

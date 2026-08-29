@@ -65,6 +65,7 @@ try {
   assert.equal(descriptor.ports.guacamole, 8093);
   assert.equal(descriptor.ports.guacd, 4823);
   assert.equal(descriptor.ports.postgres, 55433);
+  assert.equal(descriptor.publicOperatorUrl, 'http://127.0.0.1:4948');
   assert.deepEqual(descriptor.rdpTarget, {
     host: 'host.docker.internal',
     port: 3389,
@@ -422,6 +423,15 @@ try {
   assert.equal(applied.productionUnchanged, true);
   assert.equal(existsSync(descriptor.manifest), true);
   assert.equal(existsSync(descriptor.inventoryPath), true);
+  const authorityInventory = JSON.parse(readFileSync(descriptor.inventoryPath, 'utf8'));
+  assert.equal(
+    authorityInventory.routes[0].routeDescriptor.publicOperatorUrl,
+    'http://127.0.0.1:4948',
+  );
+  assert.match(
+    authorityInventory.routes[0].routeDescriptor.localEmbedUrl,
+    /^http:\/\/127\.0\.0\.1:8093\/guacamole\/#\/client\//,
+  );
   assert.deepEqual(effectCalls, [
     'create-volume',
     'start-database',

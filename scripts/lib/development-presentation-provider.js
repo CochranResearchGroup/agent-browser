@@ -33,6 +33,7 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
   );
   const warmSlots = positiveInteger(env.AGENT_BROWSER_DEV_PRESENTATION_WARM_SLOTS, 4);
   const hardMaxSlots = positiveInteger(env.AGENT_BROWSER_DEV_PRESENTATION_MAX_SLOTS, 6);
+  const dashboardPort = port(env.AGENT_BROWSER_DEV_DASHBOARD_PORT, 4948);
   if (hardMaxSlots < warmSlots) {
     throw new Error('Development presentation hard maximum must be at least the warm slot count');
   }
@@ -87,6 +88,7 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
       guacd: port(env.AGENT_BROWSER_DEV_GUACD_PORT, 4823),
       postgres: port(env.AGENT_BROWSER_DEV_POSTGRES_PORT, 55433),
     },
+    publicOperatorUrl: `http://127.0.0.1:${dashboardPort}`,
     rdpTarget: {
       host: env.AGENT_BROWSER_DEV_RDP_TARGET_HOST || 'host.docker.internal',
       port: port(env.AGENT_BROWSER_DEV_RDP_TARGET_PORT, 3389),
@@ -189,6 +191,7 @@ export function developmentPresentationProviderManifest(descriptor) {
     services: descriptor.services,
     database: descriptor.database,
     ports: descriptor.ports,
+    publicOperatorUrl: descriptor.publicOperatorUrl,
     rdpTarget: descriptor.rdpTarget,
     warmSlots: descriptor.warmSlots,
     hardMaxSlots: descriptor.hardMaxSlots,
