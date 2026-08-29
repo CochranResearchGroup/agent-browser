@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_c_complete_slice_d_not_started`
+Execution state: `slice_d_complete_slice_e_not_started`
 
 Lane: P137
 
@@ -824,3 +824,39 @@ checkpoint is durable and the plan's identity model remains coherent.
   the remaining mitigation registry, CDP-free manual seeding, dashboard and
   migration completion, isolated development acceptance, and every production
   gate remain open.
+
+## Slice D Checkpoint | 2026-08-28
+
+- Objective: make status projection read-only, distinguish provenance from
+  liveness authority, and give inert legacy browser rows exact retirement
+  recourse.
+- Source commit: `7fd03776` on `main`, pushed to `origin/main`.
+- Authority split: caller-supplied `serviceState` is projection-only. A status
+  request without supplied state loads the durable repository snapshot. Neither
+  path persists reconciliation results during the read.
+- Browser projection: every returned browser row identifies source, authority
+  source, creation and observation evidence when known, lifecycle
+  classification, recommended action, record revision, and evidence digest.
+  Only process-identity or managed-runtime evidence can classify a row as live
+  or reattachable. PID-less unreferenced rows classify as `inert_legacy` with
+  `retire`; ambiguous rows remain `review_required` with `review`.
+- Retirement and contamination: exact browser retirement binds browser id,
+  record revision, evidence digest, expiry, and a terminal receipt. It rejects
+  any new process, managed lifecycle, session, display, or view-stream
+  authority. The no-effect contamination detector identifies `browser-cdp`
+  and `session:odollo-carrier-ups` while reporting, and preserving, all 36
+  diagnostic display allocations.
+- Test isolation: test builds always redirect the default Service State path to
+  a process-scoped temporary home unless the explicit test escape hatch is set,
+  regardless of build-time or process `HOME`.
+- Validation: formatting and Clippy passed; focused read-only projection,
+  contamination, exact retirement, replay, live-authority rejection, and test
+  home interlock tests passed; generated client contract and JavaScript type
+  checks passed.
+- Effects and rollback: source and provider-free fixture behavior only. No live
+  Service State, browser, display, route, profile, or process was changed.
+  Reverting `7fd03776` restores the prior status and browser schema behavior.
+- Remaining gate: Slice E must connect the remaining lifecycle blocker classes
+  to exact mitigation actions. Public retirement surfaces and dashboard actions
+  remain assigned to Slice G, and migration execution remains assigned to
+  Slice H.
