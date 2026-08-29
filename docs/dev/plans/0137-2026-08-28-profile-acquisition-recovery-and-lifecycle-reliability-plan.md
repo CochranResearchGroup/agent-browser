@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_h_complete_slice_i_not_started`
+Execution state: `slice_i_source_complete_live_acceptance_blocked_on_exact_orphan_cleanup_authority`
 
 Lane: P137
 
@@ -1024,3 +1024,65 @@ checkpoint is durable and the plan's identity model remains coherent.
   prove disposable launch residue, CDP-free manual seeding, separated readiness
   axes, and a fresh post-acceptance OS resource census before any production
   candidate is eligible.
+
+## Slice I Partial Checkpoint | 2026-08-29
+
+- Objective: validate acquisition, recovery, lifecycle, and development
+  installation continuity, then exercise isolated provider-backed manual
+  seeding without borrowing production identity or authority.
+- Source commit: `85f2313c` on `main`. This commit is newer than the currently
+  installed development candidate and must be rebuilt before acceptance
+  resumes.
+- Authority routing: profile acquisition and sealed recovery apply now execute
+  on the selected persistent daemon route. Recovery preserves the authenticated
+  principal and provenance through its single retry, and terminal-owner
+  recourse requires the logical browser record to be absent before a
+  session-only projection can satisfy the postcondition.
+- Process and state safety: Chrome launches receive an owned process group,
+  WSL PID identity inspection fails closed on unsupported pidfd results, state
+  decoding and daemon runtimes use bounded enlarged stacks, timestamp guards
+  compare RFC 3339 instants rather than strings, and acquisition verifies the
+  resulting principal binding before success.
+- Installation and provider compatibility: development candidate publication
+  rebinds every existing development lane manifest to the candidate executable
+  while preserving additive fields and exact rollback bytes. Provider
+  configured-state replay, reconciliation, quarantine, and regression fixtures
+  are idempotent and retain exact cleanup obligations.
+- Source validation: diff hygiene, Rust formatting, strict Clippy, the complete
+  parallel-safe Rust partition, every required serial Rust partition, 45
+  access-plan tests, API and MCP parity, generated service-client contract and
+  type checks, service collection no-launch parity, route-confusion gates, and
+  development runtime and provider fixtures passed. The workstation install,
+  host, VM harness, Guacamole asset, PostgreSQL durability, and route-user
+  fixtures had already passed against the same installer changes.
+- Isolated development evidence: candidate generation
+  `0.28.0-92914c43d9e6` installed without changing the production selected
+  generation. Three disposable development browser launch, URL read, close,
+  and residue iterations passed. Provider plan, stage, and preflight passed,
+  including exact stopped containers, free route ports, route users, helper,
+  XRDP, and resource checks.
+- Quarantined provider apply: the first route-bound provider apply stopped at
+  `existing_session_profile_identity_unproven` for profile
+  `development-presentation-provider-v5-1`. The transaction rolled the provider
+  back to stopped containers and deferred ingress. It did not launch a
+  duplicate browser or mutate production.
+- Fresh blocker evidence: PID and process group `62232` still execute
+  `/opt/google/chrome/chrome`, started August 29, 2026 at 00:22 CDT, with the
+  exact v5-1 development profile path. Current Service State has no owner,
+  lifecycle, browser, or session record that authorizes that process. The lease
+  remains observation-only with
+  `runtime_owner_principal_binding_missing`, and the exact reconciliation plan
+  remains non-effect-capable with `no_safe_reconciliation_transition`.
+- Effects and hard stop: no signal, force close, broad cleanup, provider retry,
+  manual authentication, ingress publication, production installation, or
+  production state mutation was performed. The fresh OS census also confirmed
+  that the unrelated production Guacamole stack remains running and the
+  development dashboard remains on the prior isolated candidate generation.
+- Remaining gate: an operator must explicitly authorize targeted termination
+  of only PID and process group `62232` after executable, start time, profile
+  path, and lock ownership are revalidated. After verified exit and profile
+  lock release, rebuild and install `85f2313c` in development, rerun provider
+  apply, complete one route-bound CDP-free manual seed without credentials,
+  record acquisition, presentation, and authentication as separate axes, and
+  take the final post-acceptance OS census. Slice J remains ineligible until all
+  of those Slice I gates pass.
