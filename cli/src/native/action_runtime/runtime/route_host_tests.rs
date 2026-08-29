@@ -994,6 +994,137 @@ fn authenticated_principal_recovers_exact_released_terminal_projection() {
 }
 
 #[test]
+fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("terminal-owner-explicit-profile-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "development-presentation-provider-v5-1";
+    let session_id = profile_id;
+    let browser_id = format!("session:{session_id}");
+    let user_data_dir = home.join("provider-profile");
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-provider-owner".to_string(),
+        profile_identity_digest: profile_identity_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 5,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id,
+            profile_identity_digest,
+            owner_generation: 5,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "service_reconcile_process_group_absent:62232".to_string(),
+                "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    let command = json!({
+        "action": "remote_view_open",
+        "runtimeProfile": profile_id,
+        "serviceName": "development-presentation-provider",
+    });
+    let mut options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        profile: Some(user_data_dir.display().to_string()),
+        ..LaunchOptions::default()
+    };
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+    assert_eq!(selection, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+
+    state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .terminal_evidence = vec!["service_reconcile_process_group_absent:62232".to_string()];
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut missing_lock_options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        profile: Some(user_data_dir.display().to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(&mut missing_lock_options, &command, Some(session_id))
+            .unwrap_err(),
+        "existing_session_profile_identity_unproven"
+    );
+
+    state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .terminal_evidence = vec![
+        "service_reconcile_process_group_absent:62232".to_string(),
+        "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+    ];
+    state.browsers.insert(
+        format!("session:{session_id}"),
+        BrowserProcess {
+            id: format!("session:{session_id}"),
+            profile_id: Some(profile_id.to_string()),
+            pid: Some(62232),
+            ..BrowserProcess::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut live_projection_options = LaunchOptions {
+        runtime_profile: Some(profile_id.to_string()),
+        profile: Some(user_data_dir.display().to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(&mut live_projection_options, &command, Some(session_id))
+            .unwrap_err(),
+        "existing_session_profile_identity_unproven"
+    );
+}
+
+#[test]
 fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("registered-session-owner-exit-home");

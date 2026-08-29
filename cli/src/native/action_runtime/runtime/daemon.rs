@@ -739,6 +739,15 @@ fn apply_existing_session_profile_selection(
             Ok(None)
         };
     };
+    if exact_terminal_owner_allows_explicit_profile_relaunch(
+        options,
+        command,
+        &session_id,
+        state,
+        &binding,
+    )? {
+        return Ok(None);
+    }
     if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
     {
         return Ok(Some(ProfileSelectionReason::ExistingOwner));
@@ -820,6 +829,111 @@ fn apply_existing_session_profile_selection(
         options.executable_path = None;
     }
     Ok(Some(ProfileSelectionReason::ExistingOwner))
+}
+
+fn exact_terminal_owner_allows_explicit_profile_relaunch(
+    options: &LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+    binding: &crate::runtime_owner_transfer::RuntimeOwnerBinding,
+) -> Result<bool, String> {
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("remote_view_open" | "launch")
+    ) {
+        return Ok(false);
+    }
+    let Some(profile_id) = options.runtime_profile.as_deref() else {
+        return Ok(false);
+    };
+    let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
+        .or_else(|| optional_command_or_params_string(command, "profileId"));
+    if command_profile_id.as_deref() != Some(profile_id) {
+        return Ok(false);
+    }
+    let Some(profile) = state.profiles.get(profile_id) else {
+        return Ok(false);
+    };
+    let user_data_dir =
+        resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), profile_id)?;
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    if profile_digest != binding.claim.profile_identity_digest
+        || binding.claim.daemon_session_route != session_id
+    {
+        return Ok(false);
+    }
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_path =
+            resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
+        if crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?
+            != profile_digest
+        {
+            return Ok(false);
+        }
+    }
+    let Some(owner) = state.runtime_owner_registry.owner(&profile_digest) else {
+        return Ok(false);
+    };
+    let Some(lifecycle) = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(&binding.claim.logical_browser_id)
+    else {
+        return Ok(false);
+    };
+    let process_absence_proven = lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "exact_process_exited"
+            || evidence.starts_with("service_reconcile_process_group_absent:")
+    });
+    let profile_lock_release_proven = lifecycle.terminal_evidence.iter().any(|evidence| {
+        evidence == "profile_lock_released"
+            || evidence == "service_reconcile_profile_lock_absent"
+            || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
+    });
+    let exact_terminal_owner = owner.owner_generation == binding.claim.owner_generation
+        && owner.browser_id == binding.claim.logical_browser_id
+        && owner.daemon_session_route == session_id
+        && owner.pending_transfer.is_none()
+        && lifecycle.logical_browser_id == binding.claim.logical_browser_id
+        && lifecycle.profile_identity_digest == profile_digest
+        && lifecycle.owner_generation == binding.claim.owner_generation
+        && lifecycle.lifecycle_state
+            == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
+        && lifecycle.cleanup_obligation_state
+            == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+        && process_absence_proven
+        && profile_lock_release_proven;
+    let owner_projection_absent = !state.sessions.contains_key(session_id)
+        && !state
+            .browsers
+            .contains_key(&binding.claim.logical_browser_id)
+        && !state.browsers.values().any(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|active_session| active_session == session_id)
+                || (browser.profile_id.as_deref() == Some(profile_id)
+                    && (browser.pid.is_some()
+                        || browser.cdp_endpoint.is_some()
+                        || !browser.active_session_ids.is_empty()
+                        || browser.tab_handles.iter().any(|handle| handle.valid)))
+        })
+        && !state.tabs.values().any(|tab| {
+            tab.browser_id == binding.claim.logical_browser_id
+                || tab.owner_session_id.as_deref() == Some(session_id)
+                || tab.service_tab_handle.as_ref().is_some_and(|handle| {
+                    handle.valid
+                        && (handle.browser_id == binding.claim.logical_browser_id
+                            || handle.session_name.as_deref() == Some(session_id)
+                            || handle.profile_id.as_deref() == Some(profile_id))
+                })
+        });
+    let principal_projection_absent = !state
+        .runtime_owner_registry
+        .principal_bindings
+        .contains_key(&profile_digest);
+    Ok(exact_terminal_owner && owner_projection_absent && principal_projection_absent)
 }
 
 fn apply_authenticated_orphaned_owner_recourse(
