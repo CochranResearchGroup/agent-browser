@@ -313,14 +313,7 @@ pub(crate) fn remote_view_helper_status_preflight_component(observed_at: &str) -
 }
 pub(crate) fn remote_view_helper_status_probe(helper_path: &str) -> Value {
     let output = Command::new("timeout")
-        .args([
-            "--kill-after=1",
-            "2s",
-            "sudo",
-            "-n",
-            helper_path,
-            "status-json",
-        ])
+        .args(["--kill-after=1", "2s", helper_path, "status-json"])
         .stdin(Stdio::null())
         .output();
     match output {
@@ -447,4 +440,38 @@ pub(crate) fn remote_view_route_desktop_preflight_component(
             _ => "open_or_select_single_rdp_route_display",
         }),
     )
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::remote_view_helper_status_probe;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn helper_status_probe_executes_read_only_contract_without_sudo() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-helper-status-probe-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let helper = root.join("agent-browser-privileged-helper");
+        fs::write(
+            &helper,
+            "#!/bin/sh\n[ -z \"${SUDO_COMMAND:-}\" ] || exit 91\n[ \"${1:-}\" = status-json ] || exit 92\nprintf '%s\\n' '{\"probeMode\":\"direct\"}'\n",
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let report = remote_view_helper_status_probe(helper.to_str().unwrap());
+
+        assert_eq!(report["success"], true);
+        assert_eq!(report["parsed"]["probeMode"], "direct");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
