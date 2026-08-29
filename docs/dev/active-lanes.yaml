@@ -1,0 +1,30 @@
+schema_version: 1
+lanes:
+  - id: P110 Authentication Run Slice A
+    objective: Authentication Run provider-free foundation
+    plan: docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md
+    plan_ref: refs/heads/plan/authentication-run-foundation
+    branch: plan/authentication-run-foundation
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 07d8676de7e7eba8efa00fe030109963768d3b8b
+    remote_ref: refs/remotes/origin/plan/authentication-run-foundation
+    integration: merge
+    dependencies: []
+    overlaps: []
+    updated_at: 2026-08-29
+  - id: P134
+    objective: Principal, lease, crash, and install coherence
+    plan: docs/dev/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md
+    plan_ref: refs/heads/plan/crash-profile-lifecycle-coherence
+    branch: plan/crash-profile-lifecycle-coherence
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 20c92743608ff7e38074c14f72cc903adcceec09
+    remote_ref: refs/remotes/origin/plan/crash-profile-lifecycle-coherence
+    integration: merge
+    dependencies: []
+    overlaps: []
+    updated_at: 2026-08-29
