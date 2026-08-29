@@ -2,7 +2,9 @@
 
 Date: 2026-08-29
 
-State: SOURCE ACCEPTED
+State: OPEN
+
+Acceptance: SOURCE ACCEPTED
 
 Execution state: `slice_a_source_accepted_public_contract_not_started`
 
@@ -17,6 +19,8 @@ Source checkpoint: `d0786a5a`
 Branch: `plan/authentication-run-foundation`
 
 Target: `main`
+
+Integration: merge
 
 Integration model: isolated worktree and reviewable branch. Promotion to
 `main` is a separate integration decision after source acceptance.
