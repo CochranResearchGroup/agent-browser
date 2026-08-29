@@ -16,9 +16,9 @@ Rebased integration baseline: `1c96ac6782c3e8f5519c4e6005b9f58db084b578`
 
 Source checkpoint: `d0786a5a`
 
-Branch: `plan/authentication-run-foundation`
+Branch: plan/authentication-run-foundation
 
-Target: `main`
+Target: main
 
 Integration: merge
 
