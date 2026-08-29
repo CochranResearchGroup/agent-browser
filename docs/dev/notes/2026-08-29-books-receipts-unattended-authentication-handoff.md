@@ -16,11 +16,12 @@ normal path is:
 
 1. acquire the exact tenant-owned stock Chrome profile;
 2. accept a still-authenticated retained session;
-3. otherwise let Chrome submit one uniquely saved account;
-4. fall back to a profile-owned credential provider when native autofill is
-   unavailable;
-5. claim a newly delivered SMS or email challenge response without exposing
-   its plaintext to the client;
+3. otherwise let Chrome submit the profile's already saved BILL username and
+   password without reading either value;
+4. if BILL sends an SMS OTP, fence and consume it through im-receipts' existing
+   local-private 2FA helper;
+5. if BILL sends a device-verification email, claim its URL through mail-
+   receipts and open it internally in a new tab on the same acquired profile;
 6. confirm a tenant-approved remember-device prompt;
 7. verify the exact authenticated service and account target; and
 8. return one redacted terminal receipt to the consumer.
@@ -72,13 +73,15 @@ Books Receipts now implements a fixture-backed provider-neutral state machine
 with this action vocabulary:
 
 - `submit_native_autofill`
-- `submit_brokered_primary_credential`
+- `submit_brokered_primary_credential` (disabled by default)
 - `select_expected_account`
-- `submit_brokered_challenge`
+- `submit_im_receipts_sms_otp`
+- `open_mail_receipts_device_verification_link`
 - `confirm_remember_device`
 
-The provider-neutral implementation is bound to Books Receipts commit
-`74e9790`.
+The original provider-neutral implementation is bound to Books Receipts commit
+`74e9790`; its R9 correction is recipe version
+`browser-authentication-recipe.v2`.
 
 Its driver accepts only an operation ID and action name. Every returned action
 receipt must prove the expected material custodian and must explicitly report
@@ -98,7 +101,8 @@ The current service model already carries useful declarative fields:
 - guarded desktop interaction plus redacted interaction receipts.
 
 The missing piece is an executable authentication capability that resolves
-those declarations inside the trusted service boundary.
+those declarations and channel-specific challenge adapters inside the trusted
+service boundary.
 
 The generic service UI action cannot serve as that capability:
 
@@ -211,10 +215,13 @@ browser dispatch completes and must never interpolate the value into an error
 message. Durable state retains only provider ID digest, credential-entry
 digest, byte-length class if needed, operation ID, and typed outcome.
 
-### Brokered challenge submission
+This is an optional extension point, not the SoyLei BILL default. The BILL
+profile already owns the username/password in stock Chrome. Do not create or
+require a second BILL password store merely to satisfy this architecture.
 
-`submit_brokered_challenge` resolves a profile and account scoped challenge
-provider. It separates:
+### im-receipts SMS OTP submission
+
+`submit_im_receipts_sms_otp` binds directly to im-receipts. It separates:
 
 1. `prepare_watch`
 2. `watch_ready`
@@ -241,12 +248,42 @@ Candidate correlation must bind at least:
 - site challenge ID or nonce when available; and
 - uniqueness among post-cursor candidates.
 
-The initial adapters should be im-receipts SMS, mail-receipts email, and TOTP.
-The current im-receipts canonical search can filter by tenant, time, sender,
-participant, and conversation, but it returns message text. Authentication
-needs a narrower challenge-claim endpoint that fills or streams the claimed
-response directly to Agent Browser and returns only an opaque receipt. Broad
-message search should remain a separate human or agent evidence capability.
+im-receipts already exposes `urgent_auth_code_watch`, which performs a pre-
+catchup, bounded post-cursor live window, post-catchup, and restoration while
+returning redacted `message.auth_code_candidate` events. It also exposes the
+explicit operator-local `subscribers latest-2fa
+--include-raw-local-message-text` readback. The Agent Browser adapter should
+compose those existing surfaces locally, bind the canonical message identity
+to the current challenge, extract exactly one code in memory, fill it, and
+discard it. Raw command output is internal challenge material and must never be
+copied into the Authentication Run, service request, job, event, trace, log,
+dashboard, or response.
+
+An applied receipt must prove watch-before-trigger delivery fencing, exactly
+one accepted post-fence candidate, response-only consumption, and fresh BILL
+verification. Zero or multiple candidates are typed blocked outcomes, never a
+guess.
+
+### mail-receipts device-verification link
+
+`open_mail_receipts_device_verification_link` is a separate challenge class,
+not an OTP-fill variant. mail-receipts already owns live Gmail readiness,
+incremental synchronization, message provenance, and a response-only auth-code
+watch. It does not yet expose a first-class verification-link watch/claim.
+
+Add a narrow local claimant with the same cursor-before-trigger lifecycle. It
+must accept exactly one new message matching the tenant-private BILL sender and
+subject policy, extract exactly one URL whose origin is allowed by the BILL
+site recipe, and transfer that URL only to Agent Browser's internal navigator.
+Persist redacted message/link provenance and terminal reason, never the URL.
+
+The authentication orchestrator must create the verification tab using the
+already acquired browser and session identity, navigate internally, prove the
+new tab shares the exact profile, verify the device effect, and then return to
+fresh BILL authentication verification. A verification URL is bearer-like
+material: do not pass it as a public `tab_new` or navigation argument. Public
+and durable receipts report only `sameProfileNewTabProven=true`, response-only
+consumption, candidate cardinality, and typed outcome.
 
 ## Site Recipe Boundary
 
@@ -327,7 +364,7 @@ Tenant-private runtime configuration should select:
 - site recipe;
 - credential-provider binding order;
 - challenge-provider binding order;
-- sender and challenge-shape policy;
+- sender, allowed verification-link origin, and challenge-shape policy;
 - remember-device permission;
 - consent and human-only policy;
 - deadline and attempt budget;
@@ -364,19 +401,23 @@ message data, account labels, or authenticated browser artifacts.
 
 ### Slice 4 | Response-only challenge broker
 
-- Implement a fake cursor-based challenge provider first.
+- Implement separate fake cursor-based SMS-code and verification-link providers
+  first.
 - Prove watch-before-trigger ordering, uniqueness, expiry, replay refusal, and
   result verification.
-- Add im-receipts, mail-receipts, and TOTP adapters only after the fake provider
-  contract is accepted.
+- Bind SMS to im-receipts' existing urgent-watch and local-private exact-message
+  surfaces.
+- Add the narrow mail-receipts verification-link claimant, then prove internal
+  same-profile new-tab navigation without exposing the URL.
 
 ### Slice 5 | Provider-specific recipes
 
 - Add synthetic BILL-shaped and Intuit-shaped fixtures without copied private
   page content.
 - Bind selectors and state classification only in narrow versioned recipes.
-- Prove saved session, native autofill, brokered login, MFA, remember-device,
-  target mismatch, lockout, and typed human-intervention branches.
+- Prove saved session, native autofill, SMS OTP, email device verification,
+  remember-device, target mismatch, lockout, and typed human-intervention
+  branches.
 
 ### Slice 6 | Separately authorized live acceptance
 
@@ -394,6 +435,8 @@ message data, account labels, or authenticated browser artifacts.
 - Do not send a real password or OTP through generic `fill`, `type`,
   `ui_action`, `evaluate`, clipboard, desktop text, MCP, HTTP, CLI arguments,
   or an agent transcript.
+- Do not send a device-verification URL through public `tab_new`, navigation,
+  clipboard, MCP, HTTP, CLI arguments, or an agent transcript.
 - Do not use broad message search as the production OTP provider.
 - Do not infer authentication from successful input, a disappeared dialog, a
   ready browser, or a remembered device alone.
@@ -420,7 +463,9 @@ message data, account labels, or authenticated browser artifacts.
 ## Best Next Action
 
 Open one successor authentication lane beginning with Slice 1. Reuse P110's
-challenge and provider model, P137's acquired-profile outcome, the existing
-guarded desktop authority, and Books Receipts' new provider-neutral recipe.
-The first acceptance artifact should be a no-launch synthetic secret-canary
-test, not a live BILL or Intuit login.
+challenge model, P137's acquired-profile outcome, the existing guarded desktop
+authority, and Books Receipts recipe version 2. Model the exact BILL paths—
+Chrome profile credentials, im-receipts SMS, and mail-receipts same-profile
+device verification—from the first fixture. The first acceptance artifact
+should be a no-launch synthetic OTP-and-URL canary test, not a live BILL or
+Intuit login.
