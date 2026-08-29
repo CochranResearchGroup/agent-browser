@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_f_complete_slice_g_not_started`
+Execution state: `slice_g_complete_slice_h_not_started`
 
 Lane: P137
 
@@ -930,3 +930,47 @@ checkpoint is durable and the plan's identity model remains coherent.
 - Remaining gate: Slice G must publish acquire and close through every public
   surface and add dashboard review and confirmation UX before isolated
   development execution is eligible.
+
+## Slice G Checkpoint | 2026-08-28
+
+- Objective: make manual-seeding recovery and exact inert-record retirement
+  usable from public contracts and dashboard surfaces without source knowledge.
+- Source commit: `93a9cda9` on `main`.
+- Contract parity: HTTP `/api/service/request`, MCP `service_request`, Rust
+  contract metadata, the canonical JSON schema and field-role ledger, generated
+  JavaScript and TypeScript clients, and action-specific helpers expose
+  `service_profile_manual_seeding_acquire`,
+  `service_profile_manual_seeding_close`,
+  `service_browser_contamination_report`,
+  `service_browser_retirement_plan`, and
+  `service_browser_retirement_apply` with the same top-level fields and typed
+  result shapes.
+- Client guidance: README, CLI help, repository skill guidance, inline Rust
+  documentation, and the docs site lead unproven identity callers to exact
+  principal/profile/process/route reconciliation, then distinguish manual
+  seeding close, attachable relaunch, authentication probe, contamination
+  reporting, and exact record retirement.
+- Dashboard: inert PID-less records expose a selected-browser retirement
+  preview only when both retirement actions are advertised. The preview shows
+  affected identity, plan, risk reasons, compensation, and expiry. Apply uses a
+  shadcn/ui `AlertDialog`, and the terminal receipt remains visible. Browser
+  retirement handlers remain distinct from incident acknowledge and resolve
+  handlers.
+- Compatibility and privacy: generic service request transport remains the
+  compatibility path for older clients. Unknown actions remain rejected by the
+  client or server instead of being applied implicitly. No capability field was
+  added to plan or receipt data, and ephemeral profile capabilities remain
+  outside queued Service State.
+- Validation: Rust formatting and strict Clippy passed; focused Service contract
+  tests, compiled no-launch contract smoke, API/MCP parity, the full generated
+  service-client suite, route-confusion gates, dashboard view-stream, row-action,
+  browser-table and inspector tests, dashboard production build, docs production
+  build, and diff hygiene passed.
+- Effects and exclusions: source and provider-free no-launch validation only.
+  No development or production browser, profile, route, provider, process,
+  dashboard publication, installed skill, or candidate installation was
+  changed. Broad workstation and live-route selector recommendations were not
+  run because they cross Slice G's no-live-effect boundary.
+- Remaining gate: Slice H must prove source-free migration, mixed-version
+  compatibility, rollback, and installation contract behavior before isolated
+  development acceptance begins.
