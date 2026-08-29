@@ -884,6 +884,9 @@ pub fn persist_service_browser_record_in_repository(
             last_error,
             last_health_observation: None,
             attachability: None,
+            record_provenance: previous
+                .as_ref()
+                .and_then(|browser| browser.record_provenance.clone()),
         };
         upsert_browser_display_allocation(
             service_state,
@@ -1300,6 +1303,7 @@ pub(crate) fn stale_browser_process_record(
         last_error: Some(last_error),
         last_health_observation: None,
         attachability: None,
+        record_provenance: previous.and_then(|browser| browser.record_provenance.clone()),
     };
     mark_cdp_screencast_streams_unavailable(&mut browser, "browser_not_ready", health);
     browser

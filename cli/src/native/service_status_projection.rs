@@ -555,7 +555,6 @@ pub(crate) mod action_commands {
         persist_browser_recovery_started_in_repository,
         persist_closed_browser_health_in_repository,
         persist_current_browser_stale_health_in_repository,
-        persist_reconciled_service_state_in_repository,
         persist_service_browser_record_in_repository, reconcile_service_state,
         retry_degraded_service_browser_in_state, retry_persisted_service_browser_in_repository,
         retry_service_browser_in_state, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
@@ -565,9 +564,11 @@ pub(crate) mod action_commands {
         retained_display_allocation_candidates, service_profile_allocations,
         service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
         BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
-        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
-        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile,
+        BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification,
+        BrowserRecordProvenance, BrowserRecordSource, BrowserSession, BrowserTab,
+        ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState,
+        MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
@@ -612,14 +613,13 @@ pub(crate) mod action_commands {
         BrowserAuthority:
             super::super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
     {
-        let mut service_state = cmd
-            .get("serviceState")
-            .cloned()
-            .map(serde_json::from_value::<ServiceState>)
-            .transpose()
-            .map_err(|err| format!("Invalid serviceState: {}", err))?
-            .unwrap_or_default();
-        let before = service_state.clone();
+        let caller_projection = cmd.get("serviceState").is_some();
+        let mut service_state = if let Some(projected) = cmd.get("serviceState") {
+            serde_json::from_value::<ServiceState>(projected.clone())
+                .map_err(|err| format!("Invalid serviceState: {}", err))?
+        } else {
+            dependencies.repository.load_snapshot()?
+        };
         let waiting_profile_lease_job_count = service_state
             .jobs
             .values()
@@ -636,11 +636,7 @@ pub(crate) mod action_commands {
             });
         }
         dependencies.preparer.prepare(&mut service_state).await;
-        persist_reconciled_service_state_in_repository(
-            dependencies.repository,
-            &before,
-            &service_state,
-        )?;
+        project_browser_record_provenance(&mut service_state, caller_projection);
         let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
         let control_plane = service_state
             .control_plane
@@ -669,6 +665,228 @@ pub(crate) mod action_commands {
             .await
             .map_err(|error| error.to_string())?;
         serde_json::to_value(response).map_err(|error| error.to_string())
+    }
+
+    fn project_browser_record_provenance(state: &mut ServiceState, caller_projection: bool) {
+        let process_backed = state
+            .browser_process_identities
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let managed = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let session_references = state
+            .sessions
+            .values()
+            .flat_map(|session| session.browser_ids.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>();
+        for (browser_id, browser) in &mut state.browsers {
+            let last_observed_at = browser
+                .last_health_observation
+                .as_ref()
+                .map(|observation| observation.observed_at.clone())
+                .filter(|value| !value.is_empty());
+            let (source, authority_source) = if caller_projection {
+                (
+                    BrowserRecordSource::CallerProjection,
+                    BrowserRecordAuthoritySource::CallerProjection,
+                )
+            } else if managed.contains(browser_id) {
+                (
+                    BrowserRecordSource::ManagedRuntime,
+                    BrowserRecordAuthoritySource::ManagedRuntime,
+                )
+            } else if process_backed.contains(browser_id) {
+                (
+                    BrowserRecordSource::RuntimeObserved,
+                    BrowserRecordAuthoritySource::ProcessIdentity,
+                )
+            } else {
+                (
+                    BrowserRecordSource::PersistedState,
+                    BrowserRecordAuthoritySource::LegacyUnproven,
+                )
+            };
+            let process_authority = process_backed.contains(browser_id) && browser.pid.is_some();
+            let managed_authority = managed.contains(browser_id);
+            let unreferenced = !session_references.contains(browser_id)
+                && browser.active_session_ids.is_empty()
+                && browser.display_allocation_id.is_none()
+                && browser.view_streams.is_empty();
+            let (lifecycle_classification, recommended_action) =
+                if (process_authority || managed_authority) && browser.cdp_endpoint.is_some() {
+                    (BrowserRecordLifecycleClassification::Reattachable, "close")
+                } else if process_authority || managed_authority {
+                    (BrowserRecordLifecycleClassification::Live, "close")
+                } else if browser.pid.is_none() && unreferenced {
+                    (BrowserRecordLifecycleClassification::InertLegacy, "retire")
+                } else {
+                    (
+                        BrowserRecordLifecycleClassification::ReviewRequired,
+                        "review",
+                    )
+                };
+            let mut evidence_record = browser.clone();
+            evidence_record.record_provenance = None;
+            let evidence_digest =
+                crate::native::runtime_lifecycle::digest_json(&evidence_record).unwrap_or_default();
+            let record_revision = browser
+                .record_provenance
+                .as_ref()
+                .map(|provenance| provenance.record_revision)
+                .unwrap_or(0);
+            browser.record_provenance = Some(BrowserRecordProvenance {
+                source,
+                authority_source,
+                created_at: None,
+                last_observed_at,
+                lifecycle_classification,
+                recommended_action: recommended_action.to_string(),
+                record_revision,
+                evidence_digest,
+            });
+        }
+    }
+
+    #[cfg(test)]
+    mod slice_d_tests {
+        use super::*;
+        use crate::native::service_status_projection::{
+            ReconciledBrowserSessionAuthority, ServiceStatusAuthorityPreparer,
+            ServiceStatusProjectionDependencies, ServiceStatusProjector,
+        };
+        use std::collections::BTreeMap;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Mutex;
+
+        struct MemoryRepository {
+            state: Mutex<ServiceState>,
+            mutation_count: AtomicUsize,
+        }
+
+        impl MemoryRepository {
+            fn new(state: ServiceState) -> Self {
+                Self {
+                    state: Mutex::new(state),
+                    mutation_count: AtomicUsize::new(0),
+                }
+            }
+        }
+
+        impl ServiceStateRepository for MemoryRepository {
+            fn load_snapshot(&self) -> Result<ServiceState, String> {
+                Ok(self.state.lock().unwrap().clone())
+            }
+
+            fn mutate<R>(
+                &self,
+                mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+            ) -> Result<R, String> {
+                self.mutation_count.fetch_add(1, Ordering::SeqCst);
+                let mut state = self.state.lock().unwrap();
+                mutator(&mut state)
+            }
+        }
+
+        #[derive(Default)]
+        struct NoopPreparer;
+
+        #[async_trait::async_trait]
+        impl ServiceStatusAuthorityPreparer for NoopPreparer {
+            async fn prepare(&self, _service_state: &mut ServiceState) {}
+        }
+
+        fn browser_state(id: &str) -> ServiceState {
+            ServiceState {
+                browsers: BTreeMap::from([(
+                    id.to_string(),
+                    BrowserProcess {
+                        id: id.to_string(),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            }
+        }
+
+        #[tokio::test]
+        async fn caller_supplied_status_state_is_projection_only_and_never_persisted() {
+            let repository = MemoryRepository::new(browser_state("durable-browser"));
+            let supplied = browser_state("browser-cdp");
+            let projector = ServiceStatusProjector::unavailable("provider-free projection test");
+            let response = handle_service_status_with_dependencies(
+                &json!({ "serviceState": supplied }),
+                ServiceStatusProjectionDependencies::new(
+                    &repository,
+                    &NoopPreparer,
+                    &ReconciledBrowserSessionAuthority,
+                    &projector,
+                ),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(repository.mutation_count.load(Ordering::SeqCst), 0);
+            assert!(repository
+                .load_snapshot()
+                .unwrap()
+                .browsers
+                .contains_key("durable-browser"));
+            assert!(!repository
+                .load_snapshot()
+                .unwrap()
+                .browsers
+                .contains_key("browser-cdp"));
+            assert_eq!(
+                response["service_state"]["browsers"]["browser-cdp"]["recordProvenance"]["source"],
+                "caller_projection"
+            );
+            assert_eq!(
+                response["service_state"]["browsers"]["browser-cdp"]["recordProvenance"]
+                    ["lifecycleClassification"],
+                "inert_legacy"
+            );
+            assert_eq!(
+                response["service_state"]["browsers"]["browser-cdp"]["recordProvenance"]
+                    ["recommendedAction"],
+                "retire"
+            );
+        }
+
+        #[tokio::test]
+        async fn repository_status_read_is_read_only_and_marks_unproven_legacy_authority() {
+            let repository = MemoryRepository::new(browser_state("session:odollo-carrier-ups"));
+            let before = repository.load_snapshot().unwrap();
+            let projector = ServiceStatusProjector::unavailable("provider-free projection test");
+            let response = handle_service_status_with_dependencies(
+                &json!({}),
+                ServiceStatusProjectionDependencies::new(
+                    &repository,
+                    &NoopPreparer,
+                    &ReconciledBrowserSessionAuthority,
+                    &projector,
+                ),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(repository.mutation_count.load(Ordering::SeqCst), 0);
+            assert_eq!(repository.load_snapshot().unwrap(), before);
+            assert_eq!(
+                response["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                    ["recordProvenance"]["authoritySource"],
+                "legacy_unproven"
+            );
+            assert_eq!(
+                response["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                    ["recordProvenance"]["lifecycleClassification"],
+                "inert_legacy"
+            );
+        }
     }
 }
 pub(crate) use action_commands::*;

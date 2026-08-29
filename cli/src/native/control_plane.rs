@@ -728,6 +728,9 @@ fn persist_process_exited_browser_health_in_repository(
             last_error,
             last_health_observation: None,
             attachability: None,
+            record_provenance: previous
+                .as_ref()
+                .and_then(|browser| browser.record_provenance.clone()),
         };
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));

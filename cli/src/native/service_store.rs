@@ -386,11 +386,10 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
         return Err("Could not determine home directory for service state".to_string());
     };
     #[cfg(test)]
-    let home = if option_env!("HOME").is_some_and(|build_home| home == Path::new(build_home))
-        && std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
-            .ok()
-            .as_deref()
-            != Some("1")
+    let home = if std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+        .ok()
+        .as_deref()
+        != Some("1")
     {
         static TEST_HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
         TEST_HOME
@@ -1120,6 +1119,7 @@ mod tests {
         RemoteViewHandoff, SitePolicy,
     };
     use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+    use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
 
     fn unique_state_path(label: &str) -> PathBuf {
@@ -1133,6 +1133,22 @@ mod tests {
                     .as_nanos()
             ))
             .join("state.json")
+    }
+
+    #[test]
+    fn test_build_default_state_path_never_targets_process_home_without_explicit_escape_hatch() {
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let claimed_live_home = std::env::temp_dir().join(format!(
+            "agent-browser-claimed-live-home-{}",
+            std::process::id()
+        ));
+        guard.set("HOME", claimed_live_home.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME");
+
+        let state_path = default_service_state_path().unwrap();
+        assert!(!state_path.starts_with(&claimed_live_home));
+        assert!(state_path.starts_with(std::env::temp_dir()));
+        assert!(state_path.ends_with(".agent-browser/service/state.json"));
     }
 
     fn runtime_owner(label: &str) -> ProfileOwner {

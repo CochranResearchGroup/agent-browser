@@ -307,6 +307,16 @@ export interface ServiceBrowserRecord {
   displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   displayName?: string | null;
   tabHandles?: ServiceTabHandle[];
+  recordProvenance?: {
+    source: 'caller_projection' | 'persisted_state' | 'runtime_observed' | 'managed_runtime';
+    authoritySource: 'caller_projection' | 'legacy_unproven' | 'process_identity' | 'managed_runtime';
+    createdAt: string | null;
+    lastObservedAt: string | null;
+    lifecycleClassification: 'live' | 'reattachable' | 'inert_legacy' | 'review_required';
+    recommendedAction: 'close' | 'retire' | 'review' | string;
+    recordRevision: number;
+    evidenceDigest: string;
+  };
   [key: string]: unknown;
 }
 

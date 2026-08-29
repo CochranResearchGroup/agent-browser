@@ -2428,6 +2428,10 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
         BTreeMap<String, super::service_profile_recovery::RecoveryReceipt>,
+    /// Idempotent receipts for exact inert browser-record retirement.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) browser_retirement_receipts:
+        BTreeMap<String, super::service_browser_retirement::BrowserRetirementReceipt>,
     /// Replayable dependency-ordered crash recovery transactions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) crash_regeneration_transactions:
@@ -5099,6 +5103,61 @@ pub enum ProfileReadinessState {
 }
 
 /// A supervised or attached browser process known to the service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserRecordSource {
+    CallerProjection,
+    PersistedState,
+    RuntimeObserved,
+    ManagedRuntime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserRecordAuthoritySource {
+    CallerProjection,
+    LegacyUnproven,
+    ProcessIdentity,
+    ManagedRuntime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserRecordLifecycleClassification {
+    Live,
+    Reattachable,
+    InertLegacy,
+    ReviewRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserRecordProvenance {
+    pub source: BrowserRecordSource,
+    pub authority_source: BrowserRecordAuthoritySource,
+    pub created_at: Option<String>,
+    pub last_observed_at: Option<String>,
+    pub lifecycle_classification: BrowserRecordLifecycleClassification,
+    pub recommended_action: String,
+    pub record_revision: u64,
+    pub evidence_digest: String,
+}
+
+impl Default for BrowserRecordProvenance {
+    fn default() -> Self {
+        Self {
+            source: BrowserRecordSource::PersistedState,
+            authority_source: BrowserRecordAuthoritySource::LegacyUnproven,
+            created_at: None,
+            last_observed_at: None,
+            lifecycle_classification: BrowserRecordLifecycleClassification::ReviewRequired,
+            recommended_action: "review".to_string(),
+            record_revision: 0,
+            evidence_digest: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserProcess {
@@ -5121,6 +5180,8 @@ pub struct BrowserProcess {
     pub tab_handles: Vec<ServiceTabHandle>,
     pub last_error: Option<String>,
     pub last_health_observation: Option<BrowserHealthObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record_provenance: Option<BrowserRecordProvenance>,
 }
 
 /// Durable process-instance evidence for a service browser.
@@ -5155,6 +5216,7 @@ impl Default for BrowserProcess {
             tab_handles: Vec::new(),
             last_error: None,
             last_health_observation: None,
+            record_provenance: None,
         }
     }
 }

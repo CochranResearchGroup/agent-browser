@@ -133,6 +133,7 @@ use super::service_access::{
     handle_service_profiles,
 };
 use super::service_activity::{handle_service_events, handle_service_incident_activity};
+use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
     handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
@@ -263,6 +264,9 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_reconcile"
             | "service_browser_close"
             | "service_browser_repair"
+            | "service_browser_contamination_report"
+            | "service_browser_retirement_plan"
+            | "service_browser_retirement_apply"
             | "service_resources"
             | "service_resources_monitor_summary"
             | "service_resources_write_monitor_summary"
@@ -821,6 +825,9 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_reconcile" => handle_service_reconcile(cmd).await,
             "service_browser_close" => handle_service_browser_close(cmd, state).await,
             "service_browser_repair" => handle_service_browser_repair(cmd).await,
+            "service_browser_contamination_report"
+            | "service_browser_retirement_plan"
+            | "service_browser_retirement_apply" => handle_service_browser_retirement_command(cmd),
             "service_resources" => handle_service_resources(cmd).await,
             "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
             "service_resources_write_monitor_summary" => {
