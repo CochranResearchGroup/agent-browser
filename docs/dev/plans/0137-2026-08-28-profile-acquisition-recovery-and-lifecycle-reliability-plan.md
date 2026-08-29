@@ -1025,68 +1025,70 @@ checkpoint is durable and the plan's identity model remains coherent.
   axes, and a fresh post-acceptance OS resource census before any production
   candidate is eligible.
 
-## Slice I Partial Checkpoint | 2026-08-29
+## Slice I Checkpoint | 2026-08-29
 
-- Objective: validate acquisition, recovery, lifecycle, and development
-  installation continuity, then exercise isolated provider-backed manual
-  seeding without borrowing production identity or authority.
-- Source commit: `85f2313c` on `main`. Its optimized binary is installed as
-  development generation `0.28.0-ce286300560d` with SHA-256
-  `ce286300560dbb0a785d0fbe689c1495a83d00c9800bc469604ad80096a8aeed`.
-- Authority routing: profile acquisition and sealed recovery apply now execute
-  on the selected persistent daemon route. Recovery preserves the authenticated
-  principal and provenance through its single retry, and terminal-owner
-  recourse requires the logical browser record to be absent before a
-  session-only projection can satisfy the postcondition.
-- Process and state safety: Chrome launches receive an owned process group,
-  WSL PID identity inspection fails closed on unsupported pidfd results, state
-  decoding and daemon runtimes use bounded enlarged stacks, timestamp guards
-  compare RFC 3339 instants rather than strings, and acquisition verifies the
-  resulting principal binding before success.
-- Installation and provider compatibility: development candidate publication
-  rebinds every existing development lane manifest to the candidate executable
-  while preserving additive fields and exact rollback bytes. Provider
-  configured-state replay, reconciliation, quarantine, and regression fixtures
-  are idempotent and retain exact cleanup obligations.
-- Source validation: diff hygiene, Rust formatting, strict Clippy, the complete
-  parallel-safe Rust partition, every required serial Rust partition, 45
-  access-plan tests, API and MCP parity, generated service-client contract and
-  type checks, service collection no-launch parity, route-confusion gates, and
-  development runtime and provider fixtures passed. The workstation install,
-  host, VM harness, Guacamole asset, PostgreSQL durability, and route-user
-  fixtures had already passed against the same installer changes.
-- Isolated development evidence: the current source candidate installed without
-  changing production selected generation
-  `0.28.0-2851117fd877-04e7cf4c8b54`. Three fresh disposable development
-  browser launch, URL read, close, and residue iterations passed on the current
-  candidate. Provider plan and secret-free stage completed without authorizing
-  effects. Provider preflight passed, including exact stopped containers, free
-  route ports, route users, helper, XRDP, bundle identity, and resource checks.
-- Quarantined provider apply: the first route-bound provider apply stopped at
-  `existing_session_profile_identity_unproven` for profile
-  `development-presentation-provider-v5-1`. The transaction rolled the provider
-  back to stopped containers and deferred ingress. It did not launch a
-  duplicate browser or mutate production.
-- Fresh blocker evidence: PID and process group `62232` still execute
-  `/opt/google/chrome/chrome`, started August 29, 2026 at 00:22 CDT, with the
-  exact v5-1 development profile path, and Chrome's `SingletonLock` still names
-  that PID. Current Service State projects a ready owner and an owned `closing`
-  lifecycle for process group `62232`, but it has no principal binding, browser
-  process identity, browser row, or session row that completes the authority
-  join. The lease remains observation-only with
-  `runtime_owner_principal_binding_missing`; its profile identity digest also
-  differs from the lifecycle owner's digest. It authorizes only read and
-  reconciliation-plan actions, not close, release, apply, or cleanup.
-- Effects and hard stop: no signal, force close, broad cleanup, provider retry,
-  manual authentication, ingress publication, production installation, or
-  production state mutation was performed. The fresh OS census also confirmed
-  that the unrelated production Guacamole stack remains running. The
-  development dashboard, backend, runtime host, lane manifests, and
-  development-only skill now resolve to the current isolated candidate.
-- Remaining gate: an operator must explicitly authorize targeted termination
-  of only PID and process group `62232` after executable, start time, profile
-  path, and lock ownership are revalidated. After verified exit and profile
-  lock release, rerun provider apply, complete one route-bound CDP-free manual
-  seed without credentials, record acquisition, presentation, and
-  authentication as separate axes, and take the final post-acceptance OS
-  census. Slice J remains ineligible until all of those Slice I gates pass.
+- Objective: complete isolated provider-backed development acceptance for
+  acquisition, recovery, manual seeding, exact close, durable operator handoff,
+  and post-close process residue without borrowing production authority.
+- Source commits: the completed Slice I repair series is `35e978f6`,
+  `1c96ac67`, `8c2e4d70`, `3d3e85dd`, `b20ea2ff`, `5aff7463`, `fba50544`,
+  `0dc0f220`, and `802eb068` on `main`, all pushed to `origin/main`.
+- Installed candidate: optimized development generation
+  `0.28.0-7294a8ccdf49` is selected with executable SHA-256
+  `7294a8ccdf49a3862b47834789ca986630b0620da4779ebf5fd94615e862b3b1`.
+  The development dashboard, backend, runtime host, lane manifest, and
+  development-only skill all resolve to this generation. Production selected
+  generation remains `0.28.0-2851117fd877-04e7cf4c8b54`.
+- Provider authority: provider configuration gained the authenticated local
+  dashboard origin as `publicOperatorUrl`, additive manifest migration accepts
+  only that missing field, and the provider inventory now projects the complete
+  route descriptor into both Service route authorities. The development
+  provider is configured and ready, its preflight passes, and its containers,
+  six route identities, four warm displays, ports, database schema, secrets
+  permissions, helper, and shared XRDP substrate remain development-isolated.
+- Initial error disposition: two early manual-seeding calls reached the
+  `default` lane because the caller omitted the top-level `sessionName`. Their
+  `existing_session_profile_identity_unproven` results occurred before Chrome
+  launch and rolled back the exact route and display lease. Supplying the
+  registered top-level session routed the request to
+  `development-presentation-provider-v5-1` and removed that caller-routing
+  error without weakening the identity interlock.
+- Durable handoff acceptance: both debug and optimized installed candidates
+  returned an opaque dashboard handoff for the exact development session.
+  Final optimized acquisition reported `operatorVisible.state=ready`, process
+  binding, active-window ownership, authorized geometry, topmost-window
+  ownership, and an unoccluded capture region. Authentication remained the
+  separate `not_probed` axis, with manual sign-in followed by exact close and a
+  later authentication probe as the advertised continuation.
+- Exact close and residue: final optimized close for PID and process group
+  `91282` succeeded politely, did not require force kill, advanced the lifecycle
+  to `seeding_closed_unverified`, and returned the exact route to available.
+  A dedicated waiter now retains each detached manual Chrome child until exit,
+  preventing runtime-host zombies. Fresh OS readback immediately after close
+  found neither PID `91282`, its process group, a development Chrome process,
+  nor a relevant zombie.
+- Launch and failure safety: failed route-bound launches retain enough exact
+  process and profile identity for compensation, exact termination follows the
+  normal close path before ownership-proven fallback, and X11 scene publication
+  retries only bounded transient Openbox states while preserving compensation
+  time. Three disposable open, URL-read, close, and residue iterations passed
+  after each final candidate installation.
+- Validation: Rust formatting, strict Clippy, focused provider inventory,
+  route-open, route-host, X11, Chrome lifecycle, and detached-child tests passed.
+  The full Rust harness passed twice after the final route-descriptor and child
+  reaping changes, including 1,705 parallel-safe tests with 57 ignored and all
+  required serial environment partitions. Development provider fixtures and
+  provider preflight also passed.
+- Fresh resource census: all three development systemd services are active on
+  generation `0.28.0-7294a8ccdf49`; the development Guacamole, guacd, and
+  PostgreSQL containers are running and healthy where health checks apply; the
+  authenticated dashboard and provider listeners are present. Seven older
+  `0.28.0-06a24ebb6035` runtime hosts belong to named Plan 0095 tmux lanes,
+  retain active listeners, and have no Chrome children. They are foreign to
+  this acceptance and were preserved rather than treated as cleanup targets.
+- Effects and remaining gate: all effects were confined to the development
+  runtime and development provider. No manual credentials were entered, no
+  authentication claim was made, and no production install, Service State,
+  browser, route, profile, provider, or process was changed. Slice I is
+  complete. Slice J remains gated on explicit production candidate and consumer
+  acceptance authority.
