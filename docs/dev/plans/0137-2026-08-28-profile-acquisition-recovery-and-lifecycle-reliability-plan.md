@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `first_packet_checkpoint_complete_slice_c_not_started`
+Execution state: `slice_c_complete_slice_d_not_started`
 
 Lane: P137
 
@@ -793,3 +793,34 @@ checkpoint is durable and the plan's identity model remains coherent.
   additional mitigation actions, state-provenance repair, dashboard actions,
   migration, installation compatibility, isolated development acceptance, and
   every production gate remain open under their later slices.
+
+## Slice C Checkpoint | 2026-08-28
+
+- Objective: make authenticated profile acquisition the stable client entry
+  point and remove route and replacement-session choreography from callers.
+- Source commit: `69d75aa1` on `main`, pushed to `origin/main`.
+- Contract: `service recovery acquire`, HTTP
+  `POST /api/service/profiles/acquire`, MCP `service_profile_acquire`, and
+  generated helper `acquireServiceProfile()` return exactly `acquired`,
+  `recovery_available`, or `blocked`. The acquisition request rejects a
+  client-supplied daemon route.
+- Decision behavior: an exact process-backed lane with a current matching
+  principal binding is reused; current foreign-principal authority is a hard
+  blocker with wait or coordination recourse; missing or inconsistent binding
+  produces a reviewed `reconcile_exact_principal_profile_identity` plan; and
+  only conclusive terminal-owner recovery auto-applies before one retry.
+- Validation: Rust formatting and Clippy passed; 11 focused recovery and parser
+  tests passed; service contract metadata, API and MCP parity, route-confusion
+  gates, service collection no-launch parity, the complete generated-client
+  suite, and the docs production build passed.
+- Exclusions: provider-backed and CDP streaming live tests were not run because
+  Slice C requires no provider or browser effect. The repository skill changed
+  as required, while the shared user-scoped installed skill was intentionally
+  not overwritten during source validation.
+- Effects and rollback: source changes only. No development or production
+  runtime, profile, route, process, provider, or installation effect occurred.
+  Reverting `69d75aa1` restores the prior public surface.
+- Remaining gate: Slice D provenance repair, exact inert-record retirement,
+  the remaining mitigation registry, CDP-free manual seeding, dashboard and
+  migration completion, isolated development acceptance, and every production
+  gate remain open.
