@@ -832,7 +832,7 @@ fn apply_existing_session_profile_selection(
 }
 
 fn exact_terminal_owner_allows_explicit_profile_relaunch(
-    options: &LaunchOptions,
+    options: &mut LaunchOptions,
     command: &Value,
     session_id: &str,
     state: &ServiceState,
@@ -961,7 +961,17 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
         .runtime_owner_registry
         .principal_bindings
         .contains_key(&profile_digest);
-    Ok(exact_terminal_owner && owner_projection_absent && principal_projection_absent)
+    if !(exact_terminal_owner && owner_projection_absent && principal_projection_absent) {
+        return Ok(false);
+    }
+    options.runtime_profile = Some(profile_id.to_string());
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
 }
 
 fn apply_authenticated_orphaned_owner_recourse(

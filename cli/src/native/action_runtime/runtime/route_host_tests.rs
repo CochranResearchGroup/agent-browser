@@ -1075,8 +1075,8 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
 
     assert_eq!(selection, None);
-    assert_eq!(options.runtime_profile, None);
-    assert_eq!(options.profile, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), Some(profile_id));
 
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Exclusive;
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
