@@ -25,7 +25,6 @@ lanes:
     checkpoint: 3ee177181fe0b9946c85d657588e8ed4dac7c767
     remote_ref: refs/remotes/origin/main
     integration: direct
-    dependencies:
-      - P137
+    dependencies: []
     overlaps: []
     updated_at: 2026-08-29
