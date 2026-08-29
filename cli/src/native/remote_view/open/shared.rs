@@ -36,6 +36,7 @@ pub(crate) use crate::native::remote_view_handoff::{
     route_bound_handoff_operator_visible,
     route_bound_handoff_operator_visible_failure_if_not_ready, route_bound_handoff_plan,
     route_bound_handoff_post_checkout_proof, route_bound_handoff_pre_launch_failure_cleanup,
+    route_bound_handoff_presentation_stage_failure,
     route_bound_handoff_reused_browser_launch_result, route_bound_handoff_tab_open_failure,
     route_bound_handoff_target_url_readiness, route_bound_handoff_visible_window_proof_failure,
     route_bound_manual_seeding_operator_visible, shared_profile_acquisition_result,

@@ -231,6 +231,17 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         })
     }
 
+    fn stage_visible_window(
+        &mut self,
+        _request: StageVisibleWindowRequest,
+    ) -> RouteBoundOpenFuture<'_, StageVisibleWindowResult> {
+        Box::pin(async move {
+            self.effect("stage_visible_window", json!({ "state": "staged" }))
+                .await
+                .map(|value| StageVisibleWindowResult::from_compatibility(value).unwrap())
+        })
+    }
+
     fn observe_visible_window(
         &mut self,
         _request: VisibleWindowRequest,
@@ -1384,12 +1395,14 @@ async fn manual_seeding_uses_reserved_route_before_cdp_free_launch_and_persists_
             "observe_browser",
             "ensure_display_access",
             "launch_cdp_free_browser",
+            "stage_visible_window",
             "observe_visible_window",
             "observe_operator_access",
             "checkout_route",
         ]
     );
     assert_eq!(opened["operatorVisible"]["state"], "ready");
+    assert_eq!(opened["focus"]["state"], "staged");
     assert_eq!(opened["lifecycleState"], "manual_seeding");
     assert_eq!(opened["cdpAttachmentAllowed"], false);
     assert_eq!(opened["authentication"]["state"], "not_probed");

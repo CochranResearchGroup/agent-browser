@@ -170,5 +170,6 @@ effect_record!(CloseCreatedTargetResult, "close_created_target");
 effect_record!(CloseCreatedBrowserResult, "close_created_browser");
 effect_record!(CheckoutRouteResult, "checkout_route");
 effect_record!(DisplayAccessResult, "ensure_display_access");
+effect_record!(StageVisibleWindowResult, "stage_visible_window");
 effect_record!(VisibleWindowResult, "observe_visible_window");
 effect_record!(OperatorAccessResult, "observe_operator_access");

@@ -22,7 +22,8 @@ use super::runtime::{
     AdoptRetainedBrowserRequest, CheckoutRouteRequest, DaemonRouteBoundOpenRepository,
     DaemonRouteBoundOpenRuntime, DisplayAccessRequest, FocusTargetRequest, LaunchBrowserRequest,
     OperatorAccessRequest, OperatorAccessResult, RouteBoundBrowserObservation,
-    RouteBoundOpenRepository, RouteBoundOpenRuntime, VisibleWindowRequest,
+    RouteBoundOpenRepository, RouteBoundOpenRuntime, StageVisibleWindowRequest,
+    VisibleWindowRequest,
 };
 use super::runtime_model::*;
 use super::shared::*;
@@ -1058,7 +1059,42 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         }
     };
     let focus = if manual_seeding {
-        json!({ "state": "not_applicable", "reason": "manual_seeding_has_no_cdp_target" })
+        match supervisor
+            .forward(
+                "stage_visible_window",
+                runtime.stage_visible_window(StageVisibleWindowRequest {
+                    binding: route_binding.clone(),
+                    browser_pid: launched_browser_pid,
+                }),
+            )
+            .await
+        {
+            Ok(staging) => staging.into_value(),
+            Err(error) => {
+                let error_message = error.compatibility_message().to_string();
+                let failure_context = route_bound_handoff_presentation_stage_failure();
+                let failure = remote_view_open_rollback_failure_after_cleanup(
+                    runtime,
+                    supervisor,
+                    RemoteViewOpenFailureCleanupInput {
+                        repository,
+                        lease: &acquisition_lease,
+                        phase: failure_context.phase,
+                        error: &error_message,
+                        rollback_cleanup: &failure_context.cleanup,
+                        launch: &launch,
+                        tab: Some(&tab),
+                    },
+                )
+                .await?;
+                return Err(route_bound_execution_error_with_cleanup(
+                    error,
+                    failure_context.phase,
+                    failure.rollback,
+                    &failure.summary,
+                ));
+            }
+        }
     } else {
         let focus_command = route_bound_handoff_focus_command(&cmd, &tab, &session_id);
         match supervisor

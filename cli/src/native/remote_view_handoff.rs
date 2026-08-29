@@ -2398,6 +2398,13 @@ pub fn route_bound_handoff_focus_failure() -> RouteBoundHandoffRollbackFailure {
     }
 }
 
+pub fn route_bound_handoff_presentation_stage_failure() -> RouteBoundHandoffRollbackFailure {
+    RouteBoundHandoffRollbackFailure {
+        phase: "presentation_stage_failed",
+        cleanup: route_bound_handoff_pending_rollback_cleanup("presentation_stage_failed"),
+    }
+}
+
 pub fn route_bound_handoff_visible_window_proof_failure() -> RouteBoundHandoffRollbackFailure {
     RouteBoundHandoffRollbackFailure {
         phase: "proof_failed",

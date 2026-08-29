@@ -67,6 +67,11 @@ pub(crate) struct DisplayAccessRequest {
     pub(crate) binding: RemoteViewRouteBinding,
 }
 #[derive(Debug, Clone)]
+pub(crate) struct StageVisibleWindowRequest {
+    pub(crate) binding: RemoteViewRouteBinding,
+    pub(crate) browser_pid: Option<u32>,
+}
+#[derive(Debug, Clone)]
 pub(crate) struct VisibleWindowRequest {
     pub(crate) binding: RemoteViewRouteBinding,
     pub(crate) browser_pid: Option<u32>,
@@ -129,6 +134,12 @@ pub(crate) trait RouteBoundOpenRuntime {
         &mut self,
         request: DisplayAccessRequest,
     ) -> RouteBoundOpenFuture<'_, DisplayAccessResult>;
+    /// Stage the exact process-owned browser window for operator use without
+    /// requiring a CDP target. The coordinator always re-observes afterward.
+    fn stage_visible_window(
+        &mut self,
+        request: StageVisibleWindowRequest,
+    ) -> RouteBoundOpenFuture<'_, StageVisibleWindowResult>;
     fn observe_visible_window(
         &mut self,
         request: VisibleWindowRequest,
@@ -481,6 +492,50 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
                 .map_err(|message| {
                     route_bound_runtime_issue("ensure_display_access", message, None)
                 })
+        })
+    }
+    fn stage_visible_window(
+        &mut self,
+        request: StageVisibleWindowRequest,
+    ) -> RouteBoundOpenFuture<'_, StageVisibleWindowResult> {
+        Box::pin(async move {
+            let browser_pid = request.browser_pid.ok_or_else(|| {
+                route_bound_runtime_issue(
+                    "stage_visible_window",
+                    "operator_presentation_process_missing: manual seeding has no browser process identity"
+                        .to_string(),
+                    None,
+                )
+            })?;
+            let display_name = request
+                .binding
+                .launch_display_name
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    route_bound_runtime_issue(
+                        "stage_visible_window",
+                        format!(
+                            "route_display_missing: route '{}' has no launch display",
+                            request.binding.route_id
+                        ),
+                        None,
+                    )
+                })?;
+            let snapshot =
+                crate::native::x11_scene::snapshot_browser_scene(browser_pid, display_name)
+                    .map_err(|message| {
+                        route_bound_runtime_issue("stage_visible_window", message, None)
+                    })?;
+            crate::native::x11_scene::stage_browser_scene(&snapshot).map_err(|message| {
+                route_bound_runtime_issue("stage_visible_window", message, None)
+            })?;
+            StageVisibleWindowResult::from_compatibility(json!({
+                "state": "staged",
+                "pid": browser_pid,
+                "displayName": display_name,
+            }))
+            .map_err(|message| route_bound_runtime_issue("stage_visible_window", message, None))
         })
     }
     fn observe_visible_window(
