@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_d_complete_slice_e_not_started`
+Execution state: `slice_e_complete_slice_f_not_started`
 
 Lane: P137
 
@@ -860,3 +860,33 @@ checkpoint is durable and the plan's identity model remains coherent.
   to exact mitigation actions. Public retirement surfaces and dashboard actions
   remain assigned to Slice G, and migration execution remains assigned to
   Slice H.
+
+## Slice E Checkpoint | 2026-08-28
+
+- Objective: make recurring lifecycle blockers discoverable as server-owned,
+  exact-profile mitigation actions instead of client-local repair recipes.
+- Source commit: `e5fc37fd` on `main`, pushed to `origin/main`.
+- Registry: mitigation metadata now covers exact principal reconciliation,
+  missing owner-principal binding, owner-generation repair, expired ownerless
+  lease release, exact live-browser adoption, subordinate binding repair,
+  route-bound manual-seeding acquisition, terminal installation bookkeeping,
+  terminal-owner supersession, and exact inert-record retirement.
+- Action contract: every descriptor names its server-owned executor, automatic
+  or reviewed apply posture, exact-profile-graph authority, blocker codes,
+  preconditions, and compensation. Clients discover the registry and blocker
+  dominance order from Service contract metadata.
+- Dominance: current live foreign-principal authority remains the highest hard
+  blocker. Identity inconsistency precedes identity uncertainty, followed by
+  principal, owner, subordinate, lease, route, and terminal installation
+  defects.
+- Validation: Rust formatting and strict Clippy passed; all nine frozen Plan
+  0137 fixture recovery classes resolve to a registry action; every recoverable
+  dominant blocker has a nonempty executor, preconditions, compensation, and
+  exact-profile authority; Service contract metadata tests passed.
+- Effects and rollback: source metadata and provider-free tests only. No live
+  profile, lease, browser, route, process, provider, or installation state was
+  changed. Reverting `e5fc37fd` restores the earlier registry.
+- Remaining gate: Slice F must implement the route-bound CDP-free manual
+  seeding executor named by the registry. Public parity and dashboard actions
+  remain assigned to Slice G, migration and install compatibility to Slice H,
+  and all development and production effects remain gated by Slices I and J.
