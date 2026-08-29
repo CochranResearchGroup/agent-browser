@@ -1113,6 +1113,28 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Optional retained browser route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
                     },
+                    "handoffId": {
+                        "type": "string",
+                        "description": "Opaque remote-view handoff id required to close the exact manual-seeding browser."
+                    },
+                    "remoteViewHandoffId": {
+                        "type": "string",
+                        "description": "Opaque handoff id used when acquiring or resolving a manual-seeding remote view."
+                    },
+                    "pid": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Exact verified manual-seeding browser process id required by the close action."
+                    },
+                    "expiresAt": {
+                        "type": "string",
+                        "description": "Caller-selected expiry timestamp for a short-lived browser retirement plan."
+                    },
+                    "plan": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Exact retirement plan returned by service_browser_retirement_plan and required unchanged by service_browser_retirement_apply."
+                    },
                     "format": {
                         "type": "string",
                         "enum": ["png"],

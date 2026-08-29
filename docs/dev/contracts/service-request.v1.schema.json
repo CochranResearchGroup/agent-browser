@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/service-request.v1.schema.json",
   "title": "agent-browser service request",
-  "description": "Stable input shape for HTTP POST /api/service/request and MCP service_request arguments. The action field is required for compatibility; serviceName, agentName, and taskName should be supplied when known so retained jobs remain traceable.",
+  "description": "Stable input shape for HTTP POST /api/service/request and MCP service_request arguments. The action field is required for compatibility; serviceName, agentName, and taskName should be supplied when known so retained jobs remain traceable. Manual seeding uses an opaque handoff plus exact PID, while inert browser retirement requires a short-lived plan before apply.",
   "type": "object",
   "required": [
     "action"
@@ -38,6 +38,8 @@
         "view_focus",
         "view_takeover",
         "remote_view_open",
+        "service_profile_manual_seeding_acquire",
+        "service_profile_manual_seeding_close",
         "service_remote_view_handoff_resolve",
         "service_remote_view_route_preflight",
         "service_remote_view_browser_reattach",
@@ -110,6 +112,9 @@
         "clear",
         "service_browser_close",
         "service_browser_repair",
+        "service_browser_contamination_report",
+        "service_browser_retirement_plan",
+        "service_browser_retirement_apply",
         "service_prune_retained",
         "service_repair_retained"
       ],
@@ -478,6 +483,31 @@
     "manualLoginLaunch": {
       "type": "boolean",
       "description": "For action=remote_view_open, use the minimal headed Chrome flag posture from runtime login, pass the requested URL as Chrome's initial destination, and reuse that same-origin target while retaining managed CDP and service-owned Route B lifecycle. Use only after the exact profile has been manually seeded and closed."
+    },
+    "handoffId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque durable handoff identity used by exact manual-seeding close and resolution actions."
+    },
+    "remoteViewHandoffId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque durable remote-view handoff identity. Provider route URLs are not accepted as substitutes."
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Exact process identity required by manual-seeding close."
+    },
+    "expiresAt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "RFC 3339 expiry bound for a reviewed browser-retirement plan."
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Exact server-produced plan supplied unchanged to its matching reviewed apply action."
     }
   },
   "additionalProperties": false

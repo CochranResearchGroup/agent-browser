@@ -29,6 +29,8 @@ export type ServiceRequestAction =
   | "view_focus"
   | "view_takeover"
   | "remote_view_open"
+  | "service_profile_manual_seeding_acquire"
+  | "service_profile_manual_seeding_close"
   | "service_remote_view_handoff_resolve"
   | "service_remote_view_route_preflight"
   | "service_remote_view_browser_reattach"
@@ -101,6 +103,9 @@ export type ServiceRequestAction =
   | "clear"
   | "service_browser_close"
   | "service_browser_repair"
+  | "service_browser_contamination_report"
+  | "service_browser_retirement_plan"
+  | "service_browser_retirement_apply"
   | "service_prune_retained"
   | "service_repair_retained";
 
@@ -141,6 +146,9 @@ export interface ServiceRequest {
   controllerLeaseId?: string;
   operationId?: string;
   sessionName?: string;
+  handoffId?: string;
+  remoteViewHandoffId?: string;
+  expiresAt?: string;
   targetServiceIds?: string[];
   targetServices?: string[];
   siteIds?: string[];
@@ -157,6 +165,7 @@ export interface ServiceRequest {
   maxRequestEntries?: number;
   cdpPort?: number;
   maxBytes?: number;
+  pid?: number;
   blockedByManualAction?: boolean;
   manualSeedingRequired?: boolean;
   allowManualAction?: boolean;
@@ -178,6 +187,7 @@ export interface ServiceRequest {
   fileTransfer?: Record<string, unknown>;
   locator?: Record<string, unknown>;
   recipe?: Record<string, unknown>;
+  plan?: Record<string, unknown>;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -1027,6 +1037,44 @@ export interface ServiceRoutePoolRepairData {
   recommendedNextStep?: string;
 }
 
+export interface ServiceManualSeedingAcquireData extends ServiceRemoteViewRouteMutationData {
+  reused?: boolean;
+  profileId: string;
+  targetServiceId: string;
+  pid?: number | null;
+  handoffId?: string | null;
+  handoffUrl?: string | null;
+  operatorVisible?: Record<string, unknown>;
+  authentication?: Record<string, unknown>;
+  nextAction?: string;
+}
+
+export interface ServiceManualSeedingCloseData {
+  closed: boolean;
+  profileId: string;
+  targetServiceId: string;
+  handoffId: string;
+  pid: number;
+  shutdown: Record<string, unknown>;
+  routeRelease: Record<string, unknown>;
+  lifecycle: Record<string, unknown>;
+  attachableRelaunch: Record<string, unknown>;
+  authenticationProbe: Record<string, unknown>;
+}
+
+export interface ServiceBrowserContaminationReportData {
+  report: Record<string, unknown>;
+}
+
+export interface ServiceBrowserRetirementPlanData {
+  plan: Record<string, unknown>;
+}
+
+export interface ServiceBrowserRetirementApplyData {
+  receipt: Record<string, unknown>;
+  replayed: boolean;
+}
+
 export interface ServiceViewerLeaseMutationData {
   status: string;
   routeId?: string | null;
@@ -1417,6 +1465,11 @@ export interface ServiceRequestActionDataMap {
   service_remote_view_route_checkout: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_release: ServiceRemoteViewRouteMutationData;
   service_route_pool_repair: ServiceRoutePoolRepairData;
+  service_profile_manual_seeding_acquire: ServiceManualSeedingAcquireData;
+  service_profile_manual_seeding_close: ServiceManualSeedingCloseData;
+  service_browser_contamination_report: ServiceBrowserContaminationReportData;
+  service_browser_retirement_plan: ServiceBrowserRetirementPlanData;
+  service_browser_retirement_apply: ServiceBrowserRetirementApplyData;
   service_viewer_lease_request: ServiceViewerLeaseMutationData;
   service_viewer_lease_heartbeat: ServiceViewerLeaseMutationData;
   service_viewer_lease_release: ServiceViewerLeaseMutationData;
@@ -1879,6 +1932,62 @@ export interface ServiceRoutePoolRepairOptions extends Omit<ServiceRequest, "act
   params?: Record<string, unknown>;
 }
 
+export interface ServiceManualSeedingAcquireOptions extends Omit<ServiceRequest, "action" | "params"> {
+  profileId: string;
+  targetServiceId: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceManualSeedingCloseOptions extends ServiceManualSeedingAcquireOptions {
+  handoffId: string;
+  pid: number;
+}
+
+export interface ServiceBrowserContaminationReportOptions extends Omit<ServiceRequest, "action" | "params"> {
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceBrowserRetirementPlanOptions extends Omit<ServiceRequest, "action" | "params"> {
+  browserId: string;
+  expiresAt: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceBrowserRetirementApplyOptions extends Omit<ServiceRequest, "action" | "params"> {
+  plan: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceManualSeedingAcquireHttpOptions extends ServiceManualSeedingAcquireOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceManualSeedingCloseHttpOptions extends ServiceManualSeedingCloseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceBrowserContaminationReportHttpOptions extends ServiceBrowserContaminationReportOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceBrowserRetirementPlanHttpOptions extends ServiceBrowserRetirementPlanOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceBrowserRetirementApplyHttpOptions extends ServiceBrowserRetirementApplyOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceViewerLeaseRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   routeId: string;
   viewerId?: string;
@@ -2046,6 +2155,21 @@ export declare function createServiceRemoteViewRouteReleaseRequest(
 export declare function createServiceRoutePoolRepairRequest(
   input?: ServiceRoutePoolRepairOptions,
 ): ServiceRequestForAction<"service_route_pool_repair">;
+export declare function createServiceManualSeedingAcquireRequest(
+  input: ServiceManualSeedingAcquireOptions,
+): ServiceRequestForAction<"service_profile_manual_seeding_acquire">;
+export declare function createServiceManualSeedingCloseRequest(
+  input: ServiceManualSeedingCloseOptions,
+): ServiceRequestForAction<"service_profile_manual_seeding_close">;
+export declare function createServiceBrowserContaminationReportRequest(
+  input?: ServiceBrowserContaminationReportOptions,
+): ServiceRequestForAction<"service_browser_contamination_report">;
+export declare function createServiceBrowserRetirementPlanRequest(
+  input: ServiceBrowserRetirementPlanOptions,
+): ServiceRequestForAction<"service_browser_retirement_plan">;
+export declare function createServiceBrowserRetirementApplyRequest(
+  input: ServiceBrowserRetirementApplyOptions,
+): ServiceRequestForAction<"service_browser_retirement_apply">;
 export declare function createServiceViewerLeaseRequest(
   input: ServiceViewerLeaseRequestOptions,
 ): ServiceRequestForAction<"service_viewer_lease_request">;
@@ -2192,6 +2316,21 @@ export declare function requestServiceRemoteViewRouteRelease(
 export declare function requestServiceRoutePoolRepair(
   options: ServiceRoutePoolRepairHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRoutePoolRepairData>>;
+export declare function requestServiceManualSeedingAcquire(
+  options: ServiceManualSeedingAcquireHttpOptions,
+): Promise<ServiceRequestResponse<ServiceManualSeedingAcquireData>>;
+export declare function requestServiceManualSeedingClose(
+  options: ServiceManualSeedingCloseHttpOptions,
+): Promise<ServiceRequestResponse<ServiceManualSeedingCloseData>>;
+export declare function requestServiceBrowserContaminationReport(
+  options: ServiceBrowserContaminationReportHttpOptions,
+): Promise<ServiceRequestResponse<ServiceBrowserContaminationReportData>>;
+export declare function requestServiceBrowserRetirementPlan(
+  options: ServiceBrowserRetirementPlanHttpOptions,
+): Promise<ServiceRequestResponse<ServiceBrowserRetirementPlanData>>;
+export declare function requestServiceBrowserRetirementApply(
+  options: ServiceBrowserRetirementApplyHttpOptions,
+): Promise<ServiceRequestResponse<ServiceBrowserRetirementApplyData>>;
 export declare function requestServiceViewerLease(
   options: ServiceViewerLeaseRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;

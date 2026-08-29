@@ -73,6 +73,16 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseOptions} ServiceRemoteViewRouteReleaseOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairHttpOptions} ServiceRoutePoolRepairHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairOptions} ServiceRoutePoolRepairOptions
+ * @typedef {import('./service-request.generated.js').ServiceManualSeedingAcquireHttpOptions} ServiceManualSeedingAcquireHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceManualSeedingAcquireOptions} ServiceManualSeedingAcquireOptions
+ * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseHttpOptions} ServiceManualSeedingCloseHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseOptions} ServiceManualSeedingCloseOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportHttpOptions} ServiceBrowserContaminationReportHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportOptions} ServiceBrowserContaminationReportOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementPlanHttpOptions} ServiceBrowserRetirementPlanHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementPlanOptions} ServiceBrowserRetirementPlanOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementApplyHttpOptions} ServiceBrowserRetirementApplyHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementApplyOptions} ServiceBrowserRetirementApplyOptions
  * @typedef {import('./service-request.generated.js').ServiceTabHandle} ServiceTabHandle
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
@@ -1318,6 +1328,66 @@ export function createServiceRoutePoolRepairRequest(input = {}) {
 }
 
 /**
+ * @param {ServiceManualSeedingAcquireOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceManualSeedingAcquireRequest(input) {
+  assertPlainObject(input, 'manual-seeding acquire request');
+  return createServiceRequest({
+    ...input,
+    action: 'service_profile_manual_seeding_acquire',
+  });
+}
+
+/**
+ * @param {ServiceManualSeedingCloseOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceManualSeedingCloseRequest(input) {
+  assertPlainObject(input, 'manual-seeding close request');
+  return createServiceRequest({
+    ...input,
+    action: 'service_profile_manual_seeding_close',
+  });
+}
+
+/**
+ * @param {ServiceBrowserContaminationReportOptions} [input]
+ * @returns {ServiceRequest}
+ */
+export function createServiceBrowserContaminationReportRequest(input = {}) {
+  assertPlainObject(input, 'browser contamination report request');
+  return createServiceRequest({
+    ...input,
+    action: 'service_browser_contamination_report',
+  });
+}
+
+/**
+ * @param {ServiceBrowserRetirementPlanOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceBrowserRetirementPlanRequest(input) {
+  assertPlainObject(input, 'browser retirement plan request');
+  return createServiceRequest({
+    ...input,
+    action: 'service_browser_retirement_plan',
+  });
+}
+
+/**
+ * @param {ServiceBrowserRetirementApplyOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceBrowserRetirementApplyRequest(input) {
+  assertPlainObject(input, 'browser retirement apply request');
+  return createServiceRequest({
+    ...input,
+    action: 'service_browser_retirement_apply',
+  });
+}
+
+/**
  * @param {ServiceViewerLeaseRequestOptions} input
  * @returns {ServiceRequest}
  */
@@ -2232,6 +2302,56 @@ export async function requestServiceRoutePoolRepair({ baseUrl, fetch = globalThi
     fetch,
     signal,
     request: createServiceRoutePoolRepairRequest(request),
+  });
+}
+
+/** @param {ServiceManualSeedingAcquireHttpOptions} options */
+export async function requestServiceManualSeedingAcquire({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceManualSeedingAcquireRequest(request),
+  });
+}
+
+/** @param {ServiceManualSeedingCloseHttpOptions} options */
+export async function requestServiceManualSeedingClose({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceManualSeedingCloseRequest(request),
+  });
+}
+
+/** @param {ServiceBrowserContaminationReportHttpOptions} options */
+export async function requestServiceBrowserContaminationReport({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceBrowserContaminationReportRequest(request),
+  });
+}
+
+/** @param {ServiceBrowserRetirementPlanHttpOptions} options */
+export async function requestServiceBrowserRetirementPlan({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceBrowserRetirementPlanRequest(request),
+  });
+}
+
+/** @param {ServiceBrowserRetirementApplyHttpOptions} options */
+export async function requestServiceBrowserRetirementApply({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceBrowserRetirementApplyRequest(request),
   });
 }
 

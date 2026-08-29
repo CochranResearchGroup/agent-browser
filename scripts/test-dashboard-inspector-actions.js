@@ -220,6 +220,27 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /data-testid="browser-retirement-preview"[\s\S]*Affected identity:[\s\S]*Expires:[\s\S]*Risk checks:[\s\S]*Compensation:/,
+  'Selected-browser retirement must preview affected identity, risk, compensation, and expiry',
+);
+assert.match(
+  servicePanel,
+  /<AlertDialog>[\s\S]*Retire exact inert browser record\?[\s\S]*Apply exact plan/,
+  'Selected-browser retirement apply must use a shadcn AlertDialog confirmation',
+);
+assert.match(
+  servicePanel,
+  /data-testid="browser-retirement-receipt"[\s\S]*Retirement receipt[\s\S]*Result:[\s\S]*Applied:/,
+  'Selected-browser retirement must present the terminal receipt',
+);
+assert.match(
+  servicePanel,
+  /onPlanBrowserRetirement: planServiceBrowserRetirement[\s\S]*onApplyBrowserRetirement: applyServiceBrowserRetirement[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident[\s\S]*onResolveIncident: resolveInspectorIncident/,
+  'Selected-browser retirement and incident handling must remain distinct inspector actions',
+);
+
+assert.match(
+  servicePanel,
   /function ServiceTabRow\(\{[\s\S]*viewStreamAvailable,[\s\S]*onInspect,[\s\S]*onSelect,[\s\S]*\}: \{[\s\S]*viewStreamAvailable\?: boolean;[\s\S]*onInspect\?: \(tab: ServiceTab\) => void;[\s\S]*onSelect: \(tab: ServiceTab\) => void;[\s\S]*\}\) \{[\s\S]*aria-label=\{`Inspect tab \$\{tab\.id\}`\}[\s\S]*\{viewStreamAvailable && onInspect && \([\s\S]*onClick=\{\(\) => onInspect\(tab\)\}[\s\S]*Control/,
   'Service tab rows must keep a gated Control action wired to the tab inspect callback',
 );

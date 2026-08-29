@@ -880,9 +880,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_reconcile" => handle_service_reconcile(cmd).await,
             "service_browser_close" => handle_service_browser_close(cmd, state).await,
             "service_browser_repair" => handle_service_browser_repair(cmd).await,
-            "service_browser_contamination_report"
-            | "service_browser_retirement_plan"
-            | "service_browser_retirement_apply" => handle_service_browser_retirement_command(cmd),
+            "service_browser_contamination_report" =>
+                handle_service_browser_retirement_command(cmd),
+            "service_browser_retirement_plan" => handle_service_browser_retirement_command(cmd),
+            "service_browser_retirement_apply" => handle_service_browser_retirement_command(cmd),
             "service_resources" => handle_service_resources(cmd).await,
             "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
             "service_resources_write_monitor_summary" => {

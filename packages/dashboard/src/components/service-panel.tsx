@@ -205,6 +205,25 @@ export type ServiceBrowser = {
   lastError?: string | null;
 };
 
+export type ServiceBrowserRetirementPlan = {
+  schemaVersion?: string;
+  planId?: string;
+  browserId?: string;
+  recordRevision?: number;
+  evidenceDigest?: string;
+  createdAt?: string;
+  expiresAt?: string;
+  reasons?: string[];
+};
+
+export type ServiceBrowserRetirementReceipt = {
+  schemaVersion?: string;
+  planId?: string;
+  browserId?: string;
+  terminalResult?: string;
+  appliedAt?: string;
+};
+
 type ServicePanelProps = {
   onBrowserInspect?: (browser: ServiceBrowser) => void;
   onInspectSelection?: (selection: ServiceInspectorSelection) => void;
@@ -376,7 +395,13 @@ export type ServiceInspectorSelection =
 
 export type ServiceInspectorActions = {
   actingIncidentId?: string | null;
+  actingBrowserActionId?: string | null;
+  browserRetirementSupported?: boolean;
+  browserRetirementPlan?: ServiceBrowserRetirementPlan | null;
+  browserRetirementReceipt?: ServiceBrowserRetirementReceipt | null;
   onControlBrowser?: (browser: ServiceBrowser) => void;
+  onPlanBrowserRetirement?: (browser: ServiceBrowser) => void;
+  onApplyBrowserRetirement?: (plan: ServiceBrowserRetirementPlan) => void;
   onControlTab?: (tab: ServiceTab) => void;
   onSelectBrowserId?: (browserId: string) => void;
   onSelectProfileId?: (profileId: string) => void;
@@ -4359,11 +4384,23 @@ function BrowserDetailDialog({
   browser,
   projectedView,
   onInspectViewStream,
+  retirementSupported,
+  retirementPlan,
+  retirementReceipt,
+  retirementActing,
+  onPlanRetirement,
+  onApplyRetirement,
   onOpenChange,
 }: {
   browser: ServiceBrowser | null;
   projectedView?: ProjectedWorkspaceView | null;
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
+  retirementSupported?: boolean;
+  retirementPlan?: ServiceBrowserRetirementPlan | null;
+  retirementReceipt?: ServiceBrowserRetirementReceipt | null;
+  retirementActing?: boolean;
+  onPlanRetirement?: (browser: ServiceBrowser) => void;
+  onApplyRetirement?: (plan: ServiceBrowserRetirementPlan) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
@@ -4379,7 +4416,17 @@ function BrowserDetailDialog({
                 {browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}
               </DialogDescription>
             </DialogHeader>
-            <BrowserDetailContent browser={browser} projectedView={projectedView} onInspectViewStream={onInspectViewStream} />
+            <BrowserDetailContent
+              browser={browser}
+              projectedView={projectedView}
+              onInspectViewStream={onInspectViewStream}
+              retirementSupported={retirementSupported}
+              retirementPlan={retirementPlan}
+              retirementReceipt={retirementReceipt}
+              retirementActing={retirementActing}
+              onPlanRetirement={onPlanRetirement}
+              onApplyRetirement={onApplyRetirement}
+            />
           </>
         )}
       </DialogContent>
@@ -4394,6 +4441,12 @@ function BrowserDetailContent({
   onControlBrowser,
   onSelectProfileId,
   onSelectSessionId,
+  retirementSupported,
+  retirementPlan,
+  retirementReceipt,
+  retirementActing,
+  onPlanRetirement,
+  onApplyRetirement,
 }: {
   browser: ServiceBrowser;
   projectedView?: ProjectedWorkspaceView | null;
@@ -4401,6 +4454,12 @@ function BrowserDetailContent({
   onControlBrowser?: (browser: ServiceBrowser) => void;
   onSelectProfileId?: (profileId: string) => void;
   onSelectSessionId?: (sessionId: string) => void;
+  retirementSupported?: boolean;
+  retirementPlan?: ServiceBrowserRetirementPlan | null;
+  retirementReceipt?: ServiceBrowserRetirementReceipt | null;
+  retirementActing?: boolean;
+  onPlanRetirement?: (browser: ServiceBrowser) => void;
+  onApplyRetirement?: (plan: ServiceBrowserRetirementPlan) => void;
 }) {
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const primaryViewStream = projectedView?.stream ?? null;
@@ -4538,6 +4597,62 @@ function BrowserDetailContent({
           </div>
         </InspectorSection>
       )}
+      {isInertRetainedBrowserRecord(browser) && (
+        <InspectorSection title="Retirement" detail="Exact inert record only">
+          <div className="space-y-2 text-xs">
+            <p className="text-muted-foreground">
+              No PID, CDP endpoint, active session, route, or error evidence is attached. Retirement removes only this retained row and never terminates a process.
+            </p>
+            {!retirementPlan && !retirementReceipt && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!retirementSupported || retirementActing}
+                title={retirementSupported ? "Create a short-lived retirement plan preview." : "Service contract does not advertise browser retirement."}
+                onClick={() => onPlanRetirement?.(browser)}
+              >
+                Preview retirement
+              </Button>
+            )}
+            {retirementPlan && (
+              <div className="space-y-2" data-testid="browser-retirement-preview">
+                <p><span className="font-bold">Affected identity:</span> {retirementPlan.browserId ?? browser.id}</p>
+                <p><span className="font-bold">Plan:</span> {retirementPlan.planId ?? "missing"}</p>
+                <p><span className="font-bold">Expires:</span> {retirementPlan.expiresAt ?? "missing"}</p>
+                <p><span className="font-bold">Risk checks:</span> {(retirementPlan.reasons ?? []).join(", ") || "No reasons returned"}</p>
+                <p><span className="font-bold">Compensation:</span> A changed record or expired plan fails closed and requires a fresh preview.</p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" size="sm" variant="destructive" disabled={retirementActing}>Review and retire</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Retire exact inert browser record?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Apply plan {retirementPlan.planId ?? "missing"} to {retirementPlan.browserId ?? browser.id}. This removes one PID-less retained record and does not close or kill a process. The plan expires at {retirementPlan.expiresAt ?? "an unknown time"}.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => onApplyRetirement?.(retirementPlan)}>Apply exact plan</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
+            {retirementReceipt && (
+              <div className="space-y-1" data-testid="browser-retirement-receipt">
+                <p className="font-bold">Retirement receipt</p>
+                <p>Plan: {retirementReceipt.planId ?? "missing"}</p>
+                <p>Browser: {retirementReceipt.browserId ?? browser.id}</p>
+                <p>Result: {retirementReceipt.terminalResult ?? "unknown"}</p>
+                <p>Applied: {retirementReceipt.appliedAt ?? "unknown"}</p>
+              </div>
+            )}
+          </div>
+        </InspectorSection>
+      )}
       <InspectorEvidenceDisclosure
         items={[
           { label: "Browser ID", value: browser.id, code: true },
@@ -4582,6 +4697,12 @@ export function ServiceDetailInspector({
             onControlBrowser={actions.onControlBrowser}
             onSelectProfileId={actions.onSelectProfileId}
             onSelectSessionId={actions.onSelectSessionId}
+            retirementSupported={actions.browserRetirementSupported}
+            retirementPlan={actions.browserRetirementPlan}
+            retirementReceipt={actions.browserRetirementReceipt}
+            retirementActing={actions.actingBrowserActionId === selection.browser.id}
+            onPlanRetirement={actions.onPlanBrowserRetirement}
+            onApplyRetirement={actions.onApplyBrowserRetirement}
           />
         )}
         {selection.kind === "profile" && (
@@ -6766,6 +6887,8 @@ export function ServicePanel({
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedBrowserId, setSelectedBrowserId] = useState<string | null>(null);
+  const [browserRetirementPlan, setBrowserRetirementPlan] = useState<ServiceBrowserRetirementPlan | null>(null);
+  const [browserRetirementReceipt, setBrowserRetirementReceipt] = useState<ServiceBrowserRetirementReceipt | null>(null);
   const [selectedProfileAllocationId, setSelectedProfileAllocationId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
@@ -7220,6 +7343,8 @@ export function ServicePanel({
   );
   const browserCloseSupported = serviceRequestActions.has("service_browser_close");
   const browserRepairSupported = serviceRequestActions.has("service_browser_repair");
+  const browserRetirementSupported = serviceRequestActions.has("service_browser_retirement_plan")
+    && serviceRequestActions.has("service_browser_retirement_apply");
   const control = status?.control_plane;
   const serviceJobTimeoutMs =
     control?.service_job_timeout_ms ?? serviceState?.controlPlane?.serviceJobTimeoutMs ?? null;
@@ -7702,6 +7827,8 @@ export function ServicePanel({
     browser: ServiceBrowser,
     options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
   ) => {
+    setBrowserRetirementPlan(null);
+    setBrowserRetirementReceipt(null);
     setSelectedBrowserId(browser.id || null);
     if (options.syncWorkspace !== false && browser.id) {
       syncWorkspaceSelection({
@@ -7996,6 +8123,65 @@ export function ServicePanel({
       setActingBrowserActionId(null);
     }
   }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
+  const planServiceBrowserRetirement = useCallback(async (browser: ServiceBrowser) => {
+    if (!canFetch || !browser.id || !isInertRetainedBrowserRecord(browser)) return;
+    setActingBrowserActionId(browser.id);
+    setBrowserRetirementPlan(null);
+    setBrowserRetirementReceipt(null);
+    setError("");
+    try {
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_browser_retirement_plan",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: "preview-browser-retirement",
+          browserId: browser.id,
+          expiresAt,
+          jobTimeoutMs: 10000,
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<{ plan?: ServiceBrowserRetirementPlan }>;
+      if (!json.success || !json.data?.plan) throw new Error(json.error || "Browser retirement plan was not returned");
+      setBrowserRetirementPlan(json.data.plan);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Browser retirement planning failed");
+    } finally {
+      setActingBrowserActionId(null);
+    }
+  }, [activePort, activeSession, canFetch, operatorIdentity]);
+  const applyServiceBrowserRetirement = useCallback(async (plan: ServiceBrowserRetirementPlan) => {
+    const browserId = plan.browserId?.trim();
+    if (!canFetch || !browserId || !plan.planId) return;
+    setActingBrowserActionId(browserId);
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_browser_retirement_apply",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: "apply-browser-retirement",
+          plan,
+          jobTimeoutMs: 10000,
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<{ receipt?: ServiceBrowserRetirementReceipt }>;
+      if (!json.success || !json.data?.receipt) throw new Error(json.error || "Browser retirement receipt was not returned");
+      setBrowserRetirementReceipt(json.data.receipt);
+      setBrowserRetirementPlan(null);
+      await fetchService(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Browser retirement apply failed");
+    } finally {
+      setActingBrowserActionId(null);
+    }
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
   const runRetainedPrune = useCallback(async (apply: boolean) => {
     if (!canFetch) return;
     setRetainedPruneAction(apply ? "apply" : "dry-run");
@@ -8091,7 +8277,13 @@ export function ServicePanel({
     if (!onInspectorActionsChange) return;
     onInspectorActionsChange({
       actingIncidentId,
+      actingBrowserActionId,
+      browserRetirementSupported,
+      browserRetirementPlan,
+      browserRetirementReceipt,
       onControlBrowser: focusBrowserViewStream,
+      onPlanBrowserRetirement: planServiceBrowserRetirement,
+      onApplyBrowserRetirement: applyServiceBrowserRetirement,
       onControlTab: inspectTabViewStream,
       onSelectBrowserId: selectBrowserById,
       onSelectProfileId: selectProfileById,
@@ -8106,12 +8298,18 @@ export function ServicePanel({
     });
   }, [
     acknowledgeInspectorIncident,
+    actingBrowserActionId,
     actingIncidentId,
+    applyServiceBrowserRetirement,
+    browserRetirementPlan,
+    browserRetirementReceipt,
+    browserRetirementSupported,
     cancelInspectorJob,
     focusBrowserViewStream,
     inspectTabViewStream,
     manageProfileLease,
     onInspectorActionsChange,
+    planServiceBrowserRetirement,
     resolveInspectorIncident,
     selectBrowserById,
     selectJobById,
@@ -8265,8 +8463,18 @@ export function ServicePanel({
         browser={selectedBrowser}
         projectedView={selectedBrowser ? projectedViewByBrowserId.get(selectedBrowser.id) : null}
         onInspectViewStream={(stream, browser) => openViewStream(stream, browser)}
+        retirementSupported={browserRetirementSupported}
+        retirementPlan={browserRetirementPlan}
+        retirementReceipt={browserRetirementReceipt}
+        retirementActing={Boolean(selectedBrowser?.id && actingBrowserActionId === selectedBrowser.id)}
+        onPlanRetirement={planServiceBrowserRetirement}
+        onApplyRetirement={applyServiceBrowserRetirement}
         onOpenChange={(open) => {
-          if (!open) setSelectedBrowser(null);
+          if (!open) {
+            setSelectedBrowser(null);
+            setBrowserRetirementPlan(null);
+            setBrowserRetirementReceipt(null);
+          }
         }}
       />
       <ViewStreamInspectDialog

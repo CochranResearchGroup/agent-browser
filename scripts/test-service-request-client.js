@@ -26,6 +26,11 @@ import {
   createServiceRemoteViewOpenRequest,
   createServiceRemoteViewRouteReleaseRequest,
   createServiceRoutePoolRepairRequest,
+  createServiceManualSeedingAcquireRequest,
+  createServiceManualSeedingCloseRequest,
+  createServiceBrowserContaminationReportRequest,
+  createServiceBrowserRetirementPlanRequest,
+  createServiceBrowserRetirementApplyRequest,
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
@@ -74,6 +79,11 @@ import {
   requestServiceRemoteViewOpen,
   requestServiceRemoteViewHandoff,
   requestServiceRoutePoolRepair,
+  requestServiceManualSeedingAcquire,
+  requestServiceManualSeedingClose,
+  requestServiceBrowserContaminationReport,
+  requestServiceBrowserRetirementPlan,
+  requestServiceBrowserRetirementApply,
   requestServiceTab,
   requestServiceTabFromAccessPlan,
   requestServiceViewerLease,
@@ -2798,6 +2808,42 @@ async function main() {
       routePool: {},
     },
   });
+
+  assert.equal(
+    createServiceManualSeedingAcquireRequest({
+      profileId: 'contractor-portal',
+      targetServiceId: 'odollo-contractor-portal',
+    }).action,
+    'service_profile_manual_seeding_acquire',
+  );
+  assert.deepEqual(
+    createServiceManualSeedingCloseRequest({
+      profileId: 'contractor-portal',
+      targetServiceId: 'odollo-contractor-portal',
+      handoffId: 'handoff-seeding',
+      pid: 4242,
+    }),
+    {
+      action: 'service_profile_manual_seeding_close',
+      profileId: 'contractor-portal',
+      targetServiceId: 'odollo-contractor-portal',
+      handoffId: 'handoff-seeding',
+      pid: 4242,
+    },
+  );
+  assert.equal(
+    createServiceBrowserContaminationReportRequest().action,
+    'service_browser_contamination_report',
+  );
+  const retirementPlanRequest = createServiceBrowserRetirementPlanRequest({
+    browserId: 'browser-inert',
+    expiresAt: '2026-08-29T00:00:00Z',
+  });
+  assert.equal(retirementPlanRequest.action, 'service_browser_retirement_plan');
+  assert.equal(
+    createServiceBrowserRetirementApplyRequest({ plan: { planId: 'plan-1' } }).action,
+    'service_browser_retirement_apply',
+  );
   assert.equal(routePoolRepairRequest.action, 'service_route_pool_repair');
   assert.deepEqual(routePoolRepairRequest.params, {
     apply: false,
@@ -3403,6 +3449,31 @@ async function main() {
     stalePendingAcquisitions: true,
     acquisitionLeaseId: 'lease-terminal',
   });
+
+  for (const [request, action] of [
+    [requestServiceManualSeedingAcquire, 'service_profile_manual_seeding_acquire'],
+    [requestServiceManualSeedingClose, 'service_profile_manual_seeding_close'],
+    [requestServiceBrowserContaminationReport, 'service_browser_contamination_report'],
+    [requestServiceBrowserRetirementPlan, 'service_browser_retirement_plan'],
+    [requestServiceBrowserRetirementApply, 'service_browser_retirement_apply'],
+  ]) {
+    const workflow = createFetchRecorder({ success: true, data: {} });
+    const options = action === 'service_profile_manual_seeding_acquire'
+      ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal' }
+      : action === 'service_profile_manual_seeding_close'
+        ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal', handoffId: 'handoff-seeding', pid: 4242 }
+        : action === 'service_browser_retirement_plan'
+          ? { browserId: 'browser-inert', expiresAt: '2026-08-29T00:00:00Z' }
+          : action === 'service_browser_retirement_apply'
+            ? { plan: { planId: 'plan-1' } }
+            : {};
+    await request({
+      baseUrl: 'http://127.0.0.1:4849',
+      fetch: workflow.fetch,
+      ...options,
+    });
+    assert.equal(workflow.calls[0].body.action, action);
+  }
 
   const viewerWorkflow = createFetchRecorder({
     success: true,

@@ -175,6 +175,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "view_focus",
     "view_takeover",
     "remote_view_open",
+    "service_profile_manual_seeding_acquire",
+    "service_profile_manual_seeding_close",
     "service_remote_view_handoff_resolve",
     "service_remote_view_route_preflight",
     "service_remote_view_browser_reattach",
@@ -247,6 +249,9 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "clear",
     "service_browser_close",
     "service_browser_repair",
+    "service_browser_contamination_report",
+    "service_browser_retirement_plan",
+    "service_browser_retirement_apply",
     "service_prune_retained",
     "service_repair_retained",
 ];

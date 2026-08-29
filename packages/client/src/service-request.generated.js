@@ -29,6 +29,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "view_focus",
   "view_takeover",
   "remote_view_open",
+  "service_profile_manual_seeding_acquire",
+  "service_profile_manual_seeding_close",
   "service_remote_view_handoff_resolve",
   "service_remote_view_route_preflight",
   "service_remote_view_browser_reattach",
@@ -101,6 +103,9 @@ export const SERVICE_REQUEST_ACTIONS = [
   "clear",
   "service_browser_close",
   "service_browser_repair",
+  "service_browser_contamination_report",
+  "service_browser_retirement_plan",
+  "service_browser_retirement_apply",
   "service_prune_retained",
   "service_repair_retained"
 ];
@@ -144,7 +149,10 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "promptProfileId",
   "controllerLeaseId",
   "operationId",
-  "sessionName"
+  "sessionName",
+  "handoffId",
+  "remoteViewHandoffId",
+  "expiresAt"
 ];
 
 export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
@@ -166,7 +174,8 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "maxErrorEntries",
   "maxRequestEntries",
   "cdpPort",
-  "maxBytes"
+  "maxBytes",
+  "pid"
 ];
 
 export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
@@ -193,7 +202,8 @@ export const SERVICE_REQUEST_OBJECT_FIELDS = [
   "networkCapture",
   "fileTransfer",
   "locator",
-  "recipe"
+  "recipe",
+  "plan"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";
