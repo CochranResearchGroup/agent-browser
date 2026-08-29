@@ -844,16 +844,27 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     ) {
         return Ok(false);
     }
-    let Some(profile_id) = options.runtime_profile.as_deref().or_else(|| {
-        options
-            .profile
-            .as_deref()
-            .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
-    }) else {
-        return Ok(false);
-    };
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
         .or_else(|| optional_command_or_params_string(command, "profileId"));
+    let command_profile = optional_command_or_params_string(command, "profile");
+    let Some(profile_id) = options
+        .runtime_profile
+        .as_deref()
+        .or_else(|| {
+            options
+                .profile
+                .as_deref()
+                .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
+        })
+        .or(command_profile_id.as_deref())
+        .or_else(|| {
+            command_profile
+                .as_deref()
+                .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
+        })
+    else {
+        return Ok(false);
+    };
     if command_profile_id
         .as_deref()
         .is_some_and(|command_profile_id| command_profile_id != profile_id)
@@ -871,7 +882,7 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     {
         return Ok(false);
     }
-    if let Some(requested_path) = options.profile.as_deref() {
+    if let Some(requested_path) = options.profile.as_deref().or(command_profile.as_deref()) {
         let requested_path =
             resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
         if crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?
