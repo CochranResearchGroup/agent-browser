@@ -1126,6 +1126,25 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
     assert_eq!(options.profile.as_deref(), Some(profile_id));
 
+    let cdp_free_command = json!({
+        "action": "cdp_free_launch",
+        "profile": profile_id,
+        "serviceName": "development-presentation-provider",
+    });
+    let mut cdp_free_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let cdp_free_selection =
+        apply_service_profile_selection(&mut cdp_free_options, &cdp_free_command, Some(session_id))
+            .unwrap();
+    assert_eq!(cdp_free_selection, None);
+    assert_eq!(
+        cdp_free_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+    assert_eq!(cdp_free_options.profile.as_deref(), Some(profile_id));
+
     let closed_tab_id = "target:closed-provider-route";
     let closed_handle = ServiceTabHandle {
         browser_id: format!("session:{session_id}"),
