@@ -56,7 +56,20 @@
   - raw reasoning traces
   - secrets, tokens, passwords, or credential material
 - Before re-asking the user for likely durable context, prefer a bounded graph-memory read.
-- At the start of non-trivial planning, debugging, architecture, audit, adoption, upgrade, harvest, or handoff work, use the repo's documented memory-discovery workflow when prior context may exist.
+- At the start of non-trivial work, make one lightweight discovery decision:
+  - `use` when prior decisions, user preferences, runtime history, cross-repo
+    context, or avoided repeated investigation could materially affect the work
+  - `skip` when the task is trivial or self-contained and supplied content or
+    current authoritative sources are sufficient
+  - `unavailable` when the memory system or required retrieval surface is not
+    healthy; continue from repo-native evidence and state the fallback only
+    when it materially limits confidence
+- For non-trivial planning, debugging, architecture, audit, adoption, upgrade,
+  harvest, or handoff work, default to `use` when prior context may exist. Do
+  not make performative memory calls when the decision is `skip`.
+- Keep discovery bounded to the narrowest relevant group and one or two focused
+  reads before widening. Discovery is read-first and does not authorize a
+  memory write.
 - Query the repo-named memory group first when repo policy names one.
 - When the right memory group is unclear, or when the task crosses repos, tenants, or domains, query a reviewed atlas or routing layer first and inspect retrieval, privacy, export, and audience policy before descending into source groups.
 - Prefer compact, factual, retrieval-friendly writes over conversational filler or repeated paraphrases of the same fact.
@@ -87,4 +100,4 @@ and continuity aid for this repo, not an authority over source, tests, live
 services, or release state.
 Keep product-specific tool names, partition-key semantics, and runtime assumptions repo-local unless they clearly generalize across multiple graph-memory systems.
 
-Repo-local policy should name the primary memory group when one exists and should identify the memory-discovery skill, tool, or command agents are expected to use.
+Repo-local policy should name the primary memory group when one exists and should identify the memory-discovery skill, tool, or command agents are expected to use. For Graphiti, prefer the `graphiti-discovery` skill and record the repo's primary `group_id`; if the repo does not use Graphiti, preserve the same `use` / `skip` / `unavailable` decision contract with its actual memory system.

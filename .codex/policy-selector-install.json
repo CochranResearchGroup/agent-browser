@@ -1,20 +1,20 @@
 {
   "bundle_git_url": "https://github.com/CochranResearchGroup/agent-policies.git",
-  "bundle_ref": "v0.1.21",
+  "bundle_ref": "v0.1.22",
   "install_relpath": ".codex/skills/repo-policy-selector",
   "installed_bundle_release": {
     "bundle_name": "repo-policy-selector",
-    "bundle_version": "0.1.21",
+    "bundle_version": "0.1.22",
     "policy_library": {
       "catalog_path": "policy-library/catalog.yaml",
-      "content_sha256": "e524dd1d539e277cc3d51c299dc9a8f5233673ddecd599fb3cb437a7664e046b",
+      "content_sha256": "03d4cba5d1aaad7ca2805b847dd69083ebf4193b8812693ee7ea8d9079f56b42",
       "relative_root": "policy-library",
       "schema_path": "policy-library/SCHEMA.md"
     },
-    "release_ref": "v0.1.21",
+    "release_ref": "v0.1.22",
     "schema_version": 1,
-    "source_commit": "afaa0542e8f1ad056eb6aebbe4b83b59088dc55b",
-    "source_ref": "afaa0542e8f1ad056eb6aebbe4b83b59088dc55b",
+    "source_commit": "12a7f9fef466522e99be44d980c44a4ff056f540",
+    "source_ref": "12a7f9fef466522e99be44d980c44a4ff056f540",
     "source_repo_root": "/home/ecochran76/workspace.local/agent-policies",
     "source_tree_state": "clean-ref"
   },

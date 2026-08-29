@@ -1303,6 +1303,17 @@ def detect_signals(repo_root: Path) -> dict:
                 "duplicate writes",
             ]
         ),
+        "has_repo_memory_discovery_workflow": any(
+            phrase in semantic_text
+            for phrase in [
+                "graphiti",
+                "graphiti-discovery",
+                "graphiti-runtime",
+                "memory atlas",
+                "atlas-discover",
+                "search_memory_facts",
+            ]
+        ),
         "mentions_codegraph_usage": any(
             phrase in combined or phrase in semantic_text
             for phrase in [
@@ -2204,6 +2215,25 @@ def choose_profile(signals: dict, installed_library: dict[str, Any]) -> tuple[st
     return purpose, subtype, execution_bias, profile, deduped_modules, reasons
 
 
+def memory_discovery_assessment(
+    signals: dict[str, Any], recommended_modules: list[str]
+) -> dict[str, Any]:
+    policy_selected = "graph-backed-memory-usage" in recommended_modules
+    repo_signals = bool(signals.get("has_repo_memory_discovery_workflow"))
+    return {
+        "policy_module": "graph-backed-memory-usage",
+        "policy_selected": policy_selected,
+        "repo_graph_memory_signals": repo_signals,
+        "repo_default": "use" if repo_signals else "task-conditional",
+        "task_decisions": ["use", "skip", "unavailable"],
+        "rationale": (
+            "repo policy or guidance explicitly names a graph-backed memory workflow"
+            if repo_signals
+            else "shared policy is selected, but repo evidence does not establish a concrete graph-memory workflow"
+        ),
+    }
+
+
 def choose_adoption_mode(signals: dict, expectation_gaps: list[str], coverage: dict[str, Any]) -> tuple[str, list[str], dict[str, str]]:
     reasons: list[str] = []
     duplicate_authorities = signals.get("duplicate_planning_authorities", {})
@@ -2313,6 +2343,7 @@ def main() -> int:
     existing_migration_surfaces = extract_existing_migration_surfaces(repo_root)
     existing_policy_surfaces = extract_existing_policy_surfaces(repo_root)
     purpose, subtype, execution_bias, profile, modules, reasons = choose_profile(signals, installed_library)
+    memory_discovery = memory_discovery_assessment(signals, modules)
     repo_local_policy_findings = infer_repo_local_policy_findings(repo_root, modules, profile, signals)
     coverage = policy_adoption_coverage(existing_policy_surfaces, modules, installed_library)
     expectation_gaps = profile_expectation_gaps(profile, signals, installed_library)
@@ -2353,6 +2384,7 @@ def main() -> int:
         "migration_surface_actions": summarize_migration_surface_actions(existing_migration_surfaces),
         "recommended_profile": profile,
         "recommended_modules": modules,
+        "memory_discovery": memory_discovery,
         "next_modules": next_modules,
         "install_plan": install_plan,
         "agents_wirein_patch": agents_patch,
@@ -2371,6 +2403,7 @@ def main() -> int:
         print(f"adoption_readiness: {coverage['readiness']}")
         print(f"recommendation_mode: {rec_mode}")
         print(f"modules: {', '.join(modules)}")
+        print(f"memory_discovery: {memory_discovery['repo_default']}")
         print(f"next_modules: {', '.join(next_modules) if next_modules else '-'}")
         if install_plan:
             print("install_plan:")

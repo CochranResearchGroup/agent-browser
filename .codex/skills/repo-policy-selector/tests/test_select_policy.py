@@ -154,6 +154,57 @@ class SelectPolicyRegressionTests(unittest.TestCase):
             modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
             self.assertIn("graph-backed-memory-usage", modules, profile_id)
 
+    def test_graph_memory_module_defines_use_skip_unavailable_decision(self):
+        module_text = (self.policy_root / "modules" / "graph-backed-memory-usage.md").read_text(
+            encoding="utf-8"
+        )
+        for required in ("`use`", "`skip`", "`unavailable`", "graphiti-discovery", "one or two focused"):
+            self.assertIn(required, module_text)
+
+    def test_memory_discovery_assessment_uses_repo_signals(self):
+        assessment = self.select_policy.memory_discovery_assessment(
+            {"has_repo_memory_discovery_workflow": True},
+            ["planning-discipline", "graph-backed-memory-usage"],
+        )
+
+        self.assertTrue(assessment["policy_selected"])
+        self.assertTrue(assessment["repo_graph_memory_signals"])
+        self.assertEqual(assessment["repo_default"], "use")
+        self.assertEqual(assessment["task_decisions"], ["use", "skip", "unavailable"])
+
+    def test_memory_discovery_assessment_is_task_conditional_without_repo_signals(self):
+        assessment = self.select_policy.memory_discovery_assessment(
+            {"has_repo_memory_discovery_workflow": False},
+            ["planning-discipline", "graph-backed-memory-usage"],
+        )
+
+        self.assertTrue(assessment["policy_selected"])
+        self.assertFalse(assessment["repo_graph_memory_signals"])
+        self.assertEqual(assessment["repo_default"], "task-conditional")
+
+    def test_generic_adopted_module_does_not_invent_repo_graphiti_workflow(self):
+        repo_root = self.make_repo(
+            agents_text="# Fixture\n\n## Policy Entry\n\nRead shared policy files."
+        )
+        policy_dir = repo_root / "docs" / "dev" / "policies"
+        policy_dir.mkdir(parents=True, exist_ok=True)
+        (policy_dir / "0001-graph-backed-memory-usage.md").write_text(
+            (self.policy_root / "modules" / "graph-backed-memory-usage.md").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+
+        signals = self.select_policy.detect_signals(repo_root)
+        assessment = self.select_policy.memory_discovery_assessment(
+            signals,
+            ["planning-discipline", "graph-backed-memory-usage"],
+        )
+
+        self.assertTrue(signals["mentions_graph_backed_memory"])
+        self.assertFalse(signals["has_repo_memory_discovery_workflow"])
+        self.assertEqual(assessment["repo_default"], "task-conditional")
+
     def test_planning_discipline_is_in_every_starter_profile(self):
         installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
         for profile_id in installed_library["profile_ids"]:
@@ -283,6 +334,7 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         signals = self.select_policy.detect_signals(repo_root)
 
         self.assertTrue(signals["mentions_graph_backed_memory"])
+        self.assertTrue(signals["has_repo_memory_discovery_workflow"])
         self.assertFalse(signals["mentions_memory_service_runtime"])
 
     def test_goal_language_recommends_goal_and_subagent_governance(self):

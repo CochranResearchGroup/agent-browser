@@ -26,6 +26,7 @@ from select_policy import (
     extract_existing_migration_surfaces,
     extract_existing_policy_surfaces,
     infer_repo_local_policy_findings,
+    memory_discovery_assessment,
     policy_adoption_coverage,
     policy_identity_problems,
     profile_expectation_gaps,
@@ -44,6 +45,7 @@ def run_adopt(repo_root: Path, installed_library: dict[str, Any], write_drafts_f
     existing_migration_surfaces = extract_existing_migration_surfaces(repo_root)
     existing_policy_surfaces = extract_existing_policy_surfaces(repo_root)
     purpose, subtype, execution_bias, profile, modules, reasons = choose_profile(signals, installed_library)
+    memory_discovery = memory_discovery_assessment(signals, modules)
     repo_local_policy_findings = infer_repo_local_policy_findings(repo_root, modules, profile, signals)
     coverage = policy_adoption_coverage(existing_policy_surfaces, modules, installed_library)
     expectation_gaps = profile_expectation_gaps(profile, signals, installed_library)
@@ -74,6 +76,7 @@ def run_adopt(repo_root: Path, installed_library: dict[str, Any], write_drafts_f
         "execution_bias": execution_bias,
         "recommended_profile": profile,
         "recommended_modules": modules,
+        "memory_discovery": memory_discovery,
         "recommendation_mode": rec_mode,
         "next_modules": next_modules,
         "install_plan": install_plan,

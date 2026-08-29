@@ -15,14 +15,20 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    - roadmap/runbook/progress files if present
    - cluttered or legacy planning/note surfaces that may need migration into canonical locations
    - repo shape and workflow complexity
-4. Run `scripts/select_policy.py` for a deterministic first-pass profile/module recommendation.
-5. Extract the repo's current policy surfaces deterministically before drafting adoption changes.
-6. If the repo shows cluttered or legacy plans, notes, or memories, treat migration as part of adoption rather than patching only the final steady-state policy.
-7. Classify existing policy surfaces against the installed templates:
+4. Record a graph-memory discovery assessment:
+   - `use` as the repo default when Graphiti or another installed graph-memory
+     workflow is explicitly present
+   - `task-conditional` when the shared policy is selected but repo evidence
+     does not establish a concrete graph-memory workflow
+   - preserve the module's per-task `use` / `skip` / `unavailable` rubric
+5. Run `scripts/select_policy.py` for a deterministic first-pass profile/module recommendation.
+6. Extract the repo's current policy surfaces deterministically before drafting adoption changes.
+7. If the repo shows cluttered or legacy plans, notes, or memories, treat migration as part of adoption rather than patching only the final steady-state policy.
+8. Classify existing policy surfaces against the installed templates:
    - `keep`
    - `merge`
    - `retire`
-8. Run `scripts/audit_planning_contract.py` to check the applicable contract;
+9. Run `scripts/audit_planning_contract.py` to check the applicable contract;
    every starter profile adopts proportional bounded planning discipline.
    Supply `--plans-dir`, `--roadmap-path`, or `--runbook-path` for documented
    alternate authorities. `--active-only` is a steady-state gate and reports
@@ -31,17 +37,17 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    `docs/dev/planning-audit-baseline.json`, while continuing to report matched
    and unused baseline entries. Use `--force` only for pre-adoption assessment;
    active baselines never apply to full or forced audits.
-9. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, execute-by-default continuation, action-specific approval gates, local replan before escalation, at-most-one risk-triggered drift-discovery pass, closed-world verification when review occurs, and minimal material-checkpoint fields.
-10. If the repo adopts `active-lane-coordination`, refresh remote-tracking refs through its normal fetch policy and run `scripts/audit_active_lanes.py` with an explicit default ref. Prefer `--catalog-only` when the catalog is the complete authorized population; use repeated exact `--branch` selectors for bounded unregistered-lane discovery and reserve `--branch-prefix` for explicit broader surveys. Treat missing, unequal, or contradictory custody as a fail-closed planning input, not as permission for the auditor to mutate Git.
-11. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
-12. Read the referenced policy modules from this policy library before drafting changes.
-13. Decide whether the repo needs:
+10. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, execute-by-default continuation, action-specific approval gates, local replan before escalation, at-most-one risk-triggered drift-discovery pass, closed-world verification when review occurs, and minimal material-checkpoint fields.
+11. If the repo adopts `active-lane-coordination`, refresh remote-tracking refs through its normal fetch policy and run `scripts/audit_active_lanes.py` with an explicit default ref. Prefer `--catalog-only` when the catalog is the complete authorized population; use repeated exact `--branch` selectors for bounded unregistered-lane discovery and reserve `--branch-prefix` for explicit broader surveys. Treat missing, unequal, or contradictory custody as a fail-closed planning input, not as permission for the auditor to mutate Git.
+12. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
+13. Read the referenced policy modules from this policy library before drafting changes.
+14. Decide whether the repo needs:
    - a starter profile with minimal edits
    - a profile plus module overrides
    - a missing-modules patch when the repo already partially or mostly matches the selected profile
    - a migration-first adoption because plans, notes, or memories are cluttered
    - a custom composition because no single profile fits cleanly
-14. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
+15. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
 
 ## Required references
 

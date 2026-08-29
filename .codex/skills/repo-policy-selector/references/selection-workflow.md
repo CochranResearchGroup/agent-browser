@@ -97,6 +97,12 @@ For graph-backed memory usage, prioritize signals such as:
 
 Graph-backed memory usage is part of the starter policy set by default. Repo-local adoption still needs to specify the actual memory group, discovery skill or command, privacy boundary, and write/cleanup expectations.
 
+The selector must also return a `memory_discovery` assessment. Use
+`repo_default: use` when repo signals establish Graphiti or another graph-backed
+memory workflow, and `repo_default: task-conditional` otherwise. This is a
+repo-level routing result, not a command to query memory on every task. The
+adopted policy supplies the per-task `use` / `skip` / `unavailable` decision.
+
 For codegraph usage, prioritize signals such as:
 - `../codegraph`, codegraph MCP tools, codegraph CLI wrappers, or indexed workspace service language
 - source-code exploration, architecture tracing, refactor planning, impact analysis, callers/callees, or symbol graph language
@@ -167,6 +173,8 @@ Return:
 - inferred `execution_bias` when applicable
 - recommended profile
 - recommended modules
+- memory-discovery assessment, including whether the shared policy is selected,
+  whether repo-level graph-memory signals exist, and the repo default
 - recommendation mode such as `full-profile`, `patch-missing`,
   `already-aligned`, or `identity-reconciliation-required`
 - next modules to add when the repo already partially matches the selected profile
