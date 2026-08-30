@@ -6492,12 +6492,26 @@ fn transfer_discovered_runtimes(
     // activation barrier: no candidate process can enter Service State while
     // an old-generation prepare command is still running.
     let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
-    start_candidate_runtime_host_after_source_prepares(
+    if let Err(start_error) = start_candidate_runtime_host_after_source_prepares(
         &candidate_binary,
         transaction_id,
         transaction_revision,
         &candidate_socket_dir,
-    )?;
+    ) {
+        let cleanup_errors = abort_prepared_runtime_handoffs(
+            &old_binary,
+            &source_socket_dir,
+            source_is_runtime_host,
+            &cooperative_preparations,
+        );
+        if cleanup_errors.is_empty() {
+            return Err(start_error);
+        }
+        return Err(format!(
+            "{start_error}; runtime_source_prepare_cleanup_failed:{}",
+            cleanup_errors.join("|")
+        ));
+    }
 
     for (index, migration) in migrations.iter_mut().enumerate() {
         let source_session = if migration.disposition == RuntimeDisposition::CooperativeTransfer {
@@ -6725,6 +6739,88 @@ fn transfer_discovered_runtimes(
         evidence: transfer_evidence,
         preserved_lane_sessions,
     })
+}
+
+fn abort_prepared_runtime_handoffs(
+    old_binary: &Path,
+    source_socket_dir: &Path,
+    source_is_runtime_host: bool,
+    preparations: &[Option<PreparedCooperativeRuntimeTransfer>],
+) -> Vec<String> {
+    preparations
+        .iter()
+        .filter_map(|preparation| match preparation {
+            Some(PreparedCooperativeRuntimeTransfer::Handoff { source_session, .. }) => {
+                abort_one_prepared_runtime_handoff(
+                    old_binary,
+                    source_socket_dir,
+                    source_is_runtime_host,
+                    source_session,
+                )
+                .err()
+                .map(|error| format!("{source_session}:{error}"))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn abort_one_prepared_runtime_handoff(
+    old_binary: &Path,
+    source_socket_dir: &Path,
+    source_is_runtime_host: bool,
+    source_session: &str,
+) -> Result<(), String> {
+    if run_agent_json_detailed_in_socket_dir(
+        old_binary,
+        source_session,
+        &["handoff", "abort"],
+        source_is_runtime_host.then_some((source_socket_dir, true)),
+    )
+    .is_ok()
+    {
+        return Ok(());
+    }
+
+    if !crate::validation::is_valid_session_name(source_session) {
+        return Err(crate::validation::session_name_error(source_session));
+    }
+    let descriptor_path = source_socket_dir.join(format!("{source_session}.handoff.json"));
+    let descriptor: crate::native::action_runtime::runtime::RuntimeHandoffDescriptor =
+        serde_json::from_slice(&fs::read(&descriptor_path).map_err(display_io(
+            "read prepared runtime handoff for installer cleanup",
+            &descriptor_path,
+        ))?)
+        .map_err(|error| format!("runtime_source_prepare_descriptor_invalid:{error}"))?;
+    if descriptor.schema_version != 2 || descriptor.session_name != source_session {
+        return Err("runtime_source_prepare_descriptor_mismatch".to_string());
+    }
+    let proposal = descriptor
+        .owner_transfer
+        .ok_or_else(|| "runtime_source_prepare_owner_proposal_missing".to_string())?;
+    let expected_owner_id = proposal
+        .request
+        .expected_owner_id
+        .as_deref()
+        .ok_or_else(|| "runtime_source_prepare_expected_owner_missing".to_string())?;
+    let repository = crate::native::service_store::LockedServiceStateRepository::new(
+        crate::native::service_store::JsonServiceStateStore::new(
+            crate::native::service_store::JsonServiceStateStore::default_path()?,
+        ),
+    );
+    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository).abort_transfer(
+        &proposal.request.profile_identity_digest,
+        expected_owner_id,
+        proposal.request.expected_owner_generation,
+        &proposal.request.transfer_nonce_digest,
+    )?;
+    match fs::remove_file(&descriptor_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "runtime_source_prepare_descriptor_remove_failed:{error}"
+        )),
+    }
 }
 
 fn record_preserved_runtime_lane_sessions(
