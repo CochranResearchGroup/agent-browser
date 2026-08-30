@@ -177,6 +177,17 @@
     "result": {},
     "error": {
       "type": ["string", "null"]
+    },
+    "failure": {
+      "oneOf": [
+        {
+          "$ref": "service-failure-recourse.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Machine-readable recourse for failed jobs. Absence preserves compatibility with older records."
     }
   },
   "additionalProperties": true

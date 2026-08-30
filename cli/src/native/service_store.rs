@@ -27,6 +27,7 @@ const RUNTIME_LIFECYCLE_REGISTRY_FILENAME: &str = "runtime-lifecycle-registry.js
 const RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION: &str =
     "agent-browser.runtime-lifecycle-registry.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static SERVICE_STATE_ACTIVE_MUTATION: OnceLock<Mutex<Option<&'static str>>> = OnceLock::new();
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
@@ -362,7 +363,7 @@ where
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let Some(path) = self.store.state_path() else {
             let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-            let _guard = acquire_service_state_process_lock(lock, deadline)?;
+            let _guard = acquire_service_state_process_lock(lock, deadline, "snapshot")?;
             return self.store.load();
         };
 
@@ -382,7 +383,7 @@ where
             deadline,
         )?;
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = acquire_service_state_process_lock(lock, deadline)?;
+        let _guard = acquire_service_state_process_lock(lock, deadline, "transaction_recovery")?;
         self.store.load()
     }
 
@@ -404,7 +405,7 @@ where
             })
             .transpose()?;
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = acquire_service_state_process_lock(lock, deadline)?;
+        let _guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
         let mut state = self.store.load()?;
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
@@ -415,18 +416,48 @@ where
 fn acquire_service_state_process_lock(
     lock: &'static Mutex<()>,
     deadline: Instant,
-) -> Result<MutexGuard<'static, ()>, String> {
+    operation: &'static str,
+) -> Result<ServiceStateProcessGuard, String> {
+    let started = Instant::now();
     loop {
         match lock.try_lock() {
-            Ok(guard) => return Ok(guard),
+            Ok(guard) => {
+                *SERVICE_STATE_ACTIVE_MUTATION
+                    .get_or_init(|| Mutex::new(None))
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(operation);
+                return Ok(ServiceStateProcessGuard { guard });
+            }
             Err(TryLockError::Poisoned(_)) => {
                 return Err("Service state mutation lock was poisoned".to_string())
             }
             Err(TryLockError::WouldBlock) if Instant::now() >= deadline => {
-                return Err("service_state_lock_timeout: process mutation lock".to_string())
+                let holder = SERVICE_STATE_ACTIVE_MUTATION
+                    .get_or_init(|| Mutex::new(None))
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .unwrap_or("unknown");
+                return Err(format!(
+                    "service_state_lock_timeout: process mutation lock; waited_ms={}; holder_operation={holder}",
+                    started.elapsed().as_millis()
+                ));
             }
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
         }
+    }
+}
+
+struct ServiceStateProcessGuard {
+    #[allow(dead_code)]
+    guard: MutexGuard<'static, ()>,
+}
+
+impl Drop for ServiceStateProcessGuard {
+    fn drop(&mut self) {
+        *SERVICE_STATE_ACTIVE_MUTATION
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
 }
 
@@ -1112,6 +1143,7 @@ fn acquire_service_state_file_lock_until(
     mode: ServiceStateFileLockMode,
     deadline: Instant,
 ) -> Result<File, String> {
+    let started = Instant::now();
     if let Some(parent) = state_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -1144,8 +1176,8 @@ fn acquire_service_state_file_lock_until(
             Ok(()) => return Ok(file),
             Err(std::fs::TryLockError::WouldBlock) if Instant::now() >= deadline => {
                 return Err(format!(
-                    "service_state_lock_timeout: {}",
-                    lock_path.display()
+                    "service_state_lock_timeout: file lock; waited_ms={}",
+                    started.elapsed().as_millis()
                 ))
             }
             Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
@@ -1485,6 +1517,34 @@ mod tests {
         assert!(snapshot.jobs.is_empty());
         drop(process_guard);
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn process_mutation_holder_metadata_clears_when_guard_drops() {
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let guard = acquire_service_state_process_lock(
+            lock,
+            Instant::now() + Duration::from_millis(20),
+            "fixture_mutation",
+        )
+        .expect("fixture mutation should acquire the process mutex");
+        assert_eq!(
+            *SERVICE_STATE_ACTIVE_MUTATION
+                .get_or_init(|| Mutex::new(None))
+                .lock()
+                .expect("holder metadata should remain readable"),
+            Some("fixture_mutation")
+        );
+
+        drop(guard);
+
+        assert_eq!(
+            *SERVICE_STATE_ACTIVE_MUTATION
+                .get_or_init(|| Mutex::new(None))
+                .lock()
+                .expect("holder metadata should remain readable"),
+            None
+        );
     }
 
     #[test]

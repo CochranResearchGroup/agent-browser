@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-failure-recourse.v1.schema.json",
+  "title": "agent-browser service failure recourse",
+  "description": "Additive machine-readable recourse for a failed Service operation. Clients must preserve the legacy error string and must not retry a mutation unless retryDisposition explicitly permits it.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "code",
+    "axis",
+    "phase",
+    "effectState",
+    "retryDisposition",
+    "recommendedAction",
+    "reuseAllowed"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "agent-browser.service-failure-recourse.v1"
+    },
+    "code": {
+      "type": "string"
+    },
+    "axis": {
+      "type": "string",
+      "enum": ["service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"]
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"]
+    },
+    "effectState": {
+      "type": "string",
+      "enum": ["no_effect", "effect_uncertain", "verified_effect"]
+    },
+    "retryDisposition": {
+      "type": "string",
+      "enum": ["do_not_retry", "inspect_before_retry", "retry_same_request", "refresh_access_plan"]
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "reuseAllowed": {
+      "type": "boolean"
+    },
+    "waitMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "holderOperation": {
+      "type": "string",
+      "description": "Safe coarse class of the in-process operation holding the mutation mutex, when known."
+    },
+    "recoveryPlan": {},
+    "jobId": {
+      "type": "string"
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "safeNextActions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "hardStops": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": true
+}

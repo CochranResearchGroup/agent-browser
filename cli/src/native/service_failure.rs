@@ -60,6 +60,10 @@ pub struct ServiceFailureRecourse {
     pub recommended_action: String,
     pub reuse_allowed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder_operation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery_plan: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub job_id: Option<String>,
@@ -72,6 +76,8 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
+    let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
     if error.starts_with("service_state_lock_timeout: process mutation lock") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -82,6 +88,8 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
             recommended_action: "inspect_job_and_refresh_plan".to_string(),
             reuse_allowed: false,
+            wait_ms,
+            holder_operation,
             safe_next_actions: vec![
                 "inspect_service_job".to_string(),
                 "inspect_service_trace".to_string(),
@@ -105,6 +113,8 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
             recommended_action: "inspect_job_and_refresh_plan".to_string(),
             reuse_allowed: false,
+            wait_ms,
+            holder_operation,
             safe_next_actions: vec![
                 "inspect_service_job".to_string(),
                 "inspect_service_trace".to_string(),
@@ -144,6 +154,14 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         hard_stops: vec!["blind_retry".to_string()],
         ..ServiceFailureRecourse::default()
     }
+}
+
+fn failure_metadata_value<'a>(error: &'a str, key: &str) -> Option<&'a str> {
+    error
+        .split(';')
+        .map(str::trim)
+        .find_map(|part| part.strip_prefix(&format!("{key}=")))
+        .filter(|value| !value.is_empty())
 }
 
 /// Add machine-readable recourse to a failed Service response while preserving
@@ -197,7 +215,7 @@ mod tests {
     #[test]
     fn file_lock_timeout_requires_inspection_before_retry() {
         let recourse =
-            classify_service_failure("service_state_lock_timeout: /tmp/service-state.json.lock");
+            classify_service_failure("service_state_lock_timeout: file lock; waited_ms=21");
 
         assert_eq!(recourse.code, "service_state_lock_timeout");
         assert_eq!(recourse.axis, ServiceFailureAxis::ServiceState);
@@ -209,7 +227,18 @@ mod tests {
         );
         assert_eq!(recourse.recommended_action, "inspect_job_and_refresh_plan");
         assert!(!recourse.reuse_allowed);
+        assert_eq!(recourse.wait_ms, Some(21));
         assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
+    }
+
+    #[test]
+    fn process_lock_timeout_reports_safe_holder_metadata() {
+        let recourse = classify_service_failure(
+            "service_state_lock_timeout: process mutation lock; waited_ms=1001; holder_operation=mutate",
+        );
+
+        assert_eq!(recourse.wait_ms, Some(1001));
+        assert_eq!(recourse.holder_operation.as_deref(), Some("mutate"));
     }
 
     #[test]

@@ -1556,6 +1556,8 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  waitMs?: number | null;
+  holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
   jobId?: string | null;
   traceId?: string | null;

@@ -639,6 +639,19 @@ not click, move the pointer, type, submit, authenticate, or solve a challenge.
 
 ## Service clients
 
+Failed service requests preserve the legacy <code>error</code> string and may
+also include a versioned <code>failure</code> object. Software clients should
+use <code>getServiceFailureRecourse()</code> or
+<code>requireServiceRequestSuccess()</code> and branch on
+<code>retryDisposition</code>. A
+<code>service_state_lock_timeout</code> with
+<code>effectState="effect_uncertain"</code> requires reading the exact job,
+trace, and current resource state before another mutation. A lifecycle-owner
+blocker requires one refreshed access plan. Reuse is allowed only when that
+plan returns mutually consistent <code>browserId</code> and
+<code>sessionName</code> hints. Do not blind-retry either failure or open a
+duplicate profile lane.
+
 Use the CLI when a human or shell script needs a direct operational view:
 
 ```bash

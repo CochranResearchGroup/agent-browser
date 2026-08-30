@@ -3045,6 +3045,17 @@ compact reason instead of exposing a dead open button.
 
 ### Service Status
 
+Service failures retain the legacy `error` string and may also return a
+versioned `failure` object. Clients should branch on
+`failure.retryDisposition`, never on error prose. In particular,
+`service_state_lock_timeout` with `effectState: "effect_uncertain"` means the
+browser action may have completed before terminal job persistence failed. Read
+the returned job and trace locators before retrying. For
+`runtime_lifecycle_existing_owner_requires_explicit_transition`, refresh the
+access plan and reuse a browser only when that current plan supplies both the
+exact `browserId` and `sessionName`. Neither condition permits a blind retry or
+a duplicate profile lane.
+
 Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
 
 ```bash
