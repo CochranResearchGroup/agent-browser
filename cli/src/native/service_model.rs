@@ -8298,7 +8298,7 @@ mod tests {
             },
             "serviceStateLockDiagnostics": {
                 "schemaVersion": "agent-browser.service-state-lock-diagnostics.v1",
-                "recentCapacity": 16,
+                "recentCapacity": 32,
                 "active": [],
                 "recent": [],
                 "counters": {

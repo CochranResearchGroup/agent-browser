@@ -34,7 +34,7 @@ static SERVICE_STATE_LOCK_TELEMETRY: OnceLock<Mutex<ServiceStateLockTelemetrySta
     OnceLock::new();
 static SERVICE_STATE_LOCK_TOKEN: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
-const SERVICE_STATE_LOCK_RECENT_CAPACITY: usize = 16;
+const SERVICE_STATE_LOCK_RECENT_CAPACITY: usize = 32;
 pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1833,6 +1833,7 @@ mod tests {
         let held = acquire_service_state_file_lock(&path, ServiceStateFileLockMode::Exclusive)
             .expect("fixture should hold the service-state lock");
         let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let timeouts_before = service_state_lock_diagnostics().counters.file_timeouts;
 
         let started = Instant::now();
         let error = repository
@@ -1841,6 +1842,14 @@ mod tests {
 
         assert!(error.contains("service_state_lock_timeout"));
         assert!(started.elapsed() < Duration::from_secs(1));
+        let diagnostics = service_state_lock_diagnostics();
+        assert!(diagnostics.counters.file_timeouts > timeouts_before);
+        assert!(diagnostics.recent.iter().any(|activity| {
+            activity.lock_kind == "file"
+                && activity.operation == "snapshot"
+                && activity.phase == "timeout"
+                && activity.hold_ms.is_none()
+        }));
         drop(held);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
@@ -1983,6 +1992,62 @@ mod tests {
             activity.operation == "telemetry_poison_recovery_fixture"
                 && activity.phase == "released"
         }));
+    }
+
+    #[test]
+    fn process_lock_timeout_is_recorded_without_a_false_active_contender() {
+        let lock = Box::leak(Box::new(Mutex::new(())));
+        let held = lock.lock().expect("fixture should hold the process mutex");
+        let timeouts_before = service_state_lock_diagnostics().counters.process_timeouts;
+
+        let error = match acquire_service_state_process_lock(
+            lock,
+            Instant::now() + Duration::from_millis(10),
+            "telemetry_process_timeout_fixture",
+        ) {
+            Ok(_) => panic!("contender should time out before mutation entry"),
+            Err(error) => error,
+        };
+        assert!(error.starts_with("service_state_lock_timeout: process mutation lock"));
+        let diagnostics = service_state_lock_diagnostics();
+        assert!(diagnostics.counters.process_timeouts > timeouts_before);
+        assert!(!diagnostics
+            .active
+            .iter()
+            .any(|activity| activity.operation == "telemetry_process_timeout_fixture"));
+        assert!(diagnostics.recent.iter().any(|activity| {
+            activity.lock_kind == "process"
+                && activity.operation == "telemetry_process_timeout_fixture"
+                && activity.phase == "timeout"
+                && activity.hold_ms.is_none()
+        }));
+        drop(held);
+    }
+
+    #[test]
+    fn file_lock_diagnostics_cleanup_after_early_return() {
+        fn acquire_and_return(path: &Path) -> Result<(), &'static str> {
+            let _guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Shared,
+                Instant::now() + Duration::from_millis(20),
+                "telemetry_early_return_fixture",
+            )
+            .expect("fixture file lock should be acquired");
+            Err("cancelled")
+        }
+
+        let path = unique_state_path("service-state-lock-early-return");
+        assert_eq!(acquire_and_return(&path), Err("cancelled"));
+        let diagnostics = service_state_lock_diagnostics();
+        assert!(!diagnostics
+            .active
+            .iter()
+            .any(|activity| activity.operation == "telemetry_early_return_fixture"));
+        assert!(diagnostics.recent.iter().any(|activity| {
+            activity.operation == "telemetry_early_return_fixture" && activity.phase == "released"
+        }));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
@@ -2262,10 +2327,27 @@ mod tests {
         assert!(final_state.jobs.contains_key("burst-effect-0"));
         assert!(final_state.jobs.contains_key("burst-effect-1"));
         let elapsed = started.elapsed();
+        let diagnostics = service_state_lock_diagnostics();
+        let mut hold_samples = diagnostics
+            .recent
+            .iter()
+            .filter_map(|activity| activity.hold_ms)
+            .collect::<Vec<_>>();
+        hold_samples.sort_unstable();
+        let p95_index = hold_samples
+            .len()
+            .saturating_mul(95)
+            .div_ceil(100)
+            .saturating_sub(1);
+        let hold_p95_ms = hold_samples.get(p95_index).copied().unwrap_or_default();
+        let hold_max_ms = hold_samples.last().copied().unwrap_or_default();
         eprintln!(
-            "service_state_burst_receipt fixture_bytes={fixture_bytes} readers={READER_COUNT} writers={WRITER_COUNT} lock_timeouts=0 duplicate_effects=0 elapsed_ms={}",
-            elapsed.as_millis()
+            "service_state_burst_receipt fixture_bytes={fixture_bytes} readers={READER_COUNT} writers={WRITER_COUNT} lock_timeouts=0 duplicate_effects=0 elapsed_ms={} lock_hold_samples={} lock_hold_p95_ms={hold_p95_ms} lock_hold_max_ms={hold_max_ms}",
+            elapsed.as_millis(),
+            hold_samples.len(),
         );
+        assert!(hold_p95_ms < elapsed_millis(DEFAULT_SERVICE_STATE_LOCK_TIMEOUT));
+        assert!(hold_max_ms < elapsed_millis(DEFAULT_SERVICE_STATE_LOCK_TIMEOUT));
         assert!(elapsed < Duration::from_secs(10));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
