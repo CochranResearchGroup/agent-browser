@@ -243,6 +243,14 @@ async fn unavailable_observations_are_typed_unknown_and_keep_legacy_manual_array
         "agent-browser.runtime-lifecycle-status.v1"
     );
     assert_eq!(value["runtimeLifecycle"]["ready"], true);
+    assert_eq!(
+        value["serviceStateLockDiagnostics"]["schemaVersion"],
+        "agent-browser.service-state-lock-diagnostics.v1"
+    );
+    assert_eq!(value["serviceStateLockDiagnostics"]["recentCapacity"], 16);
+    assert!(value["serviceStateLockDiagnostics"]["active"].is_array());
+    assert!(value["serviceStateLockDiagnostics"]["recent"].is_array());
+    assert!(value["serviceStateLockDiagnostics"]["counters"].is_object());
 }
 
 #[tokio::test]

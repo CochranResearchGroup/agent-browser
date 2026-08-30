@@ -652,6 +652,12 @@ plan returns mutually consistent <code>browserId</code> and
 <code>sessionName</code> hints. Do not blind-retry either failure or open a
 duplicate profile lane.
 
+Current <code>service status</code> responses also include
+<code>serviceStateLockDiagnostics</code>. This bounded, process-local diagnostic
+shows active lock holders, recent wait and hold phases, timeout counters, and
+recovered process-lock poisoning. It contains no Service State paths or request
+payloads, is never persisted, and does not grant retry permission.
+
 Use the CLI when a human or shell script needs a direct operational view:
 
 ```bash

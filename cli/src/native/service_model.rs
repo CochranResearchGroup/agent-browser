@@ -2044,6 +2044,7 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
             "manualBrowsers",
             "browserSessionAuthority",
             "statusProjection",
+            "serviceStateLockDiagnostics",
         ],
         &["serviceState"],
     );
@@ -2075,6 +2076,12 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
         value["statusProjection"]["observations"]["state"].as_str(),
         Some("complete" | "partial" | "unavailable")
     ));
+    assert_eq!(
+        value["serviceStateLockDiagnostics"]["schemaVersion"],
+        "agent-browser.service-state-lock-diagnostics.v1"
+    );
+    assert!(value["serviceStateLockDiagnostics"]["active"].is_array());
+    assert!(value["serviceStateLockDiagnostics"]["recent"].is_array());
     if let Some(launch_config) = value.get("launchConfig") {
         assert_record_fields(
             "service status launch config",
@@ -8287,6 +8294,19 @@ mod tests {
                 },
                 "observations": {
                     "state": "unavailable"
+                }
+            },
+            "serviceStateLockDiagnostics": {
+                "schemaVersion": "agent-browser.service-state-lock-diagnostics.v1",
+                "recentCapacity": 16,
+                "active": [],
+                "recent": [],
+                "counters": {
+                    "processAcquisitions": 0,
+                    "fileAcquisitions": 0,
+                    "processTimeouts": 0,
+                    "fileTimeouts": 0,
+                    "processPoisonRecoveries": 0
                 }
             },
         }));

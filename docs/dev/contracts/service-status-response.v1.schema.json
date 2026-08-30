@@ -45,6 +45,40 @@
       },
       "additionalProperties": true
     },
+    "serviceStateLockDiagnostics": {
+      "description": "Bounded process-local diagnostics for Service State lock acquisition, timeout, and hold phases. This field is observational and is never persisted into Service State.",
+      "type": "object",
+      "required": ["schemaVersion", "recentCapacity", "active", "recent", "counters"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.service-state-lock-diagnostics.v1" },
+        "recentCapacity": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "active": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/serviceStateLockActivity" }
+        },
+        "recent": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/serviceStateLockActivity" }
+        },
+        "counters": {
+          "type": "object",
+          "required": [
+            "processAcquisitions", "fileAcquisitions", "processTimeouts",
+            "fileTimeouts", "processPoisonRecoveries"
+          ],
+          "properties": {
+            "processAcquisitions": { "type": "integer", "minimum": 0 },
+            "fileAcquisitions": { "type": "integer", "minimum": 0 },
+            "processTimeouts": { "type": "integer", "minimum": 0 },
+            "fileTimeouts": { "type": "integer", "minimum": 0 },
+            "processPoisonRecoveries": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "profileAllocations": {
       "description": "Derived service-owned profile allocation view for session holders and waiting profile-lease jobs.",
       "type": "array",
@@ -527,5 +561,20 @@
       "type": "object"
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "$defs": {
+    "serviceStateLockActivity": {
+      "type": "object",
+      "required": ["lockKind", "operation", "mode", "phase", "waitMs"],
+      "properties": {
+        "lockKind": { "enum": ["process", "file"] },
+        "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "mode": { "enum": ["shared", "exclusive"] },
+        "phase": { "enum": ["holding", "released", "timeout", "error", "poison_recovered"] },
+        "waitMs": { "type": "integer", "minimum": 0 },
+        "holdMs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
 }

@@ -855,6 +855,29 @@ export interface ServiceCrashRegenerationStatus {
   recourse: 'inspect_transaction_progress' | 'resume_same_transaction' | 'reuse_durable_handoff';
 }
 
+export interface ServiceStateLockActivity {
+  lockKind: 'process' | 'file';
+  operation: string;
+  mode: 'shared' | 'exclusive';
+  phase: 'holding' | 'released' | 'timeout' | 'error' | 'poison_recovered';
+  waitMs: number;
+  holdMs?: number;
+}
+
+export interface ServiceStateLockDiagnostics {
+  schemaVersion: 'agent-browser.service-state-lock-diagnostics.v1';
+  recentCapacity: number;
+  active: ServiceStateLockActivity[];
+  recent: ServiceStateLockActivity[];
+  counters: {
+    processAcquisitions: number;
+    fileAcquisitions: number;
+    processTimeouts: number;
+    fileTimeouts: number;
+    processPoisonRecoveries: number;
+  };
+}
+
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
@@ -865,6 +888,7 @@ export interface ServiceStatusResponse {
   desktopEvidencePolicy?: ServiceDesktopEvidencePolicyProjection;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
+  serviceStateLockDiagnostics?: ServiceStateLockDiagnostics;
   runtimeLifecycle?: ServiceRuntimeLifecycleStatus;
   crashRegenerationTransactions?: ServiceCrashRegenerationStatus[];
   launchConfig?: {

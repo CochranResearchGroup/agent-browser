@@ -312,6 +312,8 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) launch_config: StatusLaunchConfiguration,
     #[serde(rename = "statusProjection")]
     pub(crate) status_projection: StatusProjection,
+    #[serde(rename = "serviceStateLockDiagnostics")]
+    pub(crate) service_state_lock_diagnostics: super::service_store::ServiceStateLockDiagnostics,
     #[serde(rename = "runtimeLifecycle")]
     pub(crate) runtime_lifecycle: Value,
     #[serde(rename = "crashRegenerationTransactions")]
@@ -496,6 +498,7 @@ impl ServiceStatusProjector {
                 },
                 observations,
             },
+            service_state_lock_diagnostics: super::service_store::service_state_lock_diagnostics(),
             runtime_lifecycle: input.runtime_lifecycle,
             crash_regeneration_transactions:
                 super::service_crash_regeneration::crash_regeneration_statuses(

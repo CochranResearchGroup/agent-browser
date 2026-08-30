@@ -3,9 +3,11 @@
 //! The first service-mode store is JSON-backed and intentionally small. It gives
 //! later lifecycle work a durable contract without forcing a database choice yet.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fs::{self, File, OpenOptions};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
 use std::time::{Duration, Instant};
 
@@ -28,8 +30,61 @@ const RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION: &str =
     "agent-browser.runtime-lifecycle-registry.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static SERVICE_STATE_ACTIVE_MUTATION: OnceLock<Mutex<Option<&'static str>>> = OnceLock::new();
+static SERVICE_STATE_LOCK_TELEMETRY: OnceLock<Mutex<ServiceStateLockTelemetryState>> =
+    OnceLock::new();
+static SERVICE_STATE_LOCK_TOKEN: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
+const SERVICE_STATE_LOCK_RECENT_CAPACITY: usize = 16;
 pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateLockActivity {
+    pub(crate) lock_kind: &'static str,
+    pub(crate) operation: &'static str,
+    pub(crate) mode: &'static str,
+    pub(crate) phase: &'static str,
+    pub(crate) wait_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) hold_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateLockCounters {
+    pub(crate) process_acquisitions: u64,
+    pub(crate) file_acquisitions: u64,
+    pub(crate) process_timeouts: u64,
+    pub(crate) file_timeouts: u64,
+    pub(crate) process_poison_recoveries: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateLockDiagnostics {
+    pub(crate) schema_version: &'static str,
+    pub(crate) recent_capacity: usize,
+    pub(crate) active: Vec<ServiceStateLockActivity>,
+    pub(crate) recent: Vec<ServiceStateLockActivity>,
+    pub(crate) counters: ServiceStateLockCounters,
+}
+
+#[derive(Debug)]
+struct ActiveServiceStateLock {
+    token: u64,
+    lock_kind: &'static str,
+    operation: &'static str,
+    mode: &'static str,
+    acquired_at: Instant,
+    wait_ms: u64,
+}
+
+#[derive(Debug, Default)]
+struct ServiceStateLockTelemetryState {
+    active: Vec<ActiveServiceStateLock>,
+    recent: VecDeque<ServiceStateLockActivity>,
+    counters: ServiceStateLockCounters,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -404,6 +459,7 @@ where
             path,
             ServiceStateFileLockMode::Shared,
             deadline,
+            "snapshot",
         )?;
         if !self.store.recovery_required() {
             return self.store.load_without_recovery();
@@ -414,6 +470,7 @@ where
             path,
             ServiceStateFileLockMode::Exclusive,
             deadline,
+            "transaction_recovery",
         )?;
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
         let _guard = acquire_service_state_process_lock(lock, deadline, "transaction_recovery")?;
@@ -448,6 +505,7 @@ where
                 path,
                 ServiceStateFileLockMode::Exclusive,
                 commit_deadline,
+                "commit",
             )?;
             let process_guard =
                 acquire_service_state_process_lock(lock, commit_deadline, "commit")?;
@@ -472,6 +530,7 @@ where
                 path,
                 ServiceStateFileLockMode::Exclusive,
                 deadline,
+                "mutate",
             )?;
             let process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
             let mut state = self.store.load()?;
@@ -498,14 +557,29 @@ fn acquire_service_state_process_lock(
     loop {
         match lock.try_lock() {
             Ok(guard) => {
-                *SERVICE_STATE_ACTIVE_MUTATION
-                    .get_or_init(|| Mutex::new(None))
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(operation);
-                return Ok(ServiceStateProcessGuard { guard });
+                return Ok(service_state_process_guard(
+                    guard,
+                    operation,
+                    started.elapsed(),
+                ));
             }
-            Err(TryLockError::Poisoned(_)) => {
-                return Err("Service state mutation lock was poisoned".to_string())
+            Err(TryLockError::Poisoned(poisoned)) => {
+                record_service_state_lock_terminal(
+                    "process",
+                    operation,
+                    "exclusive",
+                    "poison_recovered",
+                    started.elapsed(),
+                );
+                with_service_state_lock_telemetry(|telemetry| {
+                    telemetry.counters.process_poison_recoveries += 1;
+                });
+                lock.clear_poison();
+                return Ok(service_state_process_guard(
+                    poisoned.into_inner(),
+                    operation,
+                    started.elapsed(),
+                ));
             }
             Err(TryLockError::WouldBlock) if Instant::now() >= deadline => {
                 let holder = SERVICE_STATE_ACTIVE_MUTATION
@@ -513,6 +587,12 @@ fn acquire_service_state_process_lock(
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .unwrap_or("unknown");
+                record_service_state_lock_timeout(
+                    "process",
+                    operation,
+                    "exclusive",
+                    started.elapsed(),
+                );
                 return Err(format!(
                     "service_state_lock_timeout: process mutation lock; waited_ms={}; holder_operation={holder}",
                     started.elapsed().as_millis()
@@ -523,18 +603,179 @@ fn acquire_service_state_process_lock(
     }
 }
 
+fn service_state_process_guard(
+    guard: MutexGuard<'static, ()>,
+    operation: &'static str,
+    wait: Duration,
+) -> ServiceStateProcessGuard {
+    *SERVICE_STATE_ACTIVE_MUTATION
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(operation);
+    let token = record_service_state_lock_acquired("process", operation, "exclusive", wait);
+    ServiceStateProcessGuard { guard, token }
+}
+
 struct ServiceStateProcessGuard {
     #[allow(dead_code)]
     guard: MutexGuard<'static, ()>,
+    token: u64,
 }
 
 impl Drop for ServiceStateProcessGuard {
     fn drop(&mut self) {
+        record_service_state_lock_released(self.token);
         *SERVICE_STATE_ACTIVE_MUTATION
             .get_or_init(|| Mutex::new(None))
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
+}
+
+fn elapsed_millis(duration: Duration) -> u64 {
+    duration.as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn with_service_state_lock_telemetry<R>(
+    update: impl FnOnce(&mut ServiceStateLockTelemetryState) -> R,
+) -> R {
+    let mut telemetry = SERVICE_STATE_LOCK_TELEMETRY
+        .get_or_init(|| Mutex::new(ServiceStateLockTelemetryState::default()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    update(&mut telemetry)
+}
+
+fn push_recent_service_state_lock_activity(
+    telemetry: &mut ServiceStateLockTelemetryState,
+    activity: ServiceStateLockActivity,
+) {
+    if telemetry.recent.len() == SERVICE_STATE_LOCK_RECENT_CAPACITY {
+        telemetry.recent.pop_front();
+    }
+    telemetry.recent.push_back(activity);
+}
+
+fn record_service_state_lock_acquired(
+    lock_kind: &'static str,
+    operation: &'static str,
+    mode: &'static str,
+    wait: Duration,
+) -> u64 {
+    let token = SERVICE_STATE_LOCK_TOKEN.fetch_add(1, Ordering::Relaxed);
+    with_service_state_lock_telemetry(|telemetry| {
+        if lock_kind == "process" {
+            telemetry.counters.process_acquisitions += 1;
+        } else {
+            telemetry.counters.file_acquisitions += 1;
+        }
+        telemetry.active.push(ActiveServiceStateLock {
+            token,
+            lock_kind,
+            operation,
+            mode,
+            acquired_at: Instant::now(),
+            wait_ms: elapsed_millis(wait),
+        });
+    });
+    token
+}
+
+fn record_service_state_lock_released(token: u64) {
+    with_service_state_lock_telemetry(|telemetry| {
+        let Some(index) = telemetry
+            .active
+            .iter()
+            .position(|active| active.token == token)
+        else {
+            return;
+        };
+        let active = telemetry.active.remove(index);
+        let hold_ms = elapsed_millis(active.acquired_at.elapsed());
+        push_recent_service_state_lock_activity(
+            telemetry,
+            ServiceStateLockActivity {
+                lock_kind: active.lock_kind,
+                operation: active.operation,
+                mode: active.mode,
+                phase: "released",
+                wait_ms: active.wait_ms,
+                hold_ms: Some(hold_ms),
+            },
+        );
+    });
+}
+
+fn record_service_state_lock_timeout(
+    lock_kind: &'static str,
+    operation: &'static str,
+    mode: &'static str,
+    wait: Duration,
+) {
+    with_service_state_lock_telemetry(|telemetry| {
+        if lock_kind == "process" {
+            telemetry.counters.process_timeouts += 1;
+        } else {
+            telemetry.counters.file_timeouts += 1;
+        }
+        push_recent_service_state_lock_activity(
+            telemetry,
+            ServiceStateLockActivity {
+                lock_kind,
+                operation,
+                mode,
+                phase: "timeout",
+                wait_ms: elapsed_millis(wait),
+                hold_ms: None,
+            },
+        );
+    });
+}
+
+fn record_service_state_lock_terminal(
+    lock_kind: &'static str,
+    operation: &'static str,
+    mode: &'static str,
+    phase: &'static str,
+    wait: Duration,
+) {
+    with_service_state_lock_telemetry(|telemetry| {
+        push_recent_service_state_lock_activity(
+            telemetry,
+            ServiceStateLockActivity {
+                lock_kind,
+                operation,
+                mode,
+                phase,
+                wait_ms: elapsed_millis(wait),
+                hold_ms: None,
+            },
+        );
+    });
+}
+
+/// Returns bounded process-local lock diagnostics without reading or writing
+/// the durable Service State repository.
+pub(crate) fn service_state_lock_diagnostics() -> ServiceStateLockDiagnostics {
+    let now = Instant::now();
+    with_service_state_lock_telemetry(|telemetry| ServiceStateLockDiagnostics {
+        schema_version: "agent-browser.service-state-lock-diagnostics.v1",
+        recent_capacity: SERVICE_STATE_LOCK_RECENT_CAPACITY,
+        active: telemetry
+            .active
+            .iter()
+            .map(|active| ServiceStateLockActivity {
+                lock_kind: active.lock_kind,
+                operation: active.operation,
+                mode: active.mode,
+                phase: "holding",
+                wait_ms: active.wait_ms,
+                hold_ms: Some(elapsed_millis(now.duration_since(active.acquired_at))),
+            })
+            .collect(),
+        recent: telemetry.recent.iter().cloned().collect(),
+        counters: telemetry.counters.clone(),
+    })
 }
 
 pub fn default_service_state_path() -> Result<PathBuf, String> {
@@ -1195,6 +1436,34 @@ enum ServiceStateFileLockMode {
     Exclusive,
 }
 
+impl ServiceStateFileLockMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Shared => "shared",
+            Self::Exclusive => "exclusive",
+        }
+    }
+}
+
+struct ServiceStateFileGuard {
+    file: File,
+    token: u64,
+}
+
+impl Deref for ServiceStateFileGuard {
+    type Target = File;
+
+    fn deref(&self) -> &Self::Target {
+        &self.file
+    }
+}
+
+impl Drop for ServiceStateFileGuard {
+    fn drop(&mut self) {
+        record_service_state_lock_released(self.token);
+    }
+}
+
 fn service_state_lock_path(path: &Path) -> PathBuf {
     let file_name = path
         .file_name()
@@ -1206,11 +1475,12 @@ fn service_state_lock_path(path: &Path) -> PathBuf {
 fn acquire_service_state_file_lock(
     state_path: &Path,
     mode: ServiceStateFileLockMode,
-) -> Result<File, String> {
+) -> Result<ServiceStateFileGuard, String> {
     acquire_service_state_file_lock_until(
         state_path,
         mode,
         Instant::now() + DEFAULT_SERVICE_STATE_LOCK_TIMEOUT,
+        "direct_file_lock",
     )
 }
 
@@ -1218,7 +1488,8 @@ fn acquire_service_state_file_lock_until(
     state_path: &Path,
     mode: ServiceStateFileLockMode,
     deadline: Instant,
-) -> Result<File, String> {
+    operation: &'static str,
+) -> Result<ServiceStateFileGuard, String> {
     let started = Instant::now();
     if let Some(parent) = state_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
@@ -1249,20 +1520,41 @@ fn acquire_service_state_file_lock_until(
             ServiceStateFileLockMode::Exclusive => file.try_lock(),
         };
         match result {
-            Ok(()) => return Ok(file),
+            Ok(()) => {
+                let token = record_service_state_lock_acquired(
+                    "file",
+                    operation,
+                    mode.as_str(),
+                    started.elapsed(),
+                );
+                return Ok(ServiceStateFileGuard { file, token });
+            }
             Err(std::fs::TryLockError::WouldBlock) if Instant::now() >= deadline => {
+                record_service_state_lock_timeout(
+                    "file",
+                    operation,
+                    mode.as_str(),
+                    started.elapsed(),
+                );
                 return Err(format!(
                     "service_state_lock_timeout: file lock; waited_ms={}",
                     started.elapsed().as_millis()
-                ))
+                ));
             }
             Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
             Err(error) => {
+                record_service_state_lock_terminal(
+                    "file",
+                    operation,
+                    mode.as_str(),
+                    "error",
+                    started.elapsed(),
+                );
                 return Err(format!(
                     "Failed to acquire service state lock {}: {}",
                     lock_path.display(),
                     error
-                ))
+                ));
             }
         }
     }
@@ -1621,6 +1913,96 @@ mod tests {
                 .expect("holder metadata should remain readable"),
             None
         );
+    }
+
+    #[test]
+    fn service_state_lock_diagnostics_track_active_and_released_file_holds() {
+        let path = unique_state_path("service-state-file-lock-telemetry");
+        let guard = acquire_service_state_file_lock_until(
+            &path,
+            ServiceStateFileLockMode::Exclusive,
+            Instant::now() + Duration::from_millis(20),
+            "telemetry_file_fixture",
+        )
+        .expect("fixture file lock should be acquired");
+
+        let active = service_state_lock_diagnostics();
+        assert!(active.active.iter().any(|activity| {
+            activity.lock_kind == "file"
+                && activity.operation == "telemetry_file_fixture"
+                && activity.phase == "holding"
+                && activity.mode == "exclusive"
+        }));
+
+        drop(guard);
+
+        let released = service_state_lock_diagnostics();
+        assert!(!released
+            .active
+            .iter()
+            .any(|activity| activity.operation == "telemetry_file_fixture"));
+        assert!(released.recent.iter().any(|activity| {
+            activity.operation == "telemetry_file_fixture"
+                && activity.phase == "released"
+                && activity.hold_ms.is_some()
+        }));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn process_lock_diagnostics_cleanup_and_recover_after_unwind() {
+        let lock = Box::leak(Box::new(Mutex::new(())));
+        let panic_result = std::panic::catch_unwind(|| {
+            let _guard = acquire_service_state_process_lock(
+                lock,
+                Instant::now() + Duration::from_millis(20),
+                "telemetry_unwind_fixture",
+            )
+            .expect("fixture process lock should be acquired");
+            panic!("intentional lock-guard unwind");
+        });
+        assert!(panic_result.is_err());
+        assert!(!service_state_lock_diagnostics()
+            .active
+            .iter()
+            .any(|activity| activity.operation == "telemetry_unwind_fixture"));
+
+        let recoveries_before = service_state_lock_diagnostics()
+            .counters
+            .process_poison_recoveries;
+        let recovered = acquire_service_state_process_lock(
+            lock,
+            Instant::now() + Duration::from_millis(20),
+            "telemetry_poison_recovery_fixture",
+        )
+        .expect("a poisoned process mutex should be safely recovered");
+        drop(recovered);
+        let diagnostics = service_state_lock_diagnostics();
+        assert!(diagnostics.counters.process_poison_recoveries > recoveries_before);
+        assert!(diagnostics.recent.iter().any(|activity| {
+            activity.operation == "telemetry_poison_recovery_fixture"
+                && activity.phase == "released"
+        }));
+    }
+
+    #[test]
+    fn service_state_lock_diagnostics_are_bounded() {
+        for _ in 0..(SERVICE_STATE_LOCK_RECENT_CAPACITY + 5) {
+            record_service_state_lock_terminal(
+                "process",
+                "telemetry_capacity_fixture",
+                "exclusive",
+                "error",
+                Duration::from_millis(1),
+            );
+        }
+
+        let diagnostics = service_state_lock_diagnostics();
+        assert_eq!(
+            diagnostics.recent_capacity,
+            SERVICE_STATE_LOCK_RECENT_CAPACITY
+        );
+        assert_eq!(diagnostics.recent.len(), SERVICE_STATE_LOCK_RECENT_CAPACITY);
     }
 
     #[test]

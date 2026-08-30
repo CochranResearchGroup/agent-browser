@@ -3056,6 +3056,13 @@ access plan and reuse a browser only when that current plan supplies both the
 exact `browserId` and `sessionName`. Neither condition permits a blind retry or
 a duplicate profile lane.
 
+Current `service status` responses include
+`serviceStateLockDiagnostics`, a bounded process-local view of active lock
+holders, recent waits and holds, timeout counters, and recovered process-lock
+poisoning. Use it to distinguish current contention from a completed timeout.
+It is diagnostic only, contains no profile paths or request payloads, and is
+never persisted into Service State.
+
 Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
 
 ```bash
