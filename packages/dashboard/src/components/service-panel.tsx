@@ -383,6 +383,22 @@ export type ServiceJob = {
   startedAt?: string | null;
   completedAt?: string | null;
   error?: string | null;
+  failure?: {
+    schemaVersion?: string;
+    code?: string;
+    axis?: string;
+    phase?: string;
+    effectState?: string;
+    retryDisposition?: string;
+    recommendedAction?: string;
+    reuseAllowed?: boolean;
+    waitMs?: number | null;
+    holderOperation?: string | null;
+    jobId?: string | null;
+    traceId?: string | null;
+    safeNextActions?: string[];
+    hardStops?: string[];
+  } | null;
 };
 
 export type ServiceInspectorSelection =
@@ -789,6 +805,12 @@ function serviceJobSearchText(job: ServiceJob): string {
     job.taskName,
     job.displayIsolation,
     job.error,
+    job.failure?.code,
+    job.failure?.axis,
+    job.failure?.phase,
+    job.failure?.effectState,
+    job.failure?.retryDisposition,
+    job.failure?.recommendedAction,
     job.submittedAt,
     job.startedAt,
     job.completedAt,
@@ -4909,6 +4931,27 @@ function JobDetailContent({
           ]}
         />
       </InspectorSection>
+      {job.failure && (
+        <InspectorSection title="Failure recourse" detail="Follow the server disposition; do not infer retry or reuse">
+          <InspectorFactRows
+            rows={[
+              { label: "Code", value: job.failure.code, mono: true },
+              { label: "Axis", value: job.failure.axis },
+              { label: "Phase", value: job.failure.phase },
+              { label: "Effect", value: job.failure.effectState },
+              { label: "Retry", value: job.failure.retryDisposition },
+              { label: "Next action", value: job.failure.recommendedAction },
+              { label: "Reuse allowed", value: job.failure.reuseAllowed === true ? "yes" : "no" },
+              { label: "Lock wait", value: job.failure.waitMs == null ? null : `${job.failure.waitMs} ms` },
+              { label: "Lock holder", value: job.failure.holderOperation },
+              { label: "Job locator", value: job.failure.jobId, mono: true },
+              { label: "Trace locator", value: job.failure.traceId, mono: true },
+              { label: "Safe next actions", value: job.failure.safeNextActions?.join(", ") },
+              { label: "Hard stops", value: job.failure.hardStops?.join(", ") },
+            ]}
+          />
+        </InspectorSection>
+      )}
       {stressReceipt && (
         <InspectorSection title="Foundation stress receipt" detail="One operation; aggregate acceptance is separate">
           <InspectorFactRows

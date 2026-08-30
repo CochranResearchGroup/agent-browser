@@ -4,7 +4,7 @@ Date: 2026-08-29
 
 State: OPEN
 
-Execution state: `slice_b_structured_recourse_checkpoint_complete_lock_refactor_next`
+Execution state: `slice_d_lock_recourse_and_client_surfaces_checkpoint_complete_commit_hardening_next`
 
 Lane: P142
 
