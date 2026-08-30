@@ -2,9 +2,9 @@
 
 Date: 2026-08-30
 
-State: OPEN
+State: COMPLETE
 
-Execution state: `development_runtime_validation_ready`
+Execution state: `production_installed_and_verified`
 
 Lane: P143
 
@@ -100,5 +100,53 @@ Install doctor was healthy before this repair.
   parallel invocation was discarded because environment-mutating tests leaked
   injected failure controls across cases; both apparent failures passed under
   the required serial execution mode.
-- Development publication, doctor, browser-launch smoke, and production
-  installation remain pending.
+- Exact candidate SHA-256
+  `ceb8f8a926e669a881da70edd8a00e9b3e2f043a423a3f954178cf0ab0f45c51`
+  passed development publication, development install doctor, the three-cycle
+  development browser-launch smoke, the development runtime fixture, and an
+  explicit `set viewport 1440 1000` readback.
+- Production transaction
+  `upgrade-c3ba448f-5360-4381-9ca2-7ab6d43f47a6` was accepted at revision 13.
+  Authenticated candidate resolution of durable handoff `r551610` returned
+  `resolved=true`, `status=ready`, and a ready presentation receipt for
+  generation `0.28.0-ceb8f8a926e6-178c836a535e` before payload commit.
+- The installed binary and the development-approved candidate have the same
+  SHA-256. Install doctor returned success and runtime convergence
+  `converged`. Runtime multiplicity is steady with one executable generation,
+  one dashboard process, one runtime host, and zero legacy daemons.
+- Production session `p143-production-viewport-final` opened Example Domain,
+  accepted `set viewport 1440 1000`, and returned JavaScript readback
+  `{width:1440,height:1000,devicePixelRatio:1}`. Close succeeded, and the
+  lifecycle registry records the browser terminal with its cleanup obligation
+  satisfied.
+- The production proof browser is also terminal with a satisfied cleanup
+  obligation and an absent process group. The enabled runtime-host user unit
+  remains stopped by the accepted-upgrade supervisor contract so it cannot
+  start a duplicate host beside the selected candidate process; the live
+  runtime census still reports exactly one healthy selected host.
+- Final Service State lock diagnostics report zero process timeouts, zero file
+  timeouts, zero poison recoveries, and no active lock holder.
+
+## Completion Receipt
+
+The installer no longer blocks its own candidate commands after admission
+drain. Candidate bootstrap, stream status, Service State reconciliation,
+handoff adoption, failure cleanup, and rollback now carry or honor only the
+exact active installation claim. Strict tests continue to reject unrelated and
+stale claims.
+
+Two additional live-state contradictions exposed by the upgrade were repaired
+without broad cleanup: exact owner-only dead process state can migrate to an
+inert placeholder, and an exact stale-generation owner can be adopted only
+when browser, profile, route, process, and owner evidence agree. Candidate
+bootstrap failure now aborts every prepared transfer, including a guarded
+administrative owner-generation compare-and-swap fallback when the source
+daemon cannot perform the abort.
+
+One retained pending transfer created by an earlier failed candidate bootstrap
+was repaired under the explicit operator recovery authority after backing up
+the exact authoritative files at
+`~/.agent-browser/runtime-adoption/manual-recovery/plan0143-pending-transfer-20260830T1430/`.
+Only that exact proposal was cleared. Production installation then completed
+through the supported transactional path; no broad process or profile cleanup
+was used.
