@@ -166,6 +166,55 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         };
     }
 
+    if error
+        .starts_with("service_access_plan_request_unavailable:lifecycle_owner_blocks_replacement")
+    {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "lifecycle_owner_blocks_replacement".to_string(),
+            axis: ServiceFailureAxis::LifecycleOwner,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: "inspect_lifecycle_owner".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_profile_allocation".to_string(),
+                "inspect_lifecycle_owner".to_string(),
+                "inspect_profile_recovery_plan".to_string(),
+            ],
+            hard_stops: vec![
+                "retry_direct_launch".to_string(),
+                "launch_duplicate_profile_lane".to_string(),
+                "force_unlock_or_process_cleanup".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+
+    if error.starts_with("service_access_plan_request_unavailable:foreign_principal_profile_lease")
+    {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "foreign_principal_profile_lease".to_string(),
+            axis: ServiceFailureAxis::ProfileLease,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: "coordinate_with_profile_lease_holder".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_profile_lease".to_string(),
+                "wait_for_profile_lease_holder".to_string(),
+            ],
+            hard_stops: vec![
+                "borrow_foreign_principal".to_string(),
+                "launch_duplicate_profile_lane".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+
     ServiceFailureRecourse {
         schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
         code: "service_operation_failed".to_string(),
@@ -295,6 +344,43 @@ mod tests {
         assert!(recourse
             .hard_stops
             .contains(&"launch_duplicate_profile_lane".to_string()));
+    }
+
+    #[test]
+    fn access_plan_lifecycle_blocker_is_terminal_without_duplicate_launch() {
+        let recourse = classify_service_failure(
+            "service_access_plan_request_unavailable:lifecycle_owner_blocks_replacement",
+        );
+
+        assert_eq!(recourse.code, "lifecycle_owner_blocks_replacement");
+        assert_eq!(recourse.axis, ServiceFailureAxis::LifecycleOwner);
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::DoNotRetry
+        );
+        assert!(!recourse.reuse_allowed);
+        assert!(recourse
+            .hard_stops
+            .contains(&"launch_duplicate_profile_lane".to_string()));
+    }
+
+    #[test]
+    fn foreign_profile_lease_never_becomes_reuse_authority() {
+        let recourse = classify_service_failure(
+            "service_access_plan_request_unavailable:foreign_principal_profile_lease",
+        );
+
+        assert_eq!(recourse.axis, ServiceFailureAxis::ProfileLease);
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::DoNotRetry
+        );
+        assert!(!recourse.reuse_allowed);
+        assert!(recourse
+            .hard_stops
+            .contains(&"borrow_foreign_principal".to_string()));
     }
 
     #[test]

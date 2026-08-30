@@ -1755,6 +1755,214 @@ mod tests {
     }
 
     #[test]
+    fn realistic_state_mixed_burst_has_no_lock_timeouts_or_duplicate_effects() {
+        const READER_COUNT: usize = 6;
+        const WRITER_COUNT: usize = 2;
+        const MINIMUM_FIXTURE_BYTES: usize = 2_900_000;
+
+        let path = unique_state_path("realistic-mixed-service-state-burst");
+        let store = JsonServiceStateStore::new(&path);
+        let mut fixture = ServiceState::default();
+        let payload = "x".repeat(20_000);
+        for index in 0..150 {
+            let id = format!("retained-job-{index:03}");
+            fixture.jobs.insert(
+                id.clone(),
+                crate::native::service_model::ServiceJob {
+                    id,
+                    action: ["launch", "remote_view_open", "tab_new", "viewport"][index % 4]
+                        .to_string(),
+                    result: Some(serde_json::json!({ "boundedFixturePayload": payload.clone() })),
+                    ..crate::native::service_model::ServiceJob::default()
+                },
+            );
+        }
+        store.save(&fixture).expect("realistic fixture should save");
+        let fixture_bytes = fs::metadata(&path)
+            .expect("realistic fixture should exist")
+            .len() as usize;
+        assert!(
+            fixture_bytes >= MINIMUM_FIXTURE_BYTES,
+            "fixture was {fixture_bytes} bytes"
+        );
+
+        let start = Arc::new(std::sync::Barrier::new(READER_COUNT + WRITER_COUNT + 1));
+        let lock_timeout_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let duplicate_effect_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut workers = Vec::new();
+        for _ in 0..READER_COUNT {
+            let path = path.clone();
+            let start = Arc::clone(&start);
+            let lock_timeout_count = Arc::clone(&lock_timeout_count);
+            workers.push(std::thread::spawn(move || {
+                start.wait();
+                let repository =
+                    LockedServiceStateRepository::new(JsonServiceStateStore::new(path));
+                if let Err(error) = repository.load_snapshot() {
+                    if error.starts_with("service_state_lock_timeout:") {
+                        lock_timeout_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    return Err(error);
+                }
+                Ok(())
+            }));
+        }
+        for writer_index in 0..WRITER_COUNT {
+            let path = path.clone();
+            let start = Arc::clone(&start);
+            let lock_timeout_count = Arc::clone(&lock_timeout_count);
+            let duplicate_effect_count = Arc::clone(&duplicate_effect_count);
+            workers.push(std::thread::spawn(move || {
+                start.wait();
+                let repository =
+                    LockedServiceStateRepository::new(JsonServiceStateStore::new(path));
+                let effect_id = format!("burst-effect-{writer_index}");
+                for attempt in 0..=1 {
+                    let outcome = repository.mutate(|state| {
+                        if state.jobs.contains_key(&effect_id) {
+                            duplicate_effect_count
+                                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            return Ok(());
+                        }
+                        state.jobs.insert(
+                            effect_id.clone(),
+                            crate::native::service_model::ServiceJob {
+                                id: effect_id.clone(),
+                                action: if writer_index == 0 {
+                                    "tab_new".to_string()
+                                } else {
+                                    "remote_view_open".to_string()
+                                },
+                                ..crate::native::service_model::ServiceJob::default()
+                            },
+                        );
+                        Ok(())
+                    });
+                    match outcome {
+                        Ok(()) => return Ok(()),
+                        Err(error)
+                            if error.starts_with("service_state_stale_revision:")
+                                && attempt == 0 =>
+                        {
+                            continue
+                        }
+                        Err(error) => {
+                            if error.starts_with("service_state_lock_timeout:") {
+                                lock_timeout_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                unreachable!("bounded retry loop always returns")
+            }));
+        }
+
+        let started = Instant::now();
+        start.wait();
+        for worker in workers {
+            worker
+                .join()
+                .expect("burst worker should not panic")
+                .expect("burst worker should finish with a classified outcome");
+        }
+        assert_eq!(
+            lock_timeout_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        assert_eq!(
+            duplicate_effect_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        let final_state = store.load().expect("final burst state should load");
+        assert_eq!(final_state.state_revision, WRITER_COUNT as u64);
+        assert!(final_state.jobs.contains_key("burst-effect-0"));
+        assert!(final_state.jobs.contains_key("burst-effect-1"));
+        let elapsed = started.elapsed();
+        eprintln!(
+            "service_state_burst_receipt fixture_bytes={fixture_bytes} readers={READER_COUNT} writers={WRITER_COUNT} lock_timeouts=0 duplicate_effects=0 elapsed_ms={}",
+            elapsed.as_millis()
+        );
+        assert!(elapsed < Duration::from_secs(10));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn cross_process_file_lock_helper() {
+        let Some(state_path) = std::env::var_os("AGENT_BROWSER_TEST_LOCK_HELPER_STATE_PATH") else {
+            return;
+        };
+        let ready_path = PathBuf::from(
+            std::env::var_os("AGENT_BROWSER_TEST_LOCK_HELPER_READY_PATH")
+                .expect("lock helper ready path should be supplied"),
+        );
+        let release_path = PathBuf::from(
+            std::env::var_os("AGENT_BROWSER_TEST_LOCK_HELPER_RELEASE_PATH")
+                .expect("lock helper release path should be supplied"),
+        );
+        let _guard = acquire_service_state_file_lock(
+            Path::new(&state_path),
+            ServiceStateFileLockMode::Exclusive,
+        )
+        .expect("child process should acquire the fixture file lock");
+        fs::write(&ready_path, b"ready").expect("child should publish lock readiness");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !release_path.exists() {
+            assert!(
+                Instant::now() < deadline,
+                "parent did not release helper lock"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn independent_process_file_lock_timeout_is_classified_before_mutation() {
+        let path = unique_state_path("cross-process-service-state-lock");
+        let ready_path = path.with_extension("helper-ready");
+        let release_path = path.with_extension("helper-release");
+        let mut child = std::process::Command::new(
+            std::env::current_exe().expect("current Rust test executable should resolve"),
+        )
+        .args([
+            "--exact",
+            "native::service_store::tests::cross_process_file_lock_helper",
+            "--nocapture",
+        ])
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_STATE_PATH", &path)
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_READY_PATH", &ready_path)
+        .env("AGENT_BROWSER_TEST_LOCK_HELPER_RELEASE_PATH", &release_path)
+        .spawn()
+        .expect("cross-process lock helper should start");
+        let ready_deadline = Instant::now() + Duration::from_secs(5);
+        while !ready_path.exists() {
+            assert!(
+                Instant::now() < ready_deadline,
+                "cross-process lock helper did not become ready"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let error = repository
+            .mutate_with_lock_timeout(Duration::from_millis(20), |state| {
+                state.state_revision = 999;
+                Ok(())
+            })
+            .expect_err("independent process lock must block mutation entry");
+        assert!(error.starts_with("service_state_lock_timeout: file lock; waited_ms="));
+
+        fs::write(&release_path, b"release").expect("parent should release helper lock");
+        assert!(child.wait().expect("lock helper should exit").success());
+        assert!(
+            !path.exists(),
+            "blocked mutation must not create Service State"
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn durable_remote_view_handoffs_survive_a_legacy_state_writer() {
         let path = unique_state_path("legacy-writer-remote-view-handoff");
         let store = JsonServiceStateStore::new(&path);
