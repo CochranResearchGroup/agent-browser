@@ -215,6 +215,34 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         };
     }
 
+    for code in [
+        "existing_session_profile_identity_unproven",
+        "existing_session_profile_identity_inconsistent",
+    ] {
+        if error.contains(code) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::ProfileLease,
+                phase: ServiceFailurePhase::LaunchAdmission,
+                effect_state: ServiceEffectState::NoEffect,
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "acquire_profile".to_string(),
+                reuse_allowed: false,
+                safe_next_actions: vec![
+                    "inspect_profile_lease".to_string(),
+                    "acquire_profile".to_string(),
+                    "inspect_profile_recovery_plan".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "launch_duplicate_profile_lane".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
+
     ServiceFailureRecourse {
         schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
         code: "service_operation_failed".to_string(),
@@ -381,6 +409,30 @@ mod tests {
         assert!(recourse
             .hard_stops
             .contains(&"borrow_foreign_principal".to_string()));
+    }
+
+    #[test]
+    fn profile_identity_admission_failure_routes_to_profile_acquisition() {
+        for error in [
+            "existing_session_profile_identity_unproven",
+            "existing_session_profile_identity_inconsistent",
+        ] {
+            let recourse = classify_service_failure(error);
+
+            assert_eq!(recourse.code, error);
+            assert_eq!(recourse.axis, ServiceFailureAxis::ProfileLease);
+            assert_eq!(recourse.phase, ServiceFailurePhase::LaunchAdmission);
+            assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+            assert_eq!(
+                recourse.retry_disposition,
+                ServiceRetryDisposition::InspectBeforeRetry
+            );
+            assert_eq!(recourse.recommended_action, "acquire_profile");
+            assert!(recourse
+                .safe_next_actions
+                .contains(&"acquire_profile".to_string()));
+            assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
+        }
     }
 
     #[test]

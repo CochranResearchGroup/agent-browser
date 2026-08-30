@@ -1322,6 +1322,18 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
             if !exact_terminal_replacement && !exact_authenticated_cold_route {
                 return Err("service_access_plan_incomplete_route_hints".to_string());
             }
+            if let Some(authority) = authenticated_principal {
+                attach_profile_launch_route_authorization(
+                    command,
+                    &plan,
+                    authority,
+                    if exact_terminal_replacement {
+                        "terminal_replacement"
+                    } else {
+                        "authenticated_cold"
+                    },
+                );
+            }
             return Ok(());
         }
         if !service_request_has_session_hint(command) {
@@ -1332,6 +1344,26 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
             {
                 command["sessionName"] = json!(session_name);
             }
+        }
+        if let Some(authority) = authenticated_principal {
+            let planned_session = command.get("sessionName").and_then(Value::as_str);
+            let terminal_session = plan["decision"]["lifecycleReplacement"]
+                .get("replacementSessionName")
+                .and_then(Value::as_str);
+            attach_profile_launch_route_authorization(
+                command,
+                &plan,
+                authority,
+                if plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
+                    == Some(true)
+                    && planned_session == terminal_session
+                    && terminal_session.is_some()
+                {
+                    "terminal_replacement"
+                } else {
+                    "authenticated_cold"
+                },
+            );
         }
         return Ok(());
     }
@@ -1354,6 +1386,35 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
     command["browserId"] = json!(browser_id);
     command["sessionName"] = json!(session_name);
     Ok(())
+}
+
+/// Attach a transport-internal receipt for the exact authenticated launch route
+/// selected from the current access plan. Public request normalization rejects
+/// this field when caller-authored, so the daemon can distinguish a copied plan
+/// from an unverified session label and revalidate its identities before launch.
+fn attach_profile_launch_route_authorization(
+    command: &mut Value,
+    plan: &Value,
+    authority: &AuthenticatedServicePrincipal,
+    route_kind: &str,
+) {
+    let session_name = command.get("sessionName").and_then(Value::as_str);
+    let profile_id = plan["selectedProfile"].get("id").and_then(Value::as_str);
+    if session_name.is_none() || profile_id != Some(authority.profile_id.as_str()) {
+        return;
+    }
+    command["serviceProfileRouteAuthorization"] = json!({
+        "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
+        "kind": route_kind,
+        "sessionName": session_name,
+        "profileId": profile_id,
+        "principalId": authority.principal_id,
+        "capabilityId": authority.capability_id,
+        "capabilityRevision": authority.capability_revision,
+        "runtimeOwnerRegistryRevision": plan["decision"]["lifecycleReplacement"]["registryRevision"],
+        "ownerId": plan["decision"]["lifecycleReplacement"]["ownerId"],
+        "ownerGeneration": plan["decision"]["lifecycleReplacement"]["ownerGeneration"],
+    });
 }
 
 fn service_request_route_hint_count(command: &Value) -> usize {
@@ -5350,6 +5411,8 @@ mod tests {
                 "odollo-fedex".to_string(),
                 BrowserProfile {
                     id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5359,6 +5422,8 @@ mod tests {
             &state,
             ServiceAccessPlanRequest {
                 runtime_profile: Some("odollo-fedex".to_string()),
+                service_name: Some("OdolloFulfillment".to_string()),
+                target_service_ids: vec!["fedex".to_string()],
                 ..ServiceAccessPlanRequest::default()
             },
             Some(&authority),
@@ -5375,6 +5440,14 @@ mod tests {
 
         assert_eq!(command["sessionName"], expected_session);
         assert!(command.get("browserId").is_none());
+        assert_eq!(
+            command["serviceProfileRouteAuthorization"]["kind"],
+            "authenticated_cold"
+        );
+        assert_eq!(
+            command["serviceProfileRouteAuthorization"]["sessionName"],
+            expected_session
+        );
     }
 
     #[test]
@@ -5892,6 +5965,9 @@ mod tests {
 
     #[test]
     fn service_access_plan_exposes_terminal_lifecycle_replacement_eligibility() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
             RuntimeLifecycleRecord, RuntimeOwnerRegistry,
@@ -5950,13 +6026,21 @@ mod tests {
             },
             ..ServiceState::default()
         };
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:bill-soylei".to_string(),
+            profile_id: "bill-soylei".to_string(),
+            capability_id: "profile-capability-v1:bill-soylei".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
 
-        let plan = service_access_plan_for_state(
+        let plan = service_access_plan_for_state_with_principal(
             &state,
             ServiceAccessPlanRequest {
                 target_service_ids: vec!["bill".to_string()],
                 ..ServiceAccessPlanRequest::default()
             },
+            Some(&authority),
         );
 
         assert_eq!(
@@ -6010,8 +6094,17 @@ mod tests {
             "runtimeProfile": "bill-soylei",
             "targetServiceIds": ["bill"],
         });
-        apply_shared_profile_route_hints_for_service_request(&state, &mut copied_request).unwrap();
+        apply_shared_profile_route_hints_for_service_request_with_principal(
+            &state,
+            &mut copied_request,
+            Some(&authority),
+        )
+        .unwrap();
         assert_eq!(copied_request["sessionName"], "terminal-lane");
+        assert_eq!(
+            copied_request["serviceProfileRouteAuthorization"]["kind"],
+            "terminal_replacement"
+        );
 
         let mut exact_explicit_request = json!({
             "action": "tab_new",
