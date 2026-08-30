@@ -7619,7 +7619,8 @@ fn runtime_transaction_failure_kind(
         && (normalized.contains("unknown command") || normalized.contains("unknown subcommand"))
         && normalized.contains("handoff");
     let legacy_transferred_owner_rejected = command_args == ["handoff", "prepare"]
-        && normalized.contains("runtime_owner_current_evidence_mismatch:");
+        && (normalized.contains("runtime_owner_current_evidence_mismatch:")
+            || normalized.contains("runtime_owner_generation_stale:"));
     let observation_only_alias = command_args == ["handoff", "prepare"]
         && normalized.contains("runtime_owner_observation_only:");
     let browser_unavailable_alias =
@@ -7651,7 +7652,14 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
                 && owner.owner_generation > 1
                 && owner.browser_id == migration.logical_browser_id
                 && owner.daemon_session_route == source_session
-                && owner.browser_id != format!("session:{source_session}")
+                && (owner.browser_id != format!("session:{source_session}")
+                    || service_state
+                        .runtime_owner_registry
+                        .is_exact_reversed_source_owner(
+                            &migration.profile_identity_digest,
+                            &migration.logical_browser_id,
+                            source_session,
+                        ))
         })
 }
 
@@ -14428,6 +14436,14 @@ mod tests {
         assert_eq!(
             runtime_transaction_failure_kind(
                 Some(&runtime_failure),
+                "runtime_owner_generation_stale: daemon is no longer the effect-capable browser owner",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
                 "runtime_owner_current_evidence_mismatch: existing profile owner does not match the preparing daemon",
                 &["handoff", "resume"]
             ),
@@ -14526,6 +14542,72 @@ mod tests {
             &generation_one_state,
             &migration,
             "handoff-candidate",
+        ));
+
+        let reversed_migration = RuntimeMigrationRecord {
+            logical_browser_id: "session:logical-browser".to_string(),
+            session_names: vec!["logical-browser".to_string()],
+            profile_identity_digest: "1".repeat(64),
+            classification: RuntimeClassification::CooperativeLiveOwner,
+            disposition: RuntimeDisposition::CooperativeTransfer,
+            adoption_receipt_id: None,
+            reason_codes: Vec::new(),
+        };
+        let mut reversed_registry = crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            crate::runtime_owner_transfer::ProfileOwner {
+                owner_id: "owner-old".to_string(),
+                profile_identity_digest: reversed_migration.profile_identity_digest.clone(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 7,
+                browser_id: "session:logical-browser".to_string(),
+                daemon_session_route: "logical-browser".to_string(),
+                process_instance_digest: "2".repeat(64),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "3".repeat(64),
+                target_set_digest: "4".repeat(64),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+        let request = crate::runtime_owner_transfer::OwnerTransferRequest {
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: reversed_migration.logical_browser_id.clone(),
+            profile_identity_digest: reversed_migration.profile_identity_digest.clone(),
+            expected_owner_id: Some("owner-old".to_string()),
+            expected_owner_generation: 7,
+            candidate_owner_id: "owner-new".to_string(),
+            candidate_daemon_session_route: "candidate".to_string(),
+            process_instance_digest: "2".repeat(64),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "3".repeat(64),
+            target_set_digest: "4".repeat(64),
+            selected_target_identity_digest: "5".repeat(64),
+            transfer_nonce_digest: "6".repeat(64),
+        };
+        let proposal = reversed_registry.begin_transfer(request.clone()).unwrap();
+        reversed_registry
+            .commit_candidate(
+                crate::runtime_owner_transfer::CandidateOwnerAttachment::from_request(
+                    &request,
+                    proposal.candidate_owner_generation,
+                ),
+            )
+            .unwrap();
+        reversed_registry
+            .reverse_transfer(crate::runtime_owner_transfer::ReverseOwnerTransferRequest {
+                profile_identity_digest: reversed_migration.profile_identity_digest.clone(),
+                expected_candidate_owner_id: "owner-new".to_string(),
+                expected_candidate_owner_generation: proposal.candidate_owner_generation,
+                transfer_nonce_digest: "6".repeat(64),
+                reverse_nonce_digest: "7".repeat(64),
+            })
+            .unwrap();
+        let mut reversed_state = ServiceState::default();
+        reversed_state.runtime_owner_registry = reversed_registry;
+        assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
+            &reversed_state,
+            &reversed_migration,
+            "logical-browser",
         ));
     }
 
