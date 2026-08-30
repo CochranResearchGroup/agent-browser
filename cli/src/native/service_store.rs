@@ -393,19 +393,22 @@ where
         mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
-        let _file_guard = self
-            .store
-            .state_path()
-            .map(|path| {
-                acquire_service_state_file_lock_until(
-                    path,
-                    ServiceStateFileLockMode::Exclusive,
-                    deadline,
-                )
-            })
-            .transpose()?;
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
+        if let Some(path) = self.store.state_path() {
+            let _file_guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Exclusive,
+                deadline,
+            )?;
+            let process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
+            let mut state = self.store.load()?;
+            let result = mutator(&mut state)?;
+            drop(process_guard);
+            self.store.save(&state)?;
+            return Ok(result);
+        }
+
+        let _process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
         let mut state = self.store.load()?;
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
@@ -1545,6 +1548,58 @@ mod tests {
                 .expect("holder metadata should remain readable"),
             None
         );
+    }
+
+    #[test]
+    fn json_backed_persistence_does_not_hold_the_process_mutation_mutex() {
+        struct BlockingSaveStore {
+            path: PathBuf,
+            save_entered: Arc<std::sync::Barrier>,
+            save_release: Arc<std::sync::Barrier>,
+        }
+
+        impl ServiceStateStore for BlockingSaveStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                Ok(ServiceState::default())
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                self.save_entered.wait();
+                self.save_release.wait();
+                Ok(())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+        }
+
+        let path = unique_state_path("blocking-save-process-mutex");
+        let save_entered = Arc::new(std::sync::Barrier::new(2));
+        let save_release = Arc::new(std::sync::Barrier::new(2));
+        let repository = LockedServiceStateRepository::new(BlockingSaveStore {
+            path: path.clone(),
+            save_entered: Arc::clone(&save_entered),
+            save_release: Arc::clone(&save_release),
+        });
+        let mutation = std::thread::spawn(move || repository.mutate(|_| Ok(())));
+
+        save_entered.wait();
+        let process_lock_available = SERVICE_STATE_MUTATION_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .try_lock()
+            .is_ok();
+        save_release.wait();
+
+        mutation
+            .join()
+            .expect("mutation thread should not panic")
+            .expect("mutation should finish after save is released");
+        assert!(
+            process_lock_available,
+            "durable serialization and commit must not retain the process mutex"
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
