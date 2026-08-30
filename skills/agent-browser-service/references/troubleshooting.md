@@ -17,6 +17,29 @@ Use the access plan, profile allocation, job, and request result.
 Do not create a duplicate profile lane unless reviewed throwaway isolation is
 the explicit request.
 
+## Structured Service failure recourse
+
+Preserve the legacy `error` string and consume the versioned `failure` object
+when it is present. Use `getServiceFailureRecourse()` or
+`requireServiceRequestSuccess()` in the generated JavaScript client. Branch on
+`retryDisposition`; do not parse error prose or invent a retry loop.
+
+- For `service_state_lock_timeout`, inspect `phase`, `effectState`, `waitMs`,
+  `holderOperation`, `jobId`, and `traceId`. An `effect_uncertain` viewport,
+  navigation, click, or other mutation may have completed before terminal
+  persistence failed. Inspect the exact job, trace, and current resource state
+  before another mutation.
+- For
+  `runtime_lifecycle_existing_owner_requires_explicit_transition`, refresh the
+  access plan once. Reuse is allowed only when the current plan supplies exact,
+  mutually consistent `browserId` and `sessionName` hints.
+- When a sealed Recovery Plan is returned, review or apply that exact plan only
+  under its stated authority. When no reuse or recovery is offered, stop on the
+  typed blocker.
+
+Neither failure authorizes blind retry, force unlock, process cleanup, or a
+duplicate profile lane.
+
 ## Presentation failures
 
 Use scoped remote-view doctor or route preflight for the requested profile,
