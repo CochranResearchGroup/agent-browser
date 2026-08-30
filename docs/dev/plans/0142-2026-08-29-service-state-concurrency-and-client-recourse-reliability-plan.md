@@ -4,7 +4,7 @@ Date: 2026-08-29
 
 State: OPEN
 
-Execution state: `slice_f_revision_cas_checkpoint_complete_stress_and_lifecycle_matrix_next`
+Execution state: `slice_h_development_candidate_green_lock_telemetry_projection_next`
 
 Lane: P142
 
