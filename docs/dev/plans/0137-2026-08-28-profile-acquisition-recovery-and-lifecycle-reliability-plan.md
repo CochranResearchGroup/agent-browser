@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_j_p142_satisfied_still_blocked_on_state_compatibility_and_presentation`
+Execution state: `slice_j_state_compatibility_repaired_presentation_blocked_on_old_runtime_lock`
 
 Lane: P137
 
@@ -638,6 +638,31 @@ evidence remain intentionally uncreated because each requires an effectful
 production staging or transaction boundary. Slice J may proceed only after a
 bounded compatibility repair or explicitly authorized state reconciliation,
 fresh candidate-specific presentation proof, and a new exact effect review.
+
+### Slice J compatibility and presentation checkpoint | 2026-08-29
+
+The bounded continuation is recorded in
+`docs/dev/notes/0148-2026-08-29-plan-0137-slice-j-lock-bootstrap-checkpoint.md`.
+
+The candidate now reads the retained production state successfully. Its
+migration plan reports `not_required`, proposes no protected-record removal,
+and preserves the historical Route 3 controller epoch as fencing evidence
+rather than current controller authority after the controller lease is absent.
+
+One disposable `about:blank` presentation opened on the exact terminal Route 3
+lane and returned `operatorVisible.state=ready`. The old selected production
+generation did not persist the generation-bound presentation receipt required
+by the candidate gate. The single exact handoff-resolution request then failed
+with `service_state_lock_timeout: process mutation lock`. Reconciliation found
+one failed job, zero related events, zero incidents, and no browser, session,
+route, or display identifier on that job. No retry or duplicate lane was
+issued.
+
+Plan 0142 source and isolated-development acceptance therefore mitigate the
+client outcome and normal contention path, but that behavior is not installed
+in production. Candidate installation remains blocked. The next packet must
+repair or provide a transaction-safe bootstrap for the old-runtime handoff
+resolution path without weakening the candidate presentation prerequisite.
 
 ## Acceptance Matrix
 

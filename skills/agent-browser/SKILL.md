@@ -50,6 +50,11 @@ profile, browser, session, display, route, lease, handoff, principal,
 capability, runtime owner, or lifecycle identity. Preserve unknown fields and
 action types without granting effect authority. Do not require an upgrade
 merely to run a recovery action the installed generation already advertises.
+Terminal orphaned remote-view evidence may be preserved through inert browser
+and released-session placeholders only when the process identity is confirmed
+absent and no active viewer, controller lease, or existing session binding
+remains. A historical controller epoch is fencing history, not current
+controller authority after the controller lease is absent.
 On the first transactional upgrade from the legacy
 mutable layout, the installer seals the exact existing binary, support tree,
 and user units as the rollback generation before replacing stable entrypoints

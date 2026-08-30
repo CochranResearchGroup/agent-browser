@@ -5620,7 +5620,9 @@ An already-invalid browser_missing tab can retain its evidence through inert
 not_started browser and released system-session placeholders. Terminal orphaned
 or released remote-view evidence can do the same when any retained process
 identity is confirmed absent and no active viewer, controller lease, or
-existing session binding remains. A registered principal binding at or behind
+existing session binding remains. A historical controller epoch does not count
+as current controller authority after the controller lease is absent. A
+registered principal binding at or behind
 the unique retained owner generation stays non-effect-capable reconciliation
 evidence until a live exact process is established. Effect-bearing references
 still block.

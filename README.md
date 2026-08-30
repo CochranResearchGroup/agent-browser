@@ -349,7 +349,9 @@ handle may likewise retain its evidence through an inert `not_started` browser
 placeholder and a released system-session placeholder. Terminal orphaned or
 released remote-view evidence can use the same inert placeholders when any
 retained process identity is confirmed absent and it has no active viewer,
-controller lease, or existing session binding. A registered principal binding
+controller lease, or existing session binding. A historical controller epoch
+does not count as current controller authority after the controller lease is
+absent. A registered principal binding
 at or behind the unique retained owner generation remains non-effect-capable
 reconciliation evidence until a live exact process is established. A unique
 unbound legacy owner remains historical identity. Effect-bearing references

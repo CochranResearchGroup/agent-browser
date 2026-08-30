@@ -694,7 +694,11 @@ fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
                 .all(|route| {
                     route.viewer_lease_ids.is_empty()
                         && route.controller_lease_id.is_none()
-                        && ((route.state == "orphaned" && route.controller_epoch == 0)
+                        // A controller epoch is historical fencing evidence, not
+                        // current control authority. An orphaned route with no
+                        // retained viewer or controller lease remains inert even
+                        // when an earlier controller advanced the epoch.
+                        && (route.state == "orphaned"
                             || (route.state == "released"
                                 && matches!(
                                     route.last_provider_event.as_deref(),
@@ -1782,6 +1786,95 @@ mod tests {
         assert_eq!(
             migrated["sessions"]["retired-session"]["browserIds"],
             json!(["session:retired-browser"])
+        );
+    }
+
+    #[test]
+    fn orphaned_route_with_historical_controller_epoch_materializes_inert_browser() {
+        let raw = json!({
+            "profiles": {
+                "managed-one-time": { "id": "managed-one-time", "name": "managed-one-time" }
+            },
+            "displayAllocations": {
+                "display:shared_display:12": {
+                    "id": "display:shared_display:12",
+                    "ownerBrowserId": "session:retired-browser",
+                    "ownerSessionId": "retired-session",
+                    "profileId": "managed-one-time",
+                    "state": "orphaned",
+                    "readiness": {
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:3": {
+                    "id": "guacamole:3",
+                    "browserId": "session:retired-browser",
+                    "sessionId": "retired-session",
+                    "displayAllocationId": "display:shared_display:12",
+                    "state": "orphaned",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": null,
+                    "controllerEpoch": 4,
+                    "lastProviderEvent": "display_allocation_unavailable"
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:retired-browser"]["health"],
+            "not_started"
+        );
+        assert_eq!(
+            migrated["sessions"]["retired-session"]["browserIds"],
+            json!(["session:retired-browser"])
+        );
+    }
+
+    #[test]
+    fn orphaned_route_with_current_controller_lease_remains_a_migration_blocker() {
+        let raw = json!({
+            "profiles": {
+                "managed-one-time": { "id": "managed-one-time", "name": "managed-one-time" }
+            },
+            "displayAllocations": {
+                "display:shared_display:12": {
+                    "id": "display:shared_display:12",
+                    "ownerBrowserId": "session:retired-browser",
+                    "ownerSessionId": "retired-session",
+                    "profileId": "managed-one-time",
+                    "state": "orphaned",
+                    "readiness": {
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:3": {
+                    "id": "guacamole:3",
+                    "browserId": "session:retired-browser",
+                    "sessionId": "retired-session",
+                    "displayAllocationId": "display:shared_display:12",
+                    "state": "orphaned",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": "controller-current",
+                    "controllerEpoch": 4,
+                    "lastProviderEvent": "display_allocation_unavailable"
+                }
+            }
+        })
+        .to_string();
+
+        let error = stage_service_state_migration(&raw).unwrap_err();
+        assert_eq!(
+            error,
+            "service_state_display_browser_missing:display:shared_display:12:session:retired-browser"
         );
     }
 
