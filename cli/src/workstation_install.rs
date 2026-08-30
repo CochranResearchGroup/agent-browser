@@ -7125,6 +7125,34 @@ fn prepare_runtime_handoff_with_alias_fallback(
                     kind: RuntimeTransactionCommandFailureKind::CommandFailed,
                     message,
                 })?;
+            let prepared = run_agent_json_detailed_in_socket_dir(
+                old_binary,
+                session,
+                &["handoff", "prepare"],
+                source_is_runtime_host.then_some((source_socket_dir, true)),
+            );
+            let Err(error) = prepared else {
+                return prepared;
+            };
+            if error.kind != RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected {
+                return Err(error);
+            }
+
+            // A failed installer transaction can stop after the source daemon
+            // durably prepared its owner transfer but before the handoff was
+            // added to the transaction ledger. The daemon then rejects the
+            // next prepare because its cached owner binding is stale. Reuse
+            // the exact descriptor-backed CAS abort before retrying once.
+            if abort_one_prepared_runtime_handoff(
+                old_binary,
+                source_socket_dir,
+                source_is_runtime_host,
+                session,
+            )
+            .is_err()
+            {
+                return Err(error);
+            }
             run_agent_json_detailed_in_socket_dir(
                 old_binary,
                 session,
