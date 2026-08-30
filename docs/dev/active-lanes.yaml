@@ -14,17 +14,3 @@ lanes:
     dependencies: []
     overlaps: []
     updated_at: 2026-08-29
-  - id: P142
-    objective: Service State concurrency and client recourse reliability
-    plan: docs/dev/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md
-    plan_ref: refs/heads/main
-    branch: main
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 3ee177181fe0b9946c85d657588e8ed4dac7c767
-    remote_ref: refs/remotes/origin/main
-    integration: direct
-    dependencies: []
-    overlaps: []
-    updated_at: 2026-08-29
