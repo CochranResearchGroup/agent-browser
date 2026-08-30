@@ -2,9 +2,9 @@
 
 Date: 2026-08-29
 
-State: OPEN
+State: CLOSED
 
-Execution state: `slice_h_development_candidate_green_lock_telemetry_projection_next`
+Execution state: `closed_integrated_development_acceptance_0_28_0_4ad310a1b16c`
 
 Lane: P142
 

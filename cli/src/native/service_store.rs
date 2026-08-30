@@ -810,10 +810,11 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
 
 /// Load a stable point-in-time snapshot of the default JSON service state.
 ///
-/// Readers take the same mutex as mutators so they do not observe a snapshot
-/// while a serialized read-modify-write operation is in progress. This does
-/// not make the snapshot live after it is returned; callers that later write
-/// must still use merge-aware mutation helpers.
+/// Readers take a shared cross-process file lock and do not take the process
+/// mutation mutex. A snapshot therefore resolves to one complete durable
+/// revision without queuing behind mutation-only preparation. This does not
+/// make the snapshot live after it is returned; callers that later write must
+/// still use revision-aware mutation helpers.
 pub fn load_default_service_state_snapshot() -> Result<ServiceState, String> {
     LockedServiceStateRepository::default_json()?.load_snapshot()
 }

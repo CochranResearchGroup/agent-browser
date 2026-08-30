@@ -2268,15 +2268,16 @@ mod tests {
         assert!(!serialized.contains("/sensitive/full/path"));
     }
 
-    fn temp_home(label: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "agent-browser-{label}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+    fn temp_home(_label: &str) -> std::path::PathBuf {
+        let state_path =
+            JsonServiceStateStore::default_path().expect("test Service State path should resolve");
+        let path = state_path
+            .parent()
+            .and_then(std::path::Path::parent)
+            .and_then(std::path::Path::parent)
+            .expect("test Service State path should have a home root")
+            .to_path_buf();
+        let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path
     }
