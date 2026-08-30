@@ -95,6 +95,26 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         };
     }
 
+    if error.starts_with("service_state_lock_timeout:") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_state_lock_timeout".to_string(),
+            axis: ServiceFailureAxis::ServiceState,
+            phase: ServiceFailurePhase::FileLockWait,
+            effect_state: ServiceEffectState::EffectUncertain,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_job_and_refresh_plan".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_job".to_string(),
+                "inspect_service_trace".to_string(),
+                "refresh_access_plan".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+
     if error.contains("runtime_lifecycle_existing_owner_requires_explicit_transition") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -172,6 +192,24 @@ mod tests {
         assert!(recourse
             .hard_stops
             .contains(&"launch_duplicate_profile_lane".to_string()));
+    }
+
+    #[test]
+    fn file_lock_timeout_requires_inspection_before_retry() {
+        let recourse =
+            classify_service_failure("service_state_lock_timeout: /tmp/service-state.json.lock");
+
+        assert_eq!(recourse.code, "service_state_lock_timeout");
+        assert_eq!(recourse.axis, ServiceFailureAxis::ServiceState);
+        assert_eq!(recourse.phase, ServiceFailurePhase::FileLockWait);
+        assert_eq!(recourse.effect_state, ServiceEffectState::EffectUncertain);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+        assert_eq!(recourse.recommended_action, "inspect_job_and_refresh_plan");
+        assert!(!recourse.reuse_allowed);
+        assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
     }
 
     #[test]

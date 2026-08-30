@@ -85,6 +85,17 @@ pub trait ServiceStateStore {
     fn load(&self) -> Result<ServiceState, String>;
     fn save(&self, state: &ServiceState) -> Result<(), String>;
 
+    /// Load while the repository already holds a lock that guarantees no
+    /// transaction is in progress. Stores without transactional recovery may
+    /// use their normal load implementation.
+    fn load_without_recovery(&self) -> Result<ServiceState, String> {
+        self.load()
+    }
+
+    fn recovery_required(&self) -> bool {
+        false
+    }
+
     fn state_path(&self) -> Option<&Path> {
         None
     }
@@ -182,6 +193,10 @@ impl LockedServiceStateRepository<JsonServiceStateStore> {
 impl ServiceStateStore for JsonServiceStateStore {
     fn load(&self) -> Result<ServiceState, String> {
         recover_service_state_transaction(&self.path)?;
+        self.load_without_recovery()
+    }
+
+    fn load_without_recovery(&self) -> Result<ServiceState, String> {
         let mut state_file_missing = false;
         let mut state = match fs::read_to_string(&self.path) {
             Ok(raw) => parse_service_state_json(raw, &self.path)?,
@@ -229,6 +244,10 @@ impl ServiceStateStore for JsonServiceStateStore {
         super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)?;
         state.refresh_derived_views();
         Ok(state)
+    }
+
+    fn recovery_required(&self) -> bool {
+        service_state_transaction_path(&self.path).exists()
     }
 
     fn save(&self, state: &ServiceState) -> Result<(), String> {
@@ -341,19 +360,29 @@ where
         timeout: Duration,
     ) -> Result<ServiceState, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+        let Some(path) = self.store.state_path() else {
+            let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+            let _guard = acquire_service_state_process_lock(lock, deadline)?;
+            return self.store.load();
+        };
+
+        let file_guard = acquire_service_state_file_lock_until(
+            path,
+            ServiceStateFileLockMode::Shared,
+            deadline,
+        )?;
+        if !self.store.recovery_required() {
+            return self.store.load_without_recovery();
+        }
+
+        drop(file_guard);
+        let _file_guard = acquire_service_state_file_lock_until(
+            path,
+            ServiceStateFileLockMode::Exclusive,
+            deadline,
+        )?;
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
         let _guard = acquire_service_state_process_lock(lock, deadline)?;
-        let _file_guard = self
-            .store
-            .state_path()
-            .map(|path| {
-                acquire_service_state_file_lock_until(
-                    path,
-                    ServiceStateFileLockMode::Exclusive,
-                    deadline,
-                )
-            })
-            .transpose()?;
         self.store.load()
     }
 
@@ -363,8 +392,6 @@ where
         mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
-        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = acquire_service_state_process_lock(lock, deadline)?;
         let _file_guard = self
             .store
             .state_path()
@@ -376,6 +403,8 @@ where
                 )
             })
             .transpose()?;
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = acquire_service_state_process_lock(lock, deadline)?;
         let mut state = self.store.load()?;
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
@@ -1413,6 +1442,48 @@ mod tests {
         assert!(error.contains("service_state_lock_timeout"));
         assert!(started.elapsed() < Duration::from_secs(1));
         drop(held);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn stable_snapshot_readers_share_the_service_state_file_lock() {
+        let path = unique_state_path("shared-service-state-snapshot-lock");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&ServiceState::default())
+            .expect("fixture state should save");
+        let first_reader = acquire_service_state_file_lock(&path, ServiceStateFileLockMode::Shared)
+            .expect("first snapshot reader should acquire the shared lock");
+        let repository = LockedServiceStateRepository::new(store);
+
+        let snapshot = repository
+            .load_snapshot_with_lock_timeout(Duration::from_millis(20))
+            .expect("a stable snapshot reader should not exclude another reader");
+
+        assert!(snapshot.jobs.is_empty());
+        drop(first_reader);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn stable_snapshot_reader_does_not_wait_for_the_process_mutation_mutex() {
+        let path = unique_state_path("snapshot-with-process-mutation-mutex-held");
+        let store = JsonServiceStateStore::new(&path);
+        store
+            .save(&ServiceState::default())
+            .expect("fixture state should save");
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let process_guard = lock
+            .lock()
+            .expect("fixture should hold the process mutation mutex");
+        let repository = LockedServiceStateRepository::new(store);
+
+        let snapshot = repository
+            .load_snapshot_with_lock_timeout(Duration::from_millis(20))
+            .expect("stable snapshot reads should not use the mutation mutex");
+
+        assert!(snapshot.jobs.is_empty());
+        drop(process_guard);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
