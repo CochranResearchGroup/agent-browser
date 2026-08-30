@@ -296,14 +296,15 @@ versioned support root, so no checkout or ambient script-root override is
 required.
 
 Before a real-host upgrade enters effects, dry-run reports
-`candidatePresentationPrerequisite`. It is ready only when one opaque durable
-handoff has an exact current browser, process identity, target, unique owner
-session, ready route, ready display, and matching presentation receipt. Apply
-records a terminal zero-effect preflight block when that evidence is absent;
-it does not stage a candidate and wait for a handoff that cannot resolve.
-Fresh installs and isolated development installs are exempt. Structured
-handoffs never fall back to stale session labels when current owner evidence
-is missing.
+`candidatePresentationPrerequisite` with `proofPhase=bootstrap`. It is ready
+when one opaque durable handoff identifies an exact healthy browser process,
+target, and unique current owner session that the staged candidate can adopt.
+A ready route, display, or old-generation presentation receipt is not required
+at bootstrap because those replaceable resources must be reacquired and proved
+by the candidate. Apply records a terminal zero-effect preflight block when no
+adoptable handoff exists. Fresh installs and isolated development installs are
+exempt. Structured handoffs never fall back to stale session labels when
+current owner evidence is missing.
 
 On real-host apply, the installer starts the candidate dashboard backend on
 the second port after the stable ingress port and stages it in the ingress
@@ -313,6 +314,8 @@ journey. Resolving an opaque durable handoff to a ready operator surface
 through the staged candidate automatically commits that exact generation.
 The commit rechecks its candidate-bound presentation receipt against the
 current runtime owner, route, display, target, provider, and deployment
+generation. If proof is not established before the deadline, the installer
+rolls back the staged candidate and preserves the selected installed
 generation. `agent-browser dashboard ingress commit --expected-revision
 <revision> --handoff-id <id>` remains an explicit recovery command for a ready
 receipt that was recorded before automatic selection completed.

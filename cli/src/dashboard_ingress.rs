@@ -898,9 +898,55 @@ fn presentation_evidence_from_durable_handoff(
     })
 }
 
-/// Reports whether an existing durable handoff can satisfy the authenticated
-/// shadow-dashboard journey before an upgrade is allowed to enter effects.
-/// The projection contains only opaque handoff ids and blocker classes.
+/// Reports whether an existing durable handoff identifies one current browser,
+/// target, and runtime owner that a staged candidate may adopt. Replaceable
+/// presentation infrastructure and a generation-bound receipt are deliberately
+/// excluded here because only the staged candidate can reacquire and prove
+/// them. The strict candidate proof remains a separate commit prerequisite.
+pub(crate) fn candidate_presentation_bootstrap_prerequisite(
+    state: &crate::native::service_model::ServiceState,
+) -> serde_json::Value {
+    let mut eligible_handoff_ids = Vec::new();
+    let mut blocker_counts = std::collections::BTreeMap::<&'static str, usize>::new();
+    for handoff in state.remote_view_handoffs.values() {
+        let owner_session =
+            crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
+                state, handoff,
+            );
+        let blocker = if handoff.state != "ready" {
+            Some("handoff_not_ready")
+        } else if owner_session.is_none() {
+            Some("current_owner_unproven")
+        } else {
+            None
+        };
+        if let Some(blocker) = blocker {
+            *blocker_counts.entry(blocker).or_default() += 1;
+        } else {
+            eligible_handoff_ids.push(handoff.id.clone());
+        }
+    }
+    let ready = !eligible_handoff_ids.is_empty();
+    serde_json::json!({
+        "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+        "proofPhase": "bootstrap",
+        "ready": ready,
+        "eligibleHandoffCount": eligible_handoff_ids.len(),
+        "eligibleHandoffIds": eligible_handoff_ids,
+        "candidateProofRequiredAfterStaging": true,
+        "blockerCounts": blocker_counts,
+        "nextAction": if ready {
+            "stage_candidate_then_resolve_eligible_handoff"
+        } else {
+            "reconcile_one_adoptable_current_handoff_before_candidate_staging"
+        },
+    })
+}
+
+/// Reports whether a staged candidate has satisfied the independently
+/// authenticated shadow-dashboard journey required for commit. The projection
+/// contains only opaque handoff ids and blocker classes.
+#[cfg(test)]
 pub(crate) fn candidate_presentation_prerequisite(
     state: &crate::native::service_model::ServiceState,
 ) -> serde_json::Value {
@@ -997,6 +1043,7 @@ pub(crate) fn candidate_presentation_prerequisite(
     let ready = !eligible_handoff_ids.is_empty();
     serde_json::json!({
         "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+        "proofPhase": "candidate_authenticated",
         "ready": ready,
         "eligibleHandoffCount": eligible_handoff_ids.len(),
         "eligibleHandoffIds": eligible_handoff_ids,
@@ -1949,6 +1996,46 @@ mod tests {
             prerequisite["blockerCounts"]["presentation_receipt_unready"],
             1
         );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_accepts_adoptable_handoff_without_old_receipt_or_route() {
+        let mut state = exact_candidate_presentation_state();
+        let handoff = state.remote_view_handoffs.get_mut("r1").unwrap();
+        handoff.presentation_receipt = None;
+        state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
+        state
+            .display_allocations
+            .get_mut("display-1")
+            .unwrap()
+            .state = "orphaned".to_string();
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["proofPhase"], "bootstrap");
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+        assert_eq!(prerequisite["candidateProofRequiredAfterStaging"], true);
+        assert_eq!(
+            prerequisite["nextAction"],
+            "stage_candidate_then_resolve_eligible_handoff"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_rejects_handoff_without_current_owner() {
+        let mut state = exact_candidate_presentation_state();
+        state.runtime_owner_registry.owners.clear();
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["blockerCounts"]["current_owner_unproven"], 1);
     }
 
     #[test]

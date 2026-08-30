@@ -151,19 +151,23 @@ seven readiness axes. The axes are `payloadReady`,
 `upgradeTransactionState`, `dashboardIngressReady`, `operatorJourneyReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
 admission drain is closed. Upgrade dry-run also reports
-`candidatePresentationPrerequisite`. It is ready only when one opaque durable
-handoff has an exact current browser, process identity, target, unique owner
-session, ready route, ready display, and matching presentation receipt. Apply
-records a terminal zero-effect preflight block when no handoff qualifies.
-Fresh and isolated installs are exempt. Never retry the upgrade or route a
-structured handoff through its old session label when this prerequisite is
-unready; reconcile exact current evidence or establish one fresh reviewed
-presentation handoff first. Real-host apply starts a candidate dashboard on the
-second port after ingress, then waits up to five minutes after runtime transfer
-for an authenticated candidate journey. Resolving an opaque durable handoff
-to a ready operator surface through the staged candidate automatically commits
-that exact generation after rechecking its receipt against the current owner,
-route, display, target, provider, and deployment generation. Use `dashboard
+`candidatePresentationPrerequisite` with `proofPhase=bootstrap`. It is ready
+when one opaque durable handoff identifies an exact healthy browser process,
+target, and unique current owner session that a staged candidate can adopt.
+Bootstrap does not require a ready route, display, or old-generation receipt;
+the staged candidate must reacquire those replaceable resources and produce
+its own authenticated receipt. Apply records a terminal zero-effect preflight
+block when no adoptable handoff qualifies. Fresh and isolated installs are
+exempt. Never retry the upgrade or route a structured handoff through its old
+session label when bootstrap is unready; reconcile exact current ownership or
+establish one fresh reviewed handoff first. Real-host apply starts a candidate
+dashboard on the second port after ingress, then waits up to five minutes after
+runtime transfer for an authenticated candidate journey. Resolving an opaque
+durable handoff to a ready operator surface through the staged candidate
+automatically commits that exact generation after rechecking its receipt
+against the current owner, route, display, target, provider, and deployment
+generation. If proof fails, rollback removes the staged candidate and preserves
+the selected generation. Use `dashboard
 ingress commit --expected-revision <revision> --handoff-id <id>` only as an
 explicit recovery command when the ready receipt landed before automatic
 selection completed. Do not synthesize file-based presentation evidence. The

@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_j_state_compatibility_repaired_presentation_blocked_on_old_runtime_lock`
+Execution state: `slice_j_transactional_bootstrap_validated_production_dry_run_next`
 
 Lane: P137
 
@@ -664,6 +664,37 @@ in production. Candidate installation remains blocked. The next packet must
 repair or provide a transaction-safe bootstrap for the old-runtime handoff
 resolution path without weakening the candidate presentation prerequisite.
 
+### Slice J transactional candidate bootstrap repair | 2026-08-30
+
+The installer no longer requires the selected old generation to produce the
+staged candidate's authenticated presentation receipt before staging can
+begin. The pre-effect projection now has `proofPhase=bootstrap` and admits only
+an opaque durable handoff whose retained browser process, target, and unique
+current owner session are exact and healthy. Route, display, and presentation
+receipt evidence remain excluded from bootstrap because they are replaceable
+resources that the candidate must reacquire.
+
+The authenticated candidate commit gate remains strict. After runtime
+transfer, the staged candidate must resolve the same opaque handoff and persist
+a candidate-generation receipt matching the current owner, process identity,
+route, display, target, provider, and deployment generation. A timeout or
+failed proof rolls back the shadow candidate before generation selection and
+preserves the installed generation. Resume from `candidate_ready` enters this
+same proof gate directly and does not reapply the old-generation bootstrap
+check.
+
+Provider-free tests prove that persisted Service State with an adoptable
+handoff and no old receipt, ready route, or ready display admits candidate
+staging; missing current ownership still blocks; strict candidate evidence
+remains required for commit; and proof failure removes the staged dashboard
+candidate without changing the generation selector. Rust formatting, strict
+Clippy, the source-free workstation fixture, documentation build, 118 serial
+workstation tests, and the repository's partitioned Rust harness pass. Isolated
+development generation `0.28.0-d9577e0ed57a` is ready, its repository skill is
+synchronized, and three disposable launch, URL-read, close, and residue checks
+pass. Development publication verified that production identity and state-file
+hashes were unchanged. A fresh production dry-run is the next exact gate.
+
 ## Acceptance Matrix
 
 | Case | Required terminal outcome |
@@ -1147,7 +1178,10 @@ fixtures prove bounded lock diagnostics, zero-effect pre-mutation timeouts,
 effect-uncertain inspection requirements, exact-route-only reuse, sealed
 recovery, and hard-block behavior without duplicate profile lanes.
 
-This satisfies P142 for Slice J eligibility only. It does not clear the
-production Service State compatibility or presentation prerequisites recorded
-in the Slice J no-effect checkpoint, and it does not authorize production
-installation, repair, cleanup, provider work, or tenant effects.
+This satisfies P142 for Slice J eligibility only. The compatibility blocker is
+closed by the bounded migration repair, and the circular old-generation
+presentation prerequisite is replaced by the transactional candidate bootstrap
+described above. Production installation still requires source validation,
+isolated development-runtime acceptance, and a fresh exact effect review. It
+does not authorize provider work, tenant effects, broad cleanup, or retries of
+uncertain service requests.

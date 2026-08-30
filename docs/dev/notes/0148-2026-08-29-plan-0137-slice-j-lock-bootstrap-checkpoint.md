@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: BLOCKED BEFORE PRODUCTION CANDIDATE INSTALLATION
+Status: SOURCE AND ISOLATED VALIDATION ACCEPTED, PRODUCTION DRY-RUN NEXT
 
 ## Scope
 
@@ -108,11 +108,46 @@ because production remains on the older selected generation. The current
 upgrade bootstrap requires a presentation receipt that the old generation
 cannot produce through this contended resolution path.
 
+## Transactional bootstrap repair | 2026-08-30
+
+The bounded source repair separates two proof phases:
+
+- bootstrap admits one opaque handoff only when its retained browser process,
+  target, and unique current runtime owner are exact and healthy; and
+- candidate commit still requires a new authenticated presentation receipt
+  matching the staged generation, current owner and process identity, route,
+  display, target, and provider.
+
+Bootstrap deliberately does not require the old selected generation to persist
+the candidate's receipt or keep replaceable route and display infrastructure
+ready. The candidate stages first, adopts the retained browser lane, reacquires
+presentation, and commits only after its own receipt passes the strict gate. If
+proof times out or fails, rollback removes the staged dashboard candidate and
+preserves the selected installed generation.
+
+Provider-free tests cover persisted Service State admission without an old
+receipt or ready route, rejection without current ownership, strict candidate
+receipt validation, and rollback without generation-selector change. Resume
+from `candidate_ready` already waits on the same candidate proof and does not
+reapply bootstrap.
+
+## Isolated acceptance | 2026-08-30
+
+The repository's formatting, strict Clippy, source-free workstation fixture,
+documentation build, remote-view guidance check, 118 serial workstation tests,
+and partitioned Rust harness pass. Development generation
+`0.28.0-d9577e0ed57a` has candidate SHA-256
+`d9577e0ed57a240302995c002ebf4a2a08dd94705b1c06d8ad194db95a40d368`.
+The development runtime and presentation provider report ready, the repository
+skill is synchronized into the development pseudo-home, and three disposable
+browser launch, URL-read, close, and residue iterations pass. Publication
+verified that the production selected generation, process identities, and
+Service State hashes were unchanged.
+
 ## Remaining gate
 
-Keep the stop in force. The next bounded source packet must make the old-to-new
-presentation bootstrap transaction-safe without accepting a receipt-less
-handoff, inventing retry permission, bypassing authenticated candidate proof,
-or launching another browser. Production candidate installation and provider
-acceptance remain blocked until that packet has source tests, isolated-runtime
-acceptance, and a new exact effect review.
+Run a fresh production dry-run with this exact candidate. Production apply may
+enter its transactional staging path only when bootstrap identifies an
+adoptable current handoff and every migration, census, rollback, and host gate
+is exact. Provider acceptance remains a separate authority boundary, and no
+uncertain failed service request may be retried as part of the upgrade.

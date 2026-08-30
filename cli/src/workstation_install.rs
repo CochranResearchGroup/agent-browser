@@ -2410,10 +2410,12 @@ fn workstation_candidate_presentation_prerequisite(
     if isolated_root || !existing_install {
         return serde_json::json!({
             "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+            "proofPhase": "bootstrap",
             "required": false,
             "ready": true,
             "eligibleHandoffCount": 0,
             "eligibleHandoffIds": [],
+            "candidateProofRequiredAfterStaging": true,
             "blockerCounts": {},
             "nextAction": "not_required_for_fresh_or_isolated_install",
         });
@@ -2423,18 +2425,20 @@ fn workstation_candidate_presentation_prerequisite(
     match JsonServiceStateStore::new(state_path).load() {
         Ok(state) => {
             let mut prerequisite =
-                crate::dashboard_ingress::candidate_presentation_prerequisite(&state);
+                crate::dashboard_ingress::candidate_presentation_bootstrap_prerequisite(&state);
             prerequisite["required"] = Value::Bool(true);
             prerequisite
         }
         Err(error) => serde_json::json!({
             "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+            "proofPhase": "bootstrap",
             "required": true,
             "ready": false,
             "eligibleHandoffCount": 0,
             "eligibleHandoffIds": [],
+            "candidateProofRequiredAfterStaging": true,
             "blockerCounts": {"service_state_unreadable": 1},
-            "nextAction": "repair_service_state_before_candidate_install",
+            "nextAction": "repair_service_state_before_candidate_staging",
             "error": error,
         }),
     }
@@ -2508,7 +2512,7 @@ fn run_workstation_install(args: &[String]) {
             != Some(true)
     {
         let mut error = format!(
-            "candidate_dashboard_presentation_prerequisite_unready: {}",
+            "candidate_dashboard_bootstrap_prerequisite_unready: {}",
             candidate_presentation_prerequisite
         );
         if let Ok(path) = record_terminal_zero_effect_upgrade_transaction(
@@ -2516,7 +2520,7 @@ fn run_workstation_install(args: &[String]) {
             &paths,
             &parsed,
             crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
-            "candidate_dashboard_presentation_prerequisite_unready",
+            "candidate_dashboard_bootstrap_prerequisite_unready",
         ) {
             error.push_str(&format!("; transaction: {}", path.display()));
         }
@@ -10715,8 +10719,114 @@ mod tests {
         assert_eq!(prerequisite["eligibleHandoffCount"], 0);
         assert_eq!(
             prerequisite["nextAction"],
-            "reconcile_exact_current_handoff_or_create_fresh_presentation_handoff"
+            "reconcile_one_adoptable_current_handoff_before_candidate_staging"
         );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workstation_upgrade_preflight_accepts_adoptable_handoff_without_old_presentation() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserProcess, BrowserTab, RemoteViewHandoff,
+            ServiceBrowserProcessIdentity, ServiceState, TabLifecycle,
+        };
+        use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+        use crate::process_identity::RecordedProcessIdentity;
+        use crate::runtime_owner_transfer::{
+            ProfileOwner, ProfileOwnerState, RuntimeOwnerRegistry,
+        };
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-bootstrap-prerequisite-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(&paths.generations_dir).unwrap();
+        symlink("generation-old", &paths.current_selector).unwrap();
+        let process_identity = RecordedProcessIdentity {
+            pid: 4242,
+            start_token: "linux:boot:4242".to_string(),
+            executable_path: Some("/opt/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        };
+        let process_digest =
+            workstation_bytes_sha256(&serde_json::to_vec(&process_identity).unwrap());
+        let state = ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "r1".to_string(),
+                RemoteViewHandoff {
+                    id: "r1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_name: Some("owner-session".to_string()),
+                    target_id: Some("target-1".to_string()),
+                    presentation_receipt: None,
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            browsers: std::collections::BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    pid: Some(4242),
+                    active_session_ids: vec!["owner-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            tabs: std::collections::BTreeMap::from([(
+                "tab-1".to_string(),
+                BrowserTab {
+                    id: "tab-1".to_string(),
+                    browser_id: "browser-1".to_string(),
+                    target_id: Some("target-1".to_string()),
+                    session_id: Some("owner-session".to_string()),
+                    owner_session_id: Some("owner-session".to_string()),
+                    lifecycle: TabLifecycle::Ready,
+                    ..BrowserTab::default()
+                },
+            )]),
+            browser_process_identities: std::collections::BTreeMap::from([(
+                "browser-1".to_string(),
+                ServiceBrowserProcessIdentity {
+                    process_identity,
+                    user_data_dir: None,
+                    runtime_profile: Some("profile-1".to_string()),
+                },
+            )]),
+            runtime_owner_registry: RuntimeOwnerRegistry::from_owner(ProfileOwner {
+                owner_id: "owner-1".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 4,
+                browser_id: "browser-1".to_string(),
+                daemon_session_route: "owner-session".to_string(),
+                process_instance_digest: process_digest,
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                target_set_digest: "target-digest".to_string(),
+                pending_transfer: None,
+                last_transition: None,
+            }),
+            ..ServiceState::default()
+        };
+        JsonServiceStateStore::new(root.join(".agent-browser/service/state.json"))
+            .save(&state)
+            .unwrap();
+
+        let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
+
+        assert_eq!(prerequisite["proofPhase"], "bootstrap");
+        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+        assert_eq!(prerequisite["candidateProofRequiredAfterStaging"], true);
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -12676,7 +12786,7 @@ mod tests {
     }
 
     #[test]
-    fn presentation_preflight_rejection_is_terminal_without_staging_payload() {
+    fn bootstrap_preflight_rejection_is_terminal_without_staging_payload() {
         let root = env::temp_dir().join(format!(
             "agent-browser-terminal-presentation-preflight-{}",
             uuid::Uuid::new_v4()
@@ -12695,7 +12805,7 @@ mod tests {
             &paths,
             &args,
             crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
-            "candidate_dashboard_presentation_prerequisite_unready",
+            "candidate_dashboard_bootstrap_prerequisite_unready",
         )
         .unwrap();
         let transaction: crate::runtime_adoption::UpgradeTransaction =
@@ -12712,7 +12822,7 @@ mod tests {
         );
         assert_eq!(
             transaction.stop_reason.as_deref(),
-            Some("candidate_dashboard_presentation_prerequisite_unready")
+            Some("candidate_dashboard_bootstrap_prerequisite_unready")
         );
         assert!(!paths.generations_dir.exists());
         assert!(!paths.current_selector.exists());
@@ -13059,6 +13169,52 @@ mod tests {
         server.join().unwrap();
         let selected = repository.load().unwrap();
         assert_eq!(selected.selected_backend().generation_id, generation_id);
+        fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn candidate_presentation_failure_rolls_back_shadow_without_changing_selected_generation() {
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-presentation-rollback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(&paths.generations_dir).unwrap();
+        symlink("generation-old", &paths.current_selector).unwrap();
+        let ingress_path = root.join(".agent-browser/dashboard-ingress.json");
+        let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&ingress_path);
+        let initial = repository
+            .initialize(crate::dashboard_ingress::DashboardBackend::new(
+                "generation-old",
+                4849,
+                "old-manifest",
+            ))
+            .unwrap();
+        repository
+            .stage_candidate(
+                initial.revision,
+                crate::dashboard_ingress::DashboardBackend::new(
+                    "generation-candidate",
+                    4850,
+                    "candidate-manifest",
+                ),
+            )
+            .unwrap();
+
+        rollback_dashboard_candidate_for_transaction(&root, "generation-candidate").unwrap();
+
+        let registry = repository.load().unwrap();
+        assert_eq!(registry.selected_backend().generation_id, "generation-old");
+        assert!(registry.candidate_backend().is_none());
+        assert_eq!(
+            fs::read_link(&paths.current_selector).unwrap(),
+            PathBuf::from("generation-old")
+        );
+
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
