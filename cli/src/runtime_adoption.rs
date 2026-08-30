@@ -513,7 +513,7 @@ fn runtime_admission_claim_matches(
     command: &serde_json::Value,
     drain: &RuntimeAdmissionDrain,
 ) -> bool {
-    action == "service_reconcile"
+    matches!(action, "service_reconcile" | "stream_status")
         && command
             .pointer("/runtimeAdmissionClaim/transactionId")
             .and_then(serde_json::Value::as_str)
@@ -3118,6 +3118,17 @@ mod tests {
         require_runtime_admission(
             &path,
             "service_reconcile",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap();
+        require_runtime_admission(
+            &path,
+            "stream_status",
             &serde_json::json!({
                 "runtimeAdmissionClaim": {
                     "transactionId": "upgrade-test",

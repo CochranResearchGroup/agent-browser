@@ -3108,7 +3108,11 @@ fn apply_runtime_admission_claim_from_sources(
     transaction_id: Option<String>,
     transaction_revision: Option<String>,
 ) {
-    if command.get("action").and_then(serde_json::Value::as_str) != Some("service_reconcile") {
+    if !command
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|action| matches!(action, "service_reconcile" | "stream_status"))
+    {
         return;
     }
     let Some(transaction_id) = transaction_id.filter(|value| !value.trim().is_empty()) else {
@@ -3378,7 +3382,7 @@ mod tests {
     use crate::test_utils::EnvGuard;
 
     #[test]
-    fn runtime_admission_claim_is_exact_and_service_reconcile_only() {
+    fn runtime_admission_claim_is_exact_and_installer_action_only() {
         let mut reconcile = json!({"action": "service_reconcile"});
         apply_runtime_admission_claim_from_sources(
             &mut reconcile,
@@ -3387,6 +3391,20 @@ mod tests {
         );
         assert_eq!(
             reconcile["runtimeAdmissionClaim"],
+            json!({
+                "transactionId": "upgrade-test",
+                "transactionRevision": 9,
+            })
+        );
+
+        let mut stream_status = json!({"action": "stream_status"});
+        apply_runtime_admission_claim_from_sources(
+            &mut stream_status,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+        );
+        assert_eq!(
+            stream_status["runtimeAdmissionClaim"],
             json!({
                 "transactionId": "upgrade-test",
                 "transactionRevision": 9,
