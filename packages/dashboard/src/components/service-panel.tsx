@@ -3,6 +3,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  acquireServiceProfile,
   applyServiceProfileLeaseReconciliation,
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
@@ -5486,29 +5487,59 @@ function ProfileLeaseActionDialog({
     setError("");
     setResult(null);
     try {
-      const common = {
-        baseUrl,
-        id: lease.id,
-        leaseRevision: lease.leaseRevision,
-        profileCapability,
-        serviceName: "agent-browser-dashboard",
-        agentName,
-        taskName: `profile-lease-${action}`,
-      };
       let response: unknown;
-      if (action === "rejoin") {
+      if (action === "acquire") {
+        response = await acquireServiceProfile({
+          baseUrl,
+          profileId: lease.profileId,
+          profileCapability,
+          automaticRecovery: true,
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: "profile-acquire",
+        });
+      } else if (action === "rejoin") {
+        const common = {
+          baseUrl,
+          id: lease.id,
+          leaseRevision: lease.leaseRevision,
+          profileCapability,
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: `profile-lease-${action}`,
+        };
         response = await rejoinServiceProfileLease(common);
       } else if (action === "renew") {
         response = await renewServiceProfileLease({
-          ...common,
+          baseUrl,
+          id: lease.id,
+          leaseRevision: lease.leaseRevision,
+          profileCapability,
           expiresAt: profileLeaseExpiryToIso(expiresAt),
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: `profile-lease-${action}`,
         });
       } else if (action === "release") {
-        response = await releaseServiceProfileLease(common);
+        response = await releaseServiceProfileLease({
+          baseUrl,
+          id: lease.id,
+          leaseRevision: lease.leaseRevision,
+          profileCapability,
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: `profile-lease-${action}`,
+        });
       } else {
         const planned = await planServiceProfileLeaseReconciliation({
-          ...common,
+          baseUrl,
+          id: lease.id,
+          leaseRevision: lease.leaseRevision,
+          profileCapability,
           expiresAt: profileLeaseExpiryToIso(expiresAt),
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: `profile-lease-${action}`,
         });
         response = planned;
         setReconcilePlan(planned.plan);
@@ -5559,7 +5590,7 @@ function ProfileLeaseActionDialog({
         {target && lease && action && (
           <>
             <DialogHeader>
-              <DialogTitle className="capitalize">{action === "reconcile" ? "Plan profile lease reconciliation" : `${action} profile lease`}</DialogTitle>
+              <DialogTitle className="capitalize">{action === "reconcile" ? "Plan profile lease reconciliation" : action === "acquire" ? "Acquire profile" : `${action} profile lease`}</DialogTitle>
               <DialogDescription>
                 {lease.profileId} / {lease.principalId ?? "unproven principal"}. The capability is held only in this dialog and is cleared when the dialog closes.
               </DialogDescription>
@@ -5620,7 +5651,7 @@ function ProfileLeaseActionDialog({
                   onClick={runAction}
                 >
                   {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                  {action === "reconcile" ? "Create sealed plan" : `Confirm ${action}`}
+                  {action === "reconcile" ? "Create sealed plan" : action === "acquire" ? "Acquire profile" : `Confirm ${action}`}
                 </Button>
               )}
             </div>
@@ -5773,7 +5804,7 @@ function ProfileAllocationDetailContent({
             <ProfileAllocationTokenSection title="Routes" values={allocation.profileLease.routeIds} />
             {onManageProfileLease && (
               <InspectorActionBar>
-                {(["rejoin", "renew", "release", "reconcile"] as const).map((action) => (
+                {(["acquire", "rejoin", "renew", "release", "reconcile"] as const).map((action) => (
                   <Button
                     key={action}
                     type="button"
@@ -5787,7 +5818,7 @@ function ProfileAllocationDetailContent({
                     onClick={() => onManageProfileLease(allocation, action)}
                   >
                     <ShieldCheck className="size-3.5" />
-                    {action === "reconcile" ? "Reconcile plan" : action}
+                    {action === "reconcile" ? "Reconcile plan" : action === "acquire" ? "Acquire profile" : action}
                   </Button>
                 ))}
               </InspectorActionBar>

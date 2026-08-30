@@ -14,7 +14,7 @@ const lease = {
   leaseRevision: "sha256:revision-one",
   principalId: "service:odollo-fulfillment",
   profileId: "odollo-fedex",
-  authorizedActions: ["rejoin", "renew", "release", "reconcile"],
+  authorizedActions: ["profile_acquire", "rejoin", "renew", "release", "reconcile_plan"],
   observationOnly: false,
 };
 const finding = {
@@ -38,8 +38,12 @@ assert.deepEqual(
 );
 assert.equal(profileLeaseActionAllowed(lease, "rejoin"), true);
 assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "rejoin"), false);
+assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "reconcile"), true);
+assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "acquire"), true);
 assert.equal(profileLeaseActionAllowed({ ...lease, authorizedActions: ["renew"] }, "release"), false);
-assert.equal(defaultProfileLeaseExpiry(new Date("2026-08-27T12:00:00.000Z")), "2026-08-27T13:00");
+process.env.TZ = "America/Chicago";
+assert.equal(defaultProfileLeaseExpiry(new Date("2026-08-27T12:00:00.000Z")), "2026-08-27T08:00");
+assert.equal(profileLeaseExpiryToIso("2026-08-27T08:00"), "2026-08-27T13:00:00.000Z");
 assert.equal(profileLeaseExpiryToIso("2026-08-27T13:00:00.000Z"), "2026-08-27T13:00:00.000Z");
 assert.throws(() => profileLeaseExpiryToIso("not-a-date"), /valid lease expiry/);
 

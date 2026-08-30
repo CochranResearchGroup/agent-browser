@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_j_successor_development_accepted_production_dry_run_next`
+Execution state: `slice_k_profile_lease_usability_repair_source_accepted_installation_pending`
 
 Lane: P137
 
@@ -1246,3 +1246,92 @@ One fresh production dry-run returned `mutated=false`, migration
 only after host preparation and transactional activation. Production selection
 remains unchanged. A new explicit production apply is the remaining gate and
 must not reuse the closed failed transaction.
+
+### Slice K profile lease usability repair | 2026-08-30
+
+Plan version: 13
+
+State transition:
+
+- `slice_j_successor_development_accepted_production_dry_run_next -> slice_k_profile_lease_usability_repair_in_progress`.
+- `slice_k_profile_lease_usability_repair_in_progress -> slice_k_profile_lease_usability_repair_source_accepted_installation_pending`.
+
+Progress classification:
+
+- `blocker_reduction`; the Last30days failure is reproduced at the lease gate
+  and the no-launch access-plan route now carries proof the daemon can validate
+  before either scraper or browser effect begins.
+
+Authority and bounds:
+
+- source, documentation, provider-free fixtures, and isolated local validation
+  only;
+- no production Service State, profile, provider, process, installation,
+  Last30days attempt, or recurring configuration effect is authorized; and
+- one implementation attempt plus one closed-world remediation pass. Any
+  remaining blocker is split rather than bypassed with generic force behavior.
+
+Observed contract defect:
+
+- Last30days tick `tick-fa7987a91c2c498f55a490e6cb28c827` received two
+  access plans that reported executable `tab_new` requests for the registered
+  `last30days-facebook` profile, then both failed before `startedAt` with
+  `existing_session_profile_identity_unproven` after the prelaunch session was
+  projected but before its runtime owner existed;
+- passing access-plan, route-admission, duplicate-lane, and dashboard tests did
+  not cross that exact planner-to-lease-gate seam; and
+- dashboard action vocabulary used `reconcile` while the backend advertised
+  `reconcile_plan`, observation-only rows disabled even their no-effect plan,
+  legacy rows advertised a reconcile plan they could never authorize, failure
+  recourse collapsed identity errors into `service_operation_failed`, and the
+  datetime-local default formatted UTC as local wall time.
+
+Frozen repair contract:
+
+1. The broker attaches one internal profile-launch route authorization only
+   after authenticating the capability and selecting an executable cold or
+   terminal-replacement route.
+2. The daemon revalidates the receipt's capability ID and revision, principal,
+   profile, session, owner generation when present, terminal evidence when
+   applicable, and absence of competing active session or live browser
+   authority.
+3. The public service-request schema cannot accept or forge the internal
+   receipt, and raw capability material never enters it.
+4. Legacy and unbound observation-only lease rows use `profile_acquire` for the
+   high-level acquisition coordinator. Reconcile remains the exact backend
+   `reconcile_plan` no-effect action.
+5. Identity admission failures return structured profile-acquisition recourse
+   with no-effect evidence and no blind-retry or duplicate-lane advice.
+6. Dashboard datetime-local defaults represent one hour from now in the
+   operator's local wall clock and serialize that local value to the correct
+   RFC 3339 instant.
+
+Current evidence:
+
+- the new route-host regression failed before implementation with
+  `existing_session_profile_identity_unproven` and now passes;
+- authenticated cold and terminal-replacement route-admission tests pass;
+- structured identity failure recourse and legacy lease projection tests pass;
+- dashboard profile lease tests pass under `America/Chicago`, including
+  `reconcile_plan`, `profile_acquire`, observation-only gating, and local-time
+  conversion;
+- strict Clippy with warnings denied, Rust formatting, the 45-test access-plan
+  suite, the 15-test profile-lease suite, the 9-test failure-recourse suite,
+  and the focused authenticated cold, terminal replacement, route-host,
+  forgery-rejection, and legacy projection tests pass;
+- service API and MCP parity, generated client contract and type coverage,
+  service request client, dashboard profile lease, inspector action, view
+  stream, browser table, and rendered row-action tests pass; and
+- dashboard and docs production builds plus diff whitespace validation pass.
+
+Next action or stop reason:
+
+- source and provider-free acceptance are complete on isolated branch
+  `fix/profile-lease-usability-contract`, stacked on the current workstation
+  upgrade candidate rather than `origin/main`;
+- candidate installation, production Service State mutation, installed-skill
+  synchronization, live browser or provider checks, and a Last30days scrape
+  retry remain outside this slice; and
+- after integration and an explicitly authorized candidate installation, run
+  the exact authenticated access-plan execution acceptance before considering
+  renewed Last30days attempt authority.

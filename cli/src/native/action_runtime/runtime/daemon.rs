@@ -721,6 +721,10 @@ fn apply_existing_session_profile_selection(
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
+        if apply_authenticated_access_plan_profile_selection(options, command, &session_id, state)?
+        {
+            return Ok(Some(ProfileSelectionReason::ExplicitProfile));
+        }
         if std::env::var_os("AGENT_BROWSER_DEBUG").is_some() {
             eprintln!(
                 "[profile-selection] session={} binding=missing retained_observation={} persisted_session={} active_browser_session={}",
@@ -841,6 +845,212 @@ fn apply_existing_session_profile_selection(
         options.executable_path = None;
     }
     Ok(Some(ProfileSelectionReason::ExistingOwner))
+}
+
+/// Admit the exact prelaunch session created for an authenticated principal's
+/// first browser lane.
+///
+/// Service request adapters strip caller-authored authority fields and attach
+/// the capability identity only after authenticating the raw bearer secret.
+/// The daemon revalidates that internal identity against current Service State,
+/// requires the deterministic cold route, and refuses any competing owner,
+/// session, or live browser evidence before selecting the profile.
+fn apply_authenticated_access_plan_profile_selection(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+) -> Result<bool, String> {
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("tab_new" | "remote_view_open" | "launch")
+    ) || command
+        .get("servicePrincipalProvenance")
+        .and_then(Value::as_str)
+        != Some("registered_capability")
+    {
+        return Ok(false);
+    }
+    let Some(route_authorization) = command
+        .get("serviceProfileRouteAuthorization")
+        .and_then(Value::as_object)
+    else {
+        return Ok(false);
+    };
+    if route_authorization
+        .get("schemaVersion")
+        .and_then(Value::as_str)
+        != Some("agent-browser.profile-launch-route-authorization.v1")
+        || route_authorization
+            .get("sessionName")
+            .and_then(Value::as_str)
+            != Some(session_id)
+    {
+        return Ok(false);
+    }
+    let Some(route_kind) = route_authorization.get("kind").and_then(Value::as_str) else {
+        return Ok(false);
+    };
+    let Some(principal_id) = command
+        .get("servicePrincipalId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+    let Some(capability_id) = command
+        .get("serviceProfileCapabilityId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+    let Some(capability_revision) = command
+        .get("serviceProfileCapabilityRevision")
+        .and_then(Value::as_u64)
+    else {
+        return Ok(false);
+    };
+    let Some(profile_id) = optional_command_or_params_string(command, "runtimeProfile")
+        .or_else(|| optional_command_or_params_string(command, "profileId"))
+    else {
+        return Ok(false);
+    };
+    if route_authorization.get("profileId").and_then(Value::as_str) != Some(profile_id.as_str())
+        || route_authorization
+            .get("principalId")
+            .and_then(Value::as_str)
+            != Some(principal_id)
+        || route_authorization
+            .get("capabilityId")
+            .and_then(Value::as_str)
+            != Some(capability_id)
+        || route_authorization
+            .get("capabilityRevision")
+            .and_then(Value::as_u64)
+            != Some(capability_revision)
+    {
+        return Ok(false);
+    }
+    let authority = crate::native::service_principal::AuthenticatedServicePrincipal {
+        principal_id: principal_id.to_string(),
+        profile_id: profile_id.clone(),
+        capability_id: capability_id.to_string(),
+        capability_revision,
+        provenance:
+            crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+    };
+    if !crate::native::service_principal::authenticated_authority_is_current(
+        &state.service_principals,
+        &authority,
+    ) {
+        return Ok(false);
+    }
+    let Some(profile) = state.profiles.get(&profile_id) else {
+        return Ok(false);
+    };
+    let Some(session) = state.sessions.get(session_id) else {
+        return Ok(false);
+    };
+    if session.profile_id.as_deref() != Some(profile_id.as_str())
+        || session.principal_id.as_deref() != Some(principal_id)
+        || session.principal_provenance != Some(authority.provenance)
+        || !session.browser_ids.is_empty()
+        || !session.tab_ids.is_empty()
+        || !matches!(session.lease, LeaseState::Exclusive)
+    {
+        return Ok(false);
+    }
+    let user_data_dir =
+        resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), &profile_id)?;
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let owner = state.runtime_owner_registry.owner(&profile_digest);
+    let route_authorized = match route_kind {
+        "authenticated_cold" => {
+            owner.is_none()
+        }
+        "terminal_replacement" => owner.is_some_and(|owner| {
+            route_authorization
+                .get("runtimeOwnerRegistryRevision")
+                .and_then(Value::as_u64)
+                == Some(state.runtime_owner_registry.revision)
+                && route_authorization.get("ownerId").and_then(Value::as_str)
+                    == Some(owner.owner_id.as_str())
+                && route_authorization
+                    .get("ownerGeneration")
+                    .and_then(Value::as_u64)
+                    == Some(owner.owner_generation)
+                && owner.daemon_session_route == session_id
+                && state
+                    .runtime_owner_registry
+                    .lifecycle_records
+                    .get(&owner.browser_id)
+                    .is_some_and(|lifecycle| {
+                        lifecycle.owner_generation == owner.owner_generation
+                            && lifecycle.profile_identity_digest == profile_digest
+                            && lifecycle.lifecycle_state
+                                == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
+                            && lifecycle.cleanup_obligation_state
+                                == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+                            && lifecycle
+                                .terminal_evidence
+                                .iter()
+                                .any(|evidence| evidence == "exact_process_exited")
+                    })
+                && state
+                    .browsers
+                    .get(&owner.browser_id)
+                    .is_none_or(|browser| browser.pid.is_none())
+        }),
+        _ => false,
+    };
+    if !route_authorized {
+        return Ok(false);
+    }
+    let competing_session = state.sessions.values().any(|candidate| {
+        candidate.id != session_id
+            && candidate.profile_id.as_deref() == Some(profile_id.as_str())
+            && matches!(
+                candidate.lease,
+                LeaseState::Exclusive | LeaseState::HumanTakeover
+            )
+    });
+    let competing_live_browser = state.browsers.values().any(|browser| {
+        browser.profile_id.as_deref() == Some(profile_id.as_str())
+            && (browser.pid.is_some()
+                || browser.cdp_endpoint.is_some()
+                || !browser.active_session_ids.is_empty()
+                || browser.tab_handles.iter().any(|handle| handle.valid))
+    });
+    if competing_session || competing_live_browser {
+        return Ok(false);
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_authenticated_cold_route".to_string());
+    }
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_path =
+            resolved_service_profile_identity_path(Some(requested_path), &profile_id)?;
+        let requested_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?;
+        if requested_digest != profile_digest {
+            return Err("explicit_profile_conflicts_with_authenticated_cold_route".to_string());
+        }
+    }
+    options.runtime_profile = Some(profile_id);
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
 }
 
 fn exact_terminal_owner_allows_explicit_profile_relaunch(

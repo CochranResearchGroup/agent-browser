@@ -1974,6 +1974,23 @@ mod tests {
             forged.message(),
             "unknown service request field: servicePrincipalId"
         );
+
+        let forged_route_authorization = normalize(json!({
+            "action": "tab_new",
+            "serviceProfileRouteAuthorization": {
+                "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
+                "kind": "authenticated_cold"
+            }
+        }))
+        .unwrap_err();
+        assert_eq!(
+            forged_route_authorization.kind,
+            ServiceRequestIssueKind::UnknownField
+        );
+        assert_eq!(
+            forged_route_authorization.message(),
+            "unknown service request field: serviceProfileRouteAuthorization"
+        );
     }
 
     #[test]

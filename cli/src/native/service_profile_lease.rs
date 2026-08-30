@@ -1354,7 +1354,7 @@ fn unbound_capability_profile_lease(
             });
     let mut authorized_actions = READ_ACTIONS
         .iter()
-        .chain(std::iter::once(&"reconcile_plan"))
+        .chain([&"profile_acquire", &"reconcile_plan"])
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     if rejoin_repairable {
@@ -1451,7 +1451,7 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
         blocking_identity_axes: vec!["legacy_principal_unproven".to_string()],
         authorized_actions: READ_ACTIONS
             .iter()
-            .chain(std::iter::once(&"reconcile_plan"))
+            .chain(std::iter::once(&"profile_acquire"))
             .map(ToString::to_string)
             .collect(),
         recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
@@ -2288,6 +2288,12 @@ mod tests {
         assert!(!leases[0]
             .authorized_actions
             .contains(&"release".to_string()));
+        assert!(leases[0]
+            .authorized_actions
+            .contains(&"profile_acquire".to_string()));
+        assert!(!leases[0]
+            .authorized_actions
+            .contains(&"reconcile_plan".to_string()));
         let doctor = doctor_profile_leases(&state, NOW);
         assert!(!doctor.healthy);
         assert_eq!(doctor.findings[0].code, "legacy_principal_unproven");

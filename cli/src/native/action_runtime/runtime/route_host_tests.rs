@@ -3309,6 +3309,96 @@ fn test_service_profile_lease_gate_allows_duplicate_lane_override() {
 }
 
 #[test]
+fn authenticated_cold_access_plan_route_passes_profile_lease_gate() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("authenticated-cold-profile-lease-gate-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let profile_id = "last30days-facebook";
+    let principal_id = "last30days-social";
+    let raw_capability = "synthetic-last30days-capability-more-than-thirty-two-characters";
+    let user_data_dir = home.join("last30days-facebook-user-data");
+    fs::create_dir_all(&user_data_dir).expect("profile directory should be created");
+    let profile = BrowserProfile {
+        id: profile_id.to_string(),
+        user_data_dir: Some(user_data_dir.display().to_string()),
+        ..BrowserProfile::default()
+    };
+    let mut state = ServiceState {
+        profiles: BTreeMap::from([(profile_id.to_string(), profile.clone())]),
+        ..ServiceState::default()
+    };
+    crate::native::service_principal::register_profile_capability(
+        &mut state.service_principals,
+        crate::native::service_principal::ServicePrincipalRegistrationRequest {
+            principal_id: principal_id.to_string(),
+            display_name: Some("Last30days social".to_string()),
+            profile_id: profile_id.to_string(),
+            registered_at: Some("2026-08-30T12:00:00Z".to_string()),
+            registered_by: Some("operator".to_string()),
+        },
+        raw_capability,
+    )
+    .expect("profile capability should register");
+    let authority = crate::native::service_principal::authenticate_profile_capability(
+        &state.service_principals,
+        raw_capability,
+        Some(profile_id),
+    )
+    .expect("profile capability should authenticate");
+    let session_id = authenticated_cold_session_name(&authority, &profile)
+        .expect("authenticated profile should have a deterministic cold route");
+    state.sessions.insert(
+        session_id.clone(),
+        BrowserSession {
+            id: session_id.clone(),
+            service_name: Some("Last30days".to_string()),
+            principal_id: Some(principal_id.to_string()),
+            principal_provenance: Some(authority.provenance),
+            profile_id: Some(profile_id.to_string()),
+            lease: LeaseState::Exclusive,
+            ..BrowserSession::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .expect("service state should be persisted");
+
+    let decision = service_profile_lease_gate(
+        &json!({
+            "action": "tab_new",
+            "serviceName": "Last30days",
+            "runtimeProfile": profile_id,
+            "profile": user_data_dir.display().to_string(),
+            "sessionName": session_id,
+            "servicePrincipalId": authority.principal_id,
+            "servicePrincipalProvenance": authority.provenance.as_str(),
+            "serviceProfileCapabilityId": authority.capability_id,
+            "serviceProfileCapabilityRevision": authority.capability_revision,
+            "serviceProfileRouteAuthorization": {
+                "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
+                "kind": "authenticated_cold",
+                "sessionName": session_id,
+                "profileId": profile_id,
+                "principalId": authority.principal_id,
+                "capabilityId": authority.capability_id,
+                "capabilityRevision": authority.capability_revision,
+                "runtimeOwnerRegistryRevision": 0,
+                "ownerId": null,
+                "ownerGeneration": null
+            },
+            "profileLeasePolicy": "wait"
+        }),
+        &session_id,
+        Some(0),
+    )
+    .expect("the authenticated access-plan route should be executable");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn test_runtime_handoff_descriptor_accepts_legacy_schema_v1_without_active_target() {
     let descriptor: RuntimeHandoffDescriptor = serde_json::from_value(json!(
         { "schemaVersion" : 1, "sessionName" : "legacy-session", "cdpUrl" :

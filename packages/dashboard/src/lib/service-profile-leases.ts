@@ -1,4 +1,4 @@
-export type ServiceProfileLeaseAction = "rejoin" | "renew" | "release" | "reconcile";
+export type ServiceProfileLeaseAction = "acquire" | "rejoin" | "renew" | "release" | "reconcile";
 
 export type ServiceProfileLeaseRecord = {
   id: string;
@@ -79,15 +79,22 @@ export function profileLeaseActionAllowed(
   lease: ServiceProfileLeaseRecord | null | undefined,
   action: ServiceProfileLeaseAction,
 ): boolean {
+  const authorizedAction = action === "reconcile"
+    ? "reconcile_plan"
+    : action === "acquire"
+      ? "profile_acquire"
+      : action;
   return Boolean(
     lease &&
-    !lease.observationOnly &&
-    lease.authorizedActions?.includes(action),
+    (!lease.observationOnly || action === "reconcile" || action === "acquire") &&
+    lease.authorizedActions?.includes(authorizedAction),
   );
 }
 
 export function defaultProfileLeaseExpiry(now = new Date()): string {
-  return new Date(now.getTime() + 60 * 60 * 1000).toISOString().slice(0, 16);
+  const expiry = new Date(now.getTime() + 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${expiry.getFullYear()}-${pad(expiry.getMonth() + 1)}-${pad(expiry.getDate())}T${pad(expiry.getHours())}:${pad(expiry.getMinutes())}`;
 }
 
 export function profileLeaseExpiryToIso(value: string): string {
