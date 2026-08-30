@@ -6206,6 +6206,7 @@ fn complete_runtime_transfer_phase(
             paths,
             &prepared.staged,
             &prepared.transaction.transaction_id,
+            prepared.transaction.revision,
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
         )?;
@@ -6366,11 +6367,15 @@ const CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION: &str = "dashboard-service-backen
 /// cross-generation contention for the Service State process mutation lock.
 fn start_candidate_runtime_host_after_source_prepares(
     candidate_binary: &Path,
+    transaction_id: &str,
+    transaction_revision: u64,
     socket_dir: &Path,
 ) -> Result<(), String> {
     run_candidate_agent_json_in_socket_dir(
         candidate_binary,
         CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION,
+        transaction_id,
+        transaction_revision,
         socket_dir,
         &["stream", "status"],
     )?;
@@ -6381,6 +6386,7 @@ fn transfer_discovered_runtimes(
     paths: &InstallPaths,
     staged: &StagedWorkstationGeneration,
     transaction_id: &str,
+    transaction_revision: u64,
     migrations: &mut [crate::runtime_adoption::RuntimeMigrationRecord],
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
 ) -> Result<RuntimeTransferOutcome, String> {
@@ -6486,7 +6492,12 @@ fn transfer_discovered_runtimes(
     // activation barrier: no candidate process can enter Service State while
     // an old-generation prepare command is still running.
     let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
-    start_candidate_runtime_host_after_source_prepares(&candidate_binary, &candidate_socket_dir)?;
+    start_candidate_runtime_host_after_source_prepares(
+        &candidate_binary,
+        transaction_id,
+        transaction_revision,
+        &candidate_socket_dir,
+    )?;
 
     for (index, migration) in migrations.iter_mut().enumerate() {
         let source_session = if migration.disposition == RuntimeDisposition::CooperativeTransfer {
@@ -6518,6 +6529,7 @@ fn transfer_discovered_runtimes(
                             paths,
                             &candidate_binary,
                             transaction_id,
+                            transaction_revision,
                             &service_state,
                             migration,
                             handoffs,
@@ -6542,6 +6554,7 @@ fn transfer_discovered_runtimes(
                         paths,
                         &candidate_binary,
                         transaction_id,
+                        transaction_revision,
                         &service_state,
                         migration,
                         handoffs,
@@ -6584,6 +6597,7 @@ fn transfer_discovered_runtimes(
                     &candidate_binary,
                     &candidate_session,
                     transaction_id,
+                    transaction_revision,
                     &["handoff", "resume", "--source-session", &source_session],
                 ) {
                     Ok(resumed) => resumed,
@@ -6633,6 +6647,7 @@ fn transfer_discovered_runtimes(
                         paths,
                         &candidate_binary,
                         transaction_id,
+                        transaction_revision,
                         &service_state,
                         migration,
                         handoffs,
@@ -6661,6 +6676,7 @@ fn transfer_discovered_runtimes(
                     &candidate_binary,
                     &candidate_session,
                     transaction_id,
+                    transaction_revision,
                     &[
                         "handoff",
                         "resume",
@@ -7173,6 +7189,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
     paths: &InstallPaths,
     candidate_binary: &Path,
     transaction_id: &str,
+    transaction_revision: u64,
     service_state: &crate::native::service_model::ServiceState,
     migration: &mut crate::runtime_adoption::RuntimeMigrationRecord,
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
@@ -7259,6 +7276,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
         candidate_binary,
         &candidate_session,
         transaction_id,
+        transaction_revision,
         &[
             "handoff",
             "resume",
@@ -7643,6 +7661,16 @@ fn run_agent_json_detailed_in_socket_dir(
     command_args: &[&str],
     runtime: Option<(&Path, bool)>,
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
+    run_agent_json_detailed_in_socket_dir_with(binary, session, command_args, runtime, |_| {})
+}
+
+fn run_agent_json_detailed_in_socket_dir_with(
+    binary: &Path,
+    session: &str,
+    command_args: &[&str],
+    runtime: Option<(&Path, bool)>,
+    configure: impl FnOnce(&mut Command),
+) -> Result<Value, RuntimeTransactionCommandFailure> {
     let mut command = Command::new(binary);
     command
         .args(["--json", "--session", session])
@@ -7658,6 +7686,7 @@ fn run_agent_json_detailed_in_socket_dir(
             )
             .env("AGENT_BROWSER_SOCKET_DIR", socket_dir);
     }
+    configure(&mut command);
     let output = command
         .output()
         .map_err(|error| RuntimeTransactionCommandFailure {
@@ -8035,15 +8064,44 @@ fn run_candidate_agent_json(
     binary: &Path,
     session: &str,
     transaction_id: &str,
+    transaction_revision: u64,
     command_args: &[&str],
 ) -> Result<Value, String> {
     let socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
-    run_candidate_agent_json_in_socket_dir(binary, session, &socket_dir, command_args)
+    run_candidate_agent_json_in_socket_dir(
+        binary,
+        session,
+        transaction_id,
+        transaction_revision,
+        &socket_dir,
+        command_args,
+    )
+}
+
+fn configure_candidate_runtime_admission(
+    command: &mut Command,
+    transaction_id: &str,
+    transaction_revision: u64,
+) {
+    // Candidate clients and the runtime host they start must inherit the exact
+    // drain owner. This lets installer-owned Service reconciliation proceed
+    // without reopening admission for unrelated browser mutations.
+    command
+        .env(
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV,
+            transaction_id,
+        )
+        .env(
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV,
+            transaction_revision.to_string(),
+        );
 }
 
 fn run_candidate_agent_json_in_socket_dir(
     binary: &Path,
     session: &str,
+    transaction_id: &str,
+    transaction_revision: u64,
     socket_dir: &Path,
     command_args: &[&str],
 ) -> Result<Value, String> {
@@ -8051,8 +8109,16 @@ fn run_candidate_agent_json_in_socket_dir(
         "create candidate runtime host socket directory",
         socket_dir,
     ))?;
-    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some((socket_dir, true)))
-        .map_err(|error| error.message)
+    run_agent_json_detailed_in_socket_dir_with(
+        binary,
+        session,
+        command_args,
+        Some((socket_dir, true)),
+        |command| {
+            configure_candidate_runtime_admission(command, transaction_id, transaction_revision);
+        },
+    )
+    .map_err(|error| error.message)
 }
 
 fn stage_candidate_runtime_handoff_descriptor(
@@ -9064,6 +9130,7 @@ fn rollback_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
                 &candidate_binary,
                 &candidate_session,
                 &prepared.transaction.transaction_id,
+                prepared.transaction.revision,
                 &["handoff", "rollback", "--source-session", &source_session],
             ) {
                 Ok(payload) => match owner_transfer_receipt(&payload).and_then(|receipt| {
@@ -11707,7 +11774,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn candidate_runtime_host_bootstrap_is_no_browser_stream_status() {
+    fn candidate_runtime_host_bootstrap_is_claimed_no_browser_stream_status() {
         use std::os::unix::fs::PermissionsExt;
 
         let root = env::temp_dir().join(format!(
@@ -11717,22 +11784,29 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let binary = root.join("candidate-agent-browser");
         let args_path = root.join("args.txt");
+        let claim_path = root.join("claim.txt");
         fs::write(
             &binary,
             format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s\\n' '{{\"success\":true,\"data\":{{\"port\":null}}}}'\n",
-                args_path.display()
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s\\n%s\\n' \"$AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID\" \"$AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION\" > '{}'\nprintf '%s\\n' '{{\"success\":true,\"data\":{{\"port\":null}}}}'\n",
+                args_path.display(),
+                claim_path.display()
             ),
         )
         .unwrap();
         fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
         let socket_dir = root.join("socket");
 
-        start_candidate_runtime_host_after_source_prepares(&binary, &socket_dir).unwrap();
+        start_candidate_runtime_host_after_source_prepares(&binary, "upgrade-test", 9, &socket_dir)
+            .unwrap();
 
         assert_eq!(
             fs::read_to_string(&args_path).unwrap(),
             "--json\n--session\ndashboard-service-backend\nstream\nstatus\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&claim_path).unwrap(),
+            "upgrade-test\n9\n"
         );
         assert!(socket_dir.is_dir());
         fs::remove_dir_all(root).unwrap();
