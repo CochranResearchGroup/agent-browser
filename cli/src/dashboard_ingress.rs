@@ -917,6 +917,11 @@ pub(crate) fn candidate_presentation_bootstrap_prerequisite(
                 crate::native::remote_view_handoff::remote_view_handoff_live_owner_session(
                     state, handoff,
                 )
+            })
+            .or_else(|| {
+                crate::native::remote_view_handoff::remote_view_handoff_recoverable_pending_owner_session(
+                    state, handoff,
+                )
             });
         let blocker = if handoff.state != "ready" {
             Some("handoff_not_ready")
@@ -2028,6 +2033,48 @@ mod tests {
         assert_eq!(
             prerequisite["nextAction"],
             "stage_candidate_then_resolve_eligible_handoff"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_accepts_exact_recoverable_precommit_transfer() {
+        use crate::runtime_adoption::BrowserAdoptionMode;
+        use crate::runtime_owner_transfer::{OwnerTransferProposal, OwnerTransferRequest};
+
+        let mut state = exact_candidate_presentation_state();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.pending_transfer = Some(OwnerTransferProposal {
+            request: OwnerTransferRequest {
+                mode: BrowserAdoptionMode::CooperativeTransfer,
+                logical_browser_id: owner.browser_id.clone(),
+                profile_identity_digest: owner.profile_identity_digest.clone(),
+                expected_owner_id: Some(owner.owner_id.clone()),
+                expected_owner_generation: owner.owner_generation,
+                candidate_owner_id: "candidate-owner".to_string(),
+                candidate_daemon_session_route: "handoff-candidate".to_string(),
+                process_instance_digest: owner.process_instance_digest.clone(),
+                browser_family: owner.browser_family.clone(),
+                cdp_endpoint_identity_digest: owner.cdp_endpoint_identity_digest.clone(),
+                target_set_digest: owner.target_set_digest.clone(),
+                selected_target_identity_digest: "selected-target-digest".to_string(),
+                transfer_nonce_digest: "transfer-nonce-digest".to_string(),
+            },
+            previous_owner_generation: owner.owner_generation,
+            candidate_owner_generation: owner.owner_generation + 1,
+            candidate_effect_capable: false,
+        });
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
         );
     }
 

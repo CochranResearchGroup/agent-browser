@@ -697,6 +697,65 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
     )
 }
 
+/// Resolve the still-effect-capable source owner of an exact pre-commit
+/// transfer so workstation bootstrap can stage the candidate that will first
+/// abort the descriptor-backed transfer and retry it.
+pub(crate) fn remote_view_handoff_recoverable_pending_owner_session(
+    state: &ServiceState,
+    handoff: &RemoteViewHandoff,
+) -> Option<String> {
+    let browser_id = handoff.browser_id.as_deref()?;
+    let target_id = handoff.target_id.as_deref()?;
+    let browser = state.browsers.get(browser_id)?;
+    let process = state.browser_process_identities.get(browser_id)?;
+    if browser.id != browser_id
+        || browser.health != BrowserHealth::Ready
+        || browser.pid != Some(process.process_identity.pid)
+    {
+        return None;
+    }
+    let process_instance_digest = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
+    );
+    let mut owners = state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .filter(|owner| {
+            let pending = owner.pending_transfer.as_ref();
+            owner.state == ProfileOwnerState::Ready
+                && owner.browser_id == browser_id
+                && owner.process_instance_digest == process_instance_digest
+                && !owner.daemon_session_route.trim().is_empty()
+                && pending.is_some_and(|proposal| {
+                    !proposal.candidate_effect_capable
+                        && proposal.previous_owner_generation == owner.owner_generation
+                        && proposal.request.expected_owner_generation == owner.owner_generation
+                        && proposal.request.expected_owner_id.as_deref()
+                            == Some(owner.owner_id.as_str())
+                        && proposal.request.profile_identity_digest == owner.profile_identity_digest
+                        && proposal.request.logical_browser_id == owner.browser_id
+                        && proposal.request.process_instance_digest == owner.process_instance_digest
+                })
+                && browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session_id| session_id == &owner.daemon_session_route)
+                && browser.tab_handles.iter().any(|tab| {
+                    tab.valid
+                        && tab.browser_id == browser_id
+                        && tab.target_id.as_deref() == Some(target_id)
+                        && tab.session_name.as_deref() == Some(owner.daemon_session_route.as_str())
+                })
+        });
+    let owner = owners.next()?;
+    if owners.next().is_some() {
+        return None;
+    }
+    Some(owner.daemon_session_route.clone())
+}
+
 /// Resolve a retained handoff from fresh read-only process and CDP evidence.
 ///
 /// Persisted browser health and tab projections can lag a live runtime after a
