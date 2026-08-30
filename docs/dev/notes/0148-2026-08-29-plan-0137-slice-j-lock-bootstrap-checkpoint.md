@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: SOURCE AND ISOLATED VALIDATION ACCEPTED, PRODUCTION DRY-RUN NEXT
+Status: SUCCESSOR SOURCE AND DEVELOPMENT ACCEPTED, FRESH PRODUCTION DRY-RUN NEXT
 
 ## Scope
 
@@ -151,3 +151,51 @@ enter its transactional staging path only when bootstrap identifies an
 adoptable current handoff and every migration, census, rollback, and host gate
 is exact. Provider acceptance remains a separate authority boundary, and no
 uncertain failed service request may be retried as part of the upgrade.
+
+## Production activation result | 2026-08-30
+
+The exact candidate dry-run passed with `proofPhase=bootstrap`, one eligible
+handoff `r474915`, migration status `not_required`, `mutation=false`, and zero
+protected-record removals. Transaction
+`upgrade-0f44b190-2f83-4d9d-828c-b0c6de379dbc` then staged the candidate but
+failed during runtime transfer when old-generation session
+`principal-profile-0a5250baef3a2db3f01f9f86` returned
+`service_state_lock_timeout: process mutation lock` from handoff prepare.
+
+The transaction rolled back before commit and terminated
+`failed_preserved_old_generation`. Handoff `r474915` was not resolved again,
+the candidate presentation gate was never entered, no provider request was
+issued, and the selected production generation and binary SHA remained
+unchanged.
+
+## Successor activation repair
+
+The installer previously interleaved old-lane prepare with candidate-lane
+resume. The first resume started the candidate runtime host, allowing later old
+prepares to contend with candidate Service State activity. The successor source
+packet keeps the shadow dashboard backend-only, prepares every cooperative old
+lane first, and starts candidate runtime activity with a no-browser
+stream-status bootstrap only after the complete prepare batch. The authenticated
+candidate presentation and pre-commit rollback gates remain unchanged. This
+failed transaction will not be retried.
+
+## Successor validation | 2026-08-30
+
+The successor release binary is isolated development generation
+`0.28.0-b98f2ebd4e4f` with SHA-256
+`b98f2ebd4e4f94d9786bdc9e632ec9ab2ade027cfbda219d93d0584df63e7569`.
+The development installer reported `Production unchanged: true`, skill sync
+reported `current`, and development doctor passed the selected executable,
+runtime host, dashboard backend, ingress, browser executable, presentation
+provider isolation, six provider routes, and four unique warm displays. The
+three-iteration development browser launch smoke passed.
+
+Source acceptance passed strict Clippy, the source-free workstation fixture,
+host-provision and fresh-VM contracts, Guacamole asset and PostgreSQL
+durability contracts, route-specific user sync, remote-view documentation,
+the docs production build, all 119 serial workstation installer tests, and the
+authoritative split Rust harness. The direct bootstrap regression proves the
+candidate starts through `dashboard-service-backend stream status` without a
+browser. The selected production generation and SHA remain unchanged. A fresh
+production dry-run is the next gate; this evidence does not authorize retrying
+the closed failed transaction.

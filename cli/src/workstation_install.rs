@@ -6345,6 +6345,38 @@ fn candidate_runtime_host_stage_required(
     !isolated_root
 }
 
+enum PreparedCooperativeRuntimeTransfer {
+    Handoff {
+        source_session: String,
+        prepared: Value,
+        retired_aliases: Vec<String>,
+    },
+    CandidateFallback {
+        failed_session: String,
+        error: RuntimeTransactionCommandFailure,
+    },
+}
+
+const CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION: &str = "dashboard-service-backend";
+
+/// Starts the candidate single runtime host without launching a browser.
+///
+/// This must run only after every cooperative old-generation source has
+/// completed its handoff prepare. Starting the candidate earlier reintroduces
+/// cross-generation contention for the Service State process mutation lock.
+fn start_candidate_runtime_host_after_source_prepares(
+    candidate_binary: &Path,
+    socket_dir: &Path,
+) -> Result<(), String> {
+    run_candidate_agent_json_in_socket_dir(
+        candidate_binary,
+        CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION,
+        socket_dir,
+        &["stream", "status"],
+    )?;
+    Ok(())
+}
+
 fn transfer_discovered_runtimes(
     paths: &InstallPaths,
     staged: &StagedWorkstationGeneration,
@@ -6375,46 +6407,111 @@ fn transfer_discovered_runtimes(
     });
     let mut transfer_evidence = Vec::new();
     let mut preserved_lane_sessions = std::collections::BTreeSet::new();
-    for migration in migrations {
+    let mut cooperative_preparations = std::iter::repeat_with(|| None)
+        .take(migrations.len())
+        .collect::<Vec<Option<PreparedCooperativeRuntimeTransfer>>>();
+
+    // Complete every old-generation prepare before the first candidate resume
+    // starts the transaction runtime host. Interleaving these phases lets the
+    // candidate contend with a legacy source for the process mutation lock.
+    for (index, migration) in migrations.iter_mut().enumerate() {
+        if migration.disposition != RuntimeDisposition::CooperativeTransfer {
+            continue;
+        }
         let source_session = resolve_runtime_source_session(&service_state, migration)?;
-        match migration.disposition {
-            RuntimeDisposition::CooperativeTransfer => {
-                let Some(source_session) = source_session else {
+        let Some(source_session) = source_session else {
+            record_preserved_runtime_lane_sessions(migration, None, &mut preserved_lane_sessions);
+            preserve_runtime_without_live_source(migration);
+            continue;
+        };
+        if !runtime_transfer_source_ready(source_is_runtime_host, &source_session) {
+            record_preserved_runtime_lane_sessions(
+                migration,
+                Some(&source_session),
+                &mut preserved_lane_sessions,
+            );
+            preserve_runtime_without_live_source(migration);
+            continue;
+        }
+        match prepare_runtime_handoff_with_alias_fallback(
+            &old_binary,
+            &service_state,
+            migration,
+            &source_session,
+            &source_socket_dir,
+            source_is_runtime_host,
+        ) {
+            Ok((source_session, prepared, retired_aliases)) => {
+                cooperative_preparations[index] =
+                    Some(PreparedCooperativeRuntimeTransfer::Handoff {
+                        source_session,
+                        prepared,
+                        retired_aliases,
+                    });
+            }
+            Err((failed_session, error))
+                if matches!(
+                    error.kind,
+                    RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+                        | RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+                ) =>
+            {
+                cooperative_preparations[index] =
+                    Some(PreparedCooperativeRuntimeTransfer::CandidateFallback {
+                        failed_session,
+                        error,
+                    });
+            }
+            Err((failed_session, error)) => {
+                if runtime_handoff_source_disappeared(&error) {
                     record_preserved_runtime_lane_sessions(
                         migration,
-                        None,
+                        Some(&failed_session),
                         &mut preserved_lane_sessions,
                     );
                     preserve_runtime_without_live_source(migration);
-                    continue;
-                };
-                if !runtime_transfer_source_ready(source_is_runtime_host, &source_session) {
-                    record_preserved_runtime_lane_sessions(
-                        migration,
-                        Some(&source_session),
-                        &mut preserved_lane_sessions,
-                    );
-                    preserve_runtime_without_live_source(migration);
+                    let reason = "handoff_source_disappeared_after_census";
+                    if !migration.reason_codes.iter().any(|value| value == reason) {
+                        migration.reason_codes.push(reason.to_string());
+                    }
                     continue;
                 }
-                let (source_session, prepared, retired_aliases) = match
-                    prepare_runtime_handoff_with_alias_fallback(
-                        &old_binary,
-                        &service_state,
-                        migration,
-                        &source_session,
-                        &source_socket_dir,
-                        source_is_runtime_host,
+                return Err(error.message);
+            }
+        }
+    }
+
+    // `stream status` is a no-browser command that starts the candidate
+    // single host even when there are no resumable lanes. Its placement is the
+    // activation barrier: no candidate process can enter Service State while
+    // an old-generation prepare command is still running.
+    let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
+    start_candidate_runtime_host_after_source_prepares(&candidate_binary, &candidate_socket_dir)?;
+
+    for (index, migration) in migrations.iter_mut().enumerate() {
+        let source_session = if migration.disposition == RuntimeDisposition::CooperativeTransfer {
+            None
+        } else {
+            resolve_runtime_source_session(&service_state, migration)?
+        };
+        match migration.disposition {
+            RuntimeDisposition::CooperativeTransfer => {
+                let preparation = cooperative_preparations[index].take().ok_or_else(|| {
+                    format!(
+                        "runtime_cooperative_preparation_missing:{}",
+                        migration.logical_browser_id
                     )
-                {
-                    Ok(prepared) => prepared,
-                    Err((failed_session, error))
-                        if matches!(
-                            error.kind,
-                            RuntimeTransactionCommandFailureKind::ProtocolUnavailable
-                                | RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
-                        ) =>
-                    {
+                })?;
+                let (source_session, prepared, retired_aliases) = match preparation {
+                    PreparedCooperativeRuntimeTransfer::Handoff {
+                        source_session,
+                        prepared,
+                        retired_aliases,
+                    } => (source_session, prepared, retired_aliases),
+                    PreparedCooperativeRuntimeTransfer::CandidateFallback {
+                        failed_session,
+                        error,
+                    } => {
                         let legacy_transferred_owner_rejected = error.kind
                             == RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected;
                         let evidence = adopt_runtime_via_verified_orphan_fallback(
@@ -6430,22 +6527,6 @@ fn transfer_discovered_runtimes(
                         )?;
                         transfer_evidence.push(evidence);
                         continue;
-                    }
-                    Err((failed_session, error)) => {
-                        if runtime_handoff_source_disappeared(&error) {
-                            record_preserved_runtime_lane_sessions(
-                                migration,
-                                Some(&failed_session),
-                                &mut preserved_lane_sessions,
-                            );
-                            preserve_runtime_without_live_source(migration);
-                            let reason = "handoff_source_disappeared_after_census";
-                            if !migration.reason_codes.iter().any(|value| value == reason) {
-                                migration.reason_codes.push(reason.to_string());
-                            }
-                            continue;
-                        }
-                        return Err(error.message);
                     }
                 };
                 if !retired_aliases.is_empty() {
@@ -8259,12 +8340,13 @@ fn candidate_dashboard_command(
     runtime_socket_dir: &Path,
 ) -> Command {
     let mut command = Command::new(candidate_binary);
-    // The shadow dashboard owns the transaction-scoped socket directory and
-    // must bootstrap its candidate runtime host before admission begins.
-    // Omitting backend-only mode lets the ordinary dashboard startup path
-    // create that one service lane without exposing the shadow as ingress.
+    // Keep the shadow backend read-only while every old-generation lane is
+    // prepared. A later no-browser bootstrap starts the transaction runtime
+    // host only after all source prepares have completed, preventing
+    // cross-generation Service State lock contention.
     command
         .env("AGENT_BROWSER_DASHBOARD", "1")
+        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
         .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
         .env("AGENT_BROWSER_DASHBOARD_GENERATION", generation_id)
         .env("AGENT_BROWSER_SOCKET_DIR", runtime_socket_dir)
@@ -11617,6 +11699,43 @@ mod tests {
         assert!(candidate_runtime_host_stage_required(false, 0));
         assert!(candidate_runtime_host_stage_required(false, 3));
         assert!(!candidate_runtime_host_stage_required(true, 0));
+        assert_eq!(
+            CANDIDATE_RUNTIME_HOST_BOOTSTRAP_SESSION,
+            "dashboard-service-backend"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn candidate_runtime_host_bootstrap_is_no_browser_stream_status() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-host-bootstrap-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let binary = root.join("candidate-agent-browser");
+        let args_path = root.join("args.txt");
+        fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s\\n' '{{\"success\":true,\"data\":{{\"port\":null}}}}'\n",
+                args_path.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        let socket_dir = root.join("socket");
+
+        start_candidate_runtime_host_after_source_prepares(&binary, &socket_dir).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&args_path).unwrap(),
+            "--json\n--session\ndashboard-service-backend\nstream\nstatus\n"
+        );
+        assert!(socket_dir.is_dir());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]
@@ -13248,7 +13367,11 @@ mod tests {
                 .and_then(Clone::clone),
             Some("1".to_string())
         );
-        assert_eq!(env.get("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY"), None);
+        assert_eq!(
+            env.get("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY")
+                .and_then(Clone::clone),
+            Some("1".to_string())
+        );
     }
 
     #[test]

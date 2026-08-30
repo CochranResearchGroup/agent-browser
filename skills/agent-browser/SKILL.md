@@ -161,7 +161,11 @@ block when no adoptable handoff qualifies. Fresh and isolated installs are
 exempt. Never retry the upgrade or route a structured handoff through its old
 session label when bootstrap is unready; reconcile exact current ownership or
 establish one fresh reviewed handoff first. Real-host apply starts a candidate
-dashboard on the second port after ingress, then waits up to five minutes after
+dashboard on the second port after ingress. The shadow stays backend-only while
+all old-generation cooperative lanes complete handoff prepare. The candidate
+runtime host starts through a no-browser stream-status bootstrap only after
+that prepare batch finishes, preventing legacy source and candidate mutation
+phases from contending for Service State. Apply then waits up to five minutes after
 runtime transfer for an authenticated candidate journey. Resolving an opaque
 durable handoff to a ready operator surface through the staged candidate
 automatically commits that exact generation after rechecking its receipt

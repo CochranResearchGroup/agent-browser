@@ -308,8 +308,11 @@ current owner evidence is missing.
 
 On real-host apply, the installer starts the candidate dashboard backend on
 the second port after the stable ingress port and stages it in the ingress
-registry before admission drain. After runtime transfer reaches candidate
-readiness, apply waits up to five minutes for an authenticated candidate
+registry before admission drain. The shadow remains backend-only while every
+old-generation cooperative lane completes handoff prepare. Only then does a
+no-browser `stream status` bootstrap start the transaction runtime host, so old
+prepare and candidate mutation phases never contend for Service State. After
+runtime transfer reaches candidate readiness, apply waits up to five minutes for an authenticated candidate
 journey. Resolving an opaque durable handoff to a ready operator surface
 through the staged candidate automatically commits that exact generation.
 The commit rechecks its candidate-bound presentation receipt against the

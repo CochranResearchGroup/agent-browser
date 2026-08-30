@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_j_transactional_bootstrap_validated_production_dry_run_next`
+Execution state: `slice_j_successor_development_accepted_production_dry_run_next`
 
 Lane: P137
 
@@ -1185,3 +1185,32 @@ described above. Production installation still requires source validation,
 isolated development-runtime acceptance, and a fresh exact effect review. It
 does not authorize provider work, tenant effects, broad cleanup, or retries of
 uncertain service requests.
+
+### Slice J production activation rollback and successor repair | 2026-08-30
+
+Candidate `0.28.0-d9577e0ed57a-f694d6f0ece6` passed production dry-run with
+bootstrap handoff `r474915`, migration status `not_required`, `mutation=false`,
+and zero protected-record removals. Authorized transaction
+`upgrade-0f44b190-2f83-4d9d-828c-b0c6de379dbc` then staged the candidate and
+entered runtime transfer. The presentation lane transferred and later rolled
+back with an exact owner receipt, but old-generation session
+`principal-profile-0a5250baef3a2db3f01f9f86` failed handoff prepare with
+`service_state_lock_timeout: process mutation lock` before candidate readiness.
+The transaction terminated `failed_preserved_old_generation`; the old
+generation and binary SHA remained selected, and no candidate presentation
+request or provider request was issued.
+
+The successor source repair removes the interleaving that caused this
+contention. The shadow dashboard now remains backend-only. All cooperative
+old-generation handoff prepares complete as one phase before any candidate
+runtime activity. A no-browser stream-status bootstrap then starts the
+transaction runtime host before candidate resumes. Strict presentation proof
+remains a later phase, with the existing pre-commit rollback boundary
+unchanged. No live retry is authorized from the failed transaction.
+
+Successor generation `0.28.0-b98f2ebd4e4f` with SHA-256
+`b98f2ebd4e4f94d9786bdc9e632ec9ab2ade027cfbda219d93d0584df63e7569`
+passed source validation, isolated development doctor, synchronized skill
+validation, and three disposable browser launch and residue iterations.
+Production selection remained unchanged. The next bounded gate is a fresh
+production dry-run against this exact successor binary.

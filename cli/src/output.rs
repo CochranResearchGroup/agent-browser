@@ -5639,7 +5639,11 @@ isolated installs do not require a retained presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
 Real-host apply starts a shadow candidate dashboard on the second port after
-ingress. After runtime transfer it waits up to five minutes for an authenticated
+ingress. The shadow stays backend-only while all old-generation cooperative
+lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
+transaction runtime host only after that batch finishes, preventing
+cross-generation Service State lock contention. After runtime transfer it waits
+up to five minutes for an authenticated
 candidate handoff resolution. A ready response served by the staged candidate
 automatically commits that exact generation after revalidating its presentation
 receipt. Failure to prove presentation rolls back the staged candidate and
