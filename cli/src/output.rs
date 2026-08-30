@@ -5633,9 +5633,14 @@ Upgrade dry-run reports candidatePresentationPrerequisite with
 proofPhase=bootstrap before any effect. It is ready when one opaque durable
 handoff identifies an exact healthy browser process, target, and unique current
 owner session that the staged candidate can adopt. Bootstrap does not require a
-ready route, display, or old-generation presentation receipt. Apply records a
-terminal zero-effect preflight block when no adoptable handoff exists. Fresh and
-isolated installs do not require a retained presentation handoff. A structured
+ready route, display, or old-generation presentation receipt. If persisted
+health or tab validity lags a retained browser after rollback, bootstrap may
+qualify it through one read-only loopback CDP observation only when the recorded
+process identity, unique ready owner, active session, process digest, and exact
+target still match. This observation does not write Service State or launch a
+browser. Apply records a terminal zero-effect preflight block when no adoptable
+handoff exists. Fresh and isolated installs do not require a retained
+presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
 Real-host apply starts a shadow candidate dashboard on the second port after

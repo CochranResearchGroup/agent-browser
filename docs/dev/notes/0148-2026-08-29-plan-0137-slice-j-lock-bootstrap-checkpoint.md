@@ -199,3 +199,21 @@ candidate starts through `dashboard-service-backend stream status` without a
 browser. The selected production generation and SHA remain unchanged. A fresh
 production dry-run is the next gate; this evidence does not authorize retrying
 the closed failed transaction.
+
+## Retained-browser projection repair | 2026-08-30
+
+The successor dry-run stopped because persisted Service State marked all 53
+handoffs `current_owner_unproven`. Read-only reconciliation of `r474915` found
+the exact retained Chrome process and loopback CDP listener alive, the recorded
+owner generation current, the owner session active, and the exact target still
+present. The persisted browser health and tab-validity projections were stale
+after the earlier rollback.
+
+Bootstrap now uses one read-only live observation only when the persisted path
+does not qualify the handoff. The fallback requires an exact process-instance
+match, a loopback CDP endpoint, one ready owner with no pending transfer, an
+active matching owner session, the recorded process digest, and the exact page
+or webview target. It makes no state write and launches no browser. A target
+mismatch remains blocked. The next gate is source validation, a new isolated
+development candidate, and one fresh production dry-run. Production selection
+remains unchanged.

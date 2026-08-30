@@ -682,6 +682,75 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
         Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
     );
 
+    unique_ready_handoff_owner_session(
+        state,
+        browser_id,
+        &process_instance_digest,
+        |owner_session| {
+            browser.tab_handles.iter().any(|tab| {
+                tab.valid
+                    && tab.browser_id == browser_id
+                    && tab.target_id.as_deref() == Some(target_id)
+                    && tab.session_name.as_deref() == Some(owner_session)
+            })
+        },
+    )
+}
+
+/// Resolve a retained handoff from fresh read-only process and CDP evidence.
+///
+/// Persisted browser health and tab projections can lag a live runtime after a
+/// failed upgrade rolls ownership back. This observer keeps the exact recorded
+/// process identity and runtime-owner checks, restricts CDP probing to loopback,
+/// and requires the handoff's exact target to still be live. It never writes
+/// Service State or launches a browser.
+pub(crate) fn remote_view_handoff_live_owner_session(
+    state: &ServiceState,
+    handoff: &RemoteViewHandoff,
+) -> Option<String> {
+    let browser_id = handoff.browser_id.as_deref()?;
+    let target_id = handoff.target_id.as_deref()?;
+    let browser = state.browsers.get(browser_id)?;
+    let process = state.browser_process_identities.get(browser_id)?;
+    if browser.id != browser_id || browser.pid != Some(process.process_identity.pid) {
+        return None;
+    }
+    let observation = crate::process_identity::observe_process(process.process_identity.pid);
+    let assessment = crate::process_identity::assess_process_ownership(
+        Some(&process.process_identity),
+        observation,
+        crate::process_identity::LegacyProfileProof::Unproven,
+    );
+    if assessment.ownership != crate::process_identity::RuntimeProcessOwnership::MatchingBrowser {
+        return None;
+    }
+    let endpoint = url::Url::parse(browser.cdp_endpoint.as_deref()?).ok()?;
+    let loopback = endpoint.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
+    });
+    if !loopback {
+        return None;
+    }
+    let targets = crate::runtime_profile::fetch_runtime_targets(endpoint.port()?).ok()?;
+    if !targets.iter().any(|target| {
+        target.id == target_id && matches!(target.target_type.as_str(), "page" | "webview")
+    }) {
+        return None;
+    }
+    let process_instance_digest = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
+    );
+    unique_ready_handoff_owner_session(state, browser_id, &process_instance_digest, |_| true)
+}
+
+fn unique_ready_handoff_owner_session(
+    state: &ServiceState,
+    browser_id: &str,
+    process_instance_digest: &str,
+    target_is_bound: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let browser = state.browsers.get(browser_id)?;
     let mut owners = state
         .runtime_owner_registry
         .owners
@@ -696,12 +765,7 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
                     .active_session_ids
                     .iter()
                     .any(|session_id| session_id == &owner.daemon_session_route)
-                && browser.tab_handles.iter().any(|tab| {
-                    tab.valid
-                        && tab.browser_id == browser_id
-                        && tab.target_id.as_deref() == Some(target_id)
-                        && tab.session_name.as_deref() == Some(owner.daemon_session_route.as_str())
-                })
+                && target_is_bound(owner.daemon_session_route.as_str())
         });
     let owner = owners.next()?;
     if owners.next().is_some() {

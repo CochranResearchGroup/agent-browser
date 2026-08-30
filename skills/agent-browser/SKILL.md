@@ -77,6 +77,11 @@ Chrome, Chromium, Brave, and Edge family labels as the canonical `chrome`
 engine. Continue to reject Lightpanda and unrelated family evidence.
 Treat the temporary orphan candidate session as transaction-scoped. A retry
 must not reuse a candidate daemon created by an earlier failed transaction.
+If upgrade bootstrap encounters stale persisted browser health or tab validity,
+allow its single read-only loopback CDP observation to qualify the retained
+lane only when the exact recorded process identity, unique ready owner, active
+session, process digest, and target all match. This observation must not write
+Service State or launch a duplicate browser.
 When service projection metadata omits the runtime-profile name, recover it
 only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.

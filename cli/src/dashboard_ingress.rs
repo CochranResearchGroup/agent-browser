@@ -912,7 +912,12 @@ pub(crate) fn candidate_presentation_bootstrap_prerequisite(
         let owner_session =
             crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
                 state, handoff,
-            );
+            )
+            .or_else(|| {
+                crate::native::remote_view_handoff::remote_view_handoff_live_owner_session(
+                    state, handoff,
+                )
+            });
         let blocker = if handoff.state != "ready" {
             Some("handoff_not_ready")
         } else if owner_session.is_none() {
@@ -2032,6 +2037,119 @@ mod tests {
         state.runtime_owner_registry.owners.clear();
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["blockerCounts"]["current_owner_unproven"], 1);
+    }
+
+    fn serve_runtime_targets_once(target_id: &str) -> (u16, thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let target_id = target_id.to_string();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            let body = serde_json::json!([{
+                "id": target_id,
+                "type": "page",
+                "title": "retained page",
+                "url": "about:blank"
+            }])
+            .to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+        (port, server)
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_recovers_from_stale_projection_with_exact_live_evidence() {
+        let mut state = exact_candidate_presentation_state();
+        let process_identity =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        let process_digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&process_identity).unwrap())
+        );
+        state
+            .browser_process_identities
+            .get_mut("browser-1")
+            .unwrap()
+            .process_identity = process_identity;
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.process_instance_digest = process_digest;
+        let (port, server) = serve_runtime_targets_once("target-1");
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.pid = Some(std::process::id());
+        browser.cdp_endpoint = Some(format!("ws://127.0.0.1:{port}/devtools/browser/retained"));
+        browser.health = crate::native::service_model::BrowserHealth::CdpDisconnected;
+        browser.tab_handles[0].valid = false;
+
+        assert!(
+            crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
+                &state,
+                state.remote_view_handoffs.get("r1").unwrap()
+            )
+            .is_none()
+        );
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+        server.join().unwrap();
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_rejects_stale_projection_when_live_target_differs() {
+        let mut state = exact_candidate_presentation_state();
+        let process_identity =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        let process_digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&process_identity).unwrap())
+        );
+        state
+            .browser_process_identities
+            .get_mut("browser-1")
+            .unwrap()
+            .process_identity = process_identity;
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .process_instance_digest = process_digest;
+        let (port, server) = serve_runtime_targets_once("different-target");
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.pid = Some(std::process::id());
+        browser.cdp_endpoint = Some(format!("ws://127.0.0.1:{port}/devtools/browser/retained"));
+        browser.health = crate::native::service_model::BrowserHealth::CdpDisconnected;
+        browser.tab_handles[0].valid = false;
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+        server.join().unwrap();
 
         assert_eq!(prerequisite["ready"], false);
         assert_eq!(prerequisite["eligibleHandoffCount"], 0);

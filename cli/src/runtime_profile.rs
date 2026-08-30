@@ -646,7 +646,7 @@ pub fn list_manual_runtime_browsers() -> Result<Vec<ManualRuntimeBrowser>, Strin
     Ok(browsers)
 }
 
-fn fetch_runtime_targets(port: u16) -> Result<Vec<RuntimeTarget>, String> {
+pub(crate) fn fetch_runtime_targets(port: u16) -> Result<Vec<RuntimeTarget>, String> {
     let json = http_get_json(port, "/json/list")?;
     let list = json
         .as_array()

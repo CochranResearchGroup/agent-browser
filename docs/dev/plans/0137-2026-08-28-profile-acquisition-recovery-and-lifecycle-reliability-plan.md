@@ -1214,3 +1214,20 @@ passed source validation, isolated development doctor, synchronized skill
 validation, and three disposable browser launch and residue iterations.
 Production selection remained unchanged. The next bounded gate is a fresh
 production dry-run against this exact successor binary.
+
+### Slice J retained-browser observation repair | 2026-08-30
+
+The successor dry-run exposed a stale projection rather than a missing
+browser. Handoff `r474915` retained an exact live Chrome process, loopback CDP
+endpoint, current owner receipt, active owner session, and exact target, while
+persisted browser health and tab validity still described the earlier
+disconnect. Bootstrap now falls back to one read-only live observation only
+after persisted qualification fails. It requires the exact recorded process
+instance, loopback CDP endpoint, unique ready owner with no pending transfer,
+active owner session, matching process digest, and exact page or webview target.
+It neither writes Service State nor launches a browser. A different or absent
+target remains `current_owner_unproven`.
+
+Provider-free regression tests prove both stale-projection acceptance and
+mismatched-target rejection. A newly built and isolated successor, followed by
+a fresh production dry-run, remains required before any production apply.

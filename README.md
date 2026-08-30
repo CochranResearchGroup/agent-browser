@@ -243,6 +243,11 @@ Edge family labels to the canonical `chrome` engine while continuing to reject
 Lightpanda and unrelated family evidence.
 Its temporary candidate session is scoped to the upgrade transaction, so a
 retry cannot reuse a candidate daemon left by an earlier failed transaction.
+If persisted browser health or tab validity lags a retained live browser after
+rollback, upgrade bootstrap performs one read-only loopback CDP observation.
+It accepts that evidence only when the recorded PID and process identity,
+unique ready owner, active session, process digest, and exact target all still
+match. The observation does not repair Service State or launch another browser.
 If service projection metadata omits the runtime-profile name, orphan adoption
 recovers it only from one runtime-state record with the same exact process
 identity and DevTools browser endpoint; zero or multiple matches fail closed.
