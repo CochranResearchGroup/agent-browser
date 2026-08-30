@@ -217,3 +217,23 @@ or webview target. It makes no state write and launches no browser. A target
 mismatch remains blocked. The next gate is source validation, a new isolated
 development candidate, and one fresh production dry-run. Production selection
 remains unchanged.
+
+## Successor acceptance and production dry-run | 2026-08-30
+
+Development generation `0.28.0-3b7f15a031dd` has SHA-256
+`3b7f15a031dd93b74df37ff3f6b4cddc14040ffc988778af690310b3e3dedba5`.
+Development install reported production unchanged, doctor passed the selected
+generation, runtime host, dashboard, ingress, browser executable, isolated
+presentation provider, six unique routes, and four unique warm displays. Skill
+sync was current, and three disposable browser launch and residue iterations
+passed.
+
+Strict Clippy, the source-free workstation and host fixtures, fresh-VM,
+Guacamole, PostgreSQL, route-user, documentation, focused stale-projection, and
+authoritative Rust gates pass. A single fresh production dry-run returned
+`mutated=false`, migration `not_required`, zero protected-record removals, and
+candidate bootstrap `ready=true` with only handoff `r474915` eligible. The
+report-level `ready=false` is expected before an apply performs host preparation
+and transactional activation. No production mutation occurred. A new explicit
+production apply remains the only activation gate; the closed failed
+transaction is not retryable.

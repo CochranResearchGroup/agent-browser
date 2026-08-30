@@ -1231,3 +1231,18 @@ target remains `current_owner_unproven`.
 Provider-free regression tests prove both stale-projection acceptance and
 mismatched-target rejection. A newly built and isolated successor, followed by
 a fresh production dry-run, remains required before any production apply.
+
+Successor generation `0.28.0-3b7f15a031dd` with SHA-256
+`3b7f15a031dd93b74df37ff3f6b4cddc14040ffc988778af690310b3e3dedba5`
+passed isolated development install, doctor, skill synchronization, and three
+disposable browser launch and residue iterations. The authoritative Rust
+harness, strict Clippy, source-free workstation fixture, host and provider
+contracts, docs build, and remote-view guidance checks pass.
+
+One fresh production dry-run returned `mutated=false`, migration
+`not_required`, zero protected-record removals, and bootstrap prerequisite
+`ready=true` with exactly one eligible handoff, `r474915`. The report-level
+`ready=false` is the dry-run no-apply state; workstation readiness becomes true
+only after host preparation and transactional activation. Production selection
+remains unchanged. A new explicit production apply is the remaining gate and
+must not reuse the closed failed transaction.
