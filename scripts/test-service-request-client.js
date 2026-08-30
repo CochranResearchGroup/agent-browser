@@ -39,6 +39,7 @@ import {
   createServiceViewerLeaseReleaseRequest,
   createServiceViewerLeaseRequest,
   evaluateServiceTab,
+  getServiceFailureRecourse,
   getServiceTabHandle,
   getServiceTabDiagnostics,
   getServiceRemoteViewHandoffUrl,
@@ -89,6 +90,7 @@ import {
   requestServiceViewerLease,
   requireServiceRemoteViewOpenOperatorVisible,
   requireServiceRemoteViewHandoffUrl,
+  requireServiceRequestSuccess,
   summarizeServiceSharedProfileAcquisition,
   summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
@@ -96,6 +98,7 @@ import {
   SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
   summarizeServiceCdpFreeLaunchAvailability,
+  ServiceOperationError,
   takeoverServiceControllerLease,
 } from '../packages/client/src/service-request.js';
 import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
@@ -1494,6 +1497,34 @@ async function main() {
     authorization: 'Bearer private-profile-capability',
   });
   assert.deepEqual(postRecorder.calls[0].body, request);
+
+  const viewportFailure = {
+    id: 'viewport-job-1',
+    success: false,
+    error: 'service_state_lock_timeout: process mutation lock',
+    failure: {
+      schemaVersion: 'agent-browser.service-failure-recourse.v1',
+      code: 'service_state_lock_timeout',
+      axis: 'service_state',
+      phase: 'process_mutex_wait',
+      effectState: 'effect_uncertain',
+      retryDisposition: 'inspect_before_retry',
+      recommendedAction: 'inspect_job_and_refresh_plan',
+      reuseAllowed: false,
+      jobId: 'viewport-job-1',
+      safeNextActions: ['inspect_service_job', 'inspect_service_trace', 'refresh_access_plan'],
+      hardStops: ['blind_retry', 'launch_duplicate_profile_lane'],
+    },
+  };
+  assert.deepEqual(getServiceFailureRecourse(viewportFailure), viewportFailure.failure);
+  assert.throws(
+    () => requireServiceRequestSuccess(viewportFailure),
+    (error) =>
+      error instanceof ServiceOperationError &&
+      error.failure?.effectState === 'effect_uncertain' &&
+      error.failure?.retryDisposition === 'inspect_before_retry' &&
+      error.response === viewportFailure,
+  );
 
   const tabHandle = {
     browserId: 'session:acs',

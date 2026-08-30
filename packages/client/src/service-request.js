@@ -22,6 +22,7 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceRequestAction} ServiceRequestAction
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
+ * @typedef {import('./service-request.generated.js').ServiceFailureRecourse} ServiceFailureRecourse
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchAvailability} ServiceCdpFreeLaunchAvailability
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchData} ServiceCdpFreeLaunchData
  * @typedef {import('./service-request.generated.js').ServiceExternalByopAdoptRequestHttpOptions} ServiceExternalByopAdoptRequestHttpOptions
@@ -103,6 +104,57 @@ export {
   SERVICE_REQUEST_STRING_ARRAY_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
 } from './service-request.generated.js';
+
+export class ServiceOperationError extends Error {
+  /**
+   * @param {ServiceRequestResponse} response
+   */
+  constructor(response) {
+    const failure = getServiceFailureRecourse(response);
+    const errorText = typeof response?.error === 'string' ? response.error : 'Service operation failed';
+    super(failure?.code ? `${failure.code}: ${errorText}` : errorText);
+    this.name = 'ServiceOperationError';
+    this.response = response;
+    this.failure = failure;
+  }
+}
+
+/**
+ * Return machine-readable recourse from a Service response without parsing the
+ * legacy error string.
+ *
+ * @param {unknown} response
+ * @returns {ServiceFailureRecourse | null}
+ */
+export function getServiceFailureRecourse(response) {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return null;
+  const failure = /** @type {Record<string, unknown>} */ (response).failure;
+  if (!failure || typeof failure !== 'object' || Array.isArray(failure)) return null;
+  const record = /** @type {Record<string, unknown>} */ (failure);
+  if (
+    typeof record.code !== 'string' ||
+    typeof record.effectState !== 'string' ||
+    typeof record.retryDisposition !== 'string' ||
+    typeof record.recommendedAction !== 'string' ||
+    typeof record.reuseAllowed !== 'boolean'
+  ) {
+    return null;
+  }
+  return /** @type {ServiceFailureRecourse} */ (failure);
+}
+
+/**
+ * Return a successful response or throw a typed error carrying the original
+ * response and structured recourse.
+ *
+ * @template {ServiceRequestResponse} TResponse
+ * @param {TResponse} response
+ * @returns {TResponse}
+ */
+export function requireServiceRequestSuccess(response) {
+  if (response?.success === true) return response;
+  throw new ServiceOperationError(response);
+}
 
 /**
  * @param {ServiceRequest} input

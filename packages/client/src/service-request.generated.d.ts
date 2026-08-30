@@ -1542,12 +1542,35 @@ export interface ServiceRequestActionDataMap {
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =
   TAction extends keyof ServiceRequestActionDataMap ? ServiceRequestActionDataMap[TAction] : unknown;
 
+export type ServiceFailureAxis = 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
+export type ServiceFailurePhase = 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
+export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_effect';
+export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
+
+export interface ServiceFailureRecourse {
+  schemaVersion: 'agent-browser.service-failure-recourse.v1' | string;
+  code: string;
+  axis: ServiceFailureAxis;
+  phase: ServiceFailurePhase;
+  effectState: ServiceEffectState;
+  retryDisposition: ServiceRetryDisposition;
+  recommendedAction: string;
+  reuseAllowed: boolean;
+  recoveryPlan?: Record<string, unknown> | null;
+  jobId?: string | null;
+  traceId?: string | null;
+  safeNextActions?: string[];
+  hardStops?: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceRequestResponse<TData = unknown> {
   id?: string;
   success: boolean;
   data?: TData;
   error?: unknown;
   warning?: unknown;
+  failure?: ServiceFailureRecourse;
   [key: string]: unknown;
 }
 
@@ -2076,6 +2099,13 @@ export declare function createServiceRequestMcpToolCall(input: ServiceRequest): 
 export declare function postServiceRequest<TRequest extends ServiceRequest>(
   options: ServiceRequestHttpOptions<TRequest>,
 ): Promise<ServiceRequestResponse<ServiceRequestDataForAction<TRequest["action"]>>>;
+export declare class ServiceOperationError extends Error {
+  constructor(response: ServiceRequestResponse);
+  response: ServiceRequestResponse;
+  failure: ServiceFailureRecourse | null;
+}
+export declare function getServiceFailureRecourse(response: unknown): ServiceFailureRecourse | null;
+export declare function requireServiceRequestSuccess<TResponse extends ServiceRequestResponse>(response: TResponse): TResponse;
 export declare function createServiceTabRequest(input: ServiceTabRequestOptions): ServiceRequestForAction<"tab_new">;
 export declare function createServiceTabRequestFromAccessPlan(
   accessPlan: ServiceTabAccessPlan,

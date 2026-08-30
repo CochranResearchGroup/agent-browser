@@ -14,6 +14,7 @@ use super::cancellation::CancellationToken as RunningJobCancel;
 use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
+use super::service_failure::attach_service_failure_recourse;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
@@ -1044,6 +1045,10 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         .get("error")
         .and_then(|value| value.as_str())
         .map(str::to_string);
+    let failure = response
+        .get("failure")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok());
     let allocation_refs = service_job_allocation_refs(request, Some(response));
 
     persist_service_job(ServiceJob {
@@ -1082,6 +1087,7 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         timeout_ms: request.timeout_ms,
         result: Some(service_job_persisted_result(request, response)),
         error,
+        failure,
     });
 }
 
@@ -1156,6 +1162,7 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": false, "timedOut": true, "timeoutMs": timeout_ms })),
         error: Some(format!("Service job timed out after {}ms", timeout_ms)),
+        failure: None,
     });
 }
 
@@ -1197,6 +1204,7 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": false, "cancelled": true })),
         error: Some(reason.to_string()),
+        failure: None,
     });
 }
 
@@ -1819,6 +1827,7 @@ async fn run_worker(
                                 json!(queue_wait_ms.saturating_add(daemon_total_ms));
                         }
                         state.current_cancellation = previous_cancellation;
+                        attach_service_failure_recourse(&mut response);
                         if let Ok(mut running) = running_cancellations.lock() {
                             running.remove(&request.job_id);
                         }
@@ -4230,6 +4239,56 @@ mod tests {
 
         drop(_permit);
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn viewport_lock_failure_persists_the_same_structured_recourse_returned_to_clients() {
+        let home = temp_home("control-plane-viewport-lock-recourse");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let mut request = control_request_for_mode_test(json!({
+            "id": "viewport-job-1",
+            "action": "viewport",
+            "width": 1440,
+            "height": 1000
+        }));
+        request.id = "viewport-job-1".to_string();
+        request.job_id = "viewport-job-1".to_string();
+        let mut response = json!({
+            "id": "viewport-job-1",
+            "success": false,
+            "error": "service_state_lock_timeout: process mutation lock"
+        });
+        attach_service_failure_recourse(&mut response);
+
+        persist_service_job_finished(&request, &response);
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store
+            .load()
+            .expect("viewport failure job should remain inspectable");
+        let job = &persisted.jobs["viewport-job-1"];
+        assert_eq!(job.action, "viewport");
+        assert_eq!(
+            job.error.as_deref(),
+            Some("service_state_lock_timeout: process mutation lock")
+        );
+        let failure = job
+            .failure
+            .as_ref()
+            .expect("failed viewport job should carry structured recourse");
+        assert_eq!(failure.code, "service_state_lock_timeout");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::EffectUncertain
+        );
+        assert_eq!(
+            failure.retry_disposition,
+            crate::native::service_failure::ServiceRetryDisposition::InspectBeforeRetry
+        );
+        assert!(!failure.reuse_allowed);
+
         let _ = std::fs::remove_dir_all(&home);
     }
 

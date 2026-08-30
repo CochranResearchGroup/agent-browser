@@ -130,6 +130,8 @@ mod service_crash_regeneration;
 #[allow(dead_code)]
 pub mod service_diagnostics;
 #[allow(dead_code)]
+pub mod service_failure;
+#[allow(dead_code)]
 pub mod service_file_transfer;
 #[allow(dead_code)]
 pub mod service_health;

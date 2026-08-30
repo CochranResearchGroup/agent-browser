@@ -84,6 +84,28 @@ export type ServiceBrowserHealthState =
   | "faulted";
 
 
+export type ServiceFailureAxis = 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
+export type ServiceFailurePhase = 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
+export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_effect';
+export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
+
+export interface ServiceFailureRecourse {
+  schemaVersion: 'agent-browser.service-failure-recourse.v1' | string;
+  code: string;
+  axis: ServiceFailureAxis;
+  phase: ServiceFailurePhase;
+  effectState: ServiceEffectState;
+  retryDisposition: ServiceRetryDisposition;
+  recommendedAction: string;
+  reuseAllowed: boolean;
+  recoveryPlan?: Record<string, unknown> | null;
+  jobId?: string | null;
+  traceId?: string | null;
+  safeNextActions?: string[];
+  hardStops?: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
@@ -116,6 +138,7 @@ export interface ServiceJobRecord {
   timeoutMs: number | null;
   result: unknown;
   error: string | null;
+  failure?: ServiceFailureRecourse | null;
   [key: string]: unknown;
 }
 

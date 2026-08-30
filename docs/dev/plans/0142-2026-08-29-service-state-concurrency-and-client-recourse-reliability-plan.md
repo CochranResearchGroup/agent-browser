@@ -4,7 +4,7 @@ Date: 2026-08-29
 
 State: OPEN
 
-Execution state: `slice_a_contract_and_regression_in_progress`
+Execution state: `slice_b_structured_recourse_checkpoint_complete_lock_refactor_next`
 
 Lane: P142
 

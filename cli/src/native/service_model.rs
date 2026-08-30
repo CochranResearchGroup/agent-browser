@@ -6012,6 +6012,8 @@ pub struct ServiceJob {
     pub timeout_ms: Option<u64>,
     pub result: Option<serde_json::Value>,
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<super::service_failure::ServiceFailureRecourse>,
 }
 
 impl Default for ServiceJob {
@@ -6048,6 +6050,7 @@ impl Default for ServiceJob {
             timeout_ms: None,
             result: None,
             error: None,
+            failure: None,
         }
     }
 }
