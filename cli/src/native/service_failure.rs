@@ -78,6 +78,25 @@ pub struct ServiceFailureRecourse {
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
     let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
+    if error.starts_with("service_state_stale_revision:") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_state_stale_revision".to_string(),
+            axis: ServiceFailureAxis::ServiceState,
+            phase: ServiceFailurePhase::Commit,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "reload_state_and_replan".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_job".to_string(),
+                "reload_service_state".to_string(),
+                "replan_same_intent".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if error.starts_with("service_state_lock_timeout: process mutation lock") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -210,6 +229,18 @@ mod tests {
         assert!(recourse
             .hard_stops
             .contains(&"launch_duplicate_profile_lane".to_string()));
+    }
+
+    #[test]
+    fn stale_revision_fails_before_effect_and_requires_replanning() {
+        let recourse =
+            classify_service_failure("service_state_stale_revision: expected=4; actual=5");
+
+        assert_eq!(recourse.code, "service_state_stale_revision");
+        assert_eq!(recourse.phase, ServiceFailurePhase::Commit);
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(recourse.recommended_action, "reload_state_and_replan");
+        assert!(!recourse.reuse_allowed);
     }
 
     #[test]

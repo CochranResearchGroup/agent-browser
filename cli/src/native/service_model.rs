@@ -2393,6 +2393,10 @@ pub struct ServiceState {
     /// value is accepted only as the legacy unversioned input format.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub(crate) schema_version: String,
+    /// Monotonic durable snapshot revision used to reject stale prepared
+    /// transactions before any participating file is replaced.
+    #[serde(default)]
+    pub(crate) state_revision: u64,
     /// Version of the first-class profile lease projection understood by the
     /// writer. This is compatibility metadata, not an authority source.
     #[serde(default, skip_serializing_if = "String::is_empty")]

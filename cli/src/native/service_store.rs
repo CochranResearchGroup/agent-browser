@@ -61,7 +61,7 @@ struct DurableRuntimeLifecycleRegistry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ServiceStateTransaction {
+pub struct ServiceStateTransaction {
     state_payload: String,
     handoff_payload: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,6 +99,24 @@ pub trait ServiceStateStore {
 
     fn state_path(&self) -> Option<&Path> {
         None
+    }
+
+    /// Prepare a pure durable transaction without acquiring mutation
+    /// authority. Stores that return `Some` must commit the exact payload in
+    /// `save_prepared` without re-running serialization or derivation.
+    fn prepare_save(
+        &self,
+        _state: &ServiceState,
+    ) -> Result<Option<ServiceStateTransaction>, String> {
+        Ok(None)
+    }
+
+    fn supports_prepared_save(&self) -> bool {
+        false
+    }
+
+    fn save_prepared(&self, _transaction: &ServiceStateTransaction) -> Result<(), String> {
+        Err("service_state_prepared_save_unsupported".to_string())
     }
 }
 
@@ -259,6 +277,21 @@ impl ServiceStateStore for JsonServiceStateStore {
     fn state_path(&self) -> Option<&Path> {
         Some(&self.path)
     }
+
+    fn prepare_save(
+        &self,
+        state: &ServiceState,
+    ) -> Result<Option<ServiceStateTransaction>, String> {
+        prepare_service_state_transaction(state).map(Some)
+    }
+
+    fn supports_prepared_save(&self) -> bool {
+        true
+    }
+
+    fn save_prepared(&self, transaction: &ServiceStateTransaction) -> Result<(), String> {
+        commit_service_state_transaction(self, transaction)
+    }
 }
 
 fn parse_service_state_json(raw: String, path: &Path) -> Result<ServiceState, String> {
@@ -394,6 +427,46 @@ where
     ) -> Result<R, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        if self.store.supports_prepared_save() {
+            let baseline = self.load_snapshot_with_lock_timeout(timeout)?;
+            let baseline_revision = baseline.state_revision;
+            let mut candidate = baseline;
+            candidate.state_revision = baseline_revision
+                .checked_add(1)
+                .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+            let result = mutator(&mut candidate)?;
+            let transaction = self
+                .store
+                .prepare_save(&candidate)?
+                .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
+            let path = self
+                .store
+                .state_path()
+                .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
+            let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+            let _file_guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Exclusive,
+                commit_deadline,
+            )?;
+            let process_guard =
+                acquire_service_state_process_lock(lock, commit_deadline, "commit")?;
+            let current = if self.store.recovery_required() {
+                self.store.load()?
+            } else {
+                self.store.load_without_recovery()?
+            };
+            if current.state_revision != baseline_revision {
+                return Err(format!(
+                    "service_state_stale_revision: expected={baseline_revision}; actual={}",
+                    current.state_revision
+                ));
+            }
+            drop(process_guard);
+            self.store.save_prepared(&transaction)?;
+            return Ok(result);
+        }
+
         if let Some(path) = self.store.state_path() {
             let _file_guard = acquire_service_state_file_lock_until(
                 path,
@@ -1599,6 +1672,85 @@ mod tests {
             process_lock_available,
             "durable serialization and commit must not retain the process mutex"
         );
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn stale_prepared_transaction_is_rejected_before_commit_effect() {
+        struct StaleRevisionStore {
+            path: PathBuf,
+            state: Arc<Mutex<ServiceState>>,
+            prepare_entered: Arc<std::sync::Barrier>,
+            prepare_release: Arc<std::sync::Barrier>,
+            commit_count: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        impl ServiceStateStore for StaleRevisionStore {
+            fn load(&self) -> Result<ServiceState, String> {
+                Ok(self.state.lock().unwrap().clone())
+            }
+
+            fn load_without_recovery(&self) -> Result<ServiceState, String> {
+                self.load()
+            }
+
+            fn save(&self, _state: &ServiceState) -> Result<(), String> {
+                Err("unexpected_unprepared_save".to_string())
+            }
+
+            fn state_path(&self) -> Option<&Path> {
+                Some(&self.path)
+            }
+
+            fn supports_prepared_save(&self) -> bool {
+                true
+            }
+
+            fn prepare_save(
+                &self,
+                _state: &ServiceState,
+            ) -> Result<Option<ServiceStateTransaction>, String> {
+                self.prepare_entered.wait();
+                self.prepare_release.wait();
+                Ok(Some(ServiceStateTransaction {
+                    state_payload: String::new(),
+                    handoff_payload: String::new(),
+                    owner_registry_payload: None,
+                    lifecycle_registry_payload: None,
+                }))
+            }
+
+            fn save_prepared(&self, _transaction: &ServiceStateTransaction) -> Result<(), String> {
+                self.commit_count
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            }
+        }
+
+        let path = unique_state_path("stale-prepared-transaction");
+        let state = Arc::new(Mutex::new(ServiceState::default()));
+        let prepare_entered = Arc::new(std::sync::Barrier::new(2));
+        let prepare_release = Arc::new(std::sync::Barrier::new(2));
+        let commit_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let repository = LockedServiceStateRepository::new(StaleRevisionStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            prepare_entered: Arc::clone(&prepare_entered),
+            prepare_release: Arc::clone(&prepare_release),
+            commit_count: Arc::clone(&commit_count),
+        });
+        let mutation = std::thread::spawn(move || repository.mutate(|_| Ok(())));
+
+        prepare_entered.wait();
+        state.lock().unwrap().state_revision = 1;
+        prepare_release.wait();
+
+        let error = mutation
+            .join()
+            .expect("mutation thread should not panic")
+            .expect_err("stale prepared state must fail before commit");
+        assert_eq!(error, "service_state_stale_revision: expected=0; actual=1");
+        assert_eq!(commit_count.load(std::sync::atomic::Ordering::SeqCst), 0);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
