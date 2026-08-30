@@ -7748,14 +7748,6 @@ fn legacy_transferred_owner_prepare_rejection_can_fallback(
                 && owner.owner_generation > 1
                 && owner.browser_id == migration.logical_browser_id
                 && owner.daemon_session_route == source_session
-                && (owner.browser_id != format!("session:{source_session}")
-                    || service_state
-                        .runtime_owner_registry
-                        .is_exact_reversed_source_owner(
-                            &migration.profile_identity_digest,
-                            &migration.logical_browser_id,
-                            source_session,
-                        ))
         })
 }
 
@@ -14638,6 +14630,21 @@ mod tests {
             &generation_one_state,
             &migration,
             "handoff-candidate",
+        ));
+
+        let mut same_route_state = ServiceState::default();
+        let mut same_route_owner = owner.clone();
+        same_route_owner.owner_generation = 5;
+        same_route_owner.browser_id = migration.logical_browser_id.clone();
+        same_route_owner.daemon_session_route = "logical-browser".to_string();
+        same_route_state
+            .runtime_owner_registry
+            .owners
+            .insert(migration.profile_identity_digest.clone(), same_route_owner);
+        assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
+            &same_route_state,
+            &migration,
+            "logical-browser",
         ));
 
         let reversed_migration = RuntimeMigrationRecord {

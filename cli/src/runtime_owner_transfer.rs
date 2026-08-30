@@ -655,43 +655,6 @@ impl RuntimeOwnerRegistry {
             .then(|| OwnerAuthorityClaim::from_owner(owner))
     }
 
-    /// Reports whether the current ready owner is the exact original daemon
-    /// restored by a receipted reverse transfer.
-    ///
-    /// This is a read-only installer reconciliation proof. It does not refresh
-    /// a daemon claim or grant effect authority.
-    pub(crate) fn is_exact_reversed_source_owner(
-        &self,
-        profile_identity_digest: &str,
-        logical_browser_id: &str,
-        daemon_session_route: &str,
-    ) -> bool {
-        self.owners
-            .get(profile_identity_digest)
-            .is_some_and(|owner| {
-                let Some(transition) = owner.last_transition.as_ref() else {
-                    return false;
-                };
-                let Some(reverse) = transition.reverse_receipt.as_ref() else {
-                    return false;
-                };
-                owner.state == ProfileOwnerState::Ready
-                    && owner.pending_transfer.is_none()
-                    && owner.browser_id == logical_browser_id
-                    && owner.daemon_session_route == daemon_session_route
-                    && transition.original_owner.owner_id == owner.owner_id
-                    && transition.original_owner.browser_id == owner.browser_id
-                    && transition.original_owner.daemon_session_route == owner.daemon_session_route
-                    && transition.original_owner.process_instance_digest
-                        == owner.process_instance_digest
-                    && reverse.transition_kind == OwnerTransferTransitionKind::Reverse
-                    && reverse.logical_browser_id == owner.browser_id
-                    && reverse.profile_identity_digest == owner.profile_identity_digest
-                    && reverse.candidate_owner_id == owner.owner_id
-                    && reverse.candidate_owner_generation == owner.owner_generation
-            })
-    }
-
     pub(crate) fn begin_transfer(
         &mut self,
         mut request: OwnerTransferRequest,
@@ -1815,16 +1778,6 @@ mod tests {
         let restored = registry.owner(&digest("profile")).unwrap();
         assert_eq!(restored.owner_id, "owner-old");
         assert_eq!(restored.owner_generation, 9);
-        assert!(registry.is_exact_reversed_source_owner(
-            &digest("profile"),
-            "browser-a",
-            "session-old"
-        ));
-        assert!(!registry.is_exact_reversed_source_owner(
-            &digest("profile"),
-            "browser-a",
-            "session-new"
-        ));
     }
 
     #[test]
