@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `slice_k_profile_lease_usability_repair_source_accepted_installation_pending`
+Execution state: `slice_k_profile_lease_usability_repair_installation_blocked_by_transfer_rollback`
 
 Lane: P137
 
@@ -1255,6 +1255,7 @@ State transition:
 
 - `slice_j_successor_development_accepted_production_dry_run_next -> slice_k_profile_lease_usability_repair_in_progress`.
 - `slice_k_profile_lease_usability_repair_in_progress -> slice_k_profile_lease_usability_repair_source_accepted_installation_pending`.
+- `slice_k_profile_lease_usability_repair_source_accepted_installation_pending -> slice_k_profile_lease_usability_repair_installation_blocked_by_transfer_rollback`.
 
 Progress classification:
 
@@ -1335,3 +1336,60 @@ Next action or stop reason:
 - after integration and an explicitly authorized candidate installation, run
   the exact authenticated access-plan execution acceptance before considering
   renewed Last30days attempt authority.
+
+### Slice K merge and installation attempt | 2026-08-30
+
+The profile lease repair commit `ac57a1cc2bdbe1305ea9a851c124a673539bb1ef`
+was merged into the accepted workstation-upgrade branch at merge commit
+`510b69b3`. The combined release binary has SHA-256
+`dae585f23da39bfd0660ff04069d3ca186ce02a677e7f1ee2d3e33070e6ec9f9`.
+It passed strict Clippy, the exact authenticated cold-route regression, all 45
+access-plan tests, dashboard profile-lease and client contract checks, the
+dashboard production build, isolated development doctor, development-only
+skill synchronization, and three disposable development browser cycles.
+
+Production dry-run initially returned `mutated=false`, migration
+`not_required`, zero protected-record removals, and three eligible durable
+handoffs. Installation did not commit:
+
+- transaction `upgrade-4bd5a63e-a613-4997-8853-f61b15fc5ef9` reached
+  `candidate_ready`, timed out waiting for authenticated candidate
+  presentation, and terminated `failed_preserved_old_generation` at revision
+  12 with `candidate_dashboard_presentation_unproven`;
+- coordinated transaction `upgrade-9dfda399-2f32-46b3-b8da-8771e2b6fd09`
+  received one definite pre-effect `503` because the candidate manifest became
+  visible before its service session existed, then terminated
+  `failed_preserved_old_generation` at revision 10 after the failed job changed
+  Service State from revision 20 to 21; and
+- a new disposable `about:blank` presentation lane produced ready opaque
+  handoff `r339327`, after which transaction
+  `upgrade-a3ca012c-078a-47d5-86ce-9a9a6e0f297a` failed before
+  `candidate_ready` with
+  `runtime_owner_current_evidence_mismatch: transferred owner fallback evidence is incomplete`.
+  It terminated `failed_preserved_old_generation` at revision 10 with zero
+  reported outstanding owner obligations.
+
+The final transaction nevertheless retained an exact uncommitted cooperative
+transfer for browser `session:plan0137-slice-k-install-presentation`:
+
+- old owner generation 1 remains recorded ready;
+- candidate generation 2 is `candidateEffectCapable=false`;
+- lifecycle and cleanup obligation remain `transferring`;
+- exact normal `handoff abort` and `close` both fail before effect with
+  `runtime_owner_generation_stale`; and
+- process 26651 remains live on the disposable managed one-time profile.
+
+No process was killed and no ownership record was rewritten. Install doctor
+remains successful on the prior selected generation
+`0.28.0-ceb8f8a926e6-178c836a535e`, SHA-256
+`ceb8f8a926e669a881da70edd8a00e9b3e2f043a423a3f954178cf0ab0f45c51`.
+Admission draining is false, runtime convergence is `converged`, and the
+runtime census reports one selected dashboard, one selected runtime host, and
+zero legacy daemons.
+
+The next bounded source repair must make failed candidate activation abort
+every exact prepared transfer even when fallback evidence is incomplete, and
+must preserve the old source daemon's authority to abort and close an
+uncommitted transfer whose candidate never became effect-capable. Another
+production apply or Last30days retry is withheld until that repair and exact
+cleanup acceptance pass.
