@@ -17,8 +17,8 @@ use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
 use super::service_failure::attach_service_failure_recourse;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
-    persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
-    record_browser_health_changed_event, remove_browser_operational_record,
+    reconcile_persisted_service_state, record_browser_health_changed_event,
+    remove_browser_operational_record,
 };
 use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
@@ -247,18 +247,10 @@ impl ControlPlaneHandle {
                 "error": "Invalid serviceState",
             });
         };
-        let before = service_state.clone();
         let waiting_profile_lease_job_count =
             service_state_waiting_profile_lease_job_count(&service_state);
         service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
         dependencies.preparer.prepare(&mut service_state).await;
-        if let Err(error) = persist_reconciled_service_state_in_repository(
-            dependencies.repository,
-            &before,
-            &service_state,
-        ) {
-            return json!({ "id": id, "success": false, "error": error });
-        }
         let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
         let control_plane = service_state
             .control_plane
@@ -2962,29 +2954,18 @@ mod tests {
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let persisted = store.load().unwrap();
         assert_eq!(
-            persisted
-                .control_plane
-                .as_ref()
-                .map(|snapshot| snapshot.queue_capacity),
-            Some(DEFAULT_QUEUE_CAPACITY)
+            persisted,
+            ServiceState::default(),
+            "status projection must not persist reconciled or derived state"
         );
-        assert_eq!(
-            persisted
-                .reconciliation
-                .as_ref()
-                .map(|snapshot| snapshot.browser_count),
-            Some(0)
-        );
-        assert!(persisted.events.iter().any(|event| {
-            event.kind == crate::native::service_model::ServiceEventKind::Reconciliation
-        }));
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
-    async fn action_and_control_plane_status_both_surface_repository_failure() {
+    async fn direct_status_read_surfaces_repository_failure_but_projected_control_status_is_read_only(
+    ) {
         let state_path = JsonServiceStateStore::default_path().unwrap();
         let service_dir = state_path.parent().unwrap();
         let agent_browser_dir = service_dir.parent().unwrap();
@@ -3002,7 +2983,7 @@ mod tests {
             .service_status_response(
                 "test-service-status-repository-failure",
                 json!({}),
-                json!({}),
+                fixed_launch_configuration(),
                 false,
             )
             .await;
@@ -3012,15 +2993,11 @@ mod tests {
                 && (error.contains("File exists") || error.contains("Not a directory"))
         };
         let action_surfaces_repository_failure = is_repository_path_failure(&action_error);
-        let control_error = control_response["error"].as_str().unwrap();
-        let control_surfaces_repository_failure = is_repository_path_failure(control_error);
-
         handle.shutdown().await;
         std::fs::remove_file(service_dir).unwrap();
 
         assert!(action_surfaces_repository_failure, "{action_error}");
-        assert_eq!(control_response["success"], false);
-        assert!(control_surfaces_repository_failure, "{control_error}");
+        assert_eq!(control_response["success"], true, "{control_response}");
     }
 
     #[tokio::test]
@@ -3322,7 +3299,12 @@ mod tests {
             },
         );
 
-        persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
+        super::super::service_health::persist_reconciled_service_state_in_repository(
+            &repository,
+            &before,
+            &reconciled,
+        )
+        .unwrap();
 
         let persisted = store.load().unwrap();
         let browser = &persisted.browsers["browser-1"];
