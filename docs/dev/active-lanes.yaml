@@ -8,8 +8,8 @@ lanes:
     target: main
     plan_state: COMPLETE
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9fd50ec9ebbf3c15200fc2815d9f8a362d60d4b7
-    remote_ref: null
+    checkpoint: c22a208703bf8efdc22d87b51784b25e5866f707
+    remote_ref: refs/remotes/origin/fix/service-state-stale-revision-recovery-20260831
     integration: merge
     dependencies:
       - P142 Service State Concurrency And Client Recourse Reliability
