@@ -169,6 +169,8 @@ impl ProfileLeaseFailureCode {
 }
 
 /// Projects the canonical first-class profile lease collection from retained authority and work.
+/// Released and expired legacy sessions remain visible as nonblocking history;
+/// only current legacy session or owner evidence requires identity reconciliation.
 pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<ProfileLeaseRecord> {
     let mut records = Vec::new();
     let mut bound_profiles = BTreeSet::new();
@@ -1421,6 +1423,19 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
         .copied()
         .filter(|session| !inactive_or_expired(session.lease, session.expires_at.as_deref(), now))
         .collect::<Vec<_>>();
+    let has_nonterminal_owner = state.runtime_owner_registry.owners.values().any(|owner| {
+        owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Failed
+            && state
+                .browsers
+                .get(&owner.browser_id)
+                .and_then(|browser| browser.profile_id.as_deref())
+                == Some(profile_id)
+    });
+    let historical = active.is_empty() && !has_nonterminal_owner;
+    let mut authorized_actions = READ_ACTIONS.map(ToString::to_string).to_vec();
+    if !historical {
+        authorized_actions.push("profile_acquire".to_string());
+    }
     let mut record = ProfileLeaseRecord {
         schema_version: PROFILE_LEASE_SCHEMA_VERSION.to_string(),
         id: profile_lease_id("unproven-legacy", profile_id),
@@ -1433,7 +1448,12 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
         session_ids: session_ids.clone(),
         tab_ids: tabs_for_sessions(state, &session_ids),
         mode: lease_mode(&active),
-        state: "identity_reconciliation_required".to_string(),
+        state: if historical {
+            "historical"
+        } else {
+            "identity_reconciliation_required"
+        }
+        .to_string(),
         owner_generation: None,
         process_instance_digest: None,
         route_ids: Vec::new(),
@@ -1448,12 +1468,12 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
                 .filter_map(|session| session.expires_at.as_deref()),
         ),
         cleanup_obligation: None,
-        blocking_identity_axes: vec!["legacy_principal_unproven".to_string()],
-        authorized_actions: READ_ACTIONS
-            .iter()
-            .chain(std::iter::once(&"profile_acquire"))
-            .map(ToString::to_string)
-            .collect(),
+        blocking_identity_axes: if historical {
+            Vec::new()
+        } else {
+            vec!["legacy_principal_unproven".to_string()]
+        },
+        authorized_actions,
         recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
         observation_only: true,
     };
@@ -2297,6 +2317,49 @@ mod tests {
         let doctor = doctor_profile_leases(&state, NOW);
         assert!(!doctor.healthy);
         assert_eq!(doctor.findings[0].code, "legacy_principal_unproven");
+    }
+
+    #[test]
+    fn historical_legacy_profile_remains_visible_without_operational_blockers() {
+        let state = ServiceState {
+            sessions: BTreeMap::from([
+                (
+                    "released-legacy".to_string(),
+                    BrowserSession {
+                        id: "released-legacy".to_string(),
+                        profile_id: Some("historical-profile".to_string()),
+                        lease: LeaseState::Released,
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "expired-legacy".to_string(),
+                    BrowserSession {
+                        id: "expired-legacy".to_string(),
+                        profile_id: Some("historical-profile".to_string()),
+                        lease: LeaseState::Expired,
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let leases = profile_leases_for_state(&state, NOW);
+        assert_eq!(leases.len(), 1);
+        assert_eq!(leases[0].state, "historical");
+        assert_eq!(leases[0].mode, "idle");
+        assert_eq!(leases[0].session_ids, ["expired-legacy", "released-legacy"]);
+        assert!(leases[0].observation_only);
+        assert!(leases[0].blocking_identity_axes.is_empty());
+        assert_eq!(
+            leases[0].authorized_actions,
+            READ_ACTIONS.map(ToString::to_string)
+        );
+
+        let doctor = doctor_profile_leases(&state, NOW);
+        assert!(doctor.healthy);
+        assert!(doctor.findings.is_empty());
     }
 
     #[test]

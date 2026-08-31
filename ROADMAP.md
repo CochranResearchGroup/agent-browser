@@ -1,11 +1,28 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-24
+Updated: 2026-08-31
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P144 | Lease Authority Coordination And Revocation
+
+State: IN PROGRESS
+Current state: the historical hotfix inventory is reconciled into one lease
+authority redesign. Slice A is test-driving the structural separation between
+active operational claims and append-only lease history. No live runtime state
+or tenant profile has been changed by this lane.
+
+### Plan
+
+- `docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md`
+
+### Next Recommendation
+
+Complete the retained-history red-green slice, then introduce the canonical
+active-claim kernel before widening public revocation surfaces.
 
 ## P129 | Request Delivery, Lifecycle Projection, And Cleanup Repair
 

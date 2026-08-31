@@ -5910,6 +5910,56 @@ mod tests {
     }
 
     #[test]
+    fn terminal_session_history_cannot_change_access_plan_decision() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-social".to_string(),
+                BrowserProfile {
+                    id: "last30days-social".to_string(),
+                    target_service_ids: vec!["social".to_string()],
+                    authenticated_service_ids: vec!["social".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let request = || ServiceAccessPlanRequest {
+            target_service_ids: vec!["social".to_string()],
+            ..ServiceAccessPlanRequest::default()
+        };
+
+        let before = service_access_plan_for_state(&state, request());
+        assert_eq!(
+            before["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+
+        state.sessions.extend([
+            (
+                "released-history".to_string(),
+                BrowserSession {
+                    id: "released-history".to_string(),
+                    profile_id: Some("last30days-social".to_string()),
+                    lease: LeaseState::Released,
+                    ..BrowserSession::default()
+                },
+            ),
+            (
+                "expired-history".to_string(),
+                BrowserSession {
+                    id: "expired-history".to_string(),
+                    profile_id: Some("last30days-social".to_string()),
+                    lease: LeaseState::Expired,
+                    ..BrowserSession::default()
+                },
+            ),
+        ]);
+
+        let after = service_access_plan_for_state(&state, request());
+        assert_eq!(after["decision"], before["decision"]);
+    }
+
+    #[test]
     fn service_access_plan_recommends_new_browser_when_no_reusable_lane_exists() {
         let state = ServiceState {
             profiles: BTreeMap::from([(
