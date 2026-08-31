@@ -3,6 +3,8 @@
 //! Only `active_claims` may authorize or block effects. `events` is retained
 //! append-only history and is never consulted for admission.
 
+mod protocol;
+
 use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

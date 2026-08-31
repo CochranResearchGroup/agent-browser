@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_f_non_minting_verifier_source_accepted_admin_revoke_kernel_in_progress`
+Execution state: `slice_g_protected_authority_protocol_resource_registry_in_progress`
 
 Lane: P144
 
@@ -511,6 +511,24 @@ Every active claim contains at least:
     compatible, while an obsolete sink is removed from routing with a typed
     bounded transition rather than manufacturing a claim conflict or a global
     readiness denial.
+94. Protected authority state is hostile input on every load, restore,
+    migration, and generation switch. The kernel validates schemas, map keys,
+    cross-collection references, one-to-one resource identities, revisions,
+    fences, epochs, completed-operation namespaces, and trust bindings before
+    serving any request. Invalid state is quarantined as a typed authority
+    outage and is never normalized into an empty or apparently clean authority.
+95. The authority endpoint has a stable protected identity. Requests are
+    authenticated and replay-bound to the exact authority domain, epoch,
+    operation, and payload; effect sinks authenticate the response or proof
+    rather than trusting whoever answered a replaceable socket. Endpoint
+    squatting, stale connections, and candidate impersonation can cause only a
+    typed bounded outage, never an allow decision or invented lease conflict.
+96. Canonical resource registration is one-to-one between a logical resource
+    key and a protected physical identity. Registration and rebinding are
+    bootstrap or administrator operations, not acquisition side effects. A
+    rebind is an explicit atomic migration that advances the resource fence,
+    reconciles active descendants and cleanup obligations, and cannot alias one
+    physical profile, route, display, browser, or installer under two keys.
 
 ## Claim Modes
 
@@ -891,6 +909,20 @@ part of structural acceptance. The current source now rejects unsafe selector
 components and requires the selected name to be derived from the active key,
 but the remaining three invariants are not implemented and the candidate
 remains noninstallable.
+
+A seventh recurrence pass treated the authority protocol and its serialized
+state as hostile boundaries. It found that private collections alone do not
+prevent a restored, migrated, tampered, or partially written snapshot from
+encoding two logical resources for one physical profile. It also found that an
+authenticated caller can still be misled by a candidate-owned or stale IPC
+endpoint unless the authority service identity and response are protected, and
+that resource bootstrap must not be an implicit consequence of acquisition.
+Invariants 94 through 96 require full load-time invariant validation,
+authenticated endpoint identity, and explicit fenced resource registration and
+rebinding. The first protocol regression now proves that a duplicate physical
+profile identity is rejected on protected-state load. The broader
+cross-collection validator, protected transport, and administrative rebind
+surface remain incomplete, so the candidate remains noninstallable.
 
 ## Validation Contract
 
@@ -1361,3 +1393,38 @@ cleanup-obligation projection remain mandatory before any operator can use it.
 The new Rust regressions pass. The administrator kernel remains non-public and
 non-installable until the bootstrap, custody, rotation, public parity, and
 cleanup-obligation requirements above are implemented and accepted.
+
+## Slice G Protected Authority Protocol And Resource Registry | 2026-08-31
+
+State transition: `slice_f_non_minting_verifier_source_accepted_admin_revoke_kernel_in_progress`
+to `slice_g_protected_authority_protocol_resource_registry_in_progress`.
+
+The first private protocol kernel now accepts an explicit allowlist of typed
+operations and rejects generic signing or generic state-mutation requests. Its
+typed acquire request carries the raw capability only as a redacted, zeroed
+secret. Authentication and derivation of principal, capability identity, and
+capability revision occur inside the kernel rather than trusting caller-supplied
+identity projections.
+
+The kernel serializes the canonical lease authority, principal registry, and a
+protected canonical resource registry as one state envelope. Profile
+acquisition requires a pre-registered protected resource and cannot create a
+profile identity as a side effect. Resource registration rejects empty or
+noncanonical identities, and load-time validation rejects mismatched map keys,
+unsupported resource kinds, invalid revisions, noncanonical digests, and two
+logical profile resources mapped to one physical identity. Idempotent replay
+survives a protected-state round trip without persisting the raw bearer.
+
+Current evidence:
+
+- the focused protocol suite has seven passing tests;
+- the duplicate-physical-profile and noncanonical-digest defects were each
+  demonstrated by a failing regression before their fixes; and
+- repository Rust formatting and strict Clippy pass.
+
+This is a source-only private protocol seam. It does not yet provide complete
+cross-collection load validation, a durable atomic store, protected IPC,
+stable-supervisor custody, authority domain and external epoch binding, owner
+generation custody, typed effect and terminal operations, public administrator
+bootstrap and rotation, or installed acceptance. The candidate remains
+noninstallable.
