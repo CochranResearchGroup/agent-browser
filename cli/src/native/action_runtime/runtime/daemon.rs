@@ -74,6 +74,7 @@ pub(crate) enum ProfileLeasePolicy {
 pub(crate) enum ServiceProfileLeaseGate {
     Ready,
     Reject {
+        reason: super::profile_lease::ServiceProfileLeaseBlockReason,
         error: String,
     },
     Wait {

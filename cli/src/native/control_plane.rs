@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::action_runtime::runtime::{handle_close, handle_recovery_close, CloseBehavior};
-use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
+use super::action_runtime::{
+    service_profile_lease_admission, DaemonState, ServiceProfileLeaseGate,
+};
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
@@ -600,7 +602,7 @@ fn coordinated_execution_response(
     execution: CoordinatedExecution,
     timeout_ms: Option<u64>,
 ) -> Value {
-    match execution {
+    let response = match execution {
         CoordinatedExecution::CancelledAfterCompensation(terminal_response) => {
             let _ = terminal_response;
             service_job_cancelled_response(request)
@@ -619,9 +621,23 @@ fn coordinated_execution_response(
                 response
             }
         }
-    }
+    };
+    annotate_profile_lease_fail_open_response(&request.command, response)
 }
 
+fn annotate_profile_lease_fail_open_response(command: &Value, mut response: Value) -> Value {
+    let Some(fail_open) = command.get("profileLeaseFailOpen") else {
+        return response;
+    };
+    let Some(object) = response.as_object_mut() else {
+        return response;
+    };
+    object.insert("profileLeaseFailOpen".to_string(), fail_open.clone());
+    object.entry("warning".to_string()).or_insert_with(|| {
+        json!("Profile lease fail-open used an isolated unauthenticated runtime profile")
+    });
+    response
+}
 enum SchedulerLeaseDecision {
     Ready,
     Reject(String),
@@ -640,9 +656,9 @@ fn scheduler_profile_lease_gate(
     let waited_ms = request
         .profile_lease_wait_started_at
         .map(|started_at| started_at.elapsed().as_millis() as u64);
-    match service_profile_lease_gate(&request.command, session_id, waited_ms) {
+    match service_profile_lease_admission(&mut request.command, session_id, waited_ms) {
         Ok(ServiceProfileLeaseGate::Ready) => SchedulerLeaseDecision::Ready,
-        Ok(ServiceProfileLeaseGate::Reject { error }) => SchedulerLeaseDecision::Reject(error),
+        Ok(ServiceProfileLeaseGate::Reject { error, .. }) => SchedulerLeaseDecision::Reject(error),
         Ok(ServiceProfileLeaseGate::Wait {
             retry_after_ms,
             profile_id,
@@ -2693,6 +2709,35 @@ mod tests {
             profile_lease_wait_retry_after_ms: None,
             response_tx,
         }
+    }
+
+    #[test]
+    fn completed_service_response_reports_profile_lease_fail_open_fallback() {
+        let request = control_request_for_mode_test(json!({
+            "action": "tab_new",
+            "profileLeaseFailOpen": {
+                "schemaVersion": "agent-browser.profile-lease-fail-open.v1",
+                "applied": true,
+                "fallbackRuntimeProfile": "lease-fail-open-1234",
+                "authenticationPreserved": false
+            }
+        }));
+
+        let response = coordinated_execution_response(
+            &request,
+            CoordinatedExecution::Completed(json!({ "success": true, "data": {} })),
+            None,
+        );
+
+        assert_eq!(response["profileLeaseFailOpen"]["applied"], true);
+        assert_eq!(
+            response["profileLeaseFailOpen"]["fallbackRuntimeProfile"],
+            "lease-fail-open-1234"
+        );
+        assert_eq!(
+            response["warning"],
+            "Profile lease fail-open used an isolated unauthenticated runtime profile"
+        );
     }
 
     #[tokio::test]

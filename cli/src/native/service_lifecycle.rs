@@ -5,8 +5,8 @@
 
 use super::service_model::{
     service_site_policy_id_for_url, BrowserBuild, BrowserProfile, BrowserSession, LeaseState,
-    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
-    ServiceActor, ServiceState, SessionCleanupPolicy, ViewStream,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileSelectionReason, ServiceActor, ServiceState, SessionCleanupPolicy, ViewStream,
 };
 
 fn current_timestamp() -> String {
@@ -203,6 +203,11 @@ pub(crate) fn upsert_service_profile_and_session(
                     .profile_name
                     .clone()
                     .unwrap_or_else(|| profile_id.clone()),
+                profile_class: if metadata.persistent_profile {
+                    ProfileClass::DurableNamed
+                } else {
+                    ProfileClass::ManagedOneTime
+                },
                 ..BrowserProfile::default()
             });
         if profile.name.is_empty() {

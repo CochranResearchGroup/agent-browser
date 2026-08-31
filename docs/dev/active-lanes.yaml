@@ -1,5 +1,20 @@
 schema_version: 1
 lanes:
+  - id: P145 Emergency Profile Lease Fail-Open
+    objective: Keep ordinary browser acquisition available through isolated profile fallback
+    plan: docs/dev/plans/0145-2026-08-31-emergency-profile-lease-fail-open-plan.md
+    plan_ref: refs/heads/fix/emergency-profile-lease-fail-open-20260831
+    branch: fix/emergency-profile-lease-fail-open-20260831
+    target: main
+    plan_state: COMPLETE
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: e4908081
+    remote_ref: null
+    integration: merge
+    dependencies: []
+    overlaps:
+      - plan/lease-authority-coordination
+    updated_at: 2026-08-31
   - id: P110 Authentication Run Slice A
     objective: Authentication Run provider-free foundation
     plan: docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md

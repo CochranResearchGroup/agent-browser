@@ -7335,6 +7335,8 @@ Environment:
   AGENT_BROWSER_CDP_BOOTSTRAP_MODE Local Chrome CDP bootstrap: eager (default) or experimental navigation_minimal
   AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH
                                  Force an unsafe launch when a runtime profile browserFamily does not match the resolved executable family
+  AGENT_BROWSER_PROFILE_LEASE_MODE
+                                 Emergency service acquisition mode. Set to fail_open_ephemeral to redirect only duplicate or exclusively leased profile requests to isolated managed-one-time profiles. Authentication is not preserved.
   AGENT_BROWSER_EXTENSIONS       Comma-separated browser extension paths
   AGENT_BROWSER_HEADED           Show browser window (not headless)
   AGENT_BROWSER_JSON             JSON output
