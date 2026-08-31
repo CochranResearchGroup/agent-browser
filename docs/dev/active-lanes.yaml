@@ -6,9 +6,9 @@ lanes:
     plan_ref: refs/heads/fix/emergency-profile-lease-fail-open-20260831
     branch: fix/emergency-profile-lease-fail-open-20260831
     target: main
-    plan_state: OPEN
+    plan_state: COMPLETE
     custody_state: ACTIVE_WORKTREE
-    checkpoint: e4908081
+    checkpoint: 05b440e948d55e9fe2a33cd46b47fd7091511fb9
     remote_ref: null
     integration: merge
     dependencies: []

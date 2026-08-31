@@ -2,9 +2,9 @@
 
 Date: 2026-08-31
 
-State: OPEN
+State: COMPLETE
 
-Execution state: `unsafe_claim_any_scope_active`
+Execution state: `unsafe_claim_any_validated_development_runtime`
 
 Lane: P145
 
@@ -50,8 +50,8 @@ conflicts.
 8. `AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any` accepts an explicitly
    named session/profile route without principal continuity approval and admits
    that route despite duplicate or exclusive profile lease conflicts.
-9. The unsafe override is recorded on the normalized command and response-facing
-   metadata. Dashboard authentication, action policy, confirmation, controller
+9. The unsafe override is recorded on the normalized command and scheduler
+   response metadata. Dashboard authentication, action policy, confirmation, controller
    and viewer authority, and workstation upgrade admission remain unchanged.
 
 ## Execution Sequence
@@ -107,3 +107,22 @@ conflicts.
   `existing_session_profile_identity_unproven` and a service-control admission
   assertion, including under a clean temporary HOME. P145 does not modify the
   failing control-action list or existing-session identity proof path.
+- Unsafe claim-any focused coverage passed: explicit foreign-session route
+  adoption, exclusive profile-conflict admission, dashboard relay-session
+  recovery for a non-capability client, and scheduler response annotation.
+- Existing safe fail-open coverage (3 tests) and disabled-mode regression (1
+  test) remained green after the unsafe mode was added.
+- `cargo fmt --check`, `cargo clippy -- -D warnings`, `git diff --check`, the
+  documentation production build, and remote-view documentation checks passed.
+- The tenant-neutral checker named by repo policy is absent from this checkout;
+  the changed active surfaces contain no tenant-specific defaults.
+- Development generation `0.28.0-5be1285b1898` is installed. The runtime-host
+  and dashboard-backend unit environments both read
+  `AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any`; production is unchanged.
+- Unauthenticated dashboard service access returned HTTP 401. Authenticated
+  dashboard login returned HTTP 200, and an explicit named session/profile
+  request returned HTTP 200 with the requested browser session. Both live smoke
+  sessions were closed; the final session census contains only `runtime-host`.
+- The development doctor still reports only the pre-existing absent
+  `development-default` lane port. The unsafe dashboard path no longer depends
+  on that lane: it recovers and proxies directly to the client-named session.
