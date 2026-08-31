@@ -932,6 +932,37 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
 }
 
 #[test]
+fn explicit_browser_session_precedes_shared_runtime_host_transport() {
+    let state = ServiceState {
+        sessions: BTreeMap::from([(
+            "runtime-host".to_string(),
+            BrowserSession {
+                id: "runtime-host".to_string(),
+                profile_id: Some("unrelated-runtime-host-profile".to_string()),
+                ..BrowserSession::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let mut options = LaunchOptions::default();
+
+    let selection =
+        crate::native::action_runtime::runtime::daemon::apply_existing_session_profile_selection(
+            &mut options,
+            &json!({
+                "action": "remote_view_open",
+                "runtimeProfile": "requested-profile",
+                "sessionName": "requested-browser-session",
+            }),
+            Some("runtime-host"),
+            &state,
+        )
+        .unwrap();
+
+    assert_eq!(selection, None);
+}
+
+#[test]
 fn authenticated_principal_recovers_exact_released_terminal_projection() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("authenticated-terminal-owner-recourse-home");

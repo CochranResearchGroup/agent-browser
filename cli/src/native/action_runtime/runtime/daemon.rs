@@ -688,7 +688,7 @@ pub(crate) fn apply_service_profile_selection(
     Ok(Some(selection.reason))
 }
 
-fn apply_existing_session_profile_selection(
+pub(crate) fn apply_existing_session_profile_selection(
     options: &mut LaunchOptions,
     command: &Value,
     effective_session: Option<&str>,
@@ -699,7 +699,7 @@ fn apply_existing_session_profile_selection(
             optional_command_or_params_string(command, "browserId")
                 .and_then(|browser_id| browser_id.strip_prefix("session:").map(str::to_string))
         });
-    let session_id = effective_session.map(str::to_string).or(requested_session);
+    let session_id = requested_session.or_else(|| effective_session.map(str::to_string));
     let Some(session_id) = session_id else {
         return Ok(None);
     };
