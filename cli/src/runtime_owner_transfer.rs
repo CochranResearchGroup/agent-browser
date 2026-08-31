@@ -804,6 +804,15 @@ impl RuntimeOwnerRegistry {
                 OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
             ));
         }
+        if self
+            .principal_bindings
+            .get(&attachment.profile_identity_digest)
+            .is_some_and(|binding| binding.owner_generation > proposal.previous_owner_generation)
+        {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
 
         let original_owner = ProfileOwnerRollbackSnapshot::from_owner(owner);
         let receipt = commit_receipt(
@@ -827,6 +836,12 @@ impl RuntimeOwnerRegistry {
             reverse_nonce_digest: None,
             reverse_receipt: None,
         });
+        if let Some(binding) = self
+            .principal_bindings
+            .get_mut(&attachment.profile_identity_digest)
+        {
+            binding.owner_generation = proposal.candidate_owner_generation;
+        }
         self.revision = self.revision.saturating_add(1);
         Ok(receipt)
     }
@@ -923,6 +938,12 @@ impl RuntimeOwnerRegistry {
         owner.pending_transfer = None;
         transition.reverse_nonce_digest = Some(request.reverse_nonce_digest);
         transition.reverse_receipt = Some(receipt.clone());
+        if let Some(binding) = self
+            .principal_bindings
+            .get_mut(&request.profile_identity_digest)
+        {
+            binding.owner_generation = reverse_generation;
+        }
         self.revision = self.revision.saturating_add(1);
         Ok(receipt)
     }
@@ -1463,6 +1484,25 @@ mod tests {
     #[test]
     fn cooperative_transfer_keeps_old_authority_until_candidate_commit() {
         let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let profile_digest = digest("profile");
+        registry
+            .bind_principal_authority(RuntimeOwnerPrincipalBinding {
+                principal_id: "principal:odollo-fulfillment".to_string(),
+                profile_id: "odollo-fulfillment".to_string(),
+                profile_identity_digest: profile_digest.clone(),
+                capability_id: "profile-capability-v1:synthetic".to_string(),
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: 7,
+            })
+            .unwrap();
+        // Preserve compatibility with registries affected by the historical
+        // transfer bug, where the principal authority lagged several otherwise
+        // valid owner generations.
+        registry
+            .principal_bindings
+            .get_mut(&profile_digest)
+            .unwrap()
+            .owner_generation = 5;
         let request = cooperative_request();
 
         let proposal = registry.begin_transfer(request.clone()).unwrap();
@@ -1496,6 +1536,13 @@ mod tests {
         assert!(registry.authorizes(&OwnerAuthorityClaim::from_owner(
             registry.owner(&request.profile_identity_digest).unwrap()
         )));
+        assert_eq!(
+            registry.principal_bindings[&profile_digest].owner_generation,
+            8
+        );
+        assert!(
+            registry.principal_binding_is_current(registry.principal_bindings.get(&profile_digest))
+        );
     }
 
     #[test]
@@ -1757,6 +1804,17 @@ mod tests {
     #[test]
     fn reverse_transfer_is_receipted_and_uses_a_new_generation() {
         let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let profile_digest = digest("profile");
+        registry
+            .bind_principal_authority(RuntimeOwnerPrincipalBinding {
+                principal_id: "principal:odollo-fulfillment".to_string(),
+                profile_id: "odollo-fulfillment".to_string(),
+                profile_identity_digest: profile_digest.clone(),
+                capability_id: "profile-capability-v1:synthetic".to_string(),
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: 7,
+            })
+            .unwrap();
         let request = cooperative_request();
         registry.begin_transfer(request.clone()).unwrap();
         registry
@@ -1778,6 +1836,13 @@ mod tests {
         let restored = registry.owner(&digest("profile")).unwrap();
         assert_eq!(restored.owner_id, "owner-old");
         assert_eq!(restored.owner_generation, 9);
+        assert_eq!(
+            registry.principal_bindings[&profile_digest].owner_generation,
+            9
+        );
+        assert!(
+            registry.principal_binding_is_current(registry.principal_bindings.get(&profile_digest))
+        );
     }
 
     #[test]
