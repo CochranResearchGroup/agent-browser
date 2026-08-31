@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: COMPLETE
     custody_state: ACTIVE_WORKTREE
-    checkpoint: a127c872914cc06530d9017b566d156840f1919d
+    checkpoint: e4908081
     remote_ref: null
     integration: merge
     dependencies: []
