@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
-use super::service_lease_authority::LeaseResourceKey;
+use super::service_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
@@ -1654,13 +1654,13 @@ fn profile_reuse_decision(
 
     let observed_at = Utc::now().to_rfc3339();
     let active_claim = service_state
-        .lease_authority
+        .lease_authority()
         .current_claim(&LeaseResourceKey::profile(&profile.id), &observed_at);
     let active_claim_requires_authentication =
         active_claim.is_some() && authenticated_principal.is_none();
     let active_claim_is_foreign = active_claim
         .zip(authenticated_principal)
-        .is_some_and(|(claim, authority)| claim.principal_id != authority.principal_id);
+        .is_some_and(|(claim, authority)| claim.principal_id() != authority.principal_id);
 
     let browser_host = launch_posture
         .get("browserHost")
@@ -1948,10 +1948,10 @@ fn profile_reuse_decision(
         "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
         "activeLeaseSessionIds": active_lease_session_ids,
         "activeLeaseCount": active_lease_count,
-        "activeClaimId": active_claim.map(|claim| claim.claim_id.clone()),
-        "activeClaimRevision": active_claim.map(|claim| claim.revision),
-        "activeClaimFencingToken": active_claim.map(|claim| claim.fencing_token),
-        "activeClaimPrincipalId": active_claim.map(|claim| claim.principal_id.clone()),
+        "activeClaimId": active_claim.map(ActiveLeaseClaim::claim_id),
+        "activeClaimRevision": active_claim.map(ActiveLeaseClaim::revision),
+        "activeClaimFencingToken": active_claim.map(ActiveLeaseClaim::fencing_token),
+        "activeClaimPrincipalId": active_claim.map(ActiveLeaseClaim::principal_id),
         "foreignPrincipalSessionIds": foreign_principal_session_ids,
         "principalBoundSessionIds": principal_bound_session_ids,
         "profileMismatchBrowserIds": same_principal_profile_mismatch_browser_ids,
@@ -6011,8 +6011,7 @@ mod tests {
             ..ServiceState::default()
         };
         let claim = state
-            .lease_authority
-            .acquire(AcquireLeaseClaimRequest {
+            .acquire_lease_claim(AcquireLeaseClaimRequest {
                 resource: LeaseResourceKey::profile("last30days-social"),
                 parent_claim_id: None,
                 principal_id: "principal:last30days".to_string(),
@@ -6043,7 +6042,7 @@ mod tests {
         );
         assert_eq!(
             plan["decision"]["profileReuse"]["activeClaimId"],
-            claim.claim_id
+            claim.claim_id()
         );
         assert_eq!(plan["decision"]["profileReuse"]["activeLeaseCount"], 1);
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);

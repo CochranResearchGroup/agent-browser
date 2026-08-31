@@ -2480,6 +2480,23 @@ pub struct ServiceState {
 }
 
 impl ServiceState {
+    /// Returns the immutable canonical lease authority projection. Mutations
+    /// stay behind the authority kernel so sibling subsystems cannot edit its
+    /// active index, fencing counters, or history independently.
+    pub(crate) fn lease_authority(&self) -> &super::service_lease_authority::LeaseAuthorityState {
+        &self.lease_authority
+    }
+
+    pub(crate) fn acquire_lease_claim(
+        &mut self,
+        request: super::service_lease_authority::AcquireLeaseClaimRequest,
+    ) -> Result<
+        super::service_lease_authority::ActiveLeaseClaim,
+        super::service_lease_authority::LeaseAuthorityError,
+    > {
+        self.lease_authority.acquire(request)
+    }
+
     pub fn mark_persisted_entity_sources(&mut self) {
         for id in self.profiles.keys() {
             self.entity_sources

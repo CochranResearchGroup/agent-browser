@@ -93,33 +93,51 @@ pub(crate) struct LeaseAuthorityEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ActiveLeaseClaim {
-    pub(crate) schema_version: String,
-    pub(crate) claim_id: String,
-    pub(crate) resource: LeaseResourceKey,
-    pub(crate) parent_claim_id: Option<String>,
-    pub(crate) principal_id: String,
-    pub(crate) capability_id: String,
-    pub(crate) mode: LeaseClaimMode,
-    pub(crate) revision: u64,
-    pub(crate) fencing_token: u64,
-    pub(crate) idempotency_key: String,
-    pub(crate) acquired_at: String,
-    pub(crate) heartbeat_at: String,
-    pub(crate) expires_at: String,
-    pub(crate) transition_deadline: Option<String>,
-    pub(crate) recovery_controller_id: Option<String>,
-    pub(crate) boot_epoch: Option<String>,
-    pub(crate) owner_generation: Option<u64>,
+    schema_version: String,
+    claim_id: String,
+    resource: LeaseResourceKey,
+    parent_claim_id: Option<String>,
+    principal_id: String,
+    capability_id: String,
+    mode: LeaseClaimMode,
+    revision: u64,
+    fencing_token: u64,
+    idempotency_key: String,
+    acquired_at: String,
+    heartbeat_at: String,
+    expires_at: String,
+    transition_deadline: Option<String>,
+    recovery_controller_id: Option<String>,
+    boot_epoch: Option<String>,
+    owner_generation: Option<u64>,
+}
+
+impl ActiveLeaseClaim {
+    pub(crate) fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
+
+    pub(crate) fn principal_id(&self) -> &str {
+        &self.principal_id
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(crate) fn fencing_token(&self) -> u64 {
+        self.fencing_token
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct LeaseAuthorityState {
-    pub(crate) schema_version: String,
-    pub(crate) revision: u64,
-    pub(crate) active_claims: BTreeMap<String, ActiveLeaseClaim>,
-    pub(crate) next_fencing_tokens: BTreeMap<String, u64>,
-    pub(crate) events: Vec<LeaseAuthorityEvent>,
+    schema_version: String,
+    revision: u64,
+    active_claims: BTreeMap<String, ActiveLeaseClaim>,
+    next_fencing_tokens: BTreeMap<String, u64>,
+    events: Vec<LeaseAuthorityEvent>,
 }
 
 impl LeaseAuthorityState {
@@ -296,8 +314,7 @@ pub(crate) fn acquire_lease_claim_in_repository<R: ServiceStateRepository>(
 ) -> Result<ActiveLeaseClaim, String> {
     repository.mutate(|state| {
         state
-            .lease_authority
-            .acquire(request)
+            .acquire_lease_claim(request)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -479,12 +496,9 @@ mod tests {
 
     #[test]
     fn service_state_round_trips_active_claims_and_history_separately() {
-        let mut authority = LeaseAuthorityState::default();
-        let claim = authority.acquire(request()).unwrap();
-        let state = crate::native::service_model::ServiceState {
-            lease_authority: authority.clone(),
-            ..crate::native::service_model::ServiceState::default()
-        };
+        let mut state = crate::native::service_model::ServiceState::default();
+        let claim = state.acquire_lease_claim(request()).unwrap();
+        let authority = state.lease_authority().clone();
 
         let encoded = serde_json::to_value(&state).unwrap();
         assert_eq!(
@@ -495,10 +509,10 @@ mod tests {
         );
         let decoded: crate::native::service_model::ServiceState =
             serde_json::from_value(encoded).unwrap();
-        assert_eq!(decoded.lease_authority, authority);
+        assert_eq!(decoded.lease_authority(), &authority);
         assert_eq!(
             decoded
-                .lease_authority
+                .lease_authority()
                 .current_claim(&LeaseResourceKey::profile("last30days-social"), NOW)
                 .map(|current| current.claim_id.as_str()),
             Some(claim.claim_id.as_str())
@@ -555,7 +569,7 @@ mod tests {
             1
         );
         let state = repository.load_snapshot().unwrap();
-        assert_eq!(state.lease_authority.active_claims.len(), 1);
-        assert_eq!(state.lease_authority.events.len(), 1);
+        assert_eq!(state.lease_authority().active_claims.len(), 1);
+        assert_eq!(state.lease_authority().events.len(), 1);
     }
 }

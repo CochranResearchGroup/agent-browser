@@ -218,6 +218,9 @@ Every active claim contains at least:
 31. History retention and compaction preserve fencing high-water marks and
     idempotency receipts. Unbounded history growth cannot exhaust the active
     authority store or change admission.
+32. The active index, counters, and event ledger are private kernel state.
+    Other subsystems receive immutable claims and invoke typed operations;
+    they cannot directly replace or mutate authority collections.
 
 ## Claim Modes
 
@@ -299,6 +302,8 @@ change current admission.
 
 - Add the active claim, event, fencing, expiry, and transition-deadline model.
 - Centralize current-authority evaluation behind one interface.
+- Migrate direct `ServiceState` construction to builders or constructors, then
+  make the lease-authority envelope private as well as its collections.
 - Route profile acquisition and authenticated work authority through it.
 - Preserve current public responses through an explicit compatibility
   projection.
@@ -400,6 +405,7 @@ runtime receipts all satisfy the acceptance matrix.
 | route bundle fails after profile admission | bounded compensation or exact cleanup obligation, no stranded claim |
 | child row remains after parent expiry | every child effect is rejected immediately |
 | historical events are archived | fencing and idempotency high-water marks remain unchanged |
+| a subsystem attempts to edit the active index directly | impossible through the Rust module boundary |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -420,6 +426,10 @@ Without these controls, a single kernel could still admit duplicate aliases,
 revive a completed request, strand a partial acquisition, or allow a child to
 outlive its parent. These are required before the redesign can be described as
 structurally recurrence-resistant.
+
+The kernel collections are also compiler-enforced private state. This closes a
+gap between saying there is one mutation owner and actually preventing sibling
+subsystems from writing competing authority projections.
 
 ## Validation Contract
 
@@ -571,7 +581,10 @@ Evidence:
 Material blockers: profile-lease doctor and effect admission still use the
 legacy compatibility projection. The public acquire, renew, release, recovery,
 and revocation operations do not yet issue or consume canonical claim tokens.
-This checkpoint must not be installed as the completed lease redesign.
+The inner authority collections are private, but the containing Service State
+field cannot become private until existing direct struct construction is
+migrated to builders or constructors. This checkpoint must not be installed as
+the completed lease redesign.
 
 Next action: project canonical claims through profile-lease doctor, then make
 profile acquisition and daemon effects consume the same atomic claim before
