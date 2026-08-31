@@ -896,6 +896,14 @@ fn require_runtime_host_admission_for_launch() -> Result<(), String> {
     )
 }
 
+fn unsafe_claim_any_allows_daemon_reuse(auth_token_available: bool) -> bool {
+    auth_token_available
+        && matches!(
+            crate::native::service_lease_mode::profile_lease_mode_from_env(),
+            Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
+        )
+}
+
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
     cache_runtime_lane_config(session, opts);
     let _startup_lock = acquire_runtime_host_startup_lock(session)?;
@@ -921,6 +929,9 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             };
             let version_matches = daemon_version_matches(session);
             let auth_token_available = daemon_auth_token_available(session);
+            if unsafe_claim_any_allows_daemon_reuse(auth_token_available) {
+                return Ok(reachable_daemon_result(session));
+            }
             if opts.allow_stale_daemon_handoff && auth_token_available {
                 return Ok(reachable_daemon_result(session));
             }
@@ -1455,6 +1466,21 @@ mod tests {
 
         assert!(error.starts_with("runtime_host_admission_required:"));
         assert!(!root.exists());
+    }
+
+    #[test]
+    fn unsafe_claim_any_reuses_only_an_authenticated_reachable_daemon() {
+        let guard = EnvGuard::new(&[crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV]);
+
+        guard.remove(crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV);
+        assert!(!unsafe_claim_any_allows_daemon_reuse(true));
+
+        guard.set(
+            crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV,
+            crate::native::service_lease_mode::PROFILE_LEASE_UNSAFE_CLAIM_ANY,
+        );
+        assert!(unsafe_claim_any_allows_daemon_reuse(true));
+        assert!(!unsafe_claim_any_allows_daemon_reuse(false));
     }
 
     #[test]
