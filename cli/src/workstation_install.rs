@@ -3027,9 +3027,23 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
         use crate::native::service_store::ServiceStateRepository;
         let repository =
             crate::native::service_store::LockedServiceStateRepository::default_json()?;
+        let mut lifecycle_reconcile_attempts = 0_u8;
+        let completed_runtime_lifecycles = loop {
+            lifecycle_reconcile_attempts = lifecycle_reconcile_attempts.saturating_add(1);
+            match repository.mutate(|state| {
+                Ok(crate::native::service_health::reconcile_absent_runtime_lifecycles(state))
+            }) {
+                Ok(completed) => break completed,
+                Err(error)
+                    if error.starts_with("service_state_stale_revision:")
+                        && lifecycle_reconcile_attempts < 3 =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        };
         let service_effects = repository.mutate(|state| {
-            let completed_runtime_lifecycles =
-                crate::native::service_health::reconcile_absent_runtime_lifecycles(state);
             let process_gc = crate::native::service_resources::service_gc_unattended_response(state);
             if process_gc.get("applied").and_then(Value::as_bool) != Some(true) {
                 return Err(format!(
