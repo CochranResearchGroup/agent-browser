@@ -280,6 +280,68 @@ Every active claim contains at least:
     opaque or authenticated bearer proof whose secret is never exposed through
     status, history, diagnostics, logs, or generated projections. Copying or
     reconstructing public claim fields cannot impersonate the holder.
+49. A row in `activeClaims` is operational only while its authority-owned time
+    predicate is current. An expired row that has not yet been terminalized is
+    ignored by planning and admission and cannot become a blocker merely
+    because cleanup has not run.
+50. Claim recovery mode and access compatibility are separate dimensions.
+    `ephemeral` versus `strict` does not imply exclusive versus shared access.
+    A stable resource supervisor owns the profile parent claim, while
+    concurrent clients receive attributable child claims under an explicit
+    compatibility policy. A transient client session is never the durable
+    profile owner.
+51. Every canonical resource belongs to exactly one authority domain and store
+    epoch. Claims, envelopes, receipts, and physical-resource registrations bind
+    that domain and epoch. Two daemons, homes, mounts, or restored state stores
+    cannot independently authorize the same physical profile.
+52. Backup restore, rollback, replication repair, and store replacement cannot
+    lower an authority epoch, fencing high-water mark, capability revision, or
+    completed-operation index. A restored older snapshot is read-only history
+    until a stable supervisor establishes a strictly newer authority epoch.
+53. Effect authorization is least-authority and request-bound. Its proof binds
+    the action class, exact resource or child resource, audience runtime,
+    operation idempotency key, issued-at bound, and expiry in addition to claim
+    identity and fencing. The bearer has redacted debug output and is scrubbed
+    from retained commands, traces, errors, incidents, and logs.
+54. For irreversible or external effects, effect-time validation and durable
+    intent creation are one authority transaction. Only the selected executor
+    may consume that intent, and completion, uncertainty, compensation, and
+    replay all resolve through the same operation receipt. A validate-then-act
+    gap cannot let expiry or revocation race an unrecorded effect.
+55. Waiter identity, enqueue order, priority, deadline, and terminal outcome are
+    durable kernel state. Restarting a daemon or scheduler cannot forget a
+    waiter, reset maximum tenure, or let a releasing holder jump the queue.
+56. Physical process evidence includes boot epoch, process start identity, and
+    canonical file or resource identity when applicable. PID, path text, lock
+    file presence, or socket address alone is never sufficient because each can
+    be reused or aliased.
+57. Administrative recover and revoke operations use a distinct, scoped,
+    authenticated authority that is not granted by the target claim and cannot
+    be blocked by that claim. It is exact-resource, revision-bound, auditable,
+    and incapable of wildcard mutation.
+58. Claims bind the lease-policy revision that selected duration, renewal,
+    compatibility, recovery, and priority semantics. Policy changes have an
+    explicit grandfather, shorten, or revoke transition and cannot silently
+    reinterpret an existing claim.
+59. An unavailable, corrupt, or non-linearizable authority store returns a
+    typed authority outage. It cannot be described as another holder, stale
+    session, identity mismatch, or physical collision, and it cannot synthesize
+    authority. Explicit isolated fallback remains a separate unauthenticated
+    resource, never use of the requested profile.
+60. Compatibility and emergency adapters run before canonical acquisition or
+    not at all. Once a canonical envelope exists, no scheduler, fallback,
+    profile selector, alias resolver, or retry helper may rewrite its resource,
+    principal, audience, or operation. The effect boundary still verifies the
+    envelope and does not trust adapter admission.
+61. Deadline reconciliation is owned by a stable supervisor with a durable
+    scan cursor and idempotent receipts, not by the ephemeral worker whose
+    transition may be abandoned. Repeated supervisor crashes cannot reset or
+    indefinitely defer an eligible recovery.
+62. The repository maintains an exhaustive effect-entrypoint manifest. A
+    presubmit architecture test proves every browser, profile, process, route,
+    display, session, tab, installer, and control-input mutation enters through
+    the sealed kernel authorization boundary or an explicitly non-lease
+    physical-safety boundary.
 
 ## Claim Modes
 
@@ -482,6 +544,21 @@ runtime receipts all satisfy the acceptance matrix.
 | candidate runtime evaluates its own installation admission | rejected by architecture; stable selected supervisor owns the transaction |
 | migrated effect or denial path attempts to use raw legacy fields | cannot construct the sealed authority type |
 | foreign caller copies claim id, revision, fence, and principal from status | effect rejected because observable metadata is not bearer authority |
+| expired claim row remains in the active collection before cleanup | ignored for authority and admission; terminalization may follow without delaying acquisition |
+| two clients legitimately share one profile | stable parent supervisor plus attributable compatible child claims, never session-name self-conflict |
+| two authority stores point at one physical profile | second domain cannot register or authorize the resource; no duplicate process |
+| older backup is restored after newer fences were issued | restored store cannot become effect-capable until a strictly newer authority epoch is established |
+| valid envelope is replayed for another action, runtime, or operation | proof fails or the original idempotent receipt is returned; no broader effect |
+| logs or retained jobs serialize an effect bearer | bearer is structurally redacted or scrubbed before persistence and output |
+| claim expires after validation while browser launch is in progress | durable intent is reconciled to completion, compensation, or uncertainty under the original fence; no unrecorded launch |
+| scheduler restarts with a waiting principal | durable waiter position and deadline survive and renewal fairness remains enforced |
+| PID or lock path is reused by an unrelated process | no collision conclusion without matching boot, start, and canonical resource identity |
+| abandoned strict holder blocks its own administrator | exact authenticated recovery or revoke remains executable independently of holder authority |
+| lease policy changes while claims exist | explicit revision transition; existing claims are never silently reinterpreted |
+| authority store is corrupt or unavailable | typed authority outage, no invented holder or identity blocker, no requested-profile effect |
+| emergency adapter receives a canonical envelope | request remains byte-for-byte resource coherent and daemon verification still decides the effect |
+| transition owner and reconciler both crash repeatedly | stable supervisor resumes from durable deadline cursor and idempotent receipt |
+| a new effectful entrypoint omits kernel authorization | presubmit architecture manifest fails before integration |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -529,6 +606,20 @@ invariants close the remaining routes by which an otherwise centralized
 kernel could still deny ordinary work based on invented prerequisites, accept
 stale cached authority, silently renew a claim during rejoin, or strand strict
 recovery behind another vanished worker.
+
+A second recurrence pass over the concrete Plans 0128, 0130, 0132, 0134,
+0136, 0137, 0142, 0143, and 0145 reports found additional structural gaps. The
+most important is that claim lifetime (`ephemeral` or `strict`) had been
+conflated with access compatibility, which could still turn cooperating
+clients into profile-level competitors or let several tasks silently share one
+undifferentiated authority. The revised model uses a stable profile supervisor
+and attributable child claims. The pass also adds authority-domain and
+anti-rollback epochs, request-scoped and redacted bearer proofs, durable waiter
+state, PID-reuse-resistant physical evidence, scoped administrator authority,
+policy revision binding, typed authority outages, stable deadline scanning, and
+an exhaustive effect-entrypoint manifest. Without these additions, the design
+would reduce recurrence but would not make the reported defect classes
+structurally unavailable.
 
 ## Validation Contract
 
@@ -812,3 +903,44 @@ non-installable as the completed redesign.
 
 Next action: commit and push the authenticated-effect checkpoint, then add
 exact terminal claim mutations and public strict recovery and revoke plans.
+
+## Emergency Branch Reconciliation And Second Recurrence Audit | 2026-08-31
+
+State transition: `slice_c_authenticated_effect_proof_complete` to
+`emergency_branch_merged_and_semantically_reconciled`.
+
+The accepted emergency branch was merged at `be1f87cb`. Semantic review found
+one post-merge split-authority seam: the legacy scheduler gate still evaluated
+commands that already carried a canonical effect authorization. With emergency
+mode enabled, it could rewrite the authorized profile to an isolated fallback;
+with emergency mode disabled, it could reject before the daemon evaluated the
+canonical claim. The scheduler now admits canonical-envelope commands unchanged
+past the legacy gate. This is not effect admission. The daemon remains the only
+component that verifies the authenticated envelope against current claim,
+capability, profile, owner generation, and expiry before browser effect.
+
+The second recurrence audit expanded frozen invariants 49 through 62. It found
+that lifetime and recovery mode had not been separated from access
+compatibility, and added the stable profile-parent plus attributable-child
+model. It also added authority-domain and anti-rollback epochs, request-scoped
+and redacted bearers, durable external-effect intent, durable waiter fairness,
+PID-reuse-resistant physical evidence, independent administrative authority,
+policy revision binding, typed authority outages, stable deadline scans, and
+an exhaustive effect-entrypoint manifest.
+
+Focused evidence:
+
+- canonical scheduler admission regression: 1 passed;
+- emergency fail-open regressions: 3 passed;
+- canonical profile-claim regressions: 2 passed;
+- wrapper Rust formatting and strict Clippy passed;
+- documentation production build and remote-view documentation guard passed;
+- `git diff --check` passed.
+
+Material blockers remain unchanged in effect: exact release compensation,
+strict recover and revision-bound revoke, durable effect completion and
+uncertainty receipts, deadline reconciliation, parent and child claim
+integration, runtime-owner transfer coordination, legacy no-envelope removal,
+authority-domain anti-rollback, public-surface parity, mixed-version migration,
+and installed acceptance. The merged checkpoint remains intentionally
+non-installable as the completed redesign.

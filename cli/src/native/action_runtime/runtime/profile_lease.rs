@@ -84,6 +84,14 @@ pub(crate) fn service_profile_lease_admission(
     session_id: &str,
     waited_ms: Option<u64>,
 ) -> Result<ServiceProfileLeaseGate, String> {
+    // Canonical lease-bearing commands are admitted past this legacy scheduler
+    // gate unchanged. The daemon verifies the authenticated authorization
+    // against the current claim, capability, profile, and owner generation
+    // immediately before the effect. Emergency legacy fallback must never
+    // rewrite the profile bound into that authorization.
+    if command.get("leaseEffectAuthorization").is_some() {
+        return Ok(ServiceProfileLeaseGate::Ready);
+    }
     let decision = service_profile_lease_gate(command, session_id, waited_ms)?;
     let mode = match std::env::var(PROFILE_LEASE_MODE_ENV) {
         Err(std::env::VarError::NotPresent) => return Ok(decision),

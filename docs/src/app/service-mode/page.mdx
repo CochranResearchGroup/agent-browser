@@ -1048,7 +1048,9 @@ the service daemon with
 ordinary browser-acquisition request that would otherwise hit a duplicate live
 profile lane or exclusive profile lease is redirected to a deterministic
 isolated managed-one-time runtime profile. Conflict-free requests are
-unchanged. The fallback does not preserve authentication and does not bypass
+unchanged. Requests carrying a canonical authenticated lease authorization are
+never rewritten and remain subject to daemon verification immediately before
+effect. The fallback does not preserve authentication and does not bypass
 workstation upgrade admission, capability or owner-generation authority, or
 viewer/controller leases. Unset the environment value to restore normal reject
 and wait behavior. Redirected responses include top-level

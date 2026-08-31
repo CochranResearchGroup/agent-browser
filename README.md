@@ -1970,7 +1970,9 @@ mixing a profile with a different resolved browser family.
 service-acquisition mode. When an ordinary service request would be blocked by
 a duplicate live profile lane or an exclusive profile lease, the scheduler
 redirects that request to a deterministic isolated managed-one-time runtime
-profile. Conflict-free requests remain unchanged. The fallback does not copy
+profile. Requests carrying a canonical authenticated lease authorization are
+never rewritten and are validated by the daemon immediately before effect.
+Conflict-free legacy requests remain unchanged. The fallback does not copy
 authentication and does not bypass workstation upgrade admission,
 owner-generation or capability authority, or viewer/controller leases. Remove
 the environment value to restore normal reject and wait behavior. A redirected

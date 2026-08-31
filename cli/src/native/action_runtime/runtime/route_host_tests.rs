@@ -3086,6 +3086,49 @@ fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
 }
 
 #[test]
+fn service_profile_lease_admission_never_rewrites_canonical_authorization() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-canonical-admission-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([(
+                "active-session".to_string(),
+                BrowserSession {
+                    id: "active-session".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile",
+        "profileLeasePolicy": "wait",
+        "leaseEffectAuthorization": {
+            "schemaVersion": "agent-browser.lease-effect-authorization.v2",
+            "claimId": "claim-a"
+        }
+    });
+    let original = command.clone();
+
+    let decision = service_profile_lease_admission(&mut command, "new-session", Some(0))
+        .expect("canonical lease admission should bypass the legacy scheduler gate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(command, original);
+    assert!(command.get("profileLeaseFailOpen").is_none());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn service_profile_lease_admission_rejects_duplicate_lane_when_emergency_mode_is_disabled() {
     let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
     let home = unique_socket_dir("profile-lease-fail-open-disabled-home");

@@ -1711,7 +1711,9 @@ During an explicitly reviewed emergency lease-repair window, the service daemon
 may set `AGENT_BROWSER_PROFILE_LEASE_MODE=fail_open_ephemeral`. A duplicate live
 profile lane or exclusive profile conflict is then redirected to a
 deterministic isolated managed-one-time runtime profile. Conflict-free requests
-stay unchanged. The fallback does not preserve authentication and does not
+stay unchanged. Requests carrying a canonical authenticated lease authorization
+are never rewritten and remain subject to daemon verification immediately
+before effect. The fallback does not preserve authentication and does not
 bypass workstation upgrade admission, capability or owner-generation
 authority, or viewer/controller leases. Remove the environment value when the
 repair window ends. Redirected responses include top-level
