@@ -221,6 +221,65 @@ Every active claim contains at least:
 32. The active index, counters, and event ledger are private kernel state.
     Other subsystems receive immutable claims and invoke typed operations;
     they cannot directly replace or mutate authority collections.
+33. A new operation from the same principal and capability may rejoin a
+    current ephemeral claim without minting a fence or extending expiry.
+    Strict claims require the explicit recovery path instead of implicit
+    rejoin.
+34. Capability revocation has one declared kernel behavior. It either fences
+    every claim issued under that capability immediately or records the
+    bounded delegation interval during which the claim remains valid. No
+    effect path may improvise different revocation semantics.
+35. Canonical authority reads and mutations are linearizable at the effect
+    boundary. A cache, replica, daemon-local snapshot, or temporarily
+    unavailable store cannot authorize an effect or manufacture a blocker.
+36. After migration, an effect request that lacks the canonical claim
+    envelope is rejected as an incompatible caller. It never falls back to a
+    legacy session, owner, or profile gate. Compatibility adapters must obtain
+    a canonical claim before invoking the effect.
+37. Every denial names either the conflicting current claim or the exact
+    positively observed physical collision, together with its expiry,
+    deadline, or supported recovery action. An absent runtime owner, invented
+    session identity, historical row, warning, or projection mismatch cannot
+    be a blocker.
+38. An executable access plan never returns an unproved identity as a launch
+    prerequisite. It either atomically establishes the exact prerequisite or
+    omits it and lets the acquisition mutation create the new identity.
+39. External effects distinguish durable intent, confirmed completion, and
+    uncertain completion. A receipt may suppress a retry only when its state
+    proves the corresponding effect semantics; uncertainty receives bounded
+    reconciliation rather than duplicate execution or an indefinite denial.
+40. A strict recovery controller is itself replaceable. Administrative
+    revision-bound recovery remains available when the named ephemeral
+    controller disappears, without granting a wildcard force-unlock.
+41. Planning, reviewed recovery, and denied acquisition create no active
+    claim. A claim is created only for an already admissible reuse or at the
+    atomic boundary immediately before an admitted effect. A diagnostic or
+    recovery offer cannot become the blocker it is reporting.
+42. With no current runtime owner, owner-linked lifecycle records are history.
+    They cannot block cold acquisition or supply a replacement browser or
+    session identity.
+43. Physical evidence can block only while its observation epoch and freshness
+    bound are current. Stale process, lock, socket, route, display, or provider
+    observations become history or an explicit need-to-reobserve outcome, not
+    an indefinite collision.
+44. Claim mutation, counter advancement, the corresponding event, and the
+    idempotency receipt commit in one storage transaction. Partial persistence
+    cannot leave authority without its fence or receipt.
+45. Renewable ephemeral claims have a maximum continuous tenure and bounded
+    waiter policy. A live but defective client cannot renew forever or release
+    and immediately reacquire in a loop that starves ordinary work.
+46. Installation selection is owned by a stable supervisor outside the
+    candidate being evaluated. A candidate cannot admit, drain, fence, or veto
+    its own activation or rollback transaction.
+47. Effectful entry points accept a kernel-issued authorized-effect type, and
+    denial construction accepts only a current-claim conflict or fresh physical
+    collision type. Raw JSON, strings, and compatibility projections cannot
+    construct either authority outcome after migration.
+48. A serialized effect envelope is not authorized by observable claim
+    metadata alone. It is bound to current request authentication or carries an
+    opaque or authenticated bearer proof whose secret is never exposed through
+    status, history, diagnostics, logs, or generated projections. Copying or
+    reconstructing public claim fields cannot impersonate the holder.
 
 ## Claim Modes
 
@@ -406,11 +465,28 @@ runtime receipts all satisfy the acceptance matrix.
 | child row remains after parent expiry | every child effect is rejected immediately |
 | historical events are archived | fencing and idempotency high-water marks remain unchanged |
 | a subsystem attempts to edit the active index directly | impossible through the Rust module boundary |
+| same capability starts another operation before ephemeral expiry | joins the exact claim without a new fence or later expiry |
+| same principal attempts to rejoin a strict claim directly | rejected with supported strict recover or revoke recourse |
+| issuing capability is revoked | one kernel policy fences the claim or proves its bounded delegation interval |
+| authority store or replica is stale or unavailable at effect time | no effect and no daemon-local authority synthesis |
+| migrated effect caller omits the canonical claim envelope | incompatible-caller error, never legacy gate fallback |
+| access planner proposes launch with an absent session identity | plan is invalid before return; acquisition establishes or omits the identity |
+| denial has no current claim or exact physical collision evidence | denial is invalid and ordinary work remains admissible |
+| external effect completion is uncertain | bounded reconciliation, never blind duplicate execution or permanent denial |
+| named strict recovery controller disappears | exact revision-bound administrative recovery remains available |
+| acquisition returns reviewed recovery or denial | no active claim, fence, or lease blocker is created |
+| terminal lifecycle history exists but current owner does not | cold acquisition remains available, with no invented replacement session |
+| physical collision observation exceeds its freshness bound | reobserve or admit; never continue blocking from the stale observation |
+| event or receipt persistence fails during claim mutation | the whole authority transaction aborts with no changed claim or fence |
+| live client renews continuously while another principal waits | bounded tenure ends or policy transfers priority; no permanent starvation |
+| candidate runtime evaluates its own installation admission | rejected by architecture; stable selected supervisor owns the transaction |
+| migrated effect or denial path attempts to use raw legacy fields | cannot construct the sealed authority type |
+| foreign caller copies claim id, revision, fence, and principal from status | effect rejected because observable metadata is not bearer authority |
 
 ## Design Completeness Audit | 2026-08-31
 
 The six hotfix families are covered by the architecture, but the first draft
-did not state five cross-cutting failure modes strongly enough. They are now
+did not state several cross-cutting failure modes strongly enough. They are now
 part of the frozen invariants and acceptance matrix:
 
 1. authority-owned time and bounded TTL policy, including wall-clock rollback;
@@ -419,7 +495,26 @@ part of the frozen invariants and acceptance matrix:
 4. terminal idempotency retained independently of active claims and event
    history; and
 5. ordered bundle or bounded-saga semantics for operations that need several
-   resources.
+   resources;
+6. same-capability ephemeral rejoin without renewal and strict recovery
+   without implicit rejoin;
+7. capability revocation and replaceable strict-recovery ownership;
+8. linearizable effect-time authority with no cache or legacy fallback;
+9. denial provenance and executable access plans that cannot invent required
+   identities;
+10. explicit intent, completion, and uncertainty states for external effects;
+    and
+11. zero-authority planning and recovery offers that cannot create a blocker.
+
+The recurrence audit also found four usability boundaries that must be
+explicit rather than assumed: freshness-bounded physical evidence,
+transactional coupling of claims with events and receipts, maximum continuous
+ephemeral tenure with bounded waiter progress, and installation authority that
+is external to the candidate. Compiler-sealed effect and denial types are the
+enforcement mechanism that turns the no-fallback rule into a structural
+property instead of a convention. Cross-process callers additionally require
+request-bound authentication or an unforgeable opaque or authenticated bearer;
+type sealing alone cannot secure a serialized envelope.
 
 The audit also makes recursive parent fencing and history compaction explicit.
 Without these controls, a single kernel could still admit duplicate aliases,
@@ -429,7 +524,11 @@ structurally recurrence-resistant.
 
 The kernel collections are also compiler-enforced private state. This closes a
 gap between saying there is one mutation owner and actually preventing sibling
-subsystems from writing competing authority projections.
+subsystems from writing competing authority projections. The additional
+invariants close the remaining routes by which an otherwise centralized
+kernel could still deny ordinary work based on invented prerequisites, accept
+stale cached authority, silently renew a claim during rejoin, or strand strict
+recovery behind another vanished worker.
 
 ## Validation Contract
 
@@ -629,3 +728,50 @@ must not be installed yet.
 Next action: replace the public profile-acquisition mutation with one atomic
 canonical acquisition and a durable idempotent receipt, then require that
 claim at the first daemon effect seam.
+
+## Slice C Profile Acquisition And Prelaunch Fence Checkpoint | 2026-08-31
+
+State transition: `slice_b_kernel_access_and_doctor_in_progress` to
+`slice_c_profile_acquisition_and_prelaunch_fence_complete`.
+
+Acceptance state: public profile acquisition now reauthenticates the registered
+profile capability inside the atomic Service State mutation, replays completed
+operations before new admission, and creates no claim for reviewed recovery or
+denial. An admitted acquisition returns one five-minute ephemeral claim,
+durable acquisition receipt, and exact effect envelope. A new operation from
+the same principal and capability rejoins the current ephemeral claim without
+changing its fence or expiry. Strict claims cannot implicitly rejoin. The
+daemon revalidates the claim, expiry, owner generation, and exact principal
+binding before retained attach, shared attach, or browser launch.
+
+The recurrence audit also repaired an authority leak outside the new kernel.
+When no current runtime owner exists, retained lifecycle records are history
+only. They cannot block cold acquisition or emit a replacement browser or
+session identity. Unsupported authority, receipt, and effect-envelope schemas
+fail before mutation or effect.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- all 13 canonical lease-authority tests pass;
+- all 20 profile-acquisition and recovery tests pass;
+- both canonical prelaunch effect tests pass, including retained-session attach;
+- the terminal-history-without-current-owner regression passes;
+- all 45 service-access-plan and all 35 service-model tests pass;
+- wrapper Rust formatting and strict Clippy pass;
+- the complete service-client suite, generated contract, JavaScript types,
+  API/MCP parity, documentation build, and remote-view documentation guard pass;
+- the validation selector's workstation fixture family passed earlier in this
+  same uncommitted slice and no workstation implementation changed afterward.
+
+Material blockers: the serialized effect envelope is not yet bound to
+request authentication or an unforgeable bearer. Effect completion receipts,
+release compensation, strict recovery and revoke, transition deadlines,
+hierarchical claims, runtime-owner transfer coordination, and removal of the
+legacy no-envelope fallback remain incomplete. This checkpoint must not be
+installed as the completed redesign.
+
+Next action: commit and push this coherent checkpoint, reconcile the isolated
+emergency fail-open branch, then add authenticated effect proof and exact
+release, strict recover, and revision-bound revoke operations.

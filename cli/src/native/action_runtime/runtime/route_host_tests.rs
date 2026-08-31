@@ -2643,6 +2643,123 @@ fn test_service_profile_lease_guard_allows_same_session_reuse() {
     );
     assert!(conflict_session_ids.is_empty());
 }
+
+#[tokio::test]
+async fn canonical_profile_claim_fences_the_prelaunch_effect() {
+    use crate::native::service_lease_authority::{
+        acquire_lease_claim_with_receipt_in_repository, AcquireLeaseClaimRequest, LeaseClaimMode,
+        LeaseResourceKey,
+    };
+
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("canonical-profile-effect-fence");
+    fs::create_dir_all(&home).expect("test home should exist");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let repository = LockedServiceStateRepository::default_json().unwrap();
+    let profile_path = home.join("profiles/acs-profile");
+    repository
+        .mutate(|state| {
+            state.profiles.insert(
+                "acs-profile".to_string(),
+                BrowserProfile {
+                    id: "acs-profile".to_string(),
+                    user_data_dir: Some(profile_path.to_string_lossy().into_owned()),
+                    ..BrowserProfile::default()
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    let now = chrono::Utc::now();
+    let acquired = acquire_lease_claim_with_receipt_in_repository(
+        &repository,
+        AcquireLeaseClaimRequest {
+            resource: LeaseResourceKey::profile("acs-profile"),
+            parent_claim_id: None,
+            principal_id: "principal:journal".to_string(),
+            capability_id: "capability:journal".to_string(),
+            mode: LeaseClaimMode::Ephemeral,
+            expected_authority_revision: 0,
+            idempotency_key: "journal-acquire-1".to_string(),
+            now: now.to_rfc3339(),
+            expires_at: (now + chrono::Duration::minutes(5)).to_rfc3339(),
+            transition_deadline: None,
+            recovery_controller_id: None,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            owner_generation: None,
+        },
+    )
+    .unwrap();
+    let authorization = acquired.claim.unwrap().effect_authorization();
+    let metadata = ServiceLaunchMetadata {
+        profile_id: Some("acs-profile".to_string()),
+        service_name: Some("JournalDownloader".to_string()),
+        ..ServiceLaunchMetadata::default()
+    };
+    let command = json!({
+        "action": "tab_new",
+        "profileId": "acs-profile",
+        "leaseEffectAuthorization": authorization,
+    });
+
+    ensure_service_profile_lease_available(&metadata, "journal-session", &command)
+        .await
+        .unwrap();
+
+    let mut stale_command = command.clone();
+    stale_command["leaseEffectAuthorization"]["fencingToken"] = json!(999);
+    let error =
+        ensure_service_profile_lease_available(&metadata, "journal-session", &stale_command)
+            .await
+            .unwrap_err();
+    assert_eq!(error, "lease_authority_stale_claim");
+
+    let mut unsupported_command = command.clone();
+    unsupported_command["leaseEffectAuthorization"]["schemaVersion"] =
+        json!("agent-browser.lease-effect-authorization.v0");
+    let error =
+        ensure_service_profile_lease_available(&metadata, "journal-session", &unsupported_command)
+            .await
+            .unwrap_err();
+    assert_eq!(error, "lease_authority_unsupported_schema");
+
+    let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+        &crate::runtime_profile::resolve_profile(
+            Some(profile_path.to_str().unwrap()),
+            Some("acs-profile"),
+        )
+        .unwrap()
+        .user_data_dir,
+    )
+    .unwrap();
+    repository
+        .mutate(|state| {
+            state.runtime_owner_registry =
+                crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                    crate::runtime_owner_transfer::ProfileOwner {
+                        owner_id: "owner:appeared-after-claim".to_string(),
+                        profile_identity_digest,
+                        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                        owner_generation: 1,
+                        browser_id: "browser:foreign".to_string(),
+                        daemon_session_route: "foreign-route".to_string(),
+                        process_instance_digest: "a".repeat(64),
+                        browser_family: "chrome".to_string(),
+                        cdp_endpoint_identity_digest: "b".repeat(64),
+                        target_set_digest: "c".repeat(64),
+                        pending_transfer: None,
+                        last_transition: None,
+                    },
+                );
+            Ok(())
+        })
+        .unwrap();
+    let error = ensure_service_profile_lease_available(&metadata, "journal-session", &command)
+        .await
+        .unwrap_err();
+    assert_eq!(error, "lease_authority_owner_generation_stale");
+    let _ = fs::remove_dir_all(&home);
+}
 #[test]
 fn test_cdp_screencast_view_stream_ready_for_non_remote_cdp_browser() {
     let stream = cdp_screencast_view_stream(
@@ -2903,6 +3020,52 @@ fn test_retained_session_attach_target_reconnects_registered_tab_list_client() {
     );
     let _ = fs::remove_dir_all(&home);
 }
+
+#[tokio::test]
+async fn canonical_effect_fence_precedes_retained_session_attach() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("canonical-fence-before-retained-attach");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            browsers: BTreeMap::from([(
+                "session:last30days-facebook".to_string(),
+                BrowserProcess {
+                    id: "session:last30days-facebook".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    cdp_endpoint: Some("ws://127.0.0.1:1/devtools/browser/unreachable".to_string()),
+                    active_session_ids: vec!["last30days-facebook".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut state = DaemonState::new();
+    state.session_id = "last30days-facebook".to_string();
+    let command = json!({
+        "action": "tab_list",
+        "profileId": "last30days-facebook",
+        "leaseEffectAuthorization": {
+            "schemaVersion": "agent-browser.lease-effect-authorization.v0",
+            "resource": { "kind": "profile", "id": "last30days-facebook" },
+            "claimId": "claim:stale",
+            "principalId": "principal:last30days",
+            "claimRevision": 1,
+            "fencingToken": 1
+        }
+    });
+
+    let error = auto_launch(&mut state, &command).await.unwrap_err();
+
+    assert_eq!(error, "lease_authority_unsupported_schema");
+    assert!(state.browser.is_none());
+    let _ = fs::remove_dir_all(&home);
+}
+
 #[test]
 fn test_retained_session_attach_target_does_not_cross_session_ownership() {
     let guard = EnvGuard::new(&["HOME"]);

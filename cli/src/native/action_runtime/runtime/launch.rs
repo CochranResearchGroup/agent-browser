@@ -579,6 +579,16 @@ async fn cleanup_failed_owned_launch(state: &mut DaemonState) -> Result<Value, S
 pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     state.pending_shared_profile_acquisition = None;
     let mut options = launch_options_from_env();
+    if command.get("leaseEffectAuthorization").is_some() {
+        let metadata = ServiceLaunchMetadata {
+            profile_id: command
+                .get("profileId")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            ..ServiceLaunchMetadata::default()
+        };
+        ensure_service_profile_lease_available(&metadata, &state.session_id, command).await?;
+    }
     let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""));
     let runtime_attach_managed = env::var("AGENT_BROWSER_RUNTIME_ATTACH_MANAGED")

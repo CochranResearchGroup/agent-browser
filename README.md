@@ -3148,6 +3148,14 @@ The response includes worker state, browser health, queue depth, profile lease w
 
 `service recovery acquire --profile-id <id> --capability-file <path>` is the high-level, capability-bound profile acquisition entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. An exact process-backed lane for the same authenticated principal is reused. A conclusive terminal owner with satisfied cleanup, proven process exit, released profile lock, and no active foreign lease is repaired automatically before one acquisition retry. A current foreign principal remains hard blocked with wait or coordination recourse. `existing_session_profile_identity_unproven`, including the Odollo contractor portal fixture, returns a reviewed `reconcile_exact_principal_profile_identity` plan without launching another browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`.
 
+An acquired response includes the canonical `leaseClaim`, its exact
+`leaseEffectAuthorization`, a durable `leaseAcquisitionReceipt`, and
+`leaseAcquisitionReplayed`. The service selects a five-minute ephemeral claim
+expiry. Replaying one operation grants no new authority after expiry. A new
+operation from the same capability may join the current claim without changing
+its fencing token or expiry. The daemon validates the envelope immediately
+before launch.
+
 `service recovery plan` creates a zero-effect, expiring recovery plan for explicit review. Apply with `service recovery apply --plan-file <path> --capability-file <path> --session-name <sealed-daemon-route>`. The daemon rechecks the plan seal, Service State revision, owner generation, process and lock evidence, then retries acquisition once and stores a durable receipt. Read it with `service recovery status <recovery-id> --capability-file <path>`.
 
 When recovery returns `existing_session_profile_identity_unproven`, the next action is to reconcile the exact principal, profile, live process, and daemon route. Do not retry acquisition or launch another profile lane. A registered profile that still needs interactive sign-in can use queued service request action `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. It opens one route-bound headed browser without CDP and returns only an opaque `/remote-view/<handoff-id>` operator handoff. Replays reuse the same live process and handoff. After the operator finishes, call `service_profile_manual_seeding_close` with the exact returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Close verifies and stops that process, releases only its route, and returns the separate attachable relaunch and authentication-probe next actions. Visibility is never authentication evidence.

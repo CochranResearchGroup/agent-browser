@@ -1555,6 +1555,13 @@ Use `agent-browser service leases`, HTTP `GET /api/service/profile-leases`, MCP 
 
 Use `service recovery acquire --profile-id <id> --capability-file <path>` as the high-level capability-bound entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. It reuses an exact current lane, automatically applies only conclusive terminal-owner recovery, retries acquisition once, and hard-blocks current foreign-principal authority. `existing_session_profile_identity_unproven` returns a reviewed `reconcile_exact_principal_profile_identity` plan and must not launch a duplicate browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`. Use the lower-level plan, apply, and status operations only when explicit recovery review is required.
 
+An acquired response includes `leaseClaim`, `leaseEffectAuthorization`,
+`leaseAcquisitionReceipt`, and `leaseAcquisitionReplayed`. The service owns the
+five-minute ephemeral claim expiry. Replaying one operation grants no new
+authority after expiry. A new operation from the same capability may join the
+current claim without renewing it or minting another fence. Preserve the
+effect envelope because the daemon validates it immediately before launch.
+
 For `existing_session_profile_identity_unproven`, reconcile the exact principal, profile, process, and daemon route before any retry. If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. Give the operator only the returned opaque `/remote-view/<handoff-id>` URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
 
 Use `service_browser_contamination_report` to inspect retained inert browser rows without effects. For an eligible PID-less row, call `service_browser_retirement_plan` with `browserId` and a short `expiresAt`, review the affected identity, revision, evidence digest, reasons, compensation, and expiry, then pass the returned plan unchanged to `service_browser_retirement_apply`. Apply fails closed when the row changed or the plan expired and returns a terminal receipt on success. This is record retirement, not browser close. Never use it for a live, process-backed, session-referenced, routed, or error-bearing browser row.

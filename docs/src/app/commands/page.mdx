@@ -783,6 +783,15 @@ returns a reviewed reconciliation plan without launching another browser. HTTP
 uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`,
 and generated clients use `acquireServiceProfile()`.
 
+An acquired response includes <code>leaseClaim</code>, the exact
+<code>leaseEffectAuthorization</code>, a durable
+<code>leaseAcquisitionReceipt</code>, and
+<code>leaseAcquisitionReplayed</code>. The service selects a five-minute
+ephemeral expiry. Operation replay never grants new authority after expiry,
+while another operation from the same capability may join the current claim
+without renewing it or minting a new fence. The daemon validates the envelope
+immediately before launch.
+
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner
 with satisfied cleanup, proven process exit, a released profile lock, and no

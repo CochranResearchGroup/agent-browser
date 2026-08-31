@@ -11,8 +11,13 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
+use super::service_lease_authority::{
+    AcquireLeaseClaimRequest, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
+    LeaseEffectAuthorization, LeaseResourceKey,
+};
 use super::service_model::{BrowserProfile, ServiceState};
 use super::service_principal::{
     authenticate_profile_capability, AuthenticatedServicePrincipal, ServicePrincipalProvenance,
@@ -201,12 +206,20 @@ fn profile_acquisition_retry_command(
     intent: &ProfileAcquisitionIntent,
     daemon_session_route: &str,
 ) -> Value {
+    profile_acquisition_retry_command_with_claim(intent, daemon_session_route, None)
+}
+
+fn profile_acquisition_retry_command_with_claim(
+    intent: &ProfileAcquisitionIntent,
+    daemon_session_route: &str,
+    lease_effect_authorization: Option<&LeaseEffectAuthorization>,
+) -> Value {
     let service_name = if intent.service_name.trim().is_empty() {
         intent.principal_id.as_str()
     } else {
         intent.service_name.as_str()
     };
-    json!({
+    let mut command = json!({
         "action": "tab_new",
         "profileId": intent.profile_id,
         "serviceName": service_name,
@@ -216,7 +229,11 @@ fn profile_acquisition_retry_command(
         "sessionName": daemon_session_route,
         "servicePrincipalId": intent.principal_id,
         "servicePrincipalProvenance": "registered_capability",
-    })
+    });
+    if let Some(authorization) = lease_effect_authorization {
+        command["leaseEffectAuthorization"] = json!(authorization);
+    }
+    command
 }
 
 fn profile_acquisition_retry_route(
@@ -759,6 +776,128 @@ where
         .map(|applied| applied.acquisition)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
+    repository: &R,
+    raw_capability: &str,
+    intent: &ProfileAcquisitionIntent,
+    created_at: &str,
+    recovery_expires_at: &str,
+    claim_expires_at: &str,
+    idempotency_key: &str,
+    seal_key: &[u8],
+) -> Result<LeaseClaimAcquisitionOutcome, String> {
+    repository.mutate(|state| {
+        let authority = authenticate_profile_capability(
+            &state.service_principals,
+            raw_capability,
+            Some(&intent.profile_id),
+        )
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        if authority.principal_id != intent.principal_id {
+            return Err("profile_acquisition_principal_mismatch".to_string());
+        }
+        let owner_generation = state
+            .profiles
+            .get(&intent.profile_id)
+            .and_then(|profile| recovery_profile_identity_digest(profile).ok())
+            .and_then(|digest| state.runtime_owner_registry.owner(&digest))
+            .map(|owner| owner.owner_generation);
+        let request = AcquireLeaseClaimRequest {
+            resource: LeaseResourceKey::profile(&intent.profile_id),
+            parent_claim_id: None,
+            principal_id: authority.principal_id,
+            capability_id: authority.capability_id,
+            mode: LeaseClaimMode::Ephemeral,
+            expected_authority_revision: state.lease_authority().revision(),
+            idempotency_key: idempotency_key.to_string(),
+            now: created_at.to_string(),
+            expires_at: claim_expires_at.to_string(),
+            transition_deadline: None,
+            recovery_controller_id: None,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            owner_generation,
+        };
+        if let Some(replayed) = state
+            .lease_authority()
+            .replay_acquisition(&request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+        {
+            return Ok(replayed);
+        }
+        let preflight = plan_profile_acquisition(
+            state,
+            intent.clone(),
+            created_at,
+            recovery_expires_at,
+            idempotency_key,
+            seal_key,
+        )?;
+        let preflight_allows_claim = preflight.state == ProfileAcquisitionState::Acquired
+            || preflight
+                .dominant_blocker
+                .as_ref()
+                .is_some_and(|blocker| blocker.code == "runtime_owner_missing");
+        if !preflight_allows_claim {
+            let code = preflight
+                .dominant_blocker
+                .as_ref()
+                .map(|blocker| blocker.code.as_str())
+                .unwrap_or("not_admitted");
+            return Err(format!("profile_acquisition_preflight_{code}"));
+        }
+        state
+            .acquire_lease_claim_with_receipt(request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn replay_profile_claim_for_intent<R: ServiceStateRepository>(
+    repository: &R,
+    raw_capability: &str,
+    intent: &ProfileAcquisitionIntent,
+    created_at: &str,
+    claim_expires_at: &str,
+    idempotency_key: &str,
+) -> Result<Option<LeaseClaimAcquisitionOutcome>, String> {
+    let state = repository.load_snapshot()?;
+    let authority = authenticate_profile_capability(
+        &state.service_principals,
+        raw_capability,
+        Some(&intent.profile_id),
+    )
+    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+    if authority.principal_id != intent.principal_id {
+        return Err("profile_acquisition_principal_mismatch".to_string());
+    }
+    let owner_generation = state
+        .profiles
+        .get(&intent.profile_id)
+        .and_then(|profile| recovery_profile_identity_digest(profile).ok())
+        .and_then(|digest| state.runtime_owner_registry.owner(&digest))
+        .map(|owner| owner.owner_generation);
+    let request = AcquireLeaseClaimRequest {
+        resource: LeaseResourceKey::profile(&intent.profile_id),
+        parent_claim_id: None,
+        principal_id: authority.principal_id,
+        capability_id: authority.capability_id,
+        mode: LeaseClaimMode::Ephemeral,
+        expected_authority_revision: state.lease_authority().revision(),
+        idempotency_key: idempotency_key.to_string(),
+        now: created_at.to_string(),
+        expires_at: claim_expires_at.to_string(),
+        transition_deadline: None,
+        recovery_controller_id: None,
+        boot_epoch: crate::process_identity::current_boot_epoch(),
+        owner_generation,
+    };
+    state
+        .lease_authority()
+        .replay_acquisition(&request)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))
+}
+
 /// Executes the no-launch plan and status operations, or the exact
 /// terminal-owner apply operation, for the public recovery command surface.
 /// The raw profile capability is consumed only for authentication and plan
@@ -824,8 +963,60 @@ async fn acquire_profile_command(
     } else {
         AcquisitionRecoveryPolicy::PlanOnly
     };
+    let claim_expires_at = ephemeral_profile_claim_expiry(&created_at)?;
+    let initial_outcome = plan_profile_acquisition(
+        &snapshot,
+        intent.clone(),
+        &created_at,
+        &expires_at,
+        &idempotency_key,
+        raw_capability.as_bytes(),
+    )?;
+    if let Some(replayed) = replay_profile_claim_for_intent(
+        &repository,
+        &raw_capability,
+        &intent,
+        &created_at,
+        &claim_expires_at,
+        &idempotency_key,
+    )? {
+        return Ok(profile_acquisition_response(
+            initial_outcome,
+            Some(replayed),
+        ));
+    }
+    let initial_lease_acquisition = if initial_outcome.state == ProfileAcquisitionState::Acquired {
+        Some(acquire_profile_claim_for_intent(
+            &repository,
+            &raw_capability,
+            &intent,
+            &created_at,
+            &expires_at,
+            &claim_expires_at,
+            &idempotency_key,
+            raw_capability.as_bytes(),
+        )?)
+    } else {
+        None
+    };
+    if initial_lease_acquisition
+        .as_ref()
+        .is_some_and(|acquisition| acquisition.claim.is_none())
+    {
+        return Ok(profile_acquisition_response(
+            initial_outcome,
+            initial_lease_acquisition,
+        ));
+    }
+    let lease_acquisition_slot = Arc::new(Mutex::new(initial_lease_acquisition));
+    let retry_lease_acquisition_slot = lease_acquisition_slot.clone();
+    let retry_capability = raw_capability.clone();
+    let retry_created_at = created_at.clone();
+    let retry_expires_at = expires_at.clone();
+    let retry_claim_expires_at = claim_expires_at.clone();
+    let retry_idempotency_key = idempotency_key.clone();
     let retry_repository = repository.clone();
-    let outcome = coordinate_profile_acquisition(
+    let coordinated = coordinate_profile_acquisition(
         &repository,
         intent,
         &created_at,
@@ -834,8 +1025,32 @@ async fn acquire_profile_command(
         raw_capability.as_bytes(),
         policy,
         |intent| async move {
-            let retry_command =
-                profile_acquisition_retry_command(&intent, &retry_daemon_session_route);
+            let lease_acquisition = acquire_profile_claim_for_intent(
+                &retry_repository,
+                &retry_capability,
+                &intent,
+                &retry_created_at,
+                &retry_expires_at,
+                &retry_claim_expires_at,
+                &retry_idempotency_key,
+                retry_capability.as_bytes(),
+            )?;
+            let lease_effect_authorization = lease_acquisition
+                .claim
+                .as_ref()
+                .map(|claim| claim.effect_authorization());
+            *retry_lease_acquisition_slot
+                .lock()
+                .map_err(|_| "profile_acquisition_claim_slot_poisoned".to_string())? =
+                Some(lease_acquisition);
+            let lease_effect_authorization = lease_effect_authorization.ok_or_else(|| {
+                "profile_acquisition_idempotency_replay_without_active_claim".to_string()
+            })?;
+            let retry_command = profile_acquisition_retry_command_with_claim(
+                &intent,
+                &retry_daemon_session_route,
+                Some(&lease_effect_authorization),
+            );
             auto_launch(daemon_state, &retry_command).await?;
             bind_acquired_profile_principal(
                 &retry_repository,
@@ -851,8 +1066,65 @@ async fn acquire_profile_command(
             })
         },
     )
-    .await?;
-    Ok(json!({ "outcome": outcome }))
+    .await;
+    let lease_acquisition = lease_acquisition_slot
+        .lock()
+        .map_err(|_| "profile_acquisition_claim_slot_poisoned".to_string())?
+        .clone();
+    match coordinated {
+        Ok(outcome) => Ok(profile_acquisition_response(outcome, lease_acquisition)),
+        Err(error) if error == "profile_acquisition_idempotency_replay_without_active_claim" => Ok(
+            profile_acquisition_response(initial_outcome, lease_acquisition),
+        ),
+        Err(error) => Err(error),
+    }
+}
+
+fn profile_acquisition_response(
+    outcome: ProfileAcquisitionOutcome,
+    lease_acquisition: Option<LeaseClaimAcquisitionOutcome>,
+) -> Value {
+    let Some(lease_acquisition) = lease_acquisition else {
+        return json!({ "outcome": outcome });
+    };
+    let Some(lease_claim) = lease_acquisition.claim else {
+        return json!({
+            "outcome": blocked_outcome_with_recourse(
+                "idempotency_replay_without_active_claim",
+                true,
+                "The original acquisition claim is terminal; replay cannot grant new authority.",
+                "start_new_profile_acquisition_with_new_idempotency_key",
+                Vec::new(),
+            ),
+            "leaseAcquisitionReceipt": lease_acquisition.receipt,
+            "leaseAcquisitionReplayed": true,
+        });
+    };
+    if outcome.state != ProfileAcquisitionState::Acquired {
+        return json!({
+            "outcome": outcome,
+            "leaseAcquisitionReceipt": lease_acquisition.receipt,
+            "leaseAcquisitionReplayed": lease_acquisition.replayed,
+        });
+    }
+    let lease_effect_authorization = lease_claim.effect_authorization();
+    json!({
+        "outcome": outcome,
+        "leaseClaim": lease_claim,
+        "leaseEffectAuthorization": lease_effect_authorization,
+        "leaseAcquisitionReceipt": lease_acquisition.receipt,
+        "leaseAcquisitionReplayed": lease_acquisition.replayed,
+    })
+}
+
+fn ephemeral_profile_claim_expiry(now: &str) -> Result<String, String> {
+    chrono::DateTime::parse_from_rfc3339(now)
+        .map(|now| {
+            (now + chrono::Duration::minutes(5))
+                .with_timezone(&chrono::Utc)
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        })
+        .map_err(|_| "profile_acquisition_authority_time_invalid".to_string())
 }
 
 fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
@@ -2303,6 +2575,182 @@ mod tests {
             .evidence
             .iter()
             .any(|item| item.code == "initial_owner_registered"));
+    }
+
+    #[test]
+    fn atomic_profile_claim_refuses_current_foreign_owner() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+
+        let mut initial = ready_state("principal:foreign", true);
+        let capability = "last30days-profile-acquisition-capability-with-sufficient-length";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".to_string(),
+                display_name: Some("Last30days".to_string()),
+                profile_id: "last30days-facebook".to_string(),
+                registered_at: Some("2026-08-28T12:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            capability,
+        )
+        .unwrap();
+        let repository = MemoryRepository::new(initial);
+
+        let error = acquire_profile_claim_for_intent(
+            &repository,
+            capability,
+            &intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "2026-08-28T12:05:00Z",
+            "foreign-owner-acquire",
+            seal_key(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "profile_acquisition_preflight_live_foreign_principal_authority"
+        );
+        assert!(repository
+            .load_snapshot()
+            .unwrap()
+            .lease_authority()
+            .current_claim(
+                &crate::native::service_lease_authority::LeaseResourceKey::profile(
+                    "last30days-facebook"
+                ),
+                "2026-08-28T12:00:00Z"
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn reviewed_recovery_does_not_create_an_active_claim() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+
+        let mut initial = ready_state("principal:last30days", false);
+        let capability = "last30days-profile-acquisition-capability-with-sufficient-length";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".to_string(),
+                display_name: Some("Last30days".to_string()),
+                profile_id: "last30days-facebook".to_string(),
+                registered_at: Some("2026-08-28T12:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            capability,
+        )
+        .unwrap();
+        let repository = MemoryRepository::new(initial);
+
+        let error = acquire_profile_claim_for_intent(
+            &repository,
+            capability,
+            &intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "2026-08-28T12:05:00Z",
+            "reviewed-recovery-acquire",
+            seal_key(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "profile_acquisition_preflight_existing_session_profile_identity_unproven"
+        );
+        assert!(repository
+            .load_snapshot()
+            .unwrap()
+            .lease_authority()
+            .current_claim(
+                &crate::native::service_lease_authority::LeaseResourceKey::profile(
+                    "last30days-facebook"
+                ),
+                "2026-08-28T12:00:00Z"
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn completed_acquisition_replay_precedes_new_foreign_owner_preflight() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+
+        let capability = "last30days-profile-acquisition-capability-with-sufficient-length";
+        let mut initial = state();
+        initial.runtime_owner_registry = RuntimeOwnerRegistry::default();
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".to_string(),
+                display_name: Some("Last30days".to_string()),
+                profile_id: "last30days-facebook".to_string(),
+                registered_at: Some("2026-08-28T12:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            capability,
+        )
+        .unwrap();
+        let repository = MemoryRepository::new(initial);
+        let first = acquire_profile_claim_for_intent(
+            &repository,
+            capability,
+            &intent(),
+            "2026-08-28T12:00:00Z",
+            "2026-08-28T12:05:00Z",
+            "2026-08-28T12:05:00Z",
+            "stable-acquisition-operation",
+            seal_key(),
+        )
+        .unwrap();
+        assert!(first.claim.is_some());
+
+        let foreign = ready_state("principal:foreign", true);
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry = foreign.runtime_owner_registry;
+                state.browsers = foreign.browsers;
+                Ok(())
+            })
+            .unwrap();
+
+        let replayed = replay_profile_claim_for_intent(
+            &repository,
+            capability,
+            &intent(),
+            "2026-08-28T12:10:00Z",
+            "2026-08-28T12:15:00Z",
+            "stable-acquisition-operation",
+        )
+        .unwrap()
+        .unwrap();
+
+        assert!(replayed.replayed);
+        assert!(replayed.claim.is_none());
+        assert_eq!(replayed.receipt, first.receipt);
+        let current_outcome = plan_profile_acquisition(
+            &repository.load_snapshot().unwrap(),
+            intent(),
+            "2026-08-28T12:10:00Z",
+            "2026-08-28T12:15:00Z",
+            "stable-acquisition-operation",
+            seal_key(),
+        )
+        .unwrap();
+        let response = profile_acquisition_response(current_outcome, Some(replayed));
+        assert_eq!(response["outcome"]["state"], "blocked");
+        assert!(response.get("leaseAcquisitionReceipt").is_some());
+        assert!(response.get("leaseClaim").is_none());
+        assert!(response.get("leaseEffectAuthorization").is_none());
     }
 
     #[tokio::test]

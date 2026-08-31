@@ -231,6 +231,39 @@ fn p137_terminal_replacement_requires_exact_process_exit_evidence() {
 }
 
 #[test]
+fn p137_terminal_history_without_current_owner_cannot_emit_a_replacement_route() {
+    let fixture = fixture();
+    let mut state = state_for_fixture(&fixture);
+    state.runtime_owner_registry.owners.clear();
+
+    let plan = service_access_plan_for_state(
+        &state,
+        ServiceAccessPlanRequest {
+            service_name: Some(fixture.service_name),
+            agent_name: Some(fixture.agent_name),
+            task_name: Some(fixture.task_name),
+            runtime_profile: Some(fixture.profile_id),
+            target_service_ids: vec![fixture.target_service_id],
+            ..ServiceAccessPlanRequest::default()
+        },
+    );
+
+    assert_eq!(
+        plan["decision"]["lifecycleReplacement"]["replacementEligible"],
+        true
+    );
+    assert_eq!(
+        plan["decision"]["lifecycleReplacement"]["reason"],
+        "no_lifecycle_owner"
+    );
+    assert!(plan["decision"]["lifecycleReplacement"]["ownerId"].is_null());
+    assert!(plan["decision"]["lifecycleReplacement"]["replacementSessionName"].is_null());
+    assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+    assert!(plan["decision"]["serviceRequest"]["acquisitionBlocker"].is_null());
+    assert!(plan["decision"]["serviceRequest"]["request"]["sessionName"].is_null());
+}
+
+#[test]
 fn p137_terminal_replacement_accepts_reconciled_absent_process_and_stale_lock() {
     let fixture = fixture();
     let mut state = state_for_fixture(&fixture);

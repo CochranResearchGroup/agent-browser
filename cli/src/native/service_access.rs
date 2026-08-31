@@ -1127,7 +1127,9 @@ fn lifecycle_replacement_decision(
                 && record.owner_generation == owner.owner_generation
         })
     });
-    let lifecycle = owner_lifecycle.or_else(|| records.last().copied());
+    // Lifecycle history is observational. Only the record joined to the exact
+    // current owner generation may participate in an operational decision.
+    let lifecycle = owner_lifecycle;
     let terminal_cleanup_satisfied = lifecycle.is_some_and(|record| {
         record.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
             && record.cleanup_obligation_state

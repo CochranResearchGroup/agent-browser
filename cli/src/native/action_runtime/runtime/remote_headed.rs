@@ -20,6 +20,9 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
+use crate::native::service_lease_authority::{
+    authorize_lease_effect_in_repository, LeaseEffectAuthorization,
+};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -37,6 +40,7 @@ use crate::native::service_model::{
     TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use crate::native::service_trace::service_commands::service_now_timestamp;
 use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
@@ -600,10 +604,28 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
 /// The same retained session may still reuse its browser, and non-service
 /// launches keep the existing direct-control behavior.
 pub(crate) async fn ensure_service_profile_lease_available(
-    _metadata: &ServiceLaunchMetadata,
+    metadata: &ServiceLaunchMetadata,
     session_id: &str,
     command: &Value,
 ) -> Result<(), String> {
+    if let Some(value) = command.get("leaseEffectAuthorization") {
+        let authorization: LeaseEffectAuthorization = serde_json::from_value(value.clone())
+            .map_err(|error| format!("lease_authority_invalid_effect_authorization:{error}"))?;
+        let expected_profile_id = metadata
+            .profile_id
+            .as_deref()
+            .ok_or_else(|| "lease_authority_effect_profile_missing".to_string())?;
+        if authorization.profile_id() != Some(expected_profile_id) {
+            return Err("lease_authority_effect_profile_mismatch".to_string());
+        }
+        let repository = LockedServiceStateRepository::default_json()?;
+        authorize_lease_effect_in_repository(
+            &repository,
+            &authorization,
+            &service_now_timestamp(),
+        )?;
+        return Ok(());
+    }
     let wait_timeout_ms = profile_lease_wait_timeout_ms_from_command(command)?;
     match service_profile_lease_gate(command, session_id, Some(wait_timeout_ms))? {
         ServiceProfileLeaseGate::Ready => Ok(()),

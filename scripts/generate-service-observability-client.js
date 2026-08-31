@@ -1314,7 +1314,59 @@ export interface ServiceProfileRecoveryReceipt extends Record<string, unknown> {
   terminalResult: string;
 }
 export interface ServiceProfileRecoveryPlanResponse { outcome: { recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
-export interface ServiceProfileAcquireResponse { outcome: { state: 'acquired' | 'recovery_available' | 'blocked'; automatic: boolean; recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
+export interface ServiceLeaseResourceKey {
+  kind: 'profile' | 'runtime_lane' | 'service_session' | 'tab' | 'viewer' | 'controller' | 'presentation_route' | 'installer_transaction';
+  id: string;
+}
+export interface ServiceActiveLeaseClaim {
+  schemaVersion: 'agent-browser.lease-authority.v1';
+  claimId: string;
+  resource: ServiceLeaseResourceKey;
+  parentClaimId: string | null;
+  principalId: string;
+  capabilityId: string;
+  mode: 'ephemeral' | 'strict';
+  revision: number;
+  fencingToken: number;
+  idempotencyKey: string;
+  acquiredAt: string;
+  heartbeatAt: string;
+  expiresAt: string;
+  transitionDeadline: string | null;
+  recoveryControllerId: string | null;
+  bootEpoch: string | null;
+  ownerGeneration: number | null;
+}
+export interface ServiceLeaseEffectAuthorization {
+  schemaVersion: 'agent-browser.lease-effect-authorization.v1';
+  resource: ServiceLeaseResourceKey;
+  claimId: string;
+  principalId: string;
+  claimRevision: number;
+  fencingToken: number;
+  ownerGeneration: number | null;
+}
+export interface ServiceLeaseAcquisitionReceipt {
+  schemaVersion: 'agent-browser.lease-acquisition-receipt.v1';
+  receiptId: string;
+  requestDigest: string;
+  idempotencyKey: string;
+  resource: ServiceLeaseResourceKey;
+  principalId: string;
+  capabilityId: string;
+  claimId: string;
+  claimRevision: number;
+  fencingToken: number;
+  authorityRevision: number;
+  occurredAt: string;
+}
+export interface ServiceProfileAcquireResponse {
+  outcome: { state: 'acquired' | 'recovery_available' | 'blocked'; automatic: boolean; recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown };
+  leaseClaim?: ServiceActiveLeaseClaim;
+  leaseEffectAuthorization?: ServiceLeaseEffectAuthorization;
+  leaseAcquisitionReceipt?: ServiceLeaseAcquisitionReceipt;
+  leaseAcquisitionReplayed?: boolean;
+}
 export interface ServiceProfileRecoveryApplyResponse { outcome: Record<string, unknown>; receipt: ServiceProfileRecoveryReceipt; replayed: boolean; }
 export interface ServiceProfileRecoveryStatusResponse { recoveryId: string; state: string; receipt: ServiceProfileRecoveryReceipt | null; }
 
