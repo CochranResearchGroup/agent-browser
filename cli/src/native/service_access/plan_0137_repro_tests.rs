@@ -229,3 +229,42 @@ fn p137_terminal_replacement_requires_exact_process_exit_evidence() {
         false
     );
 }
+
+#[test]
+fn p137_terminal_replacement_accepts_reconciled_absent_process_and_stale_lock() {
+    let fixture = fixture();
+    let mut state = state_for_fixture(&fixture);
+    state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut(&fixture.durable_browser_id)
+        .unwrap()
+        .terminal_evidence = vec![
+        "service_reconcile_process_group_absent:74831".to_string(),
+        "service_reconcile_profile_lock_stale_pid_absent:74831".to_string(),
+        "service_reconcile_browser_projection_absent".to_string(),
+        "service_reconcile_transfer_authority_absent".to_string(),
+    ];
+
+    let plan = service_access_plan_for_state(
+        &state,
+        ServiceAccessPlanRequest {
+            runtime_profile: Some(fixture.profile_id),
+            target_service_ids: vec![fixture.target_service_id],
+            ..ServiceAccessPlanRequest::default()
+        },
+    );
+
+    assert_eq!(
+        plan["decision"]["lifecycleReplacement"]["replacementEligible"],
+        true
+    );
+    assert_eq!(
+        plan["decision"]["lifecycleReplacement"]["processAbsenceProven"],
+        true
+    );
+    assert_eq!(
+        plan["decision"]["lifecycleReplacement"]["reason"],
+        "terminal_cleanup_satisfied"
+    );
+}

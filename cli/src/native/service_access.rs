@@ -1133,10 +1133,17 @@ fn lifecycle_replacement_decision(
                 == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
     });
     let terminal_process_exit_recorded = lifecycle.is_some_and(|record| {
-        record
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "exact_process_exited")
+        record.terminal_evidence.iter().any(|evidence| {
+            evidence == "exact_process_exited"
+                || evidence.starts_with("service_reconcile_process_group_absent:")
+        })
+    });
+    let terminal_profile_lock_release_recorded = lifecycle.is_some_and(|record| {
+        record.terminal_evidence.iter().any(|evidence| {
+            evidence == "profile_lock_released"
+                || evidence == "service_reconcile_profile_lock_absent"
+                || evidence.starts_with("service_reconcile_profile_lock_stale_pid_absent:")
+        })
     });
     let current_process_proven = owner.is_some_and(|owner| {
         service_state
@@ -1144,7 +1151,9 @@ fn lifecycle_replacement_decision(
             .get(&owner.browser_id)
             .is_some_and(|browser| browser.pid.is_some())
     });
-    let terminal_process_absence_proven = terminal_process_exit_recorded && !current_process_proven;
+    let terminal_process_absence_proven = terminal_process_exit_recorded
+        && terminal_profile_lock_release_recorded
+        && !current_process_proven;
     let active_profile_lease_session_ids = service_state
         .sessions
         .values()
