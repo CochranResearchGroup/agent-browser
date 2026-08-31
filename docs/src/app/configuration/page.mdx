@@ -249,7 +249,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>confirmInteractive</code></td><td><code>--confirm-interactive</code></td><td>boolean</td></tr>
     <tr><td><code>engine</code></td><td><code>--engine</code></td><td>string (<code>chrome</code>, <code>lightpanda</code>)</td></tr>
     <tr><td><code>service.reconcileIntervalMs</code></td><td><code>--service-reconcile-interval</code></td><td>number</td></tr>
-    <tr><td><code>service.jobTimeoutMs</code></td><td><code>--service-job-timeout</code></td><td>number</td></tr>
+    <tr><td><code>service.jobTimeoutMs</code></td><td><code>--service-job-timeout</code></td><td>number, default 900000; 0 selects the default</td></tr>
     <tr><td><code>service.recoveryRetryBudget</code></td><td><code>--service-recovery-retry-budget</code></td><td>number</td></tr>
     <tr><td><code>service.recoveryBaseBackoffMs</code></td><td><code>--service-recovery-base-backoff</code></td><td>number</td></tr>
     <tr><td><code>service.recoveryMaxBackoffMs</code></td><td><code>--service-recovery-max-backoff</code></td><td>number</td></tr>
@@ -257,6 +257,8 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>headers</code></td><td><code>--headers</code></td><td>string (JSON)</td></tr>
   </tbody>
 </table>
+
+Service control jobs default to a 900000 ms worker deadline. The service reconciler marks a stranded <code>running</code> record <code>timed_out</code> after its persisted deadline without retrying the original operation. Legacy records without timeout metadata use the same 900000 ms recovery horizon.
 
 ## Common Configurations
 

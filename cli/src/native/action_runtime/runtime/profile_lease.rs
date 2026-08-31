@@ -132,17 +132,8 @@ pub(crate) fn service_profile_lease_metadata_for_command(
     if command
         .get("action")
         .and_then(|value| value.as_str())
-        .is_some_and(|action| {
-            action.starts_with("service_")
-                || matches!(
-                    action,
-                    "runtime_handoff_prepare"
-                        | "runtime_handoff_resume"
-                        | "runtime_handoff_abort"
-                        | "runtime_handoff_rollback"
-                        | "runtime_handoff_finalize"
-                )
-        })
+        .is_some_and(action_skips_profile_lease_admission)
+        && command.get("profileLeasePolicy").is_none()
     {
         return Ok(None);
     }
@@ -164,6 +155,37 @@ pub(crate) fn service_profile_lease_metadata_for_command(
         selection_reason,
     );
     Ok((metadata.service_name.is_some() && metadata.profile_id.is_some()).then_some(metadata))
+}
+
+/// Commands that cannot acquire a browser profile lane do not implicitly
+/// inherit the daemon session's retained profile identity or pass through
+/// launch admission. A caller can still request explicit lease coordination
+/// with `profileLeasePolicy`, which is useful for sequencing later work. A
+/// small set of lifecycle coordinators own acquisition internally even though
+/// the generic action dispatcher does not auto-launch for them.
+fn action_skips_profile_lease_admission(action: &str) -> bool {
+    if action.starts_with("service_") {
+        return true;
+    }
+    if matches!(
+        action,
+        "runtime_handoff_prepare"
+            | "runtime_handoff_resume"
+            | "runtime_handoff_abort"
+            | "runtime_handoff_rollback"
+            | "runtime_handoff_finalize"
+    ) {
+        return true;
+    }
+    crate::native::actions::action_skips_browser_launch(action)
+        && !matches!(
+            action,
+            "launch"
+                | "cdp_free_launch"
+                | "external_byop_adopt"
+                | "cdp_attach"
+                | "remote_view_open"
+        )
 }
 pub(crate) fn apply_explicit_launch_identity_from_command(
     options: &mut LaunchOptions,

@@ -12,6 +12,7 @@ use super::browser::BrowserShutdownOutcome;
 use super::desktop_control_coordinator::begin_service_controller_mutation;
 use super::remote_view::{route_display_socket_available, route_pool_target_string};
 use super::remote_view_attachability::refresh_remote_view_attachability;
+use super::service_jobs::reconcile_stale_running_service_jobs;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     advance_route_controller_authority, BrowserHealth, BrowserHealthObservation, BrowserHost,
@@ -374,6 +375,9 @@ async fn reconcile_service_state_with_controller_fence(
 ) -> ServiceReconcileSummary {
     let before = state.clone();
     let reconciled_at = current_timestamp();
+    let reconciled_stale_running_jobs =
+        reconcile_stale_running_service_jobs(state, reconciled_at.as_str());
+    let reconciled_stale_running_job_count = reconciled_stale_running_jobs.len();
     refresh_persisted_browser_health(state).await;
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
@@ -416,6 +420,8 @@ async fn reconcile_service_state_with_controller_fence(
                 "expiredSessionLeases": summary.expired_session_leases.clone(),
                 "expiredSessionLeaseCount": summary.expired_session_leases.len(),
                 "completedRuntimeLifecycles": completed_runtime_lifecycles,
+                "reconciledStaleRunningJobs": reconciled_stale_running_jobs,
+                "reconciledStaleRunningJobCount": reconciled_stale_running_job_count,
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
                 "remoteView": summary.remote_view_repair.to_json(),
@@ -1874,6 +1880,17 @@ pub fn merge_reconciled_service_state(
             .is_some_and(|(target_session, before_session)| target_session == before_session);
         if should_remove {
             target.sessions.remove(id);
+        }
+    }
+
+    for (id, reconciled_job) in &reconciled.jobs {
+        let job_unchanged_after_reconcile_started = target
+            .jobs
+            .get(id)
+            .zip(before.jobs.get(id))
+            .is_some_and(|(target_job, before_job)| target_job == before_job);
+        if job_unchanged_after_reconcile_started && before.jobs.get(id) != Some(reconciled_job) {
+            target.jobs.insert(id.clone(), reconciled_job.clone());
         }
     }
 

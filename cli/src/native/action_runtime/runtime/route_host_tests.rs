@@ -3309,7 +3309,7 @@ fn test_service_profile_lease_gate_allows_duplicate_lane_override() {
 }
 
 #[test]
-fn authenticated_cold_access_plan_route_passes_profile_lease_gate() {
+fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profile_lease_gate() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("authenticated-cold-profile-lease-gate-home");
     fs::create_dir_all(&home).expect("test home should be created");
@@ -3348,51 +3348,45 @@ fn authenticated_cold_access_plan_route_passes_profile_lease_gate() {
     .expect("profile capability should authenticate");
     let session_id = authenticated_cold_session_name(&authority, &profile)
         .expect("authenticated profile should have a deterministic cold route");
-    state.sessions.insert(
-        session_id.clone(),
-        BrowserSession {
-            id: session_id.clone(),
-            service_name: Some("Last30days".to_string()),
-            principal_id: Some(principal_id.to_string()),
-            principal_provenance: Some(authority.provenance),
-            profile_id: Some(profile_id.to_string()),
-            lease: LeaseState::Exclusive,
-            ..BrowserSession::default()
-        },
-    );
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&state)
         .expect("service state should be persisted");
 
-    let decision = service_profile_lease_gate(
-        &json!({
-            "action": "tab_new",
-            "serviceName": "Last30days",
-            "runtimeProfile": profile_id,
-            "profile": user_data_dir.display().to_string(),
+    let command = json!({
+        "action": "tab_new",
+        "serviceName": "Last30days",
+        "runtimeProfile": profile_id,
+        "profile": user_data_dir.display().to_string(),
+        "sessionName": session_id,
+        "servicePrincipalId": authority.principal_id,
+        "servicePrincipalProvenance": authority.provenance.as_str(),
+        "serviceProfileCapabilityId": authority.capability_id,
+        "serviceProfileCapabilityRevision": authority.capability_revision,
+        "serviceProfileRouteAuthorization": {
+            "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
+            "kind": "authenticated_cold",
             "sessionName": session_id,
-            "servicePrincipalId": authority.principal_id,
-            "servicePrincipalProvenance": authority.provenance.as_str(),
-            "serviceProfileCapabilityId": authority.capability_id,
-            "serviceProfileCapabilityRevision": authority.capability_revision,
-            "serviceProfileRouteAuthorization": {
-                "schemaVersion": "agent-browser.profile-launch-route-authorization.v1",
-                "kind": "authenticated_cold",
-                "sessionName": session_id,
-                "profileId": profile_id,
-                "principalId": authority.principal_id,
-                "capabilityId": authority.capability_id,
-                "capabilityRevision": authority.capability_revision,
-                "runtimeOwnerRegistryRevision": 0,
-                "ownerId": null,
-                "ownerGeneration": null
-            },
-            "profileLeasePolicy": "wait"
-        }),
+            "profileId": profile_id,
+            "principalId": authority.principal_id,
+            "capabilityId": authority.capability_id,
+            "capabilityRevision": authority.capability_revision,
+            "runtimeOwnerRegistryRevision": 0,
+            "ownerId": null,
+            "ownerGeneration": null
+        },
+        "profileLeasePolicy": "wait"
+    });
+    let mut launch_options = LaunchOptions::default();
+    assert!(apply_authenticated_access_plan_profile_selection(
+        &mut launch_options,
+        &command,
         &session_id,
-        Some(0),
+        &state,
     )
-    .expect("the authenticated access-plan route should be executable");
+    .expect("the authenticated route should be evaluated"));
+
+    let decision = service_profile_lease_gate(&command, &session_id, Some(0))
+        .expect("the authenticated access-plan route should be executable");
 
     assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
     let _ = fs::remove_dir_all(&home);

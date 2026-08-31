@@ -194,6 +194,9 @@ fn test_service_profile_lease_gate_allows_service_control_commands() {
         "service_jobs",
         "service_incidents",
         "service_events",
+        "stream_enable",
+        "stream_disable",
+        "stream_status",
     ] {
         assert!(
             action_skips_browser_launch(action),

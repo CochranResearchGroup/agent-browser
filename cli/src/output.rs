@@ -7207,7 +7207,7 @@ Options:
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
   --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
   --service-monitor-interval <ms> Background active service-monitor scheduling interval (default: 60000); 0 disables it
-  --service-job-timeout <ms> Timeout for dispatched service control jobs; 0 disables it
+  --service-job-timeout <ms> Timeout for dispatched service control jobs (default: 900000); 0 selects the default
   --job-timeout-ms <ms>     Worker deadline for this command; keep it shorter than any caller process deadline
   --service-recovery-retry-budget <n> Browser recovery attempts before faulting (default: 3)
   --service-recovery-base-backoff <ms> Browser recovery backoff base delay (default: 1000)
@@ -7299,8 +7299,14 @@ Configuration:
   to run persisted browser-health reconciliation in the daemon background.
   Set `service.monitorIntervalMs` or pass `--service-monitor-interval` to
   enqueue due active service monitors through the daemon worker.
-  Set `service.jobTimeoutMs` or pass `--service-job-timeout` to mark
-  long-running service control jobs as timed_out.
+  Service control jobs default to a 900000 ms worker deadline. Set
+  `service.jobTimeoutMs` or pass `--service-job-timeout` to override it.
+  A zero or absent configured value selects that default, so every job has a
+  recovery horizon. Reconcile terminalizes stranded running records after
+  their persisted deadline.
+  Authenticated launch-new plans may reserve a deterministic session before
+  its record exists; execution proves the internal route receipt and rejects
+  only conflicting owner, profile, capability, or live-work evidence.
   Pass `--job-timeout-ms` on one CLI command when its worker deadline must be
   shorter than an outer subprocess or client deadline. The worker cancels the
   dispatched operation and releases the serialized command queue first.
@@ -7358,7 +7364,7 @@ Environment:
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
   AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS Background active service-monitor scheduling interval in ms (default: 60000; 0 disables it)
-  AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (disabled by default; 0 disables it)
+  AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (default: 900000; 0 selects the default)
   AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET Browser recovery attempts before faulting (default: 3)
   AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS Browser recovery backoff base delay in ms (default: 1000)
   AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS Browser recovery backoff ceiling in ms (default: 30000)

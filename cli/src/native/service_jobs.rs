@@ -6,6 +6,10 @@ use super::service_model::{JobState, ServiceJob, ServiceState};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 pub const MAX_SERVICE_JOBS: usize = 200;
+/// Every persisted running job needs a bounded recovery horizon. Callers may
+/// choose a larger explicit timeout for long work; legacy records without one
+/// use this conservative fallback during reconciliation.
+pub const DEFAULT_SERVICE_JOB_TIMEOUT_MS: u64 = 15 * 60 * 1_000;
 
 pub fn mutate_persisted_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
@@ -22,6 +26,54 @@ pub fn mutate_service_jobs_in_repository(
         prune_service_jobs(state);
         Ok(())
     })
+}
+
+/// Convert a running record whose persisted deadline has elapsed into a
+/// terminal, effect-uncertain timeout. This repairs state left behind when a
+/// worker exits or loses its terminal persistence race. It does not retry or
+/// compensate the original operation.
+pub fn reconcile_stale_running_service_jobs(state: &mut ServiceState, now: &str) -> Vec<String> {
+    let Ok(parsed_now) = chrono::DateTime::parse_from_rfc3339(now) else {
+        return Vec::new();
+    };
+    let mut reconciled = Vec::new();
+    for job in state
+        .jobs
+        .values_mut()
+        .filter(|job| job.state == JobState::Running)
+    {
+        let Some(started_at) = job.started_at.as_deref().or(job.submitted_at.as_deref()) else {
+            continue;
+        };
+        let Ok(started_at) = chrono::DateTime::parse_from_rfc3339(started_at) else {
+            continue;
+        };
+        let timeout_ms = job
+            .timeout_ms
+            .filter(|timeout_ms| *timeout_ms > 0)
+            .unwrap_or(DEFAULT_SERVICE_JOB_TIMEOUT_MS);
+        let elapsed_ms = parsed_now
+            .signed_duration_since(started_at)
+            .num_milliseconds();
+        if elapsed_ms < 0 || i128::from(elapsed_ms) < i128::from(timeout_ms) {
+            continue;
+        }
+        job.state = JobState::TimedOut;
+        job.completed_at = Some(now.to_string());
+        job.error = Some(format!(
+            "Service job exceeded its persisted {}ms deadline and was reconciled",
+            timeout_ms
+        ));
+        job.result = Some(json!({
+            "success": false,
+            "timedOut": true,
+            "reconciled": true,
+            "effectUncertain": true,
+            "timeoutMs": timeout_ms,
+        }));
+        reconciled.push(job.id.clone());
+    }
+    reconciled
 }
 
 pub fn cancel_persisted_service_job(
@@ -118,6 +170,75 @@ fn current_timestamp() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    #[test]
+    fn reconciliation_terminalizes_only_overdue_running_jobs() {
+        let mut state = ServiceState {
+            jobs: BTreeMap::from([
+                (
+                    "overdue".to_string(),
+                    ServiceJob {
+                        id: "overdue".to_string(),
+                        action: "tab_new".to_string(),
+                        state: JobState::Running,
+                        started_at: Some("2026-08-30T12:00:00Z".to_string()),
+                        timeout_ms: Some(1_000),
+                        ..ServiceJob::default()
+                    },
+                ),
+                (
+                    "active".to_string(),
+                    ServiceJob {
+                        id: "active".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Running,
+                        started_at: Some("2026-08-30T12:00:01.500Z".to_string()),
+                        timeout_ms: Some(1_000),
+                        ..ServiceJob::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let reconciled = reconcile_stale_running_service_jobs(&mut state, "2026-08-30T12:00:02Z");
+
+        assert_eq!(reconciled, vec!["overdue"]);
+        assert_eq!(state.jobs["overdue"].state, JobState::TimedOut);
+        assert_eq!(
+            state.jobs["overdue"].result.as_ref().unwrap()["effectUncertain"],
+            true
+        );
+        assert_eq!(state.jobs["active"].state, JobState::Running);
+    }
+
+    #[test]
+    fn reconciliation_bounds_legacy_running_jobs_without_timeout_metadata() {
+        let mut state = ServiceState {
+            jobs: BTreeMap::from([(
+                "legacy".to_string(),
+                ServiceJob {
+                    id: "legacy".to_string(),
+                    state: JobState::Running,
+                    started_at: Some("2026-08-30T12:00:00Z".to_string()),
+                    ..ServiceJob::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let reconciled = reconcile_stale_running_service_jobs(&mut state, "2026-08-30T12:15:00Z");
+
+        assert_eq!(reconciled, vec!["legacy"]);
+        assert_eq!(state.jobs["legacy"].state, JobState::TimedOut);
+    }
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {

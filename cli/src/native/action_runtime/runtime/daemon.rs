@@ -855,7 +855,7 @@ fn apply_existing_session_profile_selection(
 /// The daemon revalidates that internal identity against current Service State,
 /// requires the deterministic cold route, and refuses any competing owner,
 /// session, or live browser evidence before selecting the profile.
-fn apply_authenticated_access_plan_profile_selection(
+pub(crate) fn apply_authenticated_access_plan_profile_selection(
     options: &mut LaunchOptions,
     command: &Value,
     session_id: &str,
@@ -951,16 +951,18 @@ fn apply_authenticated_access_plan_profile_selection(
     let Some(profile) = state.profiles.get(&profile_id) else {
         return Ok(false);
     };
-    let Some(session) = state.sessions.get(session_id) else {
-        return Ok(false);
-    };
-    if session.profile_id.as_deref() != Some(profile_id.as_str())
-        || session.principal_id.as_deref() != Some(principal_id)
-        || session.principal_provenance != Some(authority.provenance)
-        || !session.browser_ids.is_empty()
-        || !session.tab_ids.is_empty()
-        || !matches!(session.lease, LeaseState::Exclusive)
-    {
+    // Access planning deliberately allocates a deterministic route before the
+    // first session record exists. If a prelaunch record is already present it
+    // must be the exact empty principal/profile placeholder; absence is the
+    // normal launch-new state, not an identity failure.
+    if state.sessions.get(session_id).is_some_and(|session| {
+        session.profile_id.as_deref() != Some(profile_id.as_str())
+            || session.principal_id.as_deref() != Some(principal_id)
+            || session.principal_provenance != Some(authority.provenance)
+            || !session.browser_ids.is_empty()
+            || !session.tab_ids.is_empty()
+            || !matches!(session.lease, LeaseState::Exclusive)
+    }) {
         return Ok(false);
     }
     let user_data_dir =

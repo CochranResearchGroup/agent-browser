@@ -22,6 +22,7 @@ use super::service_health::{
 };
 use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
+    DEFAULT_SERVICE_JOB_TIMEOUT_MS,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -159,6 +160,11 @@ impl ControlPlaneWorker {
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
         let running_cancellations = Arc::new(Mutex::new(HashMap::new()));
+        let service_job_timeout_ms = Some(
+            service_job_timeout_ms
+                .filter(|timeout_ms| *timeout_ms > 0)
+                .unwrap_or(DEFAULT_SERVICE_JOB_TIMEOUT_MS),
+        );
         let runtime_options = WorkerRuntimeOptions {
             service_reconcile_interval_ms,
             service_job_timeout_ms,
@@ -495,11 +501,13 @@ fn command_with_effective_job_timeout(
     mut command: Value,
     default_timeout_ms: Option<u64>,
 ) -> (Value, Option<u64>) {
-    let timeout_ms = command
+    let explicit_timeout_ms = command
         .get("jobTimeoutMs")
         .and_then(Value::as_u64)
+        .filter(|timeout_ms| *timeout_ms > 0);
+    let timeout_ms = explicit_timeout_ms.or(default_timeout_ms
         .filter(|timeout_ms| *timeout_ms > 0)
-        .or(default_timeout_ms.filter(|timeout_ms| *timeout_ms > 0));
+        .or(Some(DEFAULT_SERVICE_JOB_TIMEOUT_MS)));
     if command.get("jobTimeoutMs").is_none() {
         if let (Some(timeout_ms), Some(command)) = (timeout_ms, command.as_object_mut()) {
             command.insert("jobTimeoutMs".to_string(), json!(timeout_ms));
@@ -4296,6 +4304,19 @@ mod tests {
         );
         assert_eq!(timeout_ms, Some(4_321));
         assert_eq!(explicit["jobTimeoutMs"], 4_321);
+
+        let (built_in, timeout_ms) =
+            command_with_effective_job_timeout(json!({"action": "stream_status"}), None);
+        assert_eq!(timeout_ms, Some(DEFAULT_SERVICE_JOB_TIMEOUT_MS));
+        assert_eq!(built_in["jobTimeoutMs"], DEFAULT_SERVICE_JOB_TIMEOUT_MS);
+
+        let (zero_uses_built_in, timeout_ms) =
+            command_with_effective_job_timeout(json!({"action": "stream_status"}), Some(0));
+        assert_eq!(timeout_ms, Some(DEFAULT_SERVICE_JOB_TIMEOUT_MS));
+        assert_eq!(
+            zero_uses_built_in["jobTimeoutMs"],
+            DEFAULT_SERVICE_JOB_TIMEOUT_MS
+        );
     }
 
     #[tokio::test]
