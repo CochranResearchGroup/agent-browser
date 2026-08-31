@@ -607,7 +607,7 @@ pub(crate) async fn ensure_service_profile_lease_available(
     let wait_timeout_ms = profile_lease_wait_timeout_ms_from_command(command)?;
     match service_profile_lease_gate(command, session_id, Some(wait_timeout_ms))? {
         ServiceProfileLeaseGate::Ready => Ok(()),
-        ServiceProfileLeaseGate::Reject { error } => Err(error),
+        ServiceProfileLeaseGate::Reject { error, .. } => Err(error),
         ServiceProfileLeaseGate::Wait { .. } => Err(
             "Service profile lease wait must be handled by the control-plane scheduler".to_string(),
         ),

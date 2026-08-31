@@ -48,6 +48,7 @@ use crate::native::service_file_transfer::*;
 use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
+use crate::native::service_lifecycle::upsert_service_profile_and_session;
 
 #[test]
 fn exact_close_skips_launch_only_profile_lease_selection() {
@@ -2783,13 +2784,206 @@ fn test_service_profile_lease_gate_blocks_duplicate_live_profile_lane() {
     )
     .expect("lane gate should evaluate");
     match decision {
-        ServiceProfileLeaseGate::Reject { error } => {
+        ServiceProfileLeaseGate::Reject { error, .. } => {
             assert!(error.contains("Duplicate service profile lane blocked"));
             assert!(error.contains("browser-existing"));
             assert!(error.contains("allowDuplicateProfileLane=true"));
         }
         other => panic!("expected duplicate lane rejection, got {other:?}"),
     }
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn service_profile_lease_fail_open_rewrites_duplicate_lane_to_isolated_profile() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-fail-open-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-existing".to_string(),
+                BrowserProcess {
+                    id: "browser-existing".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["existing-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile",
+        "profileId": "acs-profile",
+        "profile": "/private/authenticated/acs-profile",
+        "profileLeasePolicy": "wait",
+        "profileLeaseWaitTimeoutMs": 2_000
+    });
+
+    let decision = service_profile_lease_admission(&mut command, "new-session", Some(0))
+        .expect("fail-open lease gate should evaluate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    let fallback_profile = command["runtimeProfile"]
+        .as_str()
+        .expect("fallback should select a runtime profile");
+    assert!(fallback_profile.starts_with("lease-fail-open-"));
+    assert_ne!(fallback_profile, "acs-profile");
+    assert!(command.get("profile").is_none());
+    assert!(command.get("profileId").is_none());
+    assert_eq!(command["profileLeaseFailOpen"]["applied"], true);
+    assert_eq!(
+        command["profileLeaseFailOpen"]["originalProfileId"],
+        "acs-profile"
+    );
+    assert_eq!(
+        command["profileLeaseFailOpen"]["reason"],
+        "duplicate_live_profile_lane"
+    );
+    let fallback_metadata =
+        service_profile_lease_metadata_for_command(&command, Some("new-session"))
+            .expect("fallback metadata should resolve")
+            .expect("fallback should carry launch metadata");
+    assert!(!fallback_metadata.persistent_profile);
+    let mut fallback_state = ServiceState::default();
+    upsert_service_profile_and_session(
+        &mut fallback_state,
+        "new-session",
+        fallback_metadata.profile_id.clone(),
+        &fallback_metadata,
+    );
+    let retained_fallback = fallback_state
+        .profiles
+        .get(fallback_profile)
+        .expect("fallback profile should be retained for lifecycle cleanup");
+    assert_eq!(
+        retained_fallback.profile_class,
+        ProfileClass::ManagedOneTime
+    );
+    assert!(!retained_fallback.persistent);
+    let mut repeated_command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile",
+        "profile": "/private/authenticated/acs-profile",
+        "profileLeasePolicy": "wait"
+    });
+    let repeated_decision =
+        service_profile_lease_admission(&mut repeated_command, "new-session", Some(0))
+            .expect("repeated fail-open admission should evaluate");
+    assert!(matches!(repeated_decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(repeated_command["runtimeProfile"], fallback_profile);
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn service_profile_lease_fail_open_rewrites_exclusive_conflict_without_waiting() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-fail-open-exclusive-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([(
+                "active-session".to_string(),
+                BrowserSession {
+                    id: "active-session".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile",
+        "profileLeasePolicy": "wait",
+        "profileLeaseWaitTimeoutMs": 2_000
+    });
+
+    let decision = service_profile_lease_admission(&mut command, "new-session", Some(0))
+        .expect("fail-open lease admission should evaluate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(
+        command["profileLeaseFailOpen"]["reason"],
+        "exclusive_profile_lease"
+    );
+    assert_eq!(command["profileLeasePolicy"], "reject");
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-fail-open-clear-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile",
+        "profileLeasePolicy": "wait",
+        "profileLeaseWaitTimeoutMs": 2_000
+    });
+    let original = command.clone();
+
+    let decision = service_profile_lease_admission(&mut command, "new-session", Some(0))
+        .expect("conflict-free lease admission should evaluate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(command, original);
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn service_profile_lease_admission_rejects_duplicate_lane_when_emergency_mode_is_disabled() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-fail-open-disabled-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.remove("AGENT_BROWSER_PROFILE_LEASE_MODE");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-existing".to_string(),
+                BrowserProcess {
+                    id: "browser-existing".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["existing-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "JournalDownloader",
+        "runtimeProfile": "acs-profile"
+    });
+
+    let decision = service_profile_lease_admission(&mut command, "new-session", Some(0))
+        .expect("normal lease admission should evaluate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Reject { .. }));
+    assert_eq!(command["runtimeProfile"], "acs-profile");
+    assert!(command.get("profileLeaseFailOpen").is_none());
     let _ = fs::remove_dir_all(&home);
 }
 #[test]

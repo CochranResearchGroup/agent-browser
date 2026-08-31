@@ -53,8 +53,94 @@ use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const PROFILE_LEASE_MODE_ENV: &str = "AGENT_BROWSER_PROFILE_LEASE_MODE";
+const PROFILE_LEASE_FAIL_OPEN_EPHEMERAL: &str = "fail_open_ephemeral";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ServiceProfileLeaseBlockReason {
+    DuplicateLiveProfileLane,
+    ExclusiveProfileLease,
+}
+
+impl ServiceProfileLeaseBlockReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::DuplicateLiveProfileLane => "duplicate_live_profile_lane",
+            Self::ExclusiveProfileLease => "exclusive_profile_lease",
+        }
+    }
+}
+
+/// Applies the opt-in emergency admission policy before the control-plane
+/// scheduler dispatches browser work. Conflict-free requests are unchanged.
+/// A blocked ordinary acquisition is redirected to a deterministic isolated
+/// managed-one-time profile instead of sharing the original user-data dir.
+pub(crate) fn service_profile_lease_admission(
+    command: &mut Value,
+    session_id: &str,
+    waited_ms: Option<u64>,
+) -> Result<ServiceProfileLeaseGate, String> {
+    let decision = service_profile_lease_gate(command, session_id, waited_ms)?;
+    let mode = match std::env::var(PROFILE_LEASE_MODE_ENV) {
+        Err(std::env::VarError::NotPresent) => return Ok(decision),
+        Err(error) => return Err(format!("Could not read {PROFILE_LEASE_MODE_ENV}: {error}")),
+        Ok(value) if value == PROFILE_LEASE_FAIL_OPEN_EPHEMERAL => value,
+        Ok(value) => {
+            return Err(format!(
+            "{PROFILE_LEASE_MODE_ENV} must be '{PROFILE_LEASE_FAIL_OPEN_EPHEMERAL}', got '{value}'"
+        ))
+        }
+    };
+    let reason = match decision {
+        ServiceProfileLeaseGate::Ready => return Ok(ServiceProfileLeaseGate::Ready),
+        ServiceProfileLeaseGate::Reject { reason, .. } => reason,
+        ServiceProfileLeaseGate::Wait { .. } => {
+            ServiceProfileLeaseBlockReason::ExclusiveProfileLease
+        }
+    };
+    let original_profile_id =
+        service_profile_lease_metadata_for_command(command, Some(session_id))?
+            .and_then(|metadata| metadata.profile_id)
+            .ok_or_else(|| {
+                "Fail-open profile lease admission could not resolve the blocked profile"
+                    .to_string()
+            })?;
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{session_id}\0{original_profile_id}").as_bytes())
+    );
+    let fallback_runtime_profile = format!("lease-fail-open-{}", &digest[..24]);
+    let object = command
+        .as_object_mut()
+        .ok_or_else(|| "Service command must be a JSON object".to_string())?;
+    object.remove("profile");
+    object.remove("profileId");
+    object.insert(
+        "runtimeProfile".to_string(),
+        json!(fallback_runtime_profile),
+    );
+    object.insert("profileClass".to_string(), json!("managed_one_time"));
+    object.insert("profileLeasePolicy".to_string(), json!("reject"));
+    object.insert(
+        "profileLeaseFailOpen".to_string(),
+        json!({
+            "schemaVersion": "agent-browser.profile-lease-fail-open.v1",
+            "applied": true,
+            "mode": mode,
+            "reason": reason.as_str(),
+            "originalProfileId": original_profile_id,
+            "fallbackRuntimeProfile": fallback_runtime_profile,
+            "authenticationPreserved": false,
+            "warning": "Profile lease fail-open used an isolated unauthenticated runtime profile",
+        }),
+    );
+    Ok(ServiceProfileLeaseGate::Ready)
+}
+
 pub(crate) fn service_profile_lease_gate(
     command: &Value,
     session_id: &str,
@@ -74,6 +160,7 @@ pub(crate) fn service_profile_lease_gate(
         && command.get("sessionName").is_none()
     {
         return Ok(ServiceProfileLeaseGate::Reject {
+            reason: ServiceProfileLeaseBlockReason::DuplicateLiveProfileLane,
             error: service_duplicate_profile_lane_error(
                 &metadata,
                 profile_id,
@@ -90,6 +177,7 @@ pub(crate) fn service_profile_lease_gate(
     }
     if policy == ProfileLeasePolicy::Reject {
         return Ok(ServiceProfileLeaseGate::Reject {
+            reason: ServiceProfileLeaseBlockReason::ExclusiveProfileLease,
             error: service_profile_lease_conflict_error(
                 &metadata,
                 profile_id,
@@ -100,6 +188,7 @@ pub(crate) fn service_profile_lease_gate(
     }
     if waited_ms.unwrap_or_default() >= wait_timeout_ms {
         return Ok(ServiceProfileLeaseGate::Reject {
+            reason: ServiceProfileLeaseBlockReason::ExclusiveProfileLease,
             error: service_profile_lease_conflict_error(
                 &metadata,
                 profile_id,

@@ -49,6 +49,10 @@ impl ServiceLaunchMetadata {
         selection_reason: Option<ProfileSelectionReason>,
     ) -> Self {
         let profile_id = launch_options_service_profile_id(options);
+        let lease_fail_open_profile = command
+            .and_then(|cmd| cmd.pointer("/profileLeaseFailOpen/applied"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let user_data_dir = options.profile.clone().or_else(|| {
             options.runtime_profile.as_ref().and_then(|name| {
                 runtime_profile_user_data_dir(name)
@@ -59,7 +63,7 @@ impl ServiceLaunchMetadata {
         Self {
             profile_name: options.runtime_profile.clone().or(options.profile.clone()),
             user_data_dir,
-            persistent_profile: profile_id.is_some(),
+            persistent_profile: profile_id.is_some() && !lease_fail_open_profile,
             keyring: if options.use_real_keychain {
                 ProfileKeyringPolicy::RealOsKeychain
             } else {

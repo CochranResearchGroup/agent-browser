@@ -1965,6 +1965,18 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 `AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true` is an operator override for
 runtime profiles with `browserFamily` set. Use it only when intentionally
 mixing a profile with a different resolved browser family.
+
+`AGENT_BROWSER_PROFILE_LEASE_MODE=fail_open_ephemeral` is an emergency
+service-acquisition mode. When an ordinary service request would be blocked by
+a duplicate live profile lane or an exclusive profile lease, the scheduler
+redirects that request to a deterministic isolated managed-one-time runtime
+profile. Conflict-free requests remain unchanged. The fallback does not copy
+authentication and does not bypass workstation upgrade admission,
+owner-generation or capability authority, or viewer/controller leases. Remove
+the environment value to restore normal reject and wait behavior. A redirected
+response includes top-level `profileLeaseFailOpen` metadata and a warning so
+clients can distinguish the unauthenticated fallback from the requested
+profile.
 | `--color-scheme <scheme>` | Color scheme: `dark`, `light`, `no-preference` (or `AGENT_BROWSER_COLOR_SCHEME` env) |
 | `--download-path <path>` | Default download directory (or `AGENT_BROWSER_DOWNLOAD_PATH` env) |
 | `--content-boundaries` | Wrap page output in boundary markers for LLM safety (or `AGENT_BROWSER_CONTENT_BOUNDARIES` env) |
