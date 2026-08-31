@@ -3028,6 +3028,8 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
         let repository =
             crate::native::service_store::LockedServiceStateRepository::default_json()?;
         let service_effects = repository.mutate(|state| {
+            let completed_runtime_lifecycles =
+                crate::native::service_health::reconcile_absent_runtime_lifecycles(state);
             let process_gc = crate::native::service_resources::service_gc_unattended_response(state);
             if process_gc.get("applied").and_then(Value::as_bool) != Some(true) {
                 return Err(format!(
@@ -3066,6 +3068,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
                 })
                 .count();
             Ok(serde_json::json!({
+                "completedRuntimeLifecycles": completed_runtime_lifecycles,
                 "processGc": process_gc,
                 "retainedState": retained_state,
                 "resources": resources,

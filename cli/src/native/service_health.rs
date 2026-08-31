@@ -432,7 +432,7 @@ async fn reconcile_service_state_with_controller_fence(
     summary
 }
 
-fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> usize {
+pub(crate) fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> usize {
     use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 
     let profile_roots = state
