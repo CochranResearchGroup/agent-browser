@@ -32,7 +32,7 @@
     "requestDigest": { "type": "string", "minLength": 1 },
     "idempotencyKey": { "type": "string", "minLength": 1 },
     "operation": { "const": "recover" },
-    "resource": { "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource" },
+    "resource": { "$ref": "lease-recovery-authorization.v4.schema.json#/$defs/resource" },
     "claimId": { "type": "string", "minLength": 1 },
     "principalId": { "type": "string", "minLength": 1 },
     "recoveryControllerId": { "type": "string", "minLength": 1 },

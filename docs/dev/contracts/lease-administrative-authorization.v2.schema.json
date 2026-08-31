@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-browser.local/contracts/lease-administrative-authorization.v1.schema.json",
+  "$id": "https://agent-browser.local/contracts/lease-administrative-authorization.v2.schema.json",
   "title": "Agent Browser scoped administrative lease authorization",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "signingKeyId",
+    "signingKeyEpoch",
     "administratorId",
     "administratorRevision",
     "resource",
@@ -21,11 +22,12 @@
     "proof"
   ],
   "properties": {
-    "schemaVersion": { "const": "agent-browser.lease-administrative-authorization.v1" },
+    "schemaVersion": { "const": "agent-browser.lease-administrative-authorization.v2" },
     "signingKeyId": { "type": "string", "minLength": 1 },
+    "signingKeyEpoch": { "type": "integer", "minimum": 1 },
     "administratorId": { "type": "string", "minLength": 1 },
     "administratorRevision": { "type": "integer", "minimum": 1 },
-    "resource": { "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource" },
+    "resource": { "$ref": "lease-recovery-authorization.v4.schema.json#/$defs/resource" },
     "claimId": { "type": "string", "minLength": 1 },
     "principalId": { "type": "string", "minLength": 1 },
     "claimRevision": { "type": "integer", "minimum": 1 },

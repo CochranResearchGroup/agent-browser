@@ -21,27 +21,28 @@ pub(crate) const LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION: &str =
 pub(crate) const LEASE_RECOVERY_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-recovery-receipt.v1";
 pub(crate) const LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION: &str =
-    "agent-browser.lease-effect-authorization.v4";
+    "agent-browser.lease-effect-authorization.v5";
 pub(crate) const LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION: &str =
-    "agent-browser.lease-recovery-authorization.v3";
+    "agent-browser.lease-recovery-authorization.v4";
 pub(crate) const LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION: &str =
-    "agent-browser.lease-administrative-authorization.v1";
+    "agent-browser.lease-administrative-authorization.v2";
 pub(crate) const LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION: &str =
-    "agent-browser.lease-authority-signing-key.v2";
+    "agent-browser.lease-authority-signing-key.v3";
 pub(crate) const LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION: &str =
-    "agent-browser.lease-authority-verification-key.v1";
+    "agent-browser.lease-authority-verification-keyring.v2";
 
 const MAX_LEASE_CLAIM_TENURE_SECONDS: i64 = 300;
 const MAX_STRICT_RECOVERY_TENURE_SECONDS: i64 = 300;
 const MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS: i64 = 120;
-const LEASE_AUTHORITY_SIGNING_KEY_FILE: &str = "lease-authority-signing-key.v2.json";
-const LEASE_AUTHORITY_VERIFICATION_KEY_FILE: &str = "lease-authority-verification-key.v1.json";
+const LEASE_AUTHORITY_SIGNING_KEY_FILE: &str = "lease-authority-signing-key.v3.json";
+const LEASE_AUTHORITY_VERIFICATION_KEY_FILE: &str = "lease-authority-verification-keyring.v2.json";
 
 /// Private signing authority held outside Service State. The key identifier is
 /// safe to persist in plans and receipts; the secret is never serialized by
 /// this type or included in debug output.
 #[derive(Clone, PartialEq, Eq)]
 struct LeaseAuthoritySigningKey {
+    key_epoch: u64,
     key_id: String,
     private_key: [u8; 32],
     public_key: [u8; 32],
@@ -59,6 +60,11 @@ impl std::fmt::Debug for LeaseAuthoritySigningKey {
 
 impl LeaseAuthoritySigningKey {
     fn from_private_bytes(private_key: [u8; 32]) -> Self {
+        Self::from_private_bytes_at_epoch(private_key, 1)
+    }
+
+    fn from_private_bytes_at_epoch(private_key: [u8; 32], key_epoch: u64) -> Self {
+        assert!(key_epoch > 0, "lease signing-key epoch must be positive");
         let key = Ed25519KeyPair::from_seed_unchecked(&private_key)
             .expect("32-byte Ed25519 private seed is valid");
         let public_key: [u8; 32] = key
@@ -67,6 +73,7 @@ impl LeaseAuthoritySigningKey {
             .try_into()
             .expect("Ed25519 public keys are 32 bytes");
         Self {
+            key_epoch,
             key_id: stable_id(
                 "lease-authority-ed25519-verification-key-v1",
                 &hex::encode(public_key),
@@ -78,6 +85,7 @@ impl LeaseAuthoritySigningKey {
 
     fn verification_key(&self) -> LeaseAuthorityVerificationKey {
         LeaseAuthorityVerificationKey {
+            key_epoch: self.key_epoch,
             key_id: self.key_id.clone(),
             public_key: self.public_key,
         }
@@ -88,6 +96,7 @@ impl LeaseAuthoritySigningKey {
 /// authorization with this type but cannot use it to mint another one.
 #[derive(Clone, PartialEq, Eq)]
 struct LeaseAuthorityVerificationKey {
+    key_epoch: u64,
     key_id: String,
     public_key: [u8; 32],
 }
@@ -103,8 +112,12 @@ impl std::fmt::Debug for LeaseAuthorityVerificationKey {
 }
 
 impl LeaseAuthorityVerificationKey {
-    fn from_public_bytes(public_key: [u8; 32]) -> Result<Self, String> {
+    fn from_public_bytes_at_epoch(public_key: [u8; 32], key_epoch: u64) -> Result<Self, String> {
+        if key_epoch == 0 {
+            return Err("lease_authority_verification_key_epoch_invalid".to_string());
+        }
         Ok(Self {
+            key_epoch,
             key_id: stable_id(
                 "lease-authority-ed25519-verification-key-v1",
                 &hex::encode(public_key),
@@ -113,10 +126,62 @@ impl LeaseAuthorityVerificationKey {
         })
     }
 
-    fn verify_key_id(&self, key_id: &str) -> Result<(), LeaseAuthorityError> {
-        (self.key_id == key_id)
+    fn verify_key_identity(&self, key_id: &str, key_epoch: u64) -> Result<(), LeaseAuthorityError> {
+        (self.key_id == key_id && self.key_epoch == key_epoch)
             .then_some(())
             .ok_or(LeaseAuthorityError::SigningKeyMismatch)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LeaseAuthorityVerificationKeyring {
+    key_epoch: u64,
+    active_key_id: String,
+    keys: BTreeMap<String, LeaseAuthorityVerificationKey>,
+}
+
+impl LeaseAuthorityVerificationKeyring {
+    fn from_active(signing_key: &LeaseAuthoritySigningKey) -> Self {
+        let verification_key = signing_key.verification_key();
+        Self {
+            key_epoch: signing_key.key_epoch,
+            active_key_id: signing_key.key_id.clone(),
+            keys: BTreeMap::from([(verification_key.key_id.clone(), verification_key)]),
+        }
+    }
+
+    fn verification_key(
+        &self,
+        key_id: &str,
+        key_epoch: u64,
+    ) -> Result<&LeaseAuthorityVerificationKey, LeaseAuthorityError> {
+        if key_epoch == 0 || key_epoch > self.key_epoch {
+            return Err(LeaseAuthorityError::SigningKeyMismatch);
+        }
+        let key = self
+            .keys
+            .get(key_id)
+            .ok_or(LeaseAuthorityError::SigningKeyMismatch)?;
+        key.verify_key_identity(key_id, key_epoch)?;
+        Ok(key)
+    }
+
+    fn with_rotated_active(&self, signing_key: &LeaseAuthoritySigningKey) -> Result<Self, String> {
+        let expected_epoch = self
+            .key_epoch
+            .checked_add(1)
+            .ok_or_else(|| "lease_authority_signing_key_epoch_exhausted".to_string())?;
+        if signing_key.key_epoch != expected_epoch {
+            return Err("lease_authority_signing_key_epoch_mismatch".to_string());
+        }
+        let mut keys = self.keys.clone();
+        let verification_key = signing_key.verification_key();
+        keys.insert(verification_key.key_id.clone(), verification_key);
+        Ok(Self {
+            key_epoch: signing_key.key_epoch,
+            active_key_id: signing_key.key_id.clone(),
+            keys,
+        })
     }
 }
 
@@ -124,6 +189,7 @@ impl LeaseAuthorityVerificationKey {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthoritySigningKeyFile {
     schema_version: String,
+    key_epoch: u64,
     key_id: String,
     private_key_hex: String,
     public_key_hex: String,
@@ -131,10 +197,19 @@ struct LeaseAuthoritySigningKeyFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct LeaseAuthorityVerificationKeyFile {
-    schema_version: String,
+struct LeaseAuthorityVerificationKeyFileEntry {
+    key_epoch: u64,
     key_id: String,
     public_key_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityVerificationKeyFile {
+    schema_version: String,
+    key_epoch: u64,
+    active_key_id: String,
+    keys: Vec<LeaseAuthorityVerificationKeyFileEntry>,
 }
 
 /// Loads the user-scoped lease signing root, creating it atomically when this
@@ -172,6 +247,7 @@ fn load_or_create_lease_authority_signing_key() -> Result<LeaseAuthoritySigningK
     let key = LeaseAuthoritySigningKey::from_private_bytes(private_key);
     let document = LeaseAuthoritySigningKeyFile {
         schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
+        key_epoch: key.key_epoch,
         key_id: key.key_id.clone(),
         private_key_hex: hex::encode(key.private_key),
         public_key_hex: hex::encode(key.public_key),
@@ -217,8 +293,8 @@ fn signer_bootstrap_requires_recovery(
 
 /// Loads only public verification material. Effect and recovery executors do
 /// not read the private signing root and cannot initialize an authority domain.
-fn load_existing_lease_authority_verification_key() -> Result<LeaseAuthorityVerificationKey, String>
-{
+fn load_existing_lease_authority_verification_key(
+) -> Result<LeaseAuthorityVerificationKeyring, String> {
     let path = lease_authority_verification_key_path()?;
     if !path.exists() {
         return Err(format!(
@@ -279,7 +355,8 @@ fn load_lease_authority_signing_key_file(path: &Path) -> Result<LeaseAuthoritySi
     let private_key: [u8; 32] = decoded
         .try_into()
         .map_err(|_| "lease_authority_signing_key_private_key_invalid".to_string())?;
-    let key = LeaseAuthoritySigningKey::from_private_bytes(private_key);
+    let key =
+        LeaseAuthoritySigningKey::from_private_bytes_at_epoch(private_key, document.key_epoch);
     if key.key_id != document.key_id || hex::encode(key.public_key) != document.public_key_hex {
         return Err("lease_authority_signing_key_id_mismatch".to_string());
     }
@@ -290,10 +367,10 @@ fn publish_lease_authority_verification_key(
     signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<(), String> {
     let path = lease_authority_verification_key_path()?;
-    let verification_key = signing_key.verification_key();
+    let verification_keyring = LeaseAuthorityVerificationKeyring::from_active(signing_key);
     if path.exists() {
         let existing = load_lease_authority_verification_key_file(&path)?;
-        return (existing == verification_key)
+        return (existing == verification_keyring)
             .then_some(())
             .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string());
     }
@@ -302,8 +379,17 @@ fn publish_lease_authority_verification_key(
         .ok_or_else(|| "lease_authority_verification_key_parent_missing".to_string())?;
     let document = LeaseAuthorityVerificationKeyFile {
         schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
-        key_id: verification_key.key_id.clone(),
-        public_key_hex: hex::encode(verification_key.public_key),
+        key_epoch: verification_keyring.key_epoch,
+        active_key_id: verification_keyring.active_key_id.clone(),
+        keys: verification_keyring
+            .keys
+            .values()
+            .map(|key| LeaseAuthorityVerificationKeyFileEntry {
+                key_epoch: key.key_epoch,
+                key_id: key.key_id.clone(),
+                public_key_hex: hex::encode(key.public_key),
+            })
+            .collect(),
     };
     let encoded = serde_json::to_vec_pretty(&document)
         .map_err(|error| format!("lease_authority_verification_key_encode_failed:{error}"))?;
@@ -322,7 +408,7 @@ fn publish_lease_authority_verification_key(
             let _ = fs::remove_file(&temporary);
             sync_authority_key_directory(parent)?;
             let existing = load_lease_authority_verification_key_file(&path)?;
-            (existing == verification_key)
+            (existing == verification_keyring)
                 .then_some(())
                 .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string())
         }
@@ -338,7 +424,7 @@ fn publish_lease_authority_verification_key(
 
 fn load_lease_authority_verification_key_file(
     path: &Path,
-) -> Result<LeaseAuthorityVerificationKey, String> {
+) -> Result<LeaseAuthorityVerificationKeyring, String> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         format!(
             "lease_authority_verification_key_metadata_failed:{}:{error}",
@@ -363,16 +449,39 @@ fn load_lease_authority_verification_key_file(
     if document.schema_version != LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION {
         return Err("lease_authority_verification_key_schema_unsupported".to_string());
     }
-    let decoded = hex::decode(&document.public_key_hex)
-        .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
-    let public_key: [u8; 32] = decoded
-        .try_into()
-        .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
-    let key = LeaseAuthorityVerificationKey::from_public_bytes(public_key)?;
-    if key.key_id != document.key_id {
+    if document.key_epoch == 0
+        || document.active_key_id.trim().is_empty()
+        || document.keys.is_empty()
+    {
+        return Err("lease_authority_verification_keyring_invalid".to_string());
+    }
+    let mut keys = BTreeMap::new();
+    for entry in document.keys {
+        if entry.key_epoch == 0 || entry.key_epoch > document.key_epoch {
+            return Err("lease_authority_verification_key_epoch_invalid".to_string());
+        }
+        let decoded = hex::decode(&entry.public_key_hex)
+            .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
+        let public_key: [u8; 32] = decoded
+            .try_into()
+            .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
+        let key =
+            LeaseAuthorityVerificationKey::from_public_bytes_at_epoch(public_key, entry.key_epoch)?;
+        if key.key_id != entry.key_id || keys.insert(key.key_id.clone(), key).is_some() {
+            return Err("lease_authority_verification_key_id_mismatch".to_string());
+        }
+    }
+    let active = keys
+        .get(&document.active_key_id)
+        .ok_or_else(|| "lease_authority_verification_active_key_missing".to_string())?;
+    if active.key_epoch != document.key_epoch {
         return Err("lease_authority_verification_key_id_mismatch".to_string());
     }
-    Ok(key)
+    Ok(LeaseAuthorityVerificationKeyring {
+        key_epoch: document.key_epoch,
+        active_key_id: document.active_key_id,
+        keys,
+    })
 }
 
 fn write_private_signing_key_file(path: &Path, encoded: &[u8]) -> Result<(), String> {
@@ -778,6 +887,7 @@ pub(crate) struct LeaseClaimRecoveryOutcome {
 pub(crate) struct LeaseEffectAuthorization {
     schema_version: String,
     signing_key_id: String,
+    signing_key_epoch: u64,
     resource: LeaseResourceKey,
     claim_id: String,
     principal_id: String,
@@ -801,6 +911,7 @@ pub(crate) struct LeaseEffectAuthorization {
 pub(crate) struct LeaseRecoveryAuthorization {
     schema_version: String,
     signing_key_id: String,
+    signing_key_epoch: u64,
     resource: LeaseResourceKey,
     claim_id: String,
     principal_id: String,
@@ -825,6 +936,7 @@ pub(crate) struct LeaseRecoveryAuthorization {
 pub(crate) struct LeaseAdministrativeAuthorization {
     schema_version: String,
     signing_key_id: String,
+    signing_key_epoch: u64,
     administrator_id: String,
     administrator_revision: u64,
     resource: LeaseResourceKey,
@@ -845,6 +957,7 @@ impl std::fmt::Debug for LeaseAdministrativeAuthorization {
             .debug_struct("LeaseAdministrativeAuthorization")
             .field("schema_version", &self.schema_version)
             .field("signing_key_id", &self.signing_key_id)
+            .field("signing_key_epoch", &self.signing_key_epoch)
             .field("administrator_id", &self.administrator_id)
             .field("administrator_revision", &self.administrator_revision)
             .field("resource", &self.resource)
@@ -1030,6 +1143,7 @@ impl ActiveLeaseClaim {
         let mut authorization = LeaseEffectAuthorization {
             schema_version: LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION.to_string(),
             signing_key_id: signing_key.key_id.clone(),
+            signing_key_epoch: signing_key.key_epoch,
             resource: self.resource.clone(),
             claim_id: self.claim_id.clone(),
             principal_id: self.principal_id.clone(),
@@ -1297,7 +1411,7 @@ impl LeaseAuthorityState {
     fn release_with_receipt(
         &mut self,
         request: ReleaseLeaseClaimRequest,
-        verification_key: &LeaseAuthorityVerificationKey,
+        verification_key: &LeaseAuthorityVerificationKeyring,
     ) -> Result<LeaseClaimReleaseOutcome, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
         if let Some(replayed) = self.replay_release(&request)? {
@@ -1396,7 +1510,7 @@ impl LeaseAuthorityState {
     fn revoke_with_receipt(
         &mut self,
         request: RevokeLeaseClaimRequest,
-        verification_key: &LeaseAuthorityVerificationKey,
+        verification_key: &LeaseAuthorityVerificationKeyring,
     ) -> Result<LeaseClaimRevocationOutcome, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
         if let Some(replayed) = self.replay_revocation(&request)? {
@@ -1505,7 +1619,7 @@ impl LeaseAuthorityState {
     fn recover_with_receipt(
         &mut self,
         request: RecoverLeaseClaimRequest,
-        verification_key: &LeaseAuthorityVerificationKey,
+        verification_key: &LeaseAuthorityVerificationKeyring,
     ) -> Result<LeaseClaimRecoveryOutcome, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
         if let Some(replayed) = self.replay_recovery(&request)? {
@@ -1939,7 +2053,7 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
 fn release_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
     repository: &R,
     request: ReleaseLeaseClaimRequest,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_key: &LeaseAuthorityVerificationKeyring,
 ) -> Result<LeaseClaimReleaseOutcome, String> {
     repository.mutate(|state| {
         if let Some(replayed) = state
@@ -2013,7 +2127,7 @@ pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
 fn recover_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
     repository: &R,
     request: RecoverLeaseClaimRequest,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_key: &LeaseAuthorityVerificationKeyring,
 ) -> Result<LeaseClaimRecoveryOutcome, String> {
     repository.mutate(|state| {
         if let Some(replayed) = state
@@ -2077,7 +2191,7 @@ pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
 fn revoke_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
     repository: &R,
     request: RevokeLeaseClaimRequest,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_key: &LeaseAuthorityVerificationKeyring,
 ) -> Result<LeaseClaimRevocationOutcome, String> {
     repository.mutate(|state| {
         if let Some(replayed) = state
@@ -2115,7 +2229,7 @@ fn authorize_lease_effect_in_repository_with_verification_key<R: ServiceStateRep
     authorization: &LeaseEffectAuthorization,
     now: &str,
     context: &LeaseEffectContext<'_>,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_key: &LeaseAuthorityVerificationKeyring,
 ) -> Result<ActiveLeaseClaim, String> {
     let state = repository.load_snapshot()?;
     let claim = state
@@ -2205,7 +2319,7 @@ fn authorize_lease_effect_in_repository_with_signing_key<R: ServiceStateReposito
         authorization,
         now,
         context,
-        &signing_key.verification_key(),
+        &LeaseAuthorityVerificationKeyring::from_active(signing_key),
     )
 }
 
@@ -2218,7 +2332,7 @@ fn release_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>
     release_lease_claim_in_repository_with_verification_key(
         repository,
         request,
-        &signing_key.verification_key(),
+        &LeaseAuthorityVerificationKeyring::from_active(signing_key),
     )
 }
 
@@ -2231,7 +2345,7 @@ fn recover_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>
     recover_lease_claim_in_repository_with_verification_key(
         repository,
         request,
-        &signing_key.verification_key(),
+        &LeaseAuthorityVerificationKeyring::from_active(signing_key),
     )
 }
 
@@ -2244,7 +2358,7 @@ fn revoke_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>(
     revoke_lease_claim_in_repository_with_verification_key(
         repository,
         request,
-        &signing_key.verification_key(),
+        &LeaseAuthorityVerificationKeyring::from_active(signing_key),
     )
 }
 
@@ -2392,6 +2506,7 @@ fn issue_lease_recovery_authorization_for_state_with_signing_key(
     let mut authorization = LeaseRecoveryAuthorization {
         schema_version: LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION.to_string(),
         signing_key_id: signing_key.key_id.clone(),
+        signing_key_epoch: signing_key.key_epoch,
         resource: current.resource.clone(),
         claim_id: current.claim_id.clone(),
         principal_id: current.principal_id.clone(),
@@ -2473,6 +2588,7 @@ fn issue_lease_administrative_authorization_for_state_with_signing_key(
     let mut authorization = LeaseAdministrativeAuthorization {
         schema_version: LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION.to_string(),
         signing_key_id: signing_key.key_id.clone(),
+        signing_key_epoch: signing_key.key_epoch,
         administrator_id: intent.administrator_id.clone(),
         administrator_revision: intent.administrator_revision,
         resource: current.resource.clone(),
@@ -2693,9 +2809,12 @@ fn sign_effect_authorization(
 
 fn verify_effect_authorization(
     authorization: &LeaseEffectAuthorization,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_keys: &LeaseAuthorityVerificationKeyring,
 ) -> Result<(), LeaseAuthorityError> {
-    verification_key.verify_key_id(&authorization.signing_key_id)?;
+    let verification_key = verification_keys.verification_key(
+        &authorization.signing_key_id,
+        authorization.signing_key_epoch,
+    )?;
     let proof =
         hex::decode(&authorization.proof).map_err(|_| LeaseAuthorityError::InvalidEffectProof)?;
     signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
@@ -2720,9 +2839,12 @@ fn sign_recovery_authorization(
 
 fn verify_recovery_authorization(
     authorization: &LeaseRecoveryAuthorization,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_keys: &LeaseAuthorityVerificationKeyring,
 ) -> Result<(), LeaseAuthorityError> {
-    verification_key.verify_key_id(&authorization.signing_key_id)?;
+    let verification_key = verification_keys.verification_key(
+        &authorization.signing_key_id,
+        authorization.signing_key_epoch,
+    )?;
     let proof =
         hex::decode(&authorization.proof).map_err(|_| LeaseAuthorityError::InvalidRecoveryProof)?;
     signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
@@ -2747,9 +2869,12 @@ fn sign_administrative_authorization(
 
 fn verify_administrative_authorization(
     authorization: &LeaseAdministrativeAuthorization,
-    verification_key: &LeaseAuthorityVerificationKey,
+    verification_keys: &LeaseAuthorityVerificationKeyring,
 ) -> Result<(), LeaseAuthorityError> {
-    verification_key.verify_key_id(&authorization.signing_key_id)?;
+    let verification_key = verification_keys.verification_key(
+        &authorization.signing_key_id,
+        authorization.signing_key_epoch,
+    )?;
     let proof = hex::decode(&authorization.proof)
         .map_err(|_| LeaseAuthorityError::InvalidAdministrativeProof)?;
     signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
@@ -2762,9 +2887,10 @@ fn verify_administrative_authorization(
 
 fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> String {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authorization.schema_version,
         authorization.signing_key_id,
+        authorization.signing_key_epoch,
         authorization.resource.storage_key(),
         authorization.claim_id,
         authorization.principal_id,
@@ -2783,9 +2909,10 @@ fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> Str
 
 fn recovery_authorization_payload(authorization: &LeaseRecoveryAuthorization) -> String {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authorization.schema_version,
         authorization.signing_key_id,
+        authorization.signing_key_epoch,
         authorization.resource.storage_key(),
         authorization.claim_id,
         authorization.principal_id,
@@ -2806,9 +2933,10 @@ fn administrative_authorization_payload(
     authorization: &LeaseAdministrativeAuthorization,
 ) -> String {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authorization.schema_version,
         authorization.signing_key_id,
+        authorization.signing_key_epoch,
         authorization.administrator_id,
         authorization.administrator_revision,
         authorization.resource.storage_key(),
@@ -2948,6 +3076,7 @@ mod tests {
         let signing_key = signing_key();
         let document = LeaseAuthoritySigningKeyFile {
             schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
+            key_epoch: signing_key.key_epoch,
             key_id: signing_key.key_id.clone(),
             private_key_hex: hex::encode(signing_key.private_key),
             public_key_hex: hex::encode(signing_key.public_key),
@@ -2962,16 +3091,22 @@ mod tests {
 
         let verification_path = directory.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
         let verification_key = loaded.verification_key();
+        let verification_keyring = LeaseAuthorityVerificationKeyring::from_active(&loaded);
         let verification_document = LeaseAuthorityVerificationKeyFile {
             schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
-            key_id: verification_key.key_id.clone(),
-            public_key_hex: hex::encode(verification_key.public_key),
+            key_epoch: verification_keyring.key_epoch,
+            active_key_id: verification_keyring.active_key_id.clone(),
+            keys: vec![LeaseAuthorityVerificationKeyFileEntry {
+                key_epoch: verification_key.key_epoch,
+                key_id: verification_key.key_id.clone(),
+                public_key_hex: hex::encode(verification_key.public_key),
+            }],
         };
         let encoded_verification = serde_json::to_vec(&verification_document).unwrap();
         write_private_signing_key_file(&verification_path, &encoded_verification).unwrap();
         let loaded_verification =
             load_lease_authority_verification_key_file(&verification_path).unwrap();
-        assert_eq!(loaded_verification, verification_key);
+        assert_eq!(loaded_verification, verification_keyring);
         assert!(!String::from_utf8(encoded_verification)
             .unwrap()
             .contains(&document.private_key_hex));
@@ -3012,6 +3147,45 @@ mod tests {
         assert!(!signer_bootstrap_requires_recovery(false, false));
         assert!(!signer_bootstrap_requires_recovery(true, true));
         assert!(!signer_bootstrap_requires_recovery(true, false));
+    }
+
+    #[test]
+    fn verifier_keyring_preserves_bounded_old_proofs_and_rejects_epoch_rollback() {
+        let first_signer = LeaseAuthoritySigningKey::from_private_bytes_at_epoch([0x5a; 32], 1);
+        let second_signer = LeaseAuthoritySigningKey::from_private_bytes_at_epoch([0x6b; 32], 2);
+        let first_keyring = LeaseAuthorityVerificationKeyring::from_active(&first_signer);
+        let rotated_keyring = first_keyring.with_rotated_active(&second_signer).unwrap();
+        let mut authority = LeaseAuthorityState::default();
+        let claim = authority.acquire(request()).unwrap();
+
+        let first_authorization = claim
+            .effect_authorization(
+                &capability(),
+                &effect_intent("browser_launch", "session:last30days", "launch:epoch-1"),
+                &first_signer,
+            )
+            .unwrap();
+        let second_authorization = claim
+            .effect_authorization(
+                &capability(),
+                &effect_intent("browser_launch", "session:last30days", "launch:epoch-2"),
+                &second_signer,
+            )
+            .unwrap();
+
+        verify_effect_authorization(&first_authorization, &rotated_keyring).unwrap();
+        verify_effect_authorization(&second_authorization, &rotated_keyring).unwrap();
+        assert_eq!(
+            verify_effect_authorization(&second_authorization, &first_keyring),
+            Err(LeaseAuthorityError::SigningKeyMismatch)
+        );
+
+        let mut wrong_epoch = second_authorization;
+        wrong_epoch.signing_key_epoch = 1;
+        assert_eq!(
+            verify_effect_authorization(&wrong_epoch, &rotated_keyring),
+            Err(LeaseAuthorityError::SigningKeyMismatch)
+        );
     }
 
     #[test]

@@ -28,15 +28,17 @@ doctor projection. `service-profile-lease-detail-response.v1.schema.json`,
 `service-profile-lease-explain-response.v1.schema.json`,
 `service-profile-lease-doctor-response.v1.schema.json`, and
 `service-profile-lease-mutation-response.v1.schema.json` cover exact reads and
-authenticated owner actions. `lease-recovery-authorization.v3.schema.json`,
+authenticated owner actions. `lease-recovery-authorization.v4.schema.json`,
 `lease-recovery-receipt.v1.schema.json`, and the two
 `service-profile-lease-recovery-*-response.v1.schema.json` files cover strict
 owner recovery planning, apply, and idempotent replay. Raw profile capabilities are transport-only
 secrets and never belong in retained service contracts or events.
-`lease-effect-authorization.v4.schema.json` defines the Ed25519-signed,
+`lease-effect-authorization.v5.schema.json` defines the Ed25519-signed,
 request-scoped launch and exact-holder effect bearer. Executors need only the
-public verification key and cannot mint another bearer.
-`lease-administrative-authorization.v1.schema.json` defines the distinct,
+versioned public verification keyring and cannot mint another bearer. Every
+authorization carries a positive `signingKeyEpoch`; verification selects the
+exact retained public key and rejects unknown, mismatched, or future epochs.
+`lease-administrative-authorization.v2.schema.json` defines the distinct,
 exact-resource, revision-bound administrative authorization consumed by the
 revoke kernel. Its public plan and apply surfaces remain gated on the separate
 administrator bootstrap and custody slice.

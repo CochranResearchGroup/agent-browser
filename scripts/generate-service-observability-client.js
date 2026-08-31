@@ -1320,8 +1320,9 @@ export interface ServiceProfileLeaseReconcilePlanResponse { plan: ServiceProfile
 export interface ServiceProfileLeaseReconcileApplyResponse { receipt: ServiceProfileLeaseReconcileReceipt; }
 
 export interface ServiceLeaseRecoveryAuthorization {
-  schemaVersion: 'agent-browser.lease-recovery-authorization.v3';
+  schemaVersion: 'agent-browser.lease-recovery-authorization.v4';
   signingKeyId: string;
+  signingKeyEpoch: number;
   resource: ServiceLeaseResourceKey;
   claimId: string;
   principalId: string;
@@ -1421,8 +1422,9 @@ export interface ServiceActiveLeaseClaim {
   ownerGeneration: number | null;
 }
 export interface ServiceLeaseEffectAuthorization {
-  schemaVersion: 'agent-browser.lease-effect-authorization.v4';
+  schemaVersion: 'agent-browser.lease-effect-authorization.v5';
   signingKeyId: string;
+  signingKeyEpoch: number;
   resource: ServiceLeaseResourceKey;
   claimId: string;
   principalId: string;

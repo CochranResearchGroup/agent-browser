@@ -32,7 +32,7 @@
       "properties": {
         "schemaVersion": { "const": "agent-browser.lease-authority.v1" },
         "claimId": { "type": "string", "minLength": 1 },
-        "resource": { "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource" },
+        "resource": { "$ref": "lease-recovery-authorization.v4.schema.json#/$defs/resource" },
         "parentClaimId": { "type": ["string", "null"] },
         "principalId": { "type": "string", "minLength": 1 },
         "capabilityId": { "type": "string", "minLength": 1 },

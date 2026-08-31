@@ -3172,12 +3172,12 @@ An acquired response includes the canonical `leaseClaim`, its exact
 expiry. Replaying one operation grants no new authority after expiry. A new
 operation from the same capability may join the current claim without changing
 its fencing token or expiry. The daemon validates the envelope immediately
-before launch. Effect authorization v4 binds the claim to the current capability
+before launch. Effect authorization v5 binds the claim to the current capability
 ID and revision, the `browser_launch` action class, the exact daemon-session
-audience, and the acquisition operation ID. Its Ed25519 signature is produced
+audience, the acquisition operation ID, and the exact signing-key epoch. Its Ed25519 signature is produced
 by a private lease-authority root stored outside Service State. Executors load
-only its public verification key, so verification cannot mint a new
-authorization. Revoking or
+only its versioned public verification keyring, so verification cannot mint a new
+authorization or accept a future or unknown signing epoch. Revoking or
 rotating the capability invalidates admission, while changing any sealed scope
 field invalidates the proof. Copy `operationIdempotencyKey` to
 `leaseEffectOperationId` when executing the planned launch. Treat the effect
@@ -3185,15 +3185,17 @@ envelope as a two-minute bearer: do not log it or expose it through status,
 history, or diagnostics.
 
 The signing root is stored at
-`~/.agent-browser/service/lease-authority-signing-key.v2.json`; the matching
-public verifier is
-`~/.agent-browser/service/lease-authority-verification-key.v1.json`. Agent Browser
+`~/.agent-browser/service/lease-authority-signing-key.v3.json`; the versioned
+public verifier keyring is
+`~/.agent-browser/service/lease-authority-verification-keyring.v2.json`. Agent Browser
 creates it atomically with private permissions only while issuing authenticated
-authority. Effect and recovery verification load only the public key, never
+authority. Effect and recovery verification load only the public keyring, never
 create a missing key, and reject symlinks, non-files, foreign ownership, or
 group and world access. If the public verifier survives private-key loss,
 issuance returns `lease_authority_signing_key_recovery_required` and never
-silently creates a replacement signer behind the existing trust root.
+silently creates a replacement signer behind the existing trust root. File
+permissions alone are not the final production custody boundary. Plan 0144
+still requires an independently supervised signer identity before installation.
 
 `service recovery plan` creates a zero-effect, expiring recovery plan for explicit review. Apply with `service recovery apply --plan-file <path> --capability-file <path> --session-name <sealed-daemon-route>`. The daemon rechecks the plan seal, Service State revision, owner generation, process and lock evidence, then retries acquisition once and stores a durable receipt. Read it with `service recovery status <recovery-id> --capability-file <path>`.
 

@@ -870,7 +870,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceProfileRecovery": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaPath": "docs/dev/contracts/service-profile-recovery.v1.schema.json",
-                "effectAuthorizationSchemaPath": "docs/dev/contracts/lease-effect-authorization.v4.schema.json",
+                "effectAuthorizationSchemaPath": "docs/dev/contracts/lease-effect-authorization.v5.schema.json",
                 "http": {
                     "acquire": SERVICE_PROFILE_ACQUIRE_HTTP_ROUTE,
                     "plan": SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE,

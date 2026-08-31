@@ -227,7 +227,7 @@ async function main() {
     success: true,
     data: { schemaVersion: 'agent-browser.lease-recovery-apply-response.v1' },
   });
-  const sealedPlan = { schemaVersion: 'agent-browser.lease-recovery-authorization.v3' };
+  const sealedPlan = { schemaVersion: 'agent-browser.lease-recovery-authorization.v4' };
   await applyServiceProfileLeaseRecovery({
     baseUrl: 'http://127.0.0.1:4849',
     id: 'lease:one',

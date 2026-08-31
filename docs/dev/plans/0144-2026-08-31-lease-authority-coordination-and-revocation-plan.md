@@ -459,6 +459,33 @@ Every active claim contains at least:
     replay, time discontinuity, mixed versions, and process-spawn crash points.
     Example regressions alone are not evidence that arbitrary event ordering
     preserves single authority, bounded liveness, and receipt uniqueness.
+86. Canonical authority state has the same enforced custody boundary as signing
+    authority. Candidate daemons, workers, dashboards, compatibility adapters,
+    and effect executors cannot rewrite the active index, counters, authority
+    epoch, administrator registry, completed-operation index, or verifier trust
+    configuration through same-user file access. They use authenticated,
+    typed IPC to the stable authority service.
+87. Verifier trust distribution and key rotation are one supervised generation
+    transition. The new signer, verifier set, retirement or emergency-revocation
+    cutoffs, and external epoch floor become current atomically through a
+    durable selected-generation pointer. A crash cannot pair a new signer with
+    an old keyring or make a candidate-supplied public key trusted. The keyring
+    has a hard cardinality bound; rotation waits or prunes only after every
+    proof under the oldest key is outside its acceptance window.
+88. Authority disaster recovery does not depend solely on the online signer,
+    administrator registry, or state store being repaired. An independently
+    authenticated bootstrap can inspect, quarantine, and replace an
+    unavailable or corrupt authority generation at a strictly newer external
+    epoch while preserving fencing and completed-operation high-water marks.
+    If those high-water marks cannot be proven, the physical resource remains
+    quarantined rather than inventing a clean lease state. No recovery path
+    requires raw state editing.
+89. Every architectural use of bounded has a concrete policy maximum, a
+    machine-readable deadline, and a tested terminal outcome. Ephemeral tenure,
+    transition recovery, physical-evidence freshness, waiter lifetime, cleanup
+    retries, key retirement, uncertainty reconciliation, and authority outage
+    escalation cannot remain finite only in prose while being operationally
+    unbounded.
 
 ## Claim Modes
 
@@ -695,6 +722,11 @@ runtime receipts all satisfy the acceptance matrix.
 | the stable supervisor itself is upgraded or lost | an outside bootstrap generation selects rollback or replacement without candidate self-admission |
 | the workstation suspends past an ephemeral deadline or reboots with an active claim | the old claim cannot gain tenure; it is expired or fenced before ordinary admission resumes |
 | randomized crash and reorder sequences exercise the authority model | implementation and reference model converge on one claim, one fence order, and one receipt per authenticated operation |
+| same-user candidate rewrites authority state or verifier files | operating-system custody denies the write; authenticated IPC cannot construct raw authority state or alter trust roots |
+| rotation crashes between signer, verifier, and epoch updates | the prior generation remains selected or the complete next generation becomes selected; no mixed trust generation is effect-capable |
+| verifier keyring reaches its cardinality bound while old proofs remain live | rotation waits with a typed deadline or emergency-revokes explicitly; it never grows without bound or silently invalidates accepted proofs |
+| authority store or online signer is corrupt or permanently lost | independent bootstrap establishes a strictly newer recoverable generation or quarantines the physical resource without inventing a holder |
+| a policy describes a transition or denial as bounded | status exposes its exact maximum and deadline, and fault injection reaches the declared terminal outcome within that bound |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -796,6 +828,26 @@ arbitrary software defects, storage loss, kernel compromise, or unavailable
 hardware can never stop an operation. Those conditions must surface under
 their own typed outage or product-error classes and must not be persisted as a
 lease holder, session identity, or transferable owner.
+
+A fifth recurrence pass followed the same-user attack surface through the
+current keyring prototype and the public recovery promise. It found that
+protecting only the private signer is insufficient. A candidate that can edit
+the canonical authority file can manufacture active state without signing, and
+a candidate that can replace the verifier keyring can make its own signer
+trusted. Invariant 86 therefore extends enforced custody to authority state and
+trust configuration. Invariant 87 makes rotation a selected, crash-durable
+generation transition with explicit retirement cutoffs and a genuinely bounded
+keyring rather than an ever-growing map.
+
+The same pass found a recovery recursion: a public administrative command is
+not a disaster-recovery surface if it requires the damaged online signer,
+administrator registry, or authority store to authorize its own repair.
+Invariant 88 adds an independent bootstrap with monotonic external epochs and a
+quarantine outcome when fencing high-water marks cannot be proven. Finally,
+Invariant 89 converts every liveness promise from an adjective into a published
+maximum and deadline. These four additions are required before the design can
+claim structural resistance to the historical false-holder and permanent-gate
+families.
 
 ## Validation Contract
 
@@ -1209,18 +1261,24 @@ Current evidence:
 - the documentation production build passes;
 - every contract JSON document parses and `git diff --check` passes;
 - Cargo metadata accepts the locked offline `ring` dependency graph;
-- all 20 canonical lease-authority tests pass, including signer separation,
+- all 21 canonical lease-authority tests pass, including signer separation,
   signing-oracle rejection, exact release, strict recovery, administrative
-  revoke, administrator revocation, fencing, tamper rejection, and replay;
+  revoke, administrator revocation, key-epoch rotation, bounded old-proof
+  verification, rollback rejection, fencing, tamper rejection, and replay;
 - all 41 profile-lease, 21 profile-recovery, 45 access-plan, and 35
   service-model tests pass;
 - the exact canonical prelaunch effect test passes; and
 - wrapper Rust formatting and strict Clippy pass.
 
-The non-minting verifier and raw-capability signing boundary are source
-accepted. Stable-supervisor signer custody, rotation, loss recovery, and
-installed acceptance remain open, so this is not an installable completion of
-the lease redesign.
+The non-minting verifier, raw-capability signing boundary, versioned verifier
+keyring, and signing-key epoch are source accepted. The rotated keyring retains
+only explicitly enrolled old public keys, rejects future or mismatched epochs,
+and prevents a stale verifier from accepting a newer proof. Stable-supervisor
+signer custody, durable rotation apply, external epoch anti-rollback, loss recovery, and
+legacy v2-signer and v1-verifier migration, in-flight proof drain, and installed
+acceptance remain open, so this is not an installable completion of the lease
+redesign. The new filenames must not silently bootstrap a parallel trust root
+beside an installed legacy authority generation.
 
 The follow-on structural review removed two signing and mutation oracles before
 opening the public administrator plane. Effect and recovery issuance now
@@ -1240,7 +1298,7 @@ the active claim; emits a revoked event and durable terminal receipt; rejects
 tampering before mutation; and replays the exact completed receipt before
 requiring a signer that may have rotated. The serialized administrative
 authorization contract is
-`docs/dev/contracts/lease-administrative-authorization.v1.schema.json`.
+`docs/dev/contracts/lease-administrative-authorization.v2.schema.json`.
 
 Administrative issuance now also requires the exact raw private administrator
 capability registered in the kernel's private administrator collection. Apply

@@ -20,7 +20,7 @@
     "leaseId": { "type": "string", "minLength": 1 },
     "leaseRevision": { "type": "string", "minLength": 1 },
     "effectState": { "const": "no_effect" },
-    "plan": { "$ref": "lease-recovery-authorization.v3.schema.json" },
+    "plan": { "$ref": "lease-recovery-authorization.v4.schema.json" },
     "createdAt": { "type": "string", "format": "date-time" },
     "expiresAt": { "type": "string", "format": "date-time" }
   }

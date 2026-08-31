@@ -1565,25 +1565,28 @@ five-minute ephemeral claim expiry. Replaying one operation grants no new
 authority after expiry. A new operation from the same capability may join the
 current claim without renewing it or minting another fence. Preserve the
 effect envelope because the daemon validates it immediately before launch.
-Effect authorization v4 includes an Ed25519 signature bound to the current
+Effect authorization v5 includes an Ed25519 signature bound to the current
 capability ID and revision, the `browser_launch` action class, the exact daemon
-session, and the acquisition operation ID. The private signing root is separate
+session, the acquisition operation ID, and the exact signing-key epoch. The private signing root is separate
 from Service State and capability digests. Executors load only its public
-verification key and cannot mint authority. Copy `operationIdempotencyKey` to
+verification keyring and cannot mint authority or accept an unknown or future
+key epoch. Copy `operationIdempotencyKey` to
 `leaseEffectOperationId` on the planned launch. Revoking or rotating the
 capability, changing scope, changing audience, or exceeding the two-minute
 authorization window prevents admission. Do not log or project the envelope.
 The private root lives at
-`~/.agent-browser/service/lease-authority-signing-key.v2.json`; its public
-verification key lives at
-`~/.agent-browser/service/lease-authority-verification-key.v1.json`.
+`~/.agent-browser/service/lease-authority-signing-key.v3.json`; its versioned public
+verification keyring lives at
+`~/.agent-browser/service/lease-authority-verification-keyring.v2.json`.
 Authenticated issuance atomically publishes the private root and
 crash-convergently publishes its matching verifier; verification never
 bootstraps authority or reads the private key. Do not copy, loosen permissions
 on, or synthesize the private file. If the public verifier survives private-key
 loss, issuance returns `lease_authority_signing_key_recovery_required` instead
 of silently replacing the signer; use the supported authority recovery surface
-once it is available rather than editing key or state files.
+once it is available rather than editing key or state files. File permissions
+alone are not the final production custody boundary. Do not install this Plan
+0144 candidate until an independently supervised signer identity is validated.
 
 For `existing_session_profile_identity_unproven`, reconcile the exact principal, profile, process, and daemon route before any retry. If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. Give the operator only the returned opaque `/remote-view/<handoff-id>` URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
 

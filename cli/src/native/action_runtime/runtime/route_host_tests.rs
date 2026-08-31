@@ -3147,7 +3147,7 @@ fn service_profile_lease_admission_never_rewrites_canonical_authorization() {
         "runtimeProfile": "acs-profile",
         "profileLeasePolicy": "wait",
         "leaseEffectAuthorization": {
-            "schemaVersion": "agent-browser.lease-effect-authorization.v4",
+            "schemaVersion": "agent-browser.lease-effect-authorization.v5",
             "claimId": "claim-a"
         }
     });
@@ -3343,6 +3343,7 @@ async fn canonical_effect_fence_precedes_retained_session_attach() {
         "leaseEffectAuthorization": {
             "schemaVersion": "agent-browser.lease-effect-authorization.v0",
             "signingKeyId": "lease-signing-key:stale",
+            "signingKeyEpoch": 1,
             "resource": { "kind": "profile", "id": "last30days-facebook" },
             "claimId": "claim:stale",
             "principalId": "principal:last30days",
