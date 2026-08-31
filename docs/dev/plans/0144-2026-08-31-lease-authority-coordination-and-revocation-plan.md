@@ -462,9 +462,10 @@ Every active claim contains at least:
 86. Canonical authority state has the same enforced custody boundary as signing
     authority. Candidate daemons, workers, dashboards, compatibility adapters,
     and effect executors cannot rewrite the active index, counters, authority
-    epoch, administrator registry, completed-operation index, or verifier trust
-    configuration through same-user file access. They use authenticated,
-    typed IPC to the stable authority service.
+    epoch, principal capability registry, canonical resource registrations,
+    owner-generation bindings, administrator registry, completed-operation
+    index, or verifier trust configuration through same-user file access. They
+    use authenticated, typed IPC to the stable authority service.
 87. Verifier trust distribution and key rotation are one supervised generation
     transition. The new signer, verifier set, retirement or emergency-revocation
     cutoffs, and external epoch floor become current atomically through a
@@ -486,6 +487,30 @@ Every active claim contains at least:
     retries, key retirement, uncertainty reconciliation, and authority outage
     escalation cannot remain finite only in prose while being operationally
     unbounded.
+90. Trust-generation selectors and manifests use one canonical, path-safe
+    generation identifier derived from the exact key epoch and active verifier
+    identity. Resolution is pinned beneath the authority trust root and rejects
+    relative paths, aliases, symlinks, reparse points, and content whose
+    identity does not reproduce the selected name. A selector cannot redirect
+    authority loading or bind an epoch to a different key.
+91. Staged, incomplete, retired, and orphaned trust generations have a bounded
+    reconciliation and retention policy. They are never selected implicitly,
+    never become a lease blocker, and never require raw filesystem editing.
+    Reclamation preserves every still-accepted proof and rollback generation;
+    disk or generation-capacity exhaustion is a typed authority-capacity
+    outcome with first-class inspect and recovery actions.
+92. Every supported authority filesystem proves equivalent atomic replace,
+    directory durability, owner, ACL, link, and lock semantics. A platform or
+    volume without those primitives is rejected before authority mutation or
+    installation. A Unix-only `fsync`, permission check, or rename assumption
+    cannot silently become the Windows or network-filesystem contract.
+93. Verifier rollout is monotonic across long-lived effect executors. An
+    executor that observes a proof from a newer selected epoch refreshes only
+    from the protected trust source and never lowers its accepted external
+    floor. Signer activation waits for every mandatory sink generation to be
+    compatible, while an obsolete sink is removed from routing with a typed
+    bounded transition rather than manufacturing a claim conflict or a global
+    readiness denial.
 
 ## Claim Modes
 
@@ -727,6 +752,10 @@ runtime receipts all satisfy the acceptance matrix.
 | verifier keyring reaches its cardinality bound while old proofs remain live | rotation waits with a typed deadline or emergency-revokes explicitly; it never grows without bound or silently invalidates accepted proofs |
 | authority store or online signer is corrupt or permanently lost | independent bootstrap establishes a strictly newer recoverable generation or quarantines the physical resource without inventing a holder |
 | a policy describes a transition or denial as bounded | status exposes its exact maximum and deadline, and fault injection reaches the declared terminal outcome within that bound |
+| selector names a relative path, alias, or generation whose key identity differs | loading rejects it before leaving the protected trust root or accepting any proof |
+| rotation crashes with temporary, staged, or retired generations present | bounded reconciliation selects only an already committed generation and exposes first-class cleanup without blocking leases |
+| authority storage is on a platform or volume without proven replace, durability, ACL, or lock semantics | installation or mutation fails with a typed unsupported-storage outcome before authority can diverge |
+| long-lived executor retains verifier epoch N while the authority selects N+1 | it securely refreshes or is removed from routing within the declared deadline; no false lease conflict or global readiness denial is emitted |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -848,6 +877,20 @@ Invariant 89 converts every liveness promise from an adjective into a published
 maximum and deadline. These four additions are required before the design can
 claim structural resistance to the historical false-holder and permanent-gate
 families.
+
+A sixth recurrence pass examined the trust-generation implementation as a
+hostile input and crash surface. It found that a syntactically valid selector
+could still escape or alias the trust namespace unless its name was
+content-bound; orphaned staging and retired generations could become another
+permanent recovery gate or unbounded disk sink; Unix durability and mode checks
+did not establish the Windows or network-volume contract; and a long-lived
+effect executor could reject a legitimately rotated proof from a stale verifier
+cache. Invariants 90 through 93 make namespace binding, bounded generation
+reconciliation, platform storage qualification, and monotonic verifier rollout
+part of structural acceptance. The current source now rejects unsafe selector
+components and requires the selected name to be derived from the active key,
+but the remaining three invariants are not implemented and the candidate
+remains noninstallable.
 
 ## Validation Contract
 
@@ -1273,12 +1316,17 @@ Current evidence:
 The non-minting verifier, raw-capability signing boundary, versioned verifier
 keyring, and signing-key epoch are source accepted. The rotated keyring retains
 only explicitly enrolled old public keys, rejects future or mismatched epochs,
-and prevents a stale verifier from accepting a newer proof. Stable-supervisor
-signer custody, durable rotation apply, external epoch anti-rollback, loss recovery, and
-legacy v2-signer and v1-verifier migration, in-flight proof drain, and installed
+and prevents a stale verifier from accepting a newer proof. Trust files now
+stage under one immutable generation and become current through one atomic
+selector only after signer, verifier, manifest, file digests, and directories
+are durable. Selection rejects tampered digests and stale rotation compare-and-
+swap; the verifier ring has a hard eight-key cardinality limit. Standalone
+legacy key files cause an explicit migration-required outcome instead of a
+parallel trust root. Stable-supervisor signer and authority-state custody,
+public durable rotation apply, retirement cutoffs, external epoch anti-rollback,
+loss recovery, legacy migration apply, in-flight proof drain, and installed
 acceptance remain open, so this is not an installable completion of the lease
-redesign. The new filenames must not silently bootstrap a parallel trust root
-beside an installed legacy authority generation.
+redesign.
 
 The follow-on structural review removed two signing and mutation oracles before
 opening the public administrator plane. Effect and recovery issuance now

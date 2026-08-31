@@ -1574,14 +1574,16 @@ key epoch. Copy `operationIdempotencyKey` to
 `leaseEffectOperationId` on the planned launch. Revoking or rotating the
 capability, changing scope, changing audience, or exceeding the two-minute
 authorization window prevents admission. Do not log or project the envelope.
-The private root lives at
-`~/.agent-browser/service/lease-authority-signing-key.v3.json`; its versioned public
-verification keyring lives at
-`~/.agent-browser/service/lease-authority-verification-keyring.v2.json`.
-Authenticated issuance atomically publishes the private root and
-crash-convergently publishes its matching verifier; verification never
-bootstraps authority or reads the private key. Do not copy, loosen permissions
-on, or synthesize the private file. If the public verifier survives private-key
+Trust material lives in immutable generations below
+`~/.agent-browser/service/lease-authority-trust/generations/`. The private
+`lease-authority-signing-key.v3.json`, public
+`lease-authority-verification-keyring.v2.json`, and digest manifest become
+current together through `selected-generation.v1.json`. Verification never
+bootstraps authority or reads the private key. It rejects a mixed generation,
+changed digest, unknown epoch, symlink, non-file, foreign owner, or broad
+permissions. Do not copy, loosen permissions on, or synthesize trust files. A
+pre-generation key file requires explicit migration rather than silent
+parallel bootstrap. If the selected public verifier survives private-key
 loss, issuance returns `lease_authority_signing_key_recovery_required` instead
 of silently replacing the signer; use the supported authority recovery surface
 once it is available rather than editing key or state files. File permissions

@@ -38,6 +38,10 @@ request-scoped launch and exact-holder effect bearer. Executors need only the
 versioned public verification keyring and cannot mint another bearer. Every
 authorization carries a positive `signingKeyEpoch`; verification selects the
 exact retained public key and rejects unknown, mismatched, or future epochs.
+The signer and verifier files are published inside one immutable trust
+generation with a digest manifest and an atomically replaced selected-generation
+document. A verifier never combines material across generations, and legacy
+standalone key files require an explicit migration.
 `lease-administrative-authorization.v2.schema.json` defines the distinct,
 exact-resource, revision-bound administrative authorization consumed by the
 revoke kernel. Its public plan and apply surfaces remain gated on the separate

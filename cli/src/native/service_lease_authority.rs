@@ -34,8 +34,17 @@ pub(crate) const LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION: &str =
 const MAX_LEASE_CLAIM_TENURE_SECONDS: i64 = 300;
 const MAX_STRICT_RECOVERY_TENURE_SECONDS: i64 = 300;
 const MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS: i64 = 120;
+const MAX_LEASE_AUTHORITY_VERIFICATION_KEYS: usize = 8;
 const LEASE_AUTHORITY_SIGNING_KEY_FILE: &str = "lease-authority-signing-key.v3.json";
 const LEASE_AUTHORITY_VERIFICATION_KEY_FILE: &str = "lease-authority-verification-keyring.v2.json";
+const LEASE_AUTHORITY_TRUST_ROOT_DIRECTORY: &str = "lease-authority-trust";
+const LEASE_AUTHORITY_TRUST_GENERATIONS_DIRECTORY: &str = "generations";
+const LEASE_AUTHORITY_TRUST_GENERATION_MANIFEST_FILE: &str = "manifest.v1.json";
+const LEASE_AUTHORITY_TRUST_SELECTOR_FILE: &str = "selected-generation.v1.json";
+const LEASE_AUTHORITY_TRUST_GENERATION_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-trust-generation.v1";
+const LEASE_AUTHORITY_TRUST_SELECTOR_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-trust-selector.v1";
 
 /// Private signing authority held outside Service State. The key identifier is
 /// safe to persist in plans and receipts; the secret is never serialized by
@@ -174,6 +183,9 @@ impl LeaseAuthorityVerificationKeyring {
         if signing_key.key_epoch != expected_epoch {
             return Err("lease_authority_signing_key_epoch_mismatch".to_string());
         }
+        if self.keys.len() >= MAX_LEASE_AUTHORITY_VERIFICATION_KEYS {
+            return Err("lease_authority_verification_keyring_capacity_exhausted".to_string());
+        }
         let mut keys = self.keys.clone();
         let verification_key = signing_key.verification_key();
         keys.insert(verification_key.key_id.clone(), verification_key);
@@ -212,117 +224,509 @@ struct LeaseAuthorityVerificationKeyFile {
     keys: Vec<LeaseAuthorityVerificationKeyFileEntry>,
 }
 
-/// Loads the user-scoped lease signing root, creating it atomically when this
-/// authority domain has not been initialized. Service State never contains the
-/// secret. Existing paths must be regular private files, never symlinks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityTrustGenerationManifest {
+    schema_version: String,
+    generation_id: String,
+    key_epoch: u64,
+    active_key_id: String,
+    signing_key_sha256: String,
+    verification_keyring_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityTrustSelector {
+    schema_version: String,
+    generation_id: String,
+    key_epoch: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LeaseAuthorityTrustGeneration {
+    selector: LeaseAuthorityTrustSelector,
+    manifest: LeaseAuthorityTrustGenerationManifest,
+    path: PathBuf,
+}
+
+/// Loads the selected trust generation, creating generation one only when no
+/// legacy or partially staged trust material exists. The selector is published
+/// after both key documents and their manifest are crash durable, so a reader
+/// never pairs files from different generations.
 fn load_or_create_lease_authority_signing_key() -> Result<LeaseAuthoritySigningKey, String> {
-    let path = lease_authority_signing_key_path()?;
-    if path.exists() {
-        let key = load_lease_authority_signing_key_file(&path)?;
-        publish_lease_authority_verification_key(&key)?;
-        return Ok(key);
+    if lease_authority_trust_selector_path()?.exists() {
+        return load_selected_lease_authority_signing_key();
     }
-    let verification_path = lease_authority_verification_key_path()?;
-    if signer_bootstrap_requires_recovery(path.exists(), verification_path.exists()) {
+    let legacy_paths = existing_legacy_authority_key_paths()?;
+    if !legacy_paths.is_empty() {
         return Err(format!(
-            "lease_authority_signing_key_recovery_required:{}:{}",
-            path.display(),
-            verification_path.display()
+            "lease_authority_trust_migration_required:{}",
+            legacy_paths
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(",")
         ));
     }
-    let parent = path
-        .parent()
-        .ok_or_else(|| "lease_authority_signing_key_parent_missing".to_string())?;
-    fs::create_dir_all(parent).map_err(|error| {
-        format!(
-            "lease_authority_signing_key_directory_create_failed:{}:{error}",
-            parent.display()
-        )
-    })?;
-    set_private_directory_permissions(parent)?;
+    if lease_authority_trust_generation_present()? {
+        return Err("lease_authority_trust_selection_recovery_required".to_string());
+    }
 
     let mut private_key = [0u8; 32];
     getrandom::getrandom(&mut private_key)
         .map_err(|error| format!("lease_authority_signing_key_generation_failed:{error}"))?;
     let key = LeaseAuthoritySigningKey::from_private_bytes(private_key);
-    let document = LeaseAuthoritySigningKeyFile {
-        schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
-        key_epoch: key.key_epoch,
-        key_id: key.key_id.clone(),
-        private_key_hex: hex::encode(key.private_key),
-        public_key_hex: hex::encode(key.public_key),
-    };
-    let encoded = serde_json::to_vec_pretty(&document)
-        .map_err(|error| format!("lease_authority_signing_key_encode_failed:{error}"))?;
-    let temporary = parent.join(format!(
-        ".{LEASE_AUTHORITY_SIGNING_KEY_FILE}.{}.tmp",
-        uuid::Uuid::new_v4()
-    ));
-    write_private_signing_key_file(&temporary, &encoded)?;
-    match fs::hard_link(&temporary, &path) {
-        Ok(()) => {
-            let _ = fs::remove_file(&temporary);
-            sync_authority_key_directory(parent)?;
-            let key = load_lease_authority_signing_key_file(&path)?;
-            publish_lease_authority_verification_key(&key)?;
-            Ok(key)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let _ = fs::remove_file(&temporary);
-            sync_authority_key_directory(parent)?;
-            let key = load_lease_authority_signing_key_file(&path)?;
-            publish_lease_authority_verification_key(&key)?;
-            Ok(key)
-        }
-        Err(error) => {
-            let _ = fs::remove_file(&temporary);
-            Err(format!(
-                "lease_authority_signing_key_publish_failed:{}:{error}",
-                path.display()
-            ))
-        }
-    }
-}
-
-fn signer_bootstrap_requires_recovery(
-    signing_key_exists: bool,
-    verification_key_exists: bool,
-) -> bool {
-    !signing_key_exists && verification_key_exists
+    initialize_lease_authority_trust_generation(&key)
 }
 
 /// Loads only public verification material. Effect and recovery executors do
 /// not read the private signing root and cannot initialize an authority domain.
 fn load_existing_lease_authority_verification_key(
 ) -> Result<LeaseAuthorityVerificationKeyring, String> {
-    let path = lease_authority_verification_key_path()?;
-    if !path.exists() {
-        return Err(format!(
-            "lease_authority_verification_key_unavailable:{}",
-            path.display()
-        ));
-    }
-    load_lease_authority_verification_key_file(&path)
+    load_existing_lease_authority_verification_key_in(&lease_authority_trust_root_path()?)
 }
 
-fn lease_authority_signing_key_path() -> Result<PathBuf, String> {
+fn load_existing_lease_authority_verification_key_in(
+    root: &Path,
+) -> Result<LeaseAuthorityVerificationKeyring, String> {
+    let generation = load_selected_lease_authority_trust_generation_in(root)?;
+    let path = generation.path.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+    verify_file_sha256(
+        &path,
+        &generation.manifest.verification_keyring_sha256,
+        "lease_authority_verification_keyring_digest_mismatch",
+    )?;
+    let keyring = load_lease_authority_verification_key_file(&path)?;
+    validate_selected_keyring(&generation, &keyring)?;
+    Ok(keyring)
+}
+
+fn lease_authority_service_directory() -> Result<PathBuf, String> {
     dirs::home_dir()
-        .map(|home| {
-            home.join(".agent-browser")
-                .join("service")
-                .join(LEASE_AUTHORITY_SIGNING_KEY_FILE)
-        })
+        .map(|home| home.join(".agent-browser").join("service"))
         .ok_or_else(|| "lease_authority_signing_key_home_unavailable".to_string())
 }
 
-fn lease_authority_verification_key_path() -> Result<PathBuf, String> {
-    dirs::home_dir()
-        .map(|home| {
-            home.join(".agent-browser")
-                .join("service")
-                .join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE)
+fn lease_authority_trust_root_path() -> Result<PathBuf, String> {
+    Ok(lease_authority_service_directory()?.join(LEASE_AUTHORITY_TRUST_ROOT_DIRECTORY))
+}
+
+fn lease_authority_trust_generations_path() -> Result<PathBuf, String> {
+    Ok(lease_authority_trust_generations_path_in(
+        &lease_authority_trust_root_path()?,
+    ))
+}
+
+fn lease_authority_trust_selector_path() -> Result<PathBuf, String> {
+    Ok(lease_authority_trust_selector_path_in(
+        &lease_authority_trust_root_path()?,
+    ))
+}
+
+fn lease_authority_trust_generations_path_in(root: &Path) -> PathBuf {
+    root.join(LEASE_AUTHORITY_TRUST_GENERATIONS_DIRECTORY)
+}
+
+fn lease_authority_trust_selector_path_in(root: &Path) -> PathBuf {
+    root.join(LEASE_AUTHORITY_TRUST_SELECTOR_FILE)
+}
+
+fn existing_legacy_authority_key_paths() -> Result<Vec<PathBuf>, String> {
+    Ok(existing_legacy_authority_key_paths_in(
+        &lease_authority_service_directory()?,
+    ))
+}
+
+fn existing_legacy_authority_key_paths_in(service: &Path) -> Vec<PathBuf> {
+    [
+        LEASE_AUTHORITY_SIGNING_KEY_FILE,
+        LEASE_AUTHORITY_VERIFICATION_KEY_FILE,
+        "lease-authority-signing-key.v2.json",
+        "lease-authority-verification-key.v1.json",
+    ]
+    .into_iter()
+    .map(|name| service.join(name))
+    .filter(|path| path.exists())
+    .collect()
+}
+
+fn lease_authority_trust_generation_present() -> Result<bool, String> {
+    lease_authority_trust_generation_present_in(&lease_authority_trust_root_path()?)
+}
+
+fn lease_authority_trust_generation_present_in(root: &Path) -> Result<bool, String> {
+    let generations = lease_authority_trust_generations_path_in(root);
+    if !generations.exists() {
+        return Ok(false);
+    }
+    fs::read_dir(&generations)
+        .map_err(|error| {
+            format!(
+                "lease_authority_trust_generations_read_failed:{}:{error}",
+                generations.display()
+            )
+        })?
+        .next()
+        .transpose()
+        .map(|entry| entry.is_some())
+        .map_err(|error| {
+            format!(
+                "lease_authority_trust_generations_read_failed:{}:{error}",
+                generations.display()
+            )
         })
-        .ok_or_else(|| "lease_authority_verification_key_home_unavailable".to_string())
+}
+
+fn lease_authority_trust_generation_id(key_epoch: u64, key_id: &str) -> Result<String, String> {
+    let digest = key_id
+        .strip_prefix("lease-authority-ed25519-verification-key-v1:")
+        .filter(|digest| digest.len() == 32 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .ok_or_else(|| "lease_authority_trust_generation_key_id_invalid".to_string())?;
+    if key_epoch == 0 {
+        return Err("lease_authority_trust_generation_epoch_invalid".to_string());
+    }
+    Ok(format!("epoch-{key_epoch}-{digest}"))
+}
+
+fn lease_authority_trust_generation_component_is_safe(generation_id: &str) -> bool {
+    !generation_id.is_empty()
+        && generation_id.len() <= 96
+        && generation_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn load_selected_lease_authority_signing_key() -> Result<LeaseAuthoritySigningKey, String> {
+    load_selected_lease_authority_signing_key_in(&lease_authority_trust_root_path()?)
+}
+
+fn load_selected_lease_authority_signing_key_in(
+    root: &Path,
+) -> Result<LeaseAuthoritySigningKey, String> {
+    let generation = load_selected_lease_authority_trust_generation_in(root)?;
+    let signing_path = generation.path.join(LEASE_AUTHORITY_SIGNING_KEY_FILE);
+    let verification_path = generation.path.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+    if !signing_path.exists() && verification_path.exists() {
+        return Err(format!(
+            "lease_authority_signing_key_recovery_required:{}:{}",
+            signing_path.display(),
+            verification_path.display()
+        ));
+    }
+    verify_file_sha256(
+        &signing_path,
+        &generation.manifest.signing_key_sha256,
+        "lease_authority_signing_key_digest_mismatch",
+    )?;
+    let signing_key = load_lease_authority_signing_key_file(&signing_path)?;
+    verify_file_sha256(
+        &verification_path,
+        &generation.manifest.verification_keyring_sha256,
+        "lease_authority_verification_keyring_digest_mismatch",
+    )?;
+    let keyring = load_lease_authority_verification_key_file(&verification_path)?;
+    validate_selected_keyring(&generation, &keyring)?;
+    if signing_key.key_epoch != generation.selector.key_epoch
+        || signing_key.key_id != generation.manifest.active_key_id
+        || keyring.active_key_id != signing_key.key_id
+    {
+        return Err("lease_authority_trust_generation_key_mismatch".to_string());
+    }
+    Ok(signing_key)
+}
+
+fn load_selected_lease_authority_trust_generation_in(
+    root: &Path,
+) -> Result<LeaseAuthorityTrustGeneration, String> {
+    let selector_path = lease_authority_trust_selector_path_in(root);
+    if !selector_path.exists() {
+        return Err(format!(
+            "lease_authority_trust_selector_unavailable:{}",
+            selector_path.display()
+        ));
+    }
+    let selector: LeaseAuthorityTrustSelector = load_private_json_file(
+        &selector_path,
+        "lease_authority_trust_selector_decode_failed",
+    )?;
+    if selector.schema_version != LEASE_AUTHORITY_TRUST_SELECTOR_SCHEMA_VERSION
+        || selector.key_epoch == 0
+        || !lease_authority_trust_generation_component_is_safe(&selector.generation_id)
+    {
+        return Err("lease_authority_trust_selector_invalid".to_string());
+    }
+    let generation_path =
+        lease_authority_trust_generations_path_in(root).join(&selector.generation_id);
+    ensure_private_directory(&generation_path)?;
+    let manifest_path = generation_path.join(LEASE_AUTHORITY_TRUST_GENERATION_MANIFEST_FILE);
+    let manifest: LeaseAuthorityTrustGenerationManifest = load_private_json_file(
+        &manifest_path,
+        "lease_authority_trust_manifest_decode_failed",
+    )?;
+    if manifest.schema_version != LEASE_AUTHORITY_TRUST_GENERATION_SCHEMA_VERSION
+        || manifest.generation_id != selector.generation_id
+        || manifest.key_epoch != selector.key_epoch
+        || manifest.active_key_id.trim().is_empty()
+        || manifest.signing_key_sha256.len() != 64
+        || !manifest
+            .signing_key_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || manifest.verification_keyring_sha256.len() != 64
+        || !manifest
+            .verification_keyring_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("lease_authority_trust_generation_invalid".to_string());
+    }
+    Ok(LeaseAuthorityTrustGeneration {
+        selector,
+        manifest,
+        path: generation_path,
+    })
+}
+
+fn validate_selected_keyring(
+    generation: &LeaseAuthorityTrustGeneration,
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), String> {
+    let canonical_generation_id =
+        lease_authority_trust_generation_id(keyring.key_epoch, &keyring.active_key_id)?;
+    (keyring.key_epoch == generation.selector.key_epoch
+        && keyring.active_key_id == generation.manifest.active_key_id
+        && canonical_generation_id == generation.selector.generation_id)
+        .then_some(())
+        .ok_or_else(|| "lease_authority_trust_generation_keyring_mismatch".to_string())
+}
+
+fn initialize_lease_authority_trust_generation(
+    key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseAuthoritySigningKey, String> {
+    let root = lease_authority_trust_root_path()?;
+    fs::create_dir_all(&root).map_err(|error| {
+        format!(
+            "lease_authority_trust_directory_create_failed:{}:{error}",
+            root.display()
+        )
+    })?;
+    set_private_directory_permissions(&root)?;
+    let lock_path = root.join("selection.lock");
+    let lock = open_private_lock_file(&lock_path)?;
+    lock.lock().map_err(|error| {
+        format!(
+            "lease_authority_trust_selection_lock_failed:{}:{error}",
+            lock_path.display()
+        )
+    })?;
+    if lease_authority_trust_selector_path()?.exists() {
+        drop(lock);
+        return load_selected_lease_authority_signing_key();
+    }
+    if lease_authority_trust_generation_present()? {
+        return Err("lease_authority_trust_selection_recovery_required".to_string());
+    }
+    persist_lease_authority_trust_generation(
+        key,
+        &LeaseAuthorityVerificationKeyring::from_active(key),
+    )?;
+    drop(lock);
+    load_selected_lease_authority_signing_key()
+}
+
+fn persist_lease_authority_trust_generation(
+    signing_key: &LeaseAuthoritySigningKey,
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), String> {
+    persist_lease_authority_trust_generation_in(
+        &lease_authority_trust_root_path()?,
+        signing_key,
+        keyring,
+    )
+}
+
+fn persist_lease_authority_trust_generation_in(
+    root: &Path,
+    signing_key: &LeaseAuthoritySigningKey,
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), String> {
+    if signing_key.key_epoch != keyring.key_epoch || signing_key.key_id != keyring.active_key_id {
+        return Err("lease_authority_trust_generation_key_mismatch".to_string());
+    }
+    let generations = lease_authority_trust_generations_path_in(root);
+    fs::create_dir_all(&generations).map_err(|error| {
+        format!(
+            "lease_authority_trust_generations_create_failed:{}:{error}",
+            generations.display()
+        )
+    })?;
+    set_private_directory_permissions(&generations)?;
+    let generation_id =
+        lease_authority_trust_generation_id(signing_key.key_epoch, &signing_key.key_id)?;
+    let final_path = generations.join(&generation_id);
+    if final_path.exists() {
+        validate_persisted_lease_authority_trust_generation(
+            &final_path,
+            &generation_id,
+            signing_key,
+            keyring,
+        )?;
+        let selector = LeaseAuthorityTrustSelector {
+            schema_version: LEASE_AUTHORITY_TRUST_SELECTOR_SCHEMA_VERSION.to_string(),
+            generation_id,
+            key_epoch: signing_key.key_epoch,
+        };
+        return write_private_json_atomic_replace(
+            &lease_authority_trust_selector_path_in(root),
+            &selector,
+        );
+    }
+    let temporary = generations.join(format!(".{generation_id}.{}.tmp", uuid::Uuid::new_v4()));
+    fs::create_dir(&temporary).map_err(|error| {
+        format!(
+            "lease_authority_trust_generation_stage_failed:{}:{error}",
+            temporary.display()
+        )
+    })?;
+    set_private_directory_permissions(&temporary)?;
+    let result = (|| {
+        let signing_document = LeaseAuthoritySigningKeyFile {
+            schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
+            key_epoch: signing_key.key_epoch,
+            key_id: signing_key.key_id.clone(),
+            private_key_hex: hex::encode(signing_key.private_key),
+            public_key_hex: hex::encode(signing_key.public_key),
+        };
+        let signing_encoded = serde_json::to_vec_pretty(&signing_document)
+            .map_err(|error| format!("lease_authority_signing_key_encode_failed:{error}"))?;
+        let signing_path = temporary.join(LEASE_AUTHORITY_SIGNING_KEY_FILE);
+        write_private_signing_key_file(&signing_path, &signing_encoded)?;
+
+        let verification_document = verification_keyring_document(keyring);
+        let verification_encoded = serde_json::to_vec_pretty(&verification_document)
+            .map_err(|error| format!("lease_authority_verification_key_encode_failed:{error}"))?;
+        let verification_path = temporary.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+        write_private_signing_key_file(&verification_path, &verification_encoded)?;
+
+        let manifest = LeaseAuthorityTrustGenerationManifest {
+            schema_version: LEASE_AUTHORITY_TRUST_GENERATION_SCHEMA_VERSION.to_string(),
+            generation_id: generation_id.clone(),
+            key_epoch: signing_key.key_epoch,
+            active_key_id: signing_key.key_id.clone(),
+            signing_key_sha256: file_sha256(&signing_path)?,
+            verification_keyring_sha256: file_sha256(&verification_path)?,
+        };
+        let manifest_encoded = serde_json::to_vec_pretty(&manifest)
+            .map_err(|error| format!("lease_authority_trust_manifest_encode_failed:{error}"))?;
+        write_private_signing_key_file(
+            &temporary.join(LEASE_AUTHORITY_TRUST_GENERATION_MANIFEST_FILE),
+            &manifest_encoded,
+        )?;
+        sync_authority_key_directory(&temporary)?;
+        fs::rename(&temporary, &final_path).map_err(|error| {
+            format!(
+                "lease_authority_trust_generation_publish_failed:{}:{error}",
+                final_path.display()
+            )
+        })?;
+        sync_authority_key_directory(&generations)?;
+        let selector = LeaseAuthorityTrustSelector {
+            schema_version: LEASE_AUTHORITY_TRUST_SELECTOR_SCHEMA_VERSION.to_string(),
+            generation_id,
+            key_epoch: signing_key.key_epoch,
+        };
+        write_private_json_atomic_replace(&lease_authority_trust_selector_path_in(root), &selector)
+    })();
+    if result.is_err() && temporary.exists() {
+        let _ = fs::remove_dir_all(&temporary);
+    }
+    result
+}
+
+fn validate_persisted_lease_authority_trust_generation(
+    path: &Path,
+    generation_id: &str,
+    signing_key: &LeaseAuthoritySigningKey,
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), String> {
+    ensure_private_directory(path)?;
+    let manifest: LeaseAuthorityTrustGenerationManifest = load_private_json_file(
+        &path.join(LEASE_AUTHORITY_TRUST_GENERATION_MANIFEST_FILE),
+        "lease_authority_trust_manifest_decode_failed",
+    )?;
+    let signing_path = path.join(LEASE_AUTHORITY_SIGNING_KEY_FILE);
+    let verification_path = path.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+    if manifest.schema_version != LEASE_AUTHORITY_TRUST_GENERATION_SCHEMA_VERSION
+        || manifest.generation_id != generation_id
+        || manifest.key_epoch != signing_key.key_epoch
+        || manifest.active_key_id != signing_key.key_id
+        || manifest.signing_key_sha256 != file_sha256(&signing_path)?
+        || manifest.verification_keyring_sha256 != file_sha256(&verification_path)?
+        || load_lease_authority_signing_key_file(&signing_path)? != *signing_key
+        || load_lease_authority_verification_key_file(&verification_path)? != *keyring
+    {
+        return Err("lease_authority_trust_generation_existing_mismatch".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn rotate_lease_authority_trust_generation_in(
+    root: &Path,
+    expected: &LeaseAuthorityTrustSelector,
+    signing_key: &LeaseAuthoritySigningKey,
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), String> {
+    fs::create_dir_all(root).map_err(|error| {
+        format!(
+            "lease_authority_trust_directory_create_failed:{}:{error}",
+            root.display()
+        )
+    })?;
+    set_private_directory_permissions(root)?;
+    let lock_path = root.join("selection.lock");
+    let lock = open_private_lock_file(&lock_path)?;
+    lock.lock().map_err(|error| {
+        format!(
+            "lease_authority_trust_selection_lock_failed:{}:{error}",
+            lock_path.display()
+        )
+    })?;
+    let current = load_selected_lease_authority_trust_generation_in(root)?;
+    if current.selector != *expected {
+        return Err("lease_authority_trust_selector_stale".to_string());
+    }
+    let expected_epoch = expected
+        .key_epoch
+        .checked_add(1)
+        .ok_or_else(|| "lease_authority_signing_key_epoch_exhausted".to_string())?;
+    if signing_key.key_epoch != expected_epoch
+        || keyring.key_epoch != expected_epoch
+        || keyring.active_key_id != signing_key.key_id
+    {
+        return Err("lease_authority_signing_key_epoch_mismatch".to_string());
+    }
+    persist_lease_authority_trust_generation_in(root, signing_key, keyring)
+}
+
+fn verification_keyring_document(
+    keyring: &LeaseAuthorityVerificationKeyring,
+) -> LeaseAuthorityVerificationKeyFile {
+    LeaseAuthorityVerificationKeyFile {
+        schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
+        key_epoch: keyring.key_epoch,
+        active_key_id: keyring.active_key_id.clone(),
+        keys: keyring
+            .keys
+            .values()
+            .map(|key| LeaseAuthorityVerificationKeyFileEntry {
+                key_epoch: key.key_epoch,
+                key_id: key.key_id.clone(),
+                public_key_hex: hex::encode(key.public_key),
+            })
+            .collect(),
+    }
 }
 
 fn load_lease_authority_signing_key_file(path: &Path) -> Result<LeaseAuthoritySigningKey, String> {
@@ -363,65 +767,6 @@ fn load_lease_authority_signing_key_file(path: &Path) -> Result<LeaseAuthoritySi
     Ok(key)
 }
 
-fn publish_lease_authority_verification_key(
-    signing_key: &LeaseAuthoritySigningKey,
-) -> Result<(), String> {
-    let path = lease_authority_verification_key_path()?;
-    let verification_keyring = LeaseAuthorityVerificationKeyring::from_active(signing_key);
-    if path.exists() {
-        let existing = load_lease_authority_verification_key_file(&path)?;
-        return (existing == verification_keyring)
-            .then_some(())
-            .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string());
-    }
-    let parent = path
-        .parent()
-        .ok_or_else(|| "lease_authority_verification_key_parent_missing".to_string())?;
-    let document = LeaseAuthorityVerificationKeyFile {
-        schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
-        key_epoch: verification_keyring.key_epoch,
-        active_key_id: verification_keyring.active_key_id.clone(),
-        keys: verification_keyring
-            .keys
-            .values()
-            .map(|key| LeaseAuthorityVerificationKeyFileEntry {
-                key_epoch: key.key_epoch,
-                key_id: key.key_id.clone(),
-                public_key_hex: hex::encode(key.public_key),
-            })
-            .collect(),
-    };
-    let encoded = serde_json::to_vec_pretty(&document)
-        .map_err(|error| format!("lease_authority_verification_key_encode_failed:{error}"))?;
-    let temporary = parent.join(format!(
-        ".{LEASE_AUTHORITY_VERIFICATION_KEY_FILE}.{}.tmp",
-        uuid::Uuid::new_v4()
-    ));
-    write_private_signing_key_file(&temporary, &encoded)?;
-    match fs::hard_link(&temporary, &path) {
-        Ok(()) => {
-            let _ = fs::remove_file(&temporary);
-            sync_authority_key_directory(parent)?;
-            Ok(())
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let _ = fs::remove_file(&temporary);
-            sync_authority_key_directory(parent)?;
-            let existing = load_lease_authority_verification_key_file(&path)?;
-            (existing == verification_keyring)
-                .then_some(())
-                .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string())
-        }
-        Err(error) => {
-            let _ = fs::remove_file(&temporary);
-            Err(format!(
-                "lease_authority_verification_key_publish_failed:{}:{error}",
-                path.display()
-            ))
-        }
-    }
-}
-
 fn load_lease_authority_verification_key_file(
     path: &Path,
 ) -> Result<LeaseAuthorityVerificationKeyring, String> {
@@ -452,6 +797,7 @@ fn load_lease_authority_verification_key_file(
     if document.key_epoch == 0
         || document.active_key_id.trim().is_empty()
         || document.keys.is_empty()
+        || document.keys.len() > MAX_LEASE_AUTHORITY_VERIFICATION_KEYS
     {
         return Err("lease_authority_verification_keyring_invalid".to_string());
     }
@@ -518,6 +864,113 @@ fn write_private_signing_key_file(path: &Path, encoded: &[u8]) -> Result<(), Str
     })
 }
 
+fn open_private_lock_file(path: &Path) -> Result<fs::File, String> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options.open(path).map_err(|error| {
+        format!(
+            "lease_authority_trust_selection_lock_open_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    let metadata = file.metadata().map_err(|error| {
+        format!(
+            "lease_authority_trust_selection_lock_metadata_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    ensure_private_file_permissions(path, &metadata)?;
+    Ok(file)
+}
+
+fn write_private_json_atomic_replace<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "lease_authority_trust_selector_parent_missing".to_string())?;
+    let encoded = serde_json::to_vec_pretty(value)
+        .map_err(|error| format!("lease_authority_trust_selector_encode_failed:{error}"))?;
+    let temporary = parent.join(format!(
+        ".{}.{}.tmp",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(LEASE_AUTHORITY_TRUST_SELECTOR_FILE),
+        uuid::Uuid::new_v4()
+    ));
+    write_private_signing_key_file(&temporary, &encoded)?;
+    if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "lease_authority_trust_selector_publish_failed:{}:{error}",
+            path.display()
+        ));
+    }
+    sync_authority_key_directory(parent)
+}
+
+fn load_private_json_file<T: for<'de> Deserialize<'de>>(
+    path: &Path,
+    decode_error: &str,
+) -> Result<T, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "lease_authority_trust_file_metadata_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!(
+            "lease_authority_trust_file_not_regular:{}",
+            path.display()
+        ));
+    }
+    ensure_private_file_permissions(path, &metadata)?;
+    let encoded = fs::read(path).map_err(|error| {
+        format!(
+            "lease_authority_trust_file_read_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    serde_json::from_slice(&encoded).map_err(|error| format!("{decode_error}:{error}"))
+}
+
+fn file_sha256(path: &Path) -> Result<String, String> {
+    fs::read(path)
+        .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        .map_err(|error| {
+            format!(
+                "lease_authority_trust_file_hash_failed:{}:{error}",
+                path.display()
+            )
+        })
+}
+
+fn verify_file_sha256(path: &Path, expected: &str, code: &str) -> Result<(), String> {
+    (file_sha256(path)? == expected)
+        .then_some(())
+        .ok_or_else(|| format!("{code}:{}", path.display()))
+}
+
+fn ensure_private_directory(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "lease_authority_trust_directory_metadata_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err(format!(
+            "lease_authority_trust_directory_not_private:{}",
+            path.display()
+        ));
+    }
+    ensure_private_directory_permissions(path, &metadata)
+}
+
 #[cfg(unix)]
 fn sync_authority_key_directory(path: &Path) -> Result<(), String> {
     fs::File::open(path)
@@ -548,6 +1001,35 @@ fn set_private_directory_permissions(path: &Path) -> Result<(), String> {
 
 #[cfg(not(unix))]
 fn set_private_directory_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn ensure_private_directory_permissions(
+    path: &Path,
+    metadata: &fs::Metadata,
+) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if metadata.permissions().mode() & 0o077 != 0 {
+        return Err(format!(
+            "lease_authority_trust_directory_permissions_too_broad:{}",
+            path.display()
+        ));
+    }
+    if metadata.uid() != unsafe { libc::geteuid() } {
+        return Err(format!(
+            "lease_authority_trust_directory_owner_mismatch:{}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ensure_private_directory_permissions(
+    _path: &Path,
+    _metadata: &fs::Metadata,
+) -> Result<(), String> {
     Ok(())
 }
 
@@ -3142,11 +3624,128 @@ mod tests {
     }
 
     #[test]
-    fn surviving_verification_root_never_silently_mints_a_replacement_signer() {
-        assert!(signer_bootstrap_requires_recovery(false, true));
-        assert!(!signer_bootstrap_requires_recovery(false, false));
-        assert!(!signer_bootstrap_requires_recovery(true, true));
-        assert!(!signer_bootstrap_requires_recovery(true, false));
+    fn selected_trust_generation_is_atomic_rotatable_and_stale_safe() {
+        let directory = std::env::temp_dir().join(format!(
+            "agent-browser-lease-trust-generation-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        set_private_directory_permissions(&directory).unwrap();
+        let first_signer = LeaseAuthoritySigningKey::from_private_bytes_at_epoch([0x5a; 32], 1);
+        let first_keyring = LeaseAuthorityVerificationKeyring::from_active(&first_signer);
+
+        persist_lease_authority_trust_generation_in(&directory, &first_signer, &first_keyring)
+            .unwrap();
+        let first_generation =
+            load_selected_lease_authority_trust_generation_in(&directory).unwrap();
+        assert_eq!(first_generation.selector.key_epoch, 1);
+        assert_eq!(
+            load_selected_lease_authority_signing_key_in(&directory).unwrap(),
+            first_signer
+        );
+        assert_eq!(
+            load_existing_lease_authority_verification_key_in(&directory).unwrap(),
+            first_keyring
+        );
+
+        let second_signer = LeaseAuthoritySigningKey::from_private_bytes_at_epoch([0x6b; 32], 2);
+        let second_keyring = first_keyring.with_rotated_active(&second_signer).unwrap();
+        rotate_lease_authority_trust_generation_in(
+            &directory,
+            &first_generation.selector,
+            &second_signer,
+            &second_keyring,
+        )
+        .unwrap();
+        let second_generation =
+            load_selected_lease_authority_trust_generation_in(&directory).unwrap();
+        assert_eq!(second_generation.selector.key_epoch, 2);
+        assert_ne!(
+            second_generation.selector.generation_id,
+            first_generation.selector.generation_id
+        );
+        assert_eq!(
+            load_selected_lease_authority_signing_key_in(&directory).unwrap(),
+            second_signer
+        );
+        assert_eq!(
+            load_existing_lease_authority_verification_key_in(&directory).unwrap(),
+            second_keyring
+        );
+        assert_eq!(
+            rotate_lease_authority_trust_generation_in(
+                &directory,
+                &first_generation.selector,
+                &second_signer,
+                &second_keyring,
+            ),
+            Err("lease_authority_trust_selector_stale".to_string())
+        );
+
+        let mut unsafe_selector = second_generation.selector.clone();
+        unsafe_selector.generation_id = "../outside-trust-root".to_string();
+        write_private_json_atomic_replace(
+            &lease_authority_trust_selector_path_in(&directory),
+            &unsafe_selector,
+        )
+        .unwrap();
+        assert_eq!(
+            load_selected_lease_authority_trust_generation_in(&directory),
+            Err("lease_authority_trust_selector_invalid".to_string())
+        );
+        write_private_json_atomic_replace(
+            &lease_authority_trust_selector_path_in(&directory),
+            &second_generation.selector,
+        )
+        .unwrap();
+
+        write_private_json_atomic_replace(
+            &lease_authority_trust_selector_path_in(&directory),
+            &first_generation.selector,
+        )
+        .unwrap();
+        persist_lease_authority_trust_generation_in(&directory, &second_signer, &second_keyring)
+            .unwrap();
+        assert_eq!(
+            load_selected_lease_authority_trust_generation_in(&directory)
+                .unwrap()
+                .selector,
+            second_generation.selector
+        );
+
+        let selected_signer = second_generation
+            .path
+            .join(LEASE_AUTHORITY_SIGNING_KEY_FILE);
+        let removed_signer = second_generation.path.join("removed-signing-key.json");
+        fs::rename(&selected_signer, &removed_signer).unwrap();
+        assert!(load_selected_lease_authority_signing_key_in(&directory)
+            .unwrap_err()
+            .starts_with("lease_authority_signing_key_recovery_required:"));
+        fs::rename(&removed_signer, &selected_signer).unwrap();
+
+        let selected_verifier = second_generation
+            .path
+            .join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+        fs::write(&selected_verifier, b"{}\n").unwrap();
+        assert!(
+            load_existing_lease_authority_verification_key_in(&directory)
+                .unwrap_err()
+                .starts_with("lease_authority_verification_keyring_digest_mismatch:")
+        );
+
+        let legacy_service = directory.join("legacy-service");
+        fs::create_dir_all(&legacy_service).unwrap();
+        fs::write(
+            legacy_service.join("lease-authority-verification-key.v1.json"),
+            b"legacy",
+        )
+        .unwrap();
+        assert_eq!(
+            existing_legacy_authority_key_paths_in(&legacy_service),
+            vec![legacy_service.join("lease-authority-verification-key.v1.json")]
+        );
+
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -3185,6 +3784,21 @@ mod tests {
         assert_eq!(
             verify_effect_authorization(&wrong_epoch, &rotated_keyring),
             Err(LeaseAuthorityError::SigningKeyMismatch)
+        );
+
+        let mut capped_keyring = first_keyring;
+        for epoch in 2..=MAX_LEASE_AUTHORITY_VERIFICATION_KEYS as u64 {
+            let signer =
+                LeaseAuthoritySigningKey::from_private_bytes_at_epoch([epoch as u8; 32], epoch);
+            capped_keyring = capped_keyring.with_rotated_active(&signer).unwrap();
+        }
+        let over_capacity = LeaseAuthoritySigningKey::from_private_bytes_at_epoch(
+            [0x7f; 32],
+            MAX_LEASE_AUTHORITY_VERIFICATION_KEYS as u64 + 1,
+        );
+        assert_eq!(
+            capped_keyring.with_rotated_active(&over_capacity),
+            Err("lease_authority_verification_keyring_capacity_exhausted".to_string())
         );
     }
 

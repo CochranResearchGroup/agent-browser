@@ -3184,14 +3184,16 @@ field invalidates the proof. Copy `operationIdempotencyKey` to
 envelope as a two-minute bearer: do not log it or expose it through status,
 history, or diagnostics.
 
-The signing root is stored at
-`~/.agent-browser/service/lease-authority-signing-key.v3.json`; the versioned
-public verifier keyring is
-`~/.agent-browser/service/lease-authority-verification-keyring.v2.json`. Agent Browser
-creates it atomically with private permissions only while issuing authenticated
-authority. Effect and recovery verification load only the public keyring, never
-create a missing key, and reject symlinks, non-files, foreign ownership, or
-group and world access. If the public verifier survives private-key loss,
+Trust material is stored as immutable generations under
+`~/.agent-browser/service/lease-authority-trust/generations/`. The private
+`lease-authority-signing-key.v3.json` and public
+`lease-authority-verification-keyring.v2.json` become current together through
+`selected-generation.v1.json` only after both files and their digest manifest
+are durable. Effect and recovery verification load only the selected public
+keyring, never create missing authority, and reject mixed generations,
+digest changes, symlinks, non-files, foreign ownership, or group and world
+access. A pre-generation key file requires explicit migration and cannot cause
+a parallel trust root to be silently bootstrapped. If the selected public verifier survives private-key loss,
 issuance returns `lease_authority_signing_key_recovery_required` and never
 silently creates a replacement signer behind the existing trust root. File
 permissions alone are not the final production custody boundary. Plan 0144

@@ -1470,16 +1470,17 @@ window. Launch clients copy the envelope's
 <code>leaseEffectOperationId</code>. Another session, operation, signing key,
 or altered envelope is rejected before browser launch.
 
-The signing root is the private file
-<code>~/.agent-browser/service/lease-authority-signing-key.v3.json</code>.
-Its versioned public verifier keyring is
-<code>~/.agent-browser/service/lease-authority-verification-keyring.v2.json</code>.
-Authenticated issuance atomically publishes the private root and
-crash-convergently publishes its matching verifier when absent. Executors load
-only the public verifier keyring, so verification cannot mint authority or
-accept an unknown or future signing epoch.
-Verification never creates authority and rejects a symlink, non-file, foreign
-owner, or group-accessible key. If the public verifier survives private-key
+Trust material is stored in immutable generations below
+<code>~/.agent-browser/service/lease-authority-trust/generations/</code>. The
+private <code>lease-authority-signing-key.v3.json</code>, public
+<code>lease-authority-verification-keyring.v2.json</code>, and digest manifest
+become current together through <code>selected-generation.v1.json</code> only
+after the generation is durable. Executors load only the selected public
+verifier keyring, so verification cannot mint authority or accept an unknown
+or future signing epoch. Verification rejects mixed generations, changed
+digests, symlinks, non-files, foreign owners, or group-accessible trust files.
+A pre-generation key file requires explicit migration rather than silent
+parallel bootstrap. If the selected public verifier survives private-key
 loss, issuance returns
 <code>lease_authority_signing_key_recovery_required</code> rather than silently
 replacing the signer behind the existing trust root. File permissions alone are

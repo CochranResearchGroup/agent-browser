@@ -804,6 +804,9 @@ admission. Do not log or project the two-minute bearer. If the public verifier
 survives private-key loss, issuance returns
 <code>lease_authority_signing_key_recovery_required</code> and does not create a
 replacement signer.
+Signer and verifier files become current together through one digest-verified
+selected trust generation. Standalone legacy key files require explicit
+migration and cannot silently bootstrap a parallel trust root.
 
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner
