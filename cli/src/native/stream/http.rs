@@ -3258,6 +3258,8 @@ fn service_profile_lease_mutation_route(path: &str) -> Option<(&str, &str)> {
     for (route_suffix, operation) in [
         ("/reconcile/plan", "reconcile_plan"),
         ("/reconcile/apply", "reconcile_apply"),
+        ("/recover/plan", "recover_plan"),
+        ("/recover/apply", "recover_apply"),
     ] {
         if let Some(id) = suffix.strip_suffix(route_suffix) {
             return (!id.is_empty() && !id.contains('/')).then_some((id, operation));
@@ -3403,7 +3405,9 @@ fn service_profile_lease_mutation_command(
         .get("leaseRevision")
         .and_then(Value::as_str)
         .map(str::trim);
-    if operation != "reconcile_apply" && lease_revision.is_none_or(str::is_empty) {
+    if !matches!(operation, "reconcile_apply" | "recover_apply")
+        && lease_revision.is_none_or(str::is_empty)
+    {
         return Err("profile_lease_revision_required".to_string());
     }
     let mut command = json!({
@@ -3436,8 +3440,10 @@ fn service_profile_lease_mutation_command(
     {
         return Err("profile_lease_expires_at_required".to_string());
     }
-    if operation == "reconcile_apply" && !command.get("plan").is_some_and(Value::is_object) {
-        return Err("profile_lease_reconcile_plan_required".to_string());
+    if matches!(operation, "reconcile_apply" | "recover_apply")
+        && !command.get("plan").is_some_and(Value::is_object)
+    {
+        return Err("profile_lease_plan_required".to_string());
     }
     Ok(command)
 }
@@ -4916,6 +4922,18 @@ mod tests {
                 "/api/service/profile-leases/lease%3Aone/reconcile/apply"
             ),
             Some(("lease%3Aone", "reconcile_apply"))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route(
+                "/api/service/profile-leases/lease%3Aone/recover/plan"
+            ),
+            Some(("lease%3Aone", "recover_plan"))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route(
+                "/api/service/profile-leases/lease%3Aone/recover/apply"
+            ),
+            Some(("lease%3Aone", "recover_apply"))
         );
         assert_eq!(
             service_profile_lease_mutation_route("/api/service/profile-leases/lease%3Aone/delete"),

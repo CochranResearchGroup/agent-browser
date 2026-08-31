@@ -21,7 +21,7 @@ use crate::native::service_health::{
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use crate::native::service_lease_authority::{
-    authorize_lease_effect_in_repository, LeaseEffectAuthorization,
+    authorize_lease_effect_in_repository, LeaseEffectAuthorization, LeaseEffectContext,
 };
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
@@ -618,11 +618,22 @@ pub(crate) async fn ensure_service_profile_lease_available(
         if authorization.profile_id() != Some(expected_profile_id) {
             return Err("lease_authority_effect_profile_mismatch".to_string());
         }
+        let operation_idempotency_key = command
+            .get("leaseEffectOperationId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "lease_authority_effect_operation_id_missing".to_string())?;
+        let context = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: session_id,
+            operation_idempotency_key,
+        };
         let repository = LockedServiceStateRepository::default_json()?;
         authorize_lease_effect_in_repository(
             &repository,
             &authorization,
             &service_now_timestamp(),
+            &context,
         )?;
         return Ok(());
     }

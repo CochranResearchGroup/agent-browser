@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_b_kernel_access_and_doctor_in_progress`
+Execution state: `slice_f_non_minting_verifier_source_accepted_admin_revoke_kernel_in_progress`
 
 Lane: P144
 
@@ -361,6 +361,104 @@ Every active claim contains at least:
     epoch and a durable nondecreasing authority-time floor across restart.
     Human-readable wall-clock timestamps are evidence only; clock rollback,
     suspend, restore, or namespace skew cannot lengthen operational authority.
+67. Bearer signing authority is cryptographically separate from observable or
+    persisted capability digests. Read access to claims, capability hashes,
+    history, backups, diagnostics, or generated projections cannot mint an
+    effect, release, recovery, or revocation authorization.
+68. Terminal operation replay authenticates the exact original request or a
+    scoped receipt-read authority, then consults the completed-operation index
+    before requiring a controller that may since have rotated or disappeared.
+    Controller lifecycle changes cannot turn a completed mutation into an
+    unobservable result or recreate its effect.
+69. Administrative authority has an explicit bootstrap, custody, rotation,
+    revocation, loss-recovery, and audit lifecycle rooted outside the target
+    claim and candidate runtime. Loss of one administrator cannot require raw
+    authority-state editing, and no target holder can mint administrative
+    authority.
+70. A supervisor-owned parent claim is itself time-bounded, fenced, and
+    administratively recoverable. An absent profile supervisor cannot become a
+    permanent parent-level blocker, and a parent claim with no current child or
+    physical obligation cannot deny compatible ordinary work.
+71. Cleanup obligations have their own typed state, attempt budget, deadline,
+    evidence freshness, reconciler, and exact escalation or quarantine action.
+    Repeating a failed cleanup or observing its history cannot extend logical
+    authority or create an indefinite unsupported physical blocker.
+72. Authority-domain registration is enforced against canonical physical
+    resource identity through an external exclusive guard or coordinator, not
+    only a store-local epoch field. A second home, mount alias, restored store,
+    or daemon cannot register the same physical profile concurrently.
+73. Plan issuance evaluates claim currency at the authority-owned issuance
+    time, never at a retained heartbeat or caller-provided observation time.
+    Any helper capable of returning an executable plan uses the same current
+    predicate and sealed operation inputs that apply will revalidate.
+74. Effect, release, recovery, and revocation verifiers cannot mint the
+    authorizations they verify. Signing authority remains inside the stable
+    kernel or a dedicated signer; runtime executors receive only public
+    verification material or call a verification service. A shared symmetric
+    key readable by candidate daemons, workers, or effect executors is not an
+    acceptable component boundary even when its file is user-private.
+75. Low-level mutation sinks are sealed as well as public entry points. Browser
+    process spawn, CDP mutation, profile write, route or display allocation,
+    runtime-owner transition, installer selection, and control input require a
+    kernel-issued typed intent or an explicitly typed physical-safety permit.
+    A new caller cannot bypass authority by invoking an older raw mutation
+    helper below the public manifest.
+76. Process and daemon creation is a single-flight, capacity-admitted durable
+    saga. Intent is committed before spawn, exact boot and process-start
+    identity is attached after spawn, and every crash boundary converges to one
+    live process or one bounded cleanup obligation. Repeated client retries,
+    supervisor restarts, or lost responses cannot create a process storm.
+77. Idempotency receipts are namespaced by authenticated authority domain,
+    principal, action, canonical resource, and operation key. A colliding or
+    guessed operation key cannot reveal another principal's receipt, suppress
+    its work, or replay an authorization across domains.
+78. Active claims, durable waiters, pending intents, and cleanup obligations
+    have policy-owned cardinality and resource budgets. Admission failure is a
+    typed capacity outcome and starts no daemon, browser, waiter worker, or
+    renewal loop. An authenticated but defective client cannot recreate the
+    historical daemon and process multiplication failure through unbounded
+    distinct requests.
+79. A successful authority mutation is acknowledged only after the authority
+    store's declared crash-durability boundary is satisfied. Torn writes,
+    directory-entry loss, unsupported filesystem locking, and integrity-check
+    failure become typed authority outages; an in-memory or merely buffered
+    success cannot be used to authorize an external effect.
+80. Every gate that can prevent an ordinary operation, including readiness,
+    health aggregation, installer admission, scheduler admission, routing, and
+    compatibility checks, returns one canonical typed outcome: a current-claim
+    conflict, a fresh exact physical collision, an authority outage, a bounded
+    capacity outcome, or a non-authority product error. Generic unhealthy,
+    unavailable, warning, or readiness booleans cannot promote history or an
+    invented identity into an operational denial. The exhaustive architecture
+    manifest covers denial gates as well as effect entry points.
+81. Signing-key custody is separated from candidate runtimes by an enforced
+    operating-system or process boundary. Source visibility, Rust privacy, and
+    a mode `0600` file owned by the same user are not custody boundaries. A
+    candidate daemon, worker, executor, dashboard, or compatibility process can
+    neither read signer material nor invoke an unrestricted signing oracle.
+82. Signing and administrative key rotation uses a monotonic key epoch and a
+    bounded verifier keyring. In-flight authorizations remain verifiable only
+    for their original bounded lifetime, completed operations replay from their
+    receipt, revoked keys cannot mint or authorize new work, and restoring an
+    older key file cannot lower the accepted key epoch.
+83. The stable supervisor has its own installation, rollback, recovery, and
+    upgrade protocol. Updating that supervisor is selected and committed by a
+    still-trusted bootstrap coordinator or banked generation outside the
+    candidate being evaluated. Calling a component stable does not permit it to
+    approve its own replacement or make its loss an unrecoverable workstation
+    gate.
+84. Authority time explicitly accounts for suspend, reboot, and supervisor
+    failover. A monotonic source that pauses during suspend is insufficient.
+    Pre-boot ephemeral claims and transitions are fenced on restart unless a
+    trusted suspend-aware deadline source and durable floor prove remaining
+    tenure without lengthening it. Strict claims resume only through their
+    declared bounded recovery policy.
+85. The canonical state machine has an executable reference model used for
+    property and fault-injection tests across acquisition, renewal, release,
+    expiry, transfer, recovery, revocation, key rotation, store restart,
+    replay, time discontinuity, mixed versions, and process-spawn crash points.
+    Example regressions alone are not evidence that arbitrary event ordering
+    preserves single authority, bounded liveness, and receipt uniqueness.
 
 ## Claim Modes
 
@@ -578,6 +676,25 @@ runtime receipts all satisfy the acceptance matrix.
 | emergency adapter receives a canonical envelope | request remains byte-for-byte resource coherent and daemon verification still decides the effect |
 | transition owner and reconciler both crash repeatedly | stable supervisor resumes from durable deadline cursor and idempotent receipt |
 | a new effectful entrypoint omits kernel authorization | presubmit architecture manifest fails before integration |
+| read-only caller obtains a capability digest or authority backup | cannot derive or mint any bearer accepted at an effect boundary |
+| recovery completes and its controller is then rotated or revoked | exact replay returns the original receipt without requiring the old controller to remain active |
+| administrative credential is rotated, lost, or revoked | scoped replacement follows the independent administrative lifecycle without target-state editing |
+| stable profile supervisor disappears with no child work | bounded parent authority expires or is recovered and cannot permanently deny compatible acquisition |
+| physical cleanup repeatedly fails | logical fence remains terminal while the exact obligation reaches bounded retry, escalation, or quarantine recourse |
+| two store epochs address one profile through path or mount aliases | external canonical resource registration admits one authority domain only |
+| recovery planner reads an expired claim whose old heartbeat was current | no executable plan is returned and apply observes no mutation |
+| stale candidate daemon can read verifier material | it can verify but cannot mint an authorization accepted by any executor |
+| caller reaches a raw process, CDP, route, display, owner, installer, or input helper | compilation or the sealed sink rejects mutation without typed kernel intent |
+| launcher crashes before spawn, after spawn, or before process identity persistence | replay converges to one process or one exact bounded cleanup obligation |
+| two authenticated principals reuse the same operation key | receipts remain isolated by principal, action, resource, and authority domain |
+| defective client floods distinct acquisitions or waiters | bounded capacity denial, no worker or process multiplication, existing authority remains responsive |
+| authority transaction is buffered but not crash durable | no success or effect authorization is returned before the declared durability barrier |
+| a historical warning makes a generic readiness aggregate false | the gate rejects the aggregate as non-authoritative and ordinary admission is unchanged |
+| a candidate daemon runs as the same workstation user as the authority service | the candidate can read verifier material but cannot read or invoke signer custody |
+| signer or administrator key rotates with an authorization in flight | old proof is accepted only within its original bound, completed replay uses its receipt, and no new proof can use the retired epoch |
+| the stable supervisor itself is upgraded or lost | an outside bootstrap generation selects rollback or replacement without candidate self-admission |
+| the workstation suspends past an ephemeral deadline or reboots with an active claim | the old claim cannot gain tenure; it is expired or fenced before ordinary admission resumes |
+| randomized crash and reorder sequences exercise the authority model | implementation and reference model converge on one claim, one fence order, and one receipt per authenticated operation |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -639,6 +756,46 @@ policy revision binding, typed authority outages, stable deadline scanning, and
 an exhaustive effect-entrypoint manifest. Without these additions, the design
 would reduce recurrence but would not make the reported defect classes
 structurally unavailable.
+
+A third recurrence pass found that request binding alone is insufficient when
+the verifier holds the same symmetric secret as the signer. User-private file
+permissions protect against other operating-system users, but Agent Browser's
+candidate daemons and effect executors commonly share one user identity. The
+current in-progress HMAC prototype therefore does not satisfy the final
+single-authority design: it must be replaced by asymmetric signatures or by a
+kernel verification service whose consumers cannot mint proofs. This is a
+design correction, not a key-file hardening task.
+
+The same pass tightened the bottom and resource boundaries. An exhaustive
+entrypoint manifest can detect known public bypasses, but structural closure
+also requires the process, CDP, route, display, owner, installer, and input
+mutation sinks to demand an unforgeable typed intent. Process creation must be
+a capacity-admitted durable saga with crash injection at every boundary, and
+idempotency receipts must be authenticated namespaces rather than globally
+caller-selected strings. Finally, an authority commit is not effect-capable
+until its crash-durability barrier has completed. These additions address the
+older process-multiplication failure family as well as false lease denials.
+
+A fourth recurrence pass compared the design with the actual hotfix seams
+rather than only the lease mutation API. It found five remaining ways the
+written kernel could still be bypassed or overclaimed. A generic readiness or
+health aggregate could deny work before constructing a canonical lease denial;
+same-user candidate processes could read a private signer file despite Rust
+module privacy; a single verifier file did not define safe rotation and
+anti-rollback; the stable supervisor had no stated protocol for upgrading
+itself; and an unspecified monotonic clock could pause during suspend and
+lengthen a claim in real time. Invariants 80 through 84 close those design
+holes. Invariant 85 adds an executable state-machine oracle because a long list
+of example tests cannot prove all crash, replay, time, transfer, and mixed-
+version interleavings.
+
+These additions narrow the meaning of structurally recurrence-resistant. The
+known failure sources become incapable of constructing operational authority or
+a typed denial after every gate and sink is migrated. They do not promise that
+arbitrary software defects, storage loss, kernel compromise, or unavailable
+hardware can never stop an operation. Those conditions must surface under
+their own typed outage or product-error classes and must not be persisted as a
+lease holder, session identity, or transferable owner.
 
 ## Validation Contract
 
@@ -1019,3 +1176,82 @@ integration, runtime-owner transfer coordination, legacy no-envelope removal,
 authority-domain anti-rollback, remaining public-surface parity,
 mixed-version migration, and installed acceptance remain incomplete. This
 checkpoint is not installable as the completed redesign.
+
+## Slice F Non-Minting Verification Reframe | 2026-08-31
+
+State transition: `slice_f_request_bound_bearer_in_progress` to
+`slice_f_request_bound_bearer_signer_separation_required`.
+
+The third full recurrence pass found that the in-progress request-bound HMAC
+bearer still gave every verifier the secret needed to mint another bearer.
+User-private file permissions did not establish a component boundary because
+candidate daemons and effect executors run under the same user. Frozen
+invariants 74 through 79 now require non-minting verification, sealed low-level
+mutation sinks, crash-safe single-flight process creation, authenticated
+idempotency namespaces, bounded authority resources, and an explicit durable
+commit barrier.
+
+Source now uses Ed25519 authorization schemas v4 and recovery schemas v3. The
+private signer type, key loader, and signing helpers are private to the lease
+authority module. Profile acquisition and recovery request signed envelopes
+without receiving signer material. Runtime effect, release, and recovery paths
+load only the separate public verification-key file. Private and public key
+publication syncs file contents and the containing directory before authority
+is returned, and verification cannot bootstrap a missing authority root.
+
+Current evidence:
+
+- generated service-client contracts and observability helper tests pass;
+- dashboard profile-lease tests and dashboard TypeScript pass;
+- service API and MCP parity passes for 66 browser controls, 26 service tools,
+  19 resources, 83 native actions, and 106 service-request actions;
+- client JavaScript and TypeScript coverage passes;
+- the documentation production build passes;
+- every contract JSON document parses and `git diff --check` passes;
+- Cargo metadata accepts the locked offline `ring` dependency graph;
+- all 20 canonical lease-authority tests pass, including signer separation,
+  signing-oracle rejection, exact release, strict recovery, administrative
+  revoke, administrator revocation, fencing, tamper rejection, and replay;
+- all 41 profile-lease, 21 profile-recovery, 45 access-plan, and 35
+  service-model tests pass;
+- the exact canonical prelaunch effect test passes; and
+- wrapper Rust formatting and strict Clippy pass.
+
+The non-minting verifier and raw-capability signing boundary are source
+accepted. Stable-supervisor signer custody, rotation, loss recovery, and
+installed acceptance remain open, so this is not an installable completion of
+the lease redesign.
+
+The follow-on structural review removed two signing and mutation oracles before
+opening the public administrator plane. Effect and recovery issuance now
+reauthenticate the exact raw private profile capability before the authority
+module will sign an envelope; possession of a claim projection or an
+in-crate authenticated-principal struct is insufficient. Release, recovery,
+and administrative revoke verify their cryptographic authorization inside the
+private terminal mutation method itself. A sibling subsystem cannot deserialize
+a plausible envelope and invoke an unverified state mutation below the
+repository wrapper.
+
+The first administrative revoke kernel primitive is staged behind that sealed
+boundary. It is exact-resource, claim-id, claim-revision, and fencing-token
+bound; independent of the target capability and all optional session, browser,
+owner, and process projections; advances the resource fence before removing
+the active claim; emits a revoked event and durable terminal receipt; rejects
+tampering before mutation; and replays the exact completed receipt before
+requiring a signer that may have rotated. The serialized administrative
+authorization contract is
+`docs/dev/contracts/lease-administrative-authorization.v1.schema.json`.
+
+Administrative issuance now also requires the exact raw private administrator
+capability registered in the kernel's private administrator collection. Apply
+rechecks that the administrator remains active at the sealed revision inside
+the same terminal mutation. Revoking or rotating the administrator therefore
+invalidates an outstanding plan before effect, while revoking the target
+holder capability does not disable independent administrative recourse.
+
+This primitive is not yet a public revoke feature. Administrator bootstrap,
+credential custody, rotation, loss recovery, public plan and apply parity, and
+cleanup-obligation projection remain mandatory before any operator can use it.
+The new Rust regressions pass. The administrator kernel remains non-public and
+non-installable until the bootstrap, custody, rotation, public parity, and
+cleanup-obligation requirements above are implemented and accepted.

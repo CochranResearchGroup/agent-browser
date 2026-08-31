@@ -81,7 +81,7 @@ pub fn gen_id() -> String {
 
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
-const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
+const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release|recover plan|recover apply] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--idempotency-key <key>] [--plan-file <absolute-path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
 const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <acquire --profile-id <id> --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
@@ -262,14 +262,17 @@ fn parse_service_profile_leases(
     } else {
         2
     };
-    if operation == "reconcile" {
+    if matches!(operation, "reconcile" | "recover") {
+        let operation_group = operation;
         operation = match rest.get(3).copied() {
-            Some("plan") => "reconcile-plan",
-            Some("apply") => "reconcile-apply",
+            Some("plan") if operation_group == "reconcile" => "reconcile-plan",
+            Some("apply") if operation_group == "reconcile" => "reconcile-apply",
+            Some("plan") => "recover-plan",
+            Some("apply") => "recover-apply",
             value => {
                 return Err(ParseError::InvalidValue {
                     message: format!(
-                        "Unknown service lease reconcile operation: {}",
+                        "Unknown service lease {operation_group} operation: {}",
                         value.unwrap_or("missing")
                     ),
                     usage: SERVICE_PROFILE_LEASES_USAGE,
@@ -286,6 +289,8 @@ fn parse_service_profile_leases(
         "release" => "service_profile_lease_release",
         "reconcile-plan" => "service_profile_lease_reconcile_plan",
         "reconcile-apply" => "service_profile_lease_reconcile_apply",
+        "recover-plan" => "service_profile_lease_recover_plan",
+        "recover-apply" => "service_profile_lease_recover_apply",
         value if value.starts_with("--") => "service_profile_lease_inspect",
         value => {
             return Err(ParseError::InvalidValue {
@@ -329,9 +334,20 @@ fn parse_service_profile_leases(
     }
     if matches!(
         operation,
-        "rejoin" | "renew" | "release" | "reconcile-plan" | "reconcile-apply"
+        "rejoin"
+            | "renew"
+            | "release"
+            | "reconcile-plan"
+            | "reconcile-apply"
+            | "recover-plan"
+            | "recover-apply"
     ) {
-        for field in ["leaseRevision", "profileCapabilityFile"] {
+        let required_fields: &[&str] = if operation == "recover-apply" {
+            &["profileCapabilityFile"]
+        } else {
+            &["leaseRevision", "profileCapabilityFile"]
+        };
+        for field in required_fields {
             if cmd.get(field).is_none() {
                 return Err(ParseError::InvalidValue {
                     message: format!("Missing required service lease mutation field: {field}"),
@@ -345,10 +361,10 @@ fn parse_service_profile_leases(
                 usage: SERVICE_PROFILE_LEASES_USAGE,
             });
         }
-        if operation == "reconcile-apply" && cmd.get("planFile").is_none() {
+        if matches!(operation, "reconcile-apply" | "recover-apply") && cmd.get("planFile").is_none()
+        {
             return Err(ParseError::InvalidValue {
-                message: "Missing required service lease reconcile apply field: planFile"
-                    .to_string(),
+                message: "Missing required service lease plan apply field: planFile".to_string(),
                 usage: SERVICE_PROFILE_LEASES_USAGE,
             });
         }
@@ -9384,6 +9400,28 @@ mod tests {
         .unwrap();
         assert_eq!(apply["action"], "service_profile_lease_reconcile_apply");
         assert_eq!(apply["planFile"], "/tmp/lease-plan.json");
+    }
+
+    #[test]
+    fn test_service_profile_lease_strict_recovery_plan_and_apply() {
+        let plan = parse_command(
+            &args("service leases lease-1 recover plan --revision rev-1 --capability-file /tmp/lease.cap --idempotency-key recover-1"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(plan["action"], "service_profile_lease_recover_plan");
+        assert_eq!(plan["leaseId"], "lease-1");
+        assert_eq!(plan["leaseRevision"], "rev-1");
+        assert_eq!(plan["idempotencyKey"], "recover-1");
+
+        let apply = parse_command(
+            &args("service leases lease-1 recover apply --capability-file /tmp/lease.cap --plan-file /tmp/recovery-plan.json"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["action"], "service_profile_lease_recover_apply");
+        assert_eq!(apply["planFile"], "/tmp/recovery-plan.json");
+        assert!(apply.get("leaseRevision").is_none());
     }
 
     #[test]

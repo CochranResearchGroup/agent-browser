@@ -1555,6 +1555,8 @@ Use `agent-browser service leases`, HTTP `GET /api/service/profile-leases`, MCP 
 
 Canonical release authenticates the profile capability and exact current claim inside one serialized mutation. It advances the resource fence, removes only that claim, and returns an idempotent `canonicalTerminalReceipt`. Unrelated authority mutations do not create a false release conflict, and replay returns the original terminal result without treating retained history as a current lease.
 
+A strict claim advertises `recover_plan`. Use `service leases <id> recover plan --revision <revision> --capability-file <path>` or `planServiceProfileLeaseRecovery()` to obtain a zero-effect, two-minute recovery authorization. Apply it through `service leases <id> recover apply --capability-file <path> --plan-file <path>` or `applyServiceProfileLeaseRecovery()`. Apply revalidates the exact strict claim and controller, advances its revision and fence, and returns an idempotent receipt. Replaying the exact completed authorization returns that receipt after controller rotation or revocation; it never recreates expired authority.
+
 Use `service recovery acquire --profile-id <id> --capability-file <path>` as the high-level capability-bound entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. It reuses an exact current lane, automatically applies only conclusive terminal-owner recovery, retries acquisition once, and hard-blocks current foreign-principal authority. `existing_session_profile_identity_unproven` returns a reviewed `reconcile_exact_principal_profile_identity` plan and must not launch a duplicate browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`. Use the lower-level plan, apply, and status operations only when explicit recovery review is required.
 
 An acquired response includes `leaseClaim`, `leaseEffectAuthorization`,
@@ -1563,10 +1565,25 @@ five-minute ephemeral claim expiry. Replaying one operation grants no new
 authority after expiry. A new operation from the same capability may join the
 current claim without renewing it or minting another fence. Preserve the
 effect envelope because the daemon validates it immediately before launch.
-Effect authorization v2 includes an authenticated proof bound to the current
-capability ID and revision. Revoking or rotating the capability invalidates the
-proof. Treat the short-lived envelope as bearer material: do not log it or
-expose it through status, history, or diagnostics.
+Effect authorization v4 includes an Ed25519 signature bound to the current
+capability ID and revision, the `browser_launch` action class, the exact daemon
+session, and the acquisition operation ID. The private signing root is separate
+from Service State and capability digests. Executors load only its public
+verification key and cannot mint authority. Copy `operationIdempotencyKey` to
+`leaseEffectOperationId` on the planned launch. Revoking or rotating the
+capability, changing scope, changing audience, or exceeding the two-minute
+authorization window prevents admission. Do not log or project the envelope.
+The private root lives at
+`~/.agent-browser/service/lease-authority-signing-key.v2.json`; its public
+verification key lives at
+`~/.agent-browser/service/lease-authority-verification-key.v1.json`.
+Authenticated issuance atomically publishes the private root and
+crash-convergently publishes its matching verifier; verification never
+bootstraps authority or reads the private key. Do not copy, loosen permissions
+on, or synthesize the private file. If the public verifier survives private-key
+loss, issuance returns `lease_authority_signing_key_recovery_required` instead
+of silently replacing the signer; use the supported authority recovery surface
+once it is available rather than editing key or state files.
 
 For `existing_session_profile_identity_unproven`, reconcile the exact principal, profile, process, and daemon route before any retry. If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. Give the operator only the returned opaque `/remote-view/<handoff-id>` URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
 

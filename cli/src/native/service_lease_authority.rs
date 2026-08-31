@@ -3,10 +3,13 @@
 //! Only `active_claims` may authorize or block effects. `events` is retained
 //! append-only history and is never consulted for admission.
 
-use hmac::{Hmac, Mac};
+use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use super::service_store::ServiceStateRepository;
 
@@ -15,10 +18,452 @@ pub(crate) const LEASE_ACQUISITION_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-acquisition-receipt.v1";
 pub(crate) const LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-terminal-receipt.v1";
+pub(crate) const LEASE_RECOVERY_RECEIPT_SCHEMA_VERSION: &str =
+    "agent-browser.lease-recovery-receipt.v1";
 pub(crate) const LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION: &str =
-    "agent-browser.lease-effect-authorization.v2";
+    "agent-browser.lease-effect-authorization.v4";
+pub(crate) const LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION: &str =
+    "agent-browser.lease-recovery-authorization.v3";
+pub(crate) const LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION: &str =
+    "agent-browser.lease-administrative-authorization.v1";
+pub(crate) const LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-signing-key.v2";
+pub(crate) const LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-verification-key.v1";
 
-type HmacSha256 = Hmac<Sha256>;
+const MAX_LEASE_CLAIM_TENURE_SECONDS: i64 = 300;
+const MAX_STRICT_RECOVERY_TENURE_SECONDS: i64 = 300;
+const MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS: i64 = 120;
+const LEASE_AUTHORITY_SIGNING_KEY_FILE: &str = "lease-authority-signing-key.v2.json";
+const LEASE_AUTHORITY_VERIFICATION_KEY_FILE: &str = "lease-authority-verification-key.v1.json";
+
+/// Private signing authority held outside Service State. The key identifier is
+/// safe to persist in plans and receipts; the secret is never serialized by
+/// this type or included in debug output.
+#[derive(Clone, PartialEq, Eq)]
+struct LeaseAuthoritySigningKey {
+    key_id: String,
+    private_key: [u8; 32],
+    public_key: [u8; 32],
+}
+
+impl std::fmt::Debug for LeaseAuthoritySigningKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseAuthoritySigningKey")
+            .field("key_id", &self.key_id)
+            .field("private_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl LeaseAuthoritySigningKey {
+    fn from_private_bytes(private_key: [u8; 32]) -> Self {
+        let key = Ed25519KeyPair::from_seed_unchecked(&private_key)
+            .expect("32-byte Ed25519 private seed is valid");
+        let public_key: [u8; 32] = key
+            .public_key()
+            .as_ref()
+            .try_into()
+            .expect("Ed25519 public keys are 32 bytes");
+        Self {
+            key_id: stable_id(
+                "lease-authority-ed25519-verification-key-v1",
+                &hex::encode(public_key),
+            ),
+            private_key,
+            public_key,
+        }
+    }
+
+    fn verification_key(&self) -> LeaseAuthorityVerificationKey {
+        LeaseAuthorityVerificationKey {
+            key_id: self.key_id.clone(),
+            public_key: self.public_key,
+        }
+    }
+}
+
+/// Public verification material. Runtime executors can validate a kernel
+/// authorization with this type but cannot use it to mint another one.
+#[derive(Clone, PartialEq, Eq)]
+struct LeaseAuthorityVerificationKey {
+    key_id: String,
+    public_key: [u8; 32],
+}
+
+impl std::fmt::Debug for LeaseAuthorityVerificationKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseAuthorityVerificationKey")
+            .field("key_id", &self.key_id)
+            .field("public_key", &hex::encode(self.public_key))
+            .finish()
+    }
+}
+
+impl LeaseAuthorityVerificationKey {
+    fn from_public_bytes(public_key: [u8; 32]) -> Result<Self, String> {
+        Ok(Self {
+            key_id: stable_id(
+                "lease-authority-ed25519-verification-key-v1",
+                &hex::encode(public_key),
+            ),
+            public_key,
+        })
+    }
+
+    fn verify_key_id(&self, key_id: &str) -> Result<(), LeaseAuthorityError> {
+        (self.key_id == key_id)
+            .then_some(())
+            .ok_or(LeaseAuthorityError::SigningKeyMismatch)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthoritySigningKeyFile {
+    schema_version: String,
+    key_id: String,
+    private_key_hex: String,
+    public_key_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityVerificationKeyFile {
+    schema_version: String,
+    key_id: String,
+    public_key_hex: String,
+}
+
+/// Loads the user-scoped lease signing root, creating it atomically when this
+/// authority domain has not been initialized. Service State never contains the
+/// secret. Existing paths must be regular private files, never symlinks.
+fn load_or_create_lease_authority_signing_key() -> Result<LeaseAuthoritySigningKey, String> {
+    let path = lease_authority_signing_key_path()?;
+    if path.exists() {
+        let key = load_lease_authority_signing_key_file(&path)?;
+        publish_lease_authority_verification_key(&key)?;
+        return Ok(key);
+    }
+    let verification_path = lease_authority_verification_key_path()?;
+    if signer_bootstrap_requires_recovery(path.exists(), verification_path.exists()) {
+        return Err(format!(
+            "lease_authority_signing_key_recovery_required:{}:{}",
+            path.display(),
+            verification_path.display()
+        ));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "lease_authority_signing_key_parent_missing".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_directory_create_failed:{}:{error}",
+            parent.display()
+        )
+    })?;
+    set_private_directory_permissions(parent)?;
+
+    let mut private_key = [0u8; 32];
+    getrandom::getrandom(&mut private_key)
+        .map_err(|error| format!("lease_authority_signing_key_generation_failed:{error}"))?;
+    let key = LeaseAuthoritySigningKey::from_private_bytes(private_key);
+    let document = LeaseAuthoritySigningKeyFile {
+        schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
+        key_id: key.key_id.clone(),
+        private_key_hex: hex::encode(key.private_key),
+        public_key_hex: hex::encode(key.public_key),
+    };
+    let encoded = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("lease_authority_signing_key_encode_failed:{error}"))?;
+    let temporary = parent.join(format!(
+        ".{LEASE_AUTHORITY_SIGNING_KEY_FILE}.{}.tmp",
+        uuid::Uuid::new_v4()
+    ));
+    write_private_signing_key_file(&temporary, &encoded)?;
+    match fs::hard_link(&temporary, &path) {
+        Ok(()) => {
+            let _ = fs::remove_file(&temporary);
+            sync_authority_key_directory(parent)?;
+            let key = load_lease_authority_signing_key_file(&path)?;
+            publish_lease_authority_verification_key(&key)?;
+            Ok(key)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(&temporary);
+            sync_authority_key_directory(parent)?;
+            let key = load_lease_authority_signing_key_file(&path)?;
+            publish_lease_authority_verification_key(&key)?;
+            Ok(key)
+        }
+        Err(error) => {
+            let _ = fs::remove_file(&temporary);
+            Err(format!(
+                "lease_authority_signing_key_publish_failed:{}:{error}",
+                path.display()
+            ))
+        }
+    }
+}
+
+fn signer_bootstrap_requires_recovery(
+    signing_key_exists: bool,
+    verification_key_exists: bool,
+) -> bool {
+    !signing_key_exists && verification_key_exists
+}
+
+/// Loads only public verification material. Effect and recovery executors do
+/// not read the private signing root and cannot initialize an authority domain.
+fn load_existing_lease_authority_verification_key() -> Result<LeaseAuthorityVerificationKey, String>
+{
+    let path = lease_authority_verification_key_path()?;
+    if !path.exists() {
+        return Err(format!(
+            "lease_authority_verification_key_unavailable:{}",
+            path.display()
+        ));
+    }
+    load_lease_authority_verification_key_file(&path)
+}
+
+fn lease_authority_signing_key_path() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| {
+            home.join(".agent-browser")
+                .join("service")
+                .join(LEASE_AUTHORITY_SIGNING_KEY_FILE)
+        })
+        .ok_or_else(|| "lease_authority_signing_key_home_unavailable".to_string())
+}
+
+fn lease_authority_verification_key_path() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| {
+            home.join(".agent-browser")
+                .join("service")
+                .join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE)
+        })
+        .ok_or_else(|| "lease_authority_verification_key_home_unavailable".to_string())
+}
+
+fn load_lease_authority_signing_key_file(path: &Path) -> Result<LeaseAuthoritySigningKey, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_metadata_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!(
+            "lease_authority_signing_key_not_private_file:{}",
+            path.display()
+        ));
+    }
+    ensure_private_file_permissions(path, &metadata)?;
+    let encoded = fs::read(path).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_read_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    let document: LeaseAuthoritySigningKeyFile = serde_json::from_slice(&encoded)
+        .map_err(|error| format!("lease_authority_signing_key_decode_failed:{error}"))?;
+    if document.schema_version != LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION {
+        return Err("lease_authority_signing_key_schema_unsupported".to_string());
+    }
+    let decoded = hex::decode(&document.private_key_hex)
+        .map_err(|_| "lease_authority_signing_key_private_key_invalid".to_string())?;
+    let private_key: [u8; 32] = decoded
+        .try_into()
+        .map_err(|_| "lease_authority_signing_key_private_key_invalid".to_string())?;
+    let key = LeaseAuthoritySigningKey::from_private_bytes(private_key);
+    if key.key_id != document.key_id || hex::encode(key.public_key) != document.public_key_hex {
+        return Err("lease_authority_signing_key_id_mismatch".to_string());
+    }
+    Ok(key)
+}
+
+fn publish_lease_authority_verification_key(
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<(), String> {
+    let path = lease_authority_verification_key_path()?;
+    let verification_key = signing_key.verification_key();
+    if path.exists() {
+        let existing = load_lease_authority_verification_key_file(&path)?;
+        return (existing == verification_key)
+            .then_some(())
+            .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string());
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "lease_authority_verification_key_parent_missing".to_string())?;
+    let document = LeaseAuthorityVerificationKeyFile {
+        schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
+        key_id: verification_key.key_id.clone(),
+        public_key_hex: hex::encode(verification_key.public_key),
+    };
+    let encoded = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("lease_authority_verification_key_encode_failed:{error}"))?;
+    let temporary = parent.join(format!(
+        ".{LEASE_AUTHORITY_VERIFICATION_KEY_FILE}.{}.tmp",
+        uuid::Uuid::new_v4()
+    ));
+    write_private_signing_key_file(&temporary, &encoded)?;
+    match fs::hard_link(&temporary, &path) {
+        Ok(()) => {
+            let _ = fs::remove_file(&temporary);
+            sync_authority_key_directory(parent)?;
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(&temporary);
+            sync_authority_key_directory(parent)?;
+            let existing = load_lease_authority_verification_key_file(&path)?;
+            (existing == verification_key)
+                .then_some(())
+                .ok_or_else(|| "lease_authority_verification_key_mismatch".to_string())
+        }
+        Err(error) => {
+            let _ = fs::remove_file(&temporary);
+            Err(format!(
+                "lease_authority_verification_key_publish_failed:{}:{error}",
+                path.display()
+            ))
+        }
+    }
+}
+
+fn load_lease_authority_verification_key_file(
+    path: &Path,
+) -> Result<LeaseAuthorityVerificationKey, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "lease_authority_verification_key_metadata_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!(
+            "lease_authority_verification_key_not_regular_file:{}",
+            path.display()
+        ));
+    }
+    ensure_private_file_permissions(path, &metadata)?;
+    let encoded = fs::read(path).map_err(|error| {
+        format!(
+            "lease_authority_verification_key_read_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    let document: LeaseAuthorityVerificationKeyFile = serde_json::from_slice(&encoded)
+        .map_err(|error| format!("lease_authority_verification_key_decode_failed:{error}"))?;
+    if document.schema_version != LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION {
+        return Err("lease_authority_verification_key_schema_unsupported".to_string());
+    }
+    let decoded = hex::decode(&document.public_key_hex)
+        .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
+    let public_key: [u8; 32] = decoded
+        .try_into()
+        .map_err(|_| "lease_authority_verification_key_invalid".to_string())?;
+    let key = LeaseAuthorityVerificationKey::from_public_bytes(public_key)?;
+    if key.key_id != document.key_id {
+        return Err("lease_authority_verification_key_id_mismatch".to_string());
+    }
+    Ok(key)
+}
+
+fn write_private_signing_key_file(path: &Path, encoded: &[u8]) -> Result<(), String> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_stage_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    file.write_all(encoded).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_write_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    file.write_all(b"\n").map_err(|error| {
+        format!(
+            "lease_authority_signing_key_write_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    file.sync_all().map_err(|error| {
+        format!(
+            "lease_authority_signing_key_sync_failed:{}:{error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(unix)]
+fn sync_authority_key_directory(path: &Path) -> Result<(), String> {
+    fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| {
+            format!(
+                "lease_authority_key_directory_sync_failed:{}:{error}",
+                path.display()
+            )
+        })
+}
+
+#[cfg(not(unix))]
+fn sync_authority_key_directory(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_private_directory_permissions(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
+        format!(
+            "lease_authority_signing_key_directory_permissions_failed:{}:{error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn set_private_directory_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn ensure_private_file_permissions(path: &Path, metadata: &fs::Metadata) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if metadata.permissions().mode() & 0o077 != 0 {
+        return Err(format!(
+            "lease_authority_signing_key_permissions_too_broad:{}",
+            path.display()
+        ));
+    }
+    if metadata.uid() != unsafe { libc::geteuid() } {
+        return Err(format!(
+            "lease_authority_signing_key_owner_mismatch:{}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ensure_private_file_permissions(_path: &Path, _metadata: &fs::Metadata) -> Result<(), String> {
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -218,12 +663,121 @@ pub(crate) struct LeaseClaimReleaseOutcome {
     pub(crate) replayed: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseEffectIntent {
+    pub(crate) action_class: String,
+    pub(crate) audience: String,
+    pub(crate) operation_idempotency_key: String,
+    pub(crate) issued_at: String,
+    pub(crate) authorization_expires_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseEffectContext<'a> {
+    pub(crate) action_class: &'a str,
+    pub(crate) audience: &'a str,
+    pub(crate) operation_idempotency_key: &'a str,
+}
+
+/// Named strict-controller request to re-fence and resume one exact claim.
+/// It deliberately carries no global authority revision, so unrelated claims
+/// cannot prevent crash recovery for this resource.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecoverLeaseClaimRequest {
+    pub(crate) authorization: LeaseRecoveryAuthorization,
+    pub(crate) now: String,
+}
+
+/// Exact administrative request to fence and terminalize one current claim.
+/// It is independent of the target holder capability and optional runtime
+/// projections. The administrative authorization is separately authenticated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RevokeLeaseClaimRequest {
+    pub(crate) authorization: LeaseAdministrativeAuthorization,
+    pub(crate) now: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseAdministrativeIntent {
+    pub(crate) administrator_id: String,
+    pub(crate) administrator_revision: u64,
+    pub(crate) idempotency_key: String,
+    pub(crate) reason_code: String,
+    pub(crate) issued_at: String,
+    pub(crate) authorization_expires_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LeaseAdministratorState {
+    Active,
+    Revoked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LeaseAdministratorAuthority {
+    administrator_id: String,
+    capability_digest: String,
+    revision: u64,
+    state: LeaseAdministratorState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseRecoveryIntent {
+    pub(crate) idempotency_key: String,
+    pub(crate) issued_at: String,
+    pub(crate) authorization_expires_at: String,
+    pub(crate) claim_expires_at: String,
+    pub(crate) transition_deadline: String,
+    pub(crate) owner_generation: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LeaseClaimRecoveryReceipt {
+    schema_version: String,
+    receipt_id: String,
+    request_digest: String,
+    idempotency_key: String,
+    operation: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    recovery_controller_id: String,
+    recovery_controller_revision: u64,
+    previous_claim_revision: u64,
+    claim_revision: u64,
+    previous_fencing_token: u64,
+    fencing_token: u64,
+    authority_revision: u64,
+    expires_at: String,
+    transition_deadline: String,
+    owner_generation: Option<u64>,
+    terminal_result: String,
+    occurred_at: String,
+}
+
+impl LeaseClaimRecoveryReceipt {
+    pub(crate) fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseClaimRecoveryOutcome {
+    pub(crate) claim: Option<ActiveLeaseClaim>,
+    pub(crate) receipt: LeaseClaimRecoveryReceipt,
+    pub(crate) replayed: bool,
+}
+
 /// Exact claim envelope revalidated against canonical authority immediately
 /// before an effect. It contains no raw capability material.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct LeaseEffectAuthorization {
     schema_version: String,
+    signing_key_id: String,
     resource: LeaseResourceKey,
     claim_id: String,
     principal_id: String,
@@ -232,12 +786,162 @@ pub(crate) struct LeaseEffectAuthorization {
     claim_revision: u64,
     fencing_token: u64,
     owner_generation: Option<u64>,
+    action_class: String,
+    audience: String,
+    operation_idempotency_key: String,
+    issued_at: String,
+    authorization_expires_at: String,
     proof: String,
+}
+
+/// Authenticated bearer for the one recovery controller named by a strict
+/// claim. Observable claim fields alone cannot construct this value.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LeaseRecoveryAuthorization {
+    schema_version: String,
+    signing_key_id: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    recovery_controller_id: String,
+    recovery_controller_revision: u64,
+    claim_revision: u64,
+    fencing_token: u64,
+    idempotency_key: String,
+    issued_at: String,
+    authorization_expires_at: String,
+    claim_expires_at: String,
+    transition_deadline: String,
+    owner_generation: Option<u64>,
+    proof: String,
+}
+
+/// Scoped administrative authority for one exact claim revision and fence.
+/// Observable claim fields and target-holder capabilities cannot construct a
+/// valid proof. Debug output always redacts the signature.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LeaseAdministrativeAuthorization {
+    schema_version: String,
+    signing_key_id: String,
+    administrator_id: String,
+    administrator_revision: u64,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
+    idempotency_key: String,
+    reason_code: String,
+    issued_at: String,
+    authorization_expires_at: String,
+    proof: String,
+}
+
+impl std::fmt::Debug for LeaseAdministrativeAuthorization {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseAdministrativeAuthorization")
+            .field("schema_version", &self.schema_version)
+            .field("signing_key_id", &self.signing_key_id)
+            .field("administrator_id", &self.administrator_id)
+            .field("administrator_revision", &self.administrator_revision)
+            .field("resource", &self.resource)
+            .field("claim_id", &self.claim_id)
+            .field("principal_id", &self.principal_id)
+            .field("claim_revision", &self.claim_revision)
+            .field("fencing_token", &self.fencing_token)
+            .field("idempotency_key", &self.idempotency_key)
+            .field("reason_code", &self.reason_code)
+            .field("issued_at", &self.issued_at)
+            .field("authorization_expires_at", &self.authorization_expires_at)
+            .field("proof", &"[REDACTED]")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseClaimRevocationOutcome {
+    pub(crate) receipt: LeaseClaimTerminalReceipt,
+    pub(crate) replayed: bool,
+}
+
+impl LeaseRecoveryAuthorization {
+    pub(crate) fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
+
+    pub(crate) fn recovery_controller_id(&self) -> &str {
+        &self.recovery_controller_id
+    }
+
+    pub(crate) fn plan_id(&self) -> String {
+        stable_id(
+            "lease-recovery-plan-v1",
+            &recovery_authorization_payload(self),
+        )
+    }
+}
+
+impl std::fmt::Debug for LeaseRecoveryAuthorization {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseRecoveryAuthorization")
+            .field("schema_version", &self.schema_version)
+            .field("signing_key_id", &self.signing_key_id)
+            .field("resource", &self.resource)
+            .field("claim_id", &self.claim_id)
+            .field("principal_id", &self.principal_id)
+            .field("recovery_controller_id", &self.recovery_controller_id)
+            .field(
+                "recovery_controller_revision",
+                &self.recovery_controller_revision,
+            )
+            .field("claim_revision", &self.claim_revision)
+            .field("fencing_token", &self.fencing_token)
+            .field("idempotency_key", &self.idempotency_key)
+            .field("issued_at", &self.issued_at)
+            .field("authorization_expires_at", &self.authorization_expires_at)
+            .field("claim_expires_at", &self.claim_expires_at)
+            .field("transition_deadline", &self.transition_deadline)
+            .field("owner_generation", &self.owner_generation)
+            .field("proof", &"[REDACTED]")
+            .finish()
+    }
 }
 
 impl LeaseEffectAuthorization {
     pub(crate) fn profile_id(&self) -> Option<&str> {
         (self.resource.kind == LeaseResourceKind::Profile).then_some(self.resource.id.as_str())
+    }
+
+    pub(crate) fn operation_idempotency_key(&self) -> &str {
+        &self.operation_idempotency_key
+    }
+}
+
+impl std::fmt::Debug for LeaseEffectAuthorization {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseEffectAuthorization")
+            .field("schema_version", &self.schema_version)
+            .field("signing_key_id", &self.signing_key_id)
+            .field("resource", &self.resource)
+            .field("claim_id", &self.claim_id)
+            .field("principal_id", &self.principal_id)
+            .field("capability_id", &self.capability_id)
+            .field("capability_revision", &self.capability_revision)
+            .field("claim_revision", &self.claim_revision)
+            .field("fencing_token", &self.fencing_token)
+            .field("owner_generation", &self.owner_generation)
+            .field("action_class", &self.action_class)
+            .field("audience", &self.audience)
+            .field("operation_idempotency_key", &self.operation_idempotency_key)
+            .field("issued_at", &self.issued_at)
+            .field("authorization_expires_at", &self.authorization_expires_at)
+            .field("proof", &"[REDACTED]")
+            .finish()
     }
 }
 
@@ -306,9 +1010,11 @@ impl ActiveLeaseClaim {
         self.owner_generation
     }
 
-    pub(crate) fn effect_authorization(
+    fn effect_authorization(
         &self,
         capability: &super::service_principal::ServiceProfileCapability,
+        intent: &LeaseEffectIntent,
+        signing_key: &LeaseAuthoritySigningKey,
     ) -> Result<LeaseEffectAuthorization, LeaseAuthorityError> {
         if capability.capability_id != self.capability_id
             || capability.principal_id != self.principal_id
@@ -320,8 +1026,10 @@ impl ActiveLeaseClaim {
         {
             return Err(LeaseAuthorityError::CapabilityMismatch);
         }
+        validate_effect_intent(intent)?;
         let mut authorization = LeaseEffectAuthorization {
             schema_version: LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION.to_string(),
+            signing_key_id: signing_key.key_id.clone(),
             resource: self.resource.clone(),
             claim_id: self.claim_id.clone(),
             principal_id: self.principal_id.clone(),
@@ -330,9 +1038,14 @@ impl ActiveLeaseClaim {
             claim_revision: self.revision,
             fencing_token: self.fencing_token,
             owner_generation: self.owner_generation,
+            action_class: intent.action_class.clone(),
+            audience: intent.audience.clone(),
+            operation_idempotency_key: intent.operation_idempotency_key.clone(),
+            issued_at: intent.issued_at.clone(),
+            authorization_expires_at: intent.authorization_expires_at.clone(),
             proof: String::new(),
         };
-        authorization.proof = sign_effect_authorization(&authorization, capability)?;
+        authorization.proof = sign_effect_authorization(&authorization, signing_key)?;
         Ok(authorization)
     }
 }
@@ -347,6 +1060,8 @@ pub(crate) struct LeaseAuthorityState {
     events: Vec<LeaseAuthorityEvent>,
     acquisition_receipts: BTreeMap<String, LeaseClaimAcquisitionReceipt>,
     terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
+    recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
+    administrators: BTreeMap<String, LeaseAdministratorAuthority>,
 }
 
 impl LeaseAuthorityState {
@@ -356,6 +1071,8 @@ impl LeaseAuthorityState {
             && self.events.is_empty()
             && self.acquisition_receipts.is_empty()
             && self.terminal_receipts.is_empty()
+            && self.recovery_receipts.is_empty()
+            && self.administrators.is_empty()
     }
 
     pub(crate) fn revision(&self) -> u64 {
@@ -577,14 +1294,16 @@ impl LeaseAuthorityState {
         Ok(claim)
     }
 
-    pub(crate) fn release_with_receipt(
+    fn release_with_receipt(
         &mut self,
         request: ReleaseLeaseClaimRequest,
+        verification_key: &LeaseAuthorityVerificationKey,
     ) -> Result<LeaseClaimReleaseOutcome, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
         if let Some(replayed) = self.replay_release(&request)? {
             return Ok(replayed);
         }
+        verify_effect_authorization(&request.authorization, verification_key)?;
         let request_digest = release_request_digest(&request);
         if request.idempotency_key.trim().is_empty()
             || chrono::DateTime::parse_from_rfc3339(&request.now).is_err()
@@ -592,8 +1311,13 @@ impl LeaseAuthorityState {
             return Err(LeaseAuthorityError::InvalidRequest);
         }
         let resource_key = request.authorization.resource.storage_key();
+        let release_context = LeaseEffectContext {
+            action_class: "lease_release",
+            audience: "lease_authority_kernel",
+            operation_idempotency_key: &request.idempotency_key,
+        };
         let claim = self
-            .authorize_effect(&request.authorization, &request.now)?
+            .authorize_effect(&request.authorization, &request.now, &release_context)?
             .clone();
         let fencing_high_water = self
             .next_fencing_tokens
@@ -669,6 +1393,335 @@ impl LeaseAuthorityState {
         }))
     }
 
+    fn revoke_with_receipt(
+        &mut self,
+        request: RevokeLeaseClaimRequest,
+        verification_key: &LeaseAuthorityVerificationKey,
+    ) -> Result<LeaseClaimRevocationOutcome, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        if let Some(replayed) = self.replay_revocation(&request)? {
+            return Ok(replayed);
+        }
+        verify_administrative_authorization(&request.authorization, verification_key)?;
+        let authorization = &request.authorization;
+        if authorization.idempotency_key.trim().is_empty()
+            || authorization.reason_code.trim().is_empty()
+            || authorization.administrator_id.trim().is_empty()
+            || authorization.administrator_revision == 0
+            || !timestamp_at_or_after(&request.now, &authorization.issued_at)
+            || !timestamp_precedes(&request.now, &authorization.authorization_expires_at)
+            || !timestamp_span_within(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+                MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+            )
+        {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let resource_key = authorization.resource.storage_key();
+        let claim = self
+            .authorize_administrative_revocation(authorization, &request.now)?
+            .clone();
+        let fencing_high_water = self
+            .next_fencing_tokens
+            .get(&resource_key)
+            .copied()
+            .unwrap_or(claim.fencing_token)
+            .max(claim.fencing_token);
+        let terminal_fencing_token = fencing_high_water
+            .checked_add(1)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let next_authority_revision = self
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let receipt = LeaseClaimTerminalReceipt {
+            schema_version: LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: stable_id(
+                "lease-terminal-receipt-v1",
+                &format!(
+                    "revoke\0{}\0{}",
+                    claim.claim_id, authorization.idempotency_key
+                ),
+            ),
+            request_digest: revocation_request_digest(&request),
+            idempotency_key: authorization.idempotency_key.clone(),
+            operation: "revoke".to_string(),
+            resource: claim.resource.clone(),
+            claim_id: claim.claim_id.clone(),
+            principal_id: claim.principal_id.clone(),
+            capability_id: claim.capability_id.clone(),
+            capability_revision: claim.capability_revision,
+            claim_revision: claim.revision,
+            released_fencing_token: claim.fencing_token,
+            terminal_fencing_token,
+            authority_revision: next_authority_revision,
+            terminal_result: "revoked".to_string(),
+            occurred_at: request.now.clone(),
+        };
+        let mut event = terminal_event(&claim, LeaseEventKind::Revoked, &request.now);
+        event.fencing_token = terminal_fencing_token;
+
+        self.active_claims.remove(&resource_key);
+        self.next_fencing_tokens
+            .insert(resource_key, terminal_fencing_token);
+        self.revision = next_authority_revision;
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.events.push(event);
+        self.terminal_receipts
+            .insert(authorization.idempotency_key.clone(), receipt.clone());
+        Ok(LeaseClaimRevocationOutcome {
+            receipt,
+            replayed: false,
+        })
+    }
+
+    fn replay_revocation(
+        &self,
+        request: &RevokeLeaseClaimRequest,
+    ) -> Result<Option<LeaseClaimRevocationOutcome>, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        let Some(receipt) = self
+            .terminal_receipts
+            .get(&request.authorization.idempotency_key)
+        else {
+            return Ok(None);
+        };
+        if receipt.schema_version != LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION {
+            return Err(LeaseAuthorityError::UnsupportedSchema);
+        }
+        if receipt.request_digest != revocation_request_digest(request)
+            || receipt.operation != "revoke"
+        {
+            return Err(LeaseAuthorityError::IdempotencyConflict);
+        }
+        Ok(Some(LeaseClaimRevocationOutcome {
+            receipt: receipt.clone(),
+            replayed: true,
+        }))
+    }
+
+    fn recover_with_receipt(
+        &mut self,
+        request: RecoverLeaseClaimRequest,
+        verification_key: &LeaseAuthorityVerificationKey,
+    ) -> Result<LeaseClaimRecoveryOutcome, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        if let Some(replayed) = self.replay_recovery(&request)? {
+            return Ok(replayed);
+        }
+        verify_recovery_authorization(&request.authorization, verification_key)?;
+        let authorization = &request.authorization;
+        if authorization.idempotency_key.trim().is_empty()
+            || !timestamp_at_or_after(&request.now, &authorization.issued_at)
+            || !timestamp_precedes(&request.now, &authorization.authorization_expires_at)
+            || !timestamp_precedes(&request.now, &authorization.transition_deadline)
+            || !timestamp_precedes(
+                &authorization.transition_deadline,
+                &authorization.claim_expires_at,
+            )
+            || !timestamp_span_within(
+                &request.now,
+                &authorization.claim_expires_at,
+                MAX_STRICT_RECOVERY_TENURE_SECONDS,
+            )
+        {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let resource_key = request.authorization.resource.storage_key();
+        let current = self.authorize_recovery(&request.authorization, &request.now)?;
+        let previous_claim_revision = current.revision;
+        let previous_fencing_token = current.fencing_token;
+        let next_claim_revision = previous_claim_revision
+            .checked_add(1)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let fencing_high_water = self
+            .next_fencing_tokens
+            .get(&resource_key)
+            .copied()
+            .unwrap_or(previous_fencing_token)
+            .max(previous_fencing_token);
+        let next_fencing_token = fencing_high_water
+            .checked_add(1)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let next_authority_revision = self
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let mut recovered = current.clone();
+        recovered.revision = next_claim_revision;
+        recovered.fencing_token = next_fencing_token;
+        recovered.heartbeat_at = request.now.clone();
+        recovered.expires_at = authorization.claim_expires_at.clone();
+        recovered.transition_deadline = Some(authorization.transition_deadline.clone());
+        recovered.owner_generation = authorization.owner_generation;
+        let receipt = LeaseClaimRecoveryReceipt {
+            schema_version: LEASE_RECOVERY_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: stable_id(
+                "lease-recovery-receipt-v1",
+                &format!(
+                    "{}\0{}",
+                    request.authorization.claim_id, request.authorization.idempotency_key
+                ),
+            ),
+            request_digest: recovery_request_digest(&request),
+            idempotency_key: authorization.idempotency_key.clone(),
+            operation: "recover".to_string(),
+            resource: recovered.resource.clone(),
+            claim_id: recovered.claim_id.clone(),
+            principal_id: recovered.principal_id.clone(),
+            recovery_controller_id: request.authorization.recovery_controller_id.clone(),
+            recovery_controller_revision: request.authorization.recovery_controller_revision,
+            previous_claim_revision,
+            claim_revision: next_claim_revision,
+            previous_fencing_token,
+            fencing_token: next_fencing_token,
+            authority_revision: next_authority_revision,
+            expires_at: authorization.claim_expires_at.clone(),
+            transition_deadline: authorization.transition_deadline.clone(),
+            owner_generation: authorization.owner_generation,
+            terminal_result: "recovered".to_string(),
+            occurred_at: request.now.clone(),
+        };
+        let event = LeaseAuthorityEvent {
+            event_id: stable_id(
+                "lease-event-v1",
+                &format!(
+                    "{}\0recovered\0{}\0{}",
+                    recovered.claim_id, recovered.revision, next_authority_revision
+                ),
+            ),
+            resource: recovered.resource.clone(),
+            claim_id: recovered.claim_id.clone(),
+            principal_id: recovered.principal_id.clone(),
+            fencing_token: recovered.fencing_token,
+            kind: LeaseEventKind::Recovered,
+            occurred_at: request.now,
+        };
+
+        self.revision = next_authority_revision;
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.next_fencing_tokens
+            .insert(resource_key.clone(), next_fencing_token);
+        self.active_claims.insert(resource_key, recovered.clone());
+        self.events.push(event);
+        self.recovery_receipts
+            .insert(authorization.idempotency_key.clone(), receipt.clone());
+        Ok(LeaseClaimRecoveryOutcome {
+            claim: Some(recovered),
+            receipt,
+            replayed: false,
+        })
+    }
+
+    fn replay_recovery(
+        &self,
+        request: &RecoverLeaseClaimRequest,
+    ) -> Result<Option<LeaseClaimRecoveryOutcome>, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        let Some(receipt) = self
+            .recovery_receipts
+            .get(&request.authorization.idempotency_key)
+        else {
+            return Ok(None);
+        };
+        if receipt.schema_version != LEASE_RECOVERY_RECEIPT_SCHEMA_VERSION {
+            return Err(LeaseAuthorityError::UnsupportedSchema);
+        }
+        if receipt.operation != "recover"
+            || receipt.request_digest != recovery_request_digest(request)
+        {
+            return Err(LeaseAuthorityError::IdempotencyConflict);
+        }
+        let claim = self
+            .active_claims
+            .get(&receipt.resource.storage_key())
+            .filter(|claim| {
+                claim.claim_id == receipt.claim_id
+                    && claim.revision == receipt.claim_revision
+                    && claim.fencing_token == receipt.fencing_token
+                    && timestamp_precedes(&request.now, &claim.expires_at)
+            })
+            .cloned();
+        Ok(Some(LeaseClaimRecoveryOutcome {
+            claim,
+            receipt: receipt.clone(),
+            replayed: true,
+        }))
+    }
+
+    fn authorize_administrative_revocation(
+        &self,
+        authorization: &LeaseAdministrativeAuthorization,
+        now: &str,
+    ) -> Result<&ActiveLeaseClaim, LeaseAuthorityError> {
+        if authorization.schema_version != LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION
+            || !timestamp_at_or_after(now, &authorization.issued_at)
+            || !timestamp_precedes(now, &authorization.authorization_expires_at)
+        {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let administrator = self
+            .administrators
+            .get(&authorization.administrator_id)
+            .ok_or(LeaseAuthorityError::AdministrativeAuthorityMismatch)?;
+        if administrator.state != LeaseAdministratorState::Active
+            || administrator.revision != authorization.administrator_revision
+        {
+            return Err(LeaseAuthorityError::AdministrativeAuthorityMismatch);
+        }
+        let claim = self
+            .active_claims
+            .get(&authorization.resource.storage_key())
+            .ok_or(LeaseAuthorityError::ClaimUnavailable)?;
+        if !timestamp_precedes(now, &claim.expires_at) {
+            return Err(LeaseAuthorityError::ClaimExpired);
+        }
+        if claim.claim_id != authorization.claim_id
+            || claim.principal_id != authorization.principal_id
+            || claim.revision != authorization.claim_revision
+            || claim.fencing_token != authorization.fencing_token
+        {
+            return Err(LeaseAuthorityError::StaleClaim);
+        }
+        Ok(claim)
+    }
+
+    fn authorize_recovery(
+        &self,
+        authorization: &LeaseRecoveryAuthorization,
+        now: &str,
+    ) -> Result<&ActiveLeaseClaim, LeaseAuthorityError> {
+        if authorization.schema_version != LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION {
+            return Err(LeaseAuthorityError::UnsupportedSchema);
+        }
+        let claim = self
+            .active_claims
+            .get(&authorization.resource.storage_key())
+            .ok_or(LeaseAuthorityError::ClaimUnavailable)?;
+        if !timestamp_precedes(now, &claim.expires_at) {
+            return Err(LeaseAuthorityError::ClaimExpired);
+        }
+        if claim.mode != LeaseClaimMode::Strict {
+            return Err(LeaseAuthorityError::StrictClaimRequired);
+        }
+        if claim.recovery_controller_id.as_deref()
+            != Some(authorization.recovery_controller_id.as_str())
+        {
+            return Err(LeaseAuthorityError::RecoveryControllerMismatch);
+        }
+        if claim.claim_id != authorization.claim_id
+            || claim.principal_id != authorization.principal_id
+            || claim.revision != authorization.claim_revision
+            || claim.fencing_token != authorization.fencing_token
+        {
+            return Err(LeaseAuthorityError::StaleClaim);
+        }
+        Ok(claim)
+    }
+
     pub(crate) fn current_claim(
         &self,
         resource: &LeaseResourceKey,
@@ -710,14 +1763,31 @@ impl LeaseAuthorityState {
         })
     }
 
-    pub(crate) fn authorize_effect(
+    fn authorize_effect(
         &self,
         authorization: &LeaseEffectAuthorization,
         now: &str,
+        context: &LeaseEffectContext<'_>,
     ) -> Result<&ActiveLeaseClaim, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
         if authorization.schema_version != LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION {
             return Err(LeaseAuthorityError::UnsupportedSchema);
+        }
+        if !timestamp_at_or_after(now, &authorization.issued_at)
+            || !timestamp_precedes(now, &authorization.authorization_expires_at)
+            || !timestamp_span_within(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+                MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+            )
+        {
+            return Err(LeaseAuthorityError::EffectAuthorizationExpired);
+        }
+        if authorization.action_class != context.action_class
+            || authorization.audience != context.audience
+            || authorization.operation_idempotency_key != context.operation_idempotency_key
+        {
+            return Err(LeaseAuthorityError::EffectScopeMismatch);
         }
         let claim = self
             .active_claims
@@ -777,6 +1847,8 @@ pub(crate) enum LeaseAuthorityError {
     IdempotencyConflict,
     ParentClaimUnavailable,
     StrictRecoveryRequired,
+    StrictClaimRequired,
+    RecoveryControllerMismatch,
     CounterExhausted,
     ClaimUnavailable,
     ClaimExpired,
@@ -784,7 +1856,13 @@ pub(crate) enum LeaseAuthorityError {
     CapabilityUnavailable,
     CapabilityRevoked,
     CapabilityMismatch,
+    SigningKeyMismatch,
+    EffectScopeMismatch,
+    EffectAuthorizationExpired,
     InvalidEffectProof,
+    InvalidRecoveryProof,
+    InvalidAdministrativeProof,
+    AdministrativeAuthorityMismatch,
     UnsupportedSchema,
 }
 
@@ -797,6 +1875,8 @@ impl LeaseAuthorityError {
             Self::IdempotencyConflict => "idempotency_conflict",
             Self::ParentClaimUnavailable => "parent_claim_unavailable",
             Self::StrictRecoveryRequired => "strict_recovery_required",
+            Self::StrictClaimRequired => "strict_claim_required",
+            Self::RecoveryControllerMismatch => "recovery_controller_mismatch",
             Self::CounterExhausted => "counter_exhausted",
             Self::ClaimUnavailable => "claim_unavailable",
             Self::ClaimExpired => "claim_expired",
@@ -804,7 +1884,13 @@ impl LeaseAuthorityError {
             Self::CapabilityUnavailable => "capability_unavailable",
             Self::CapabilityRevoked => "capability_revoked",
             Self::CapabilityMismatch => "capability_mismatch",
+            Self::SigningKeyMismatch => "signing_key_mismatch",
+            Self::EffectScopeMismatch => "effect_scope_mismatch",
+            Self::EffectAuthorizationExpired => "effect_authorization_expired",
             Self::InvalidEffectProof => "invalid_effect_proof",
+            Self::InvalidRecoveryProof => "invalid_recovery_proof",
+            Self::InvalidAdministrativeProof => "invalid_administrative_proof",
+            Self::AdministrativeAuthorityMismatch => "administrative_authority_mismatch",
             Self::UnsupportedSchema => "unsupported_schema",
         }
     }
@@ -838,6 +1924,23 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
     repository: &R,
     request: ReleaseLeaseClaimRequest,
 ) -> Result<LeaseClaimReleaseOutcome, String> {
+    if let Some(replayed) = repository
+        .load_snapshot()?
+        .lease_authority()
+        .replay_release(&request)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+    {
+        return Ok(replayed);
+    }
+    let verification_key = load_existing_lease_authority_verification_key()?;
+    release_lease_claim_in_repository_with_verification_key(repository, request, &verification_key)
+}
+
+fn release_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: ReleaseLeaseClaimRequest,
+    verification_key: &LeaseAuthorityVerificationKey,
+) -> Result<LeaseClaimReleaseOutcome, String> {
     repository.mutate(|state| {
         if let Some(replayed) = state
             .lease_authority()
@@ -846,9 +1949,14 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
         {
             return Ok(replayed);
         }
+        let release_context = LeaseEffectContext {
+            action_class: "lease_release",
+            audience: "lease_authority_kernel",
+            operation_idempotency_key: &request.idempotency_key,
+        };
         let claim = state
             .lease_authority()
-            .authorize_effect(&request.authorization, &request.now)
+            .authorize_effect(&request.authorization, &request.now, &release_context)
             .cloned()
             .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
         let capability = state
@@ -879,11 +1987,109 @@ pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
                 LeaseAuthorityError::CapabilityMismatch.as_str()
             ));
         }
-        verify_effect_authorization(&request.authorization, capability)
-            .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
         state
             .lease_authority
-            .release_with_receipt(request)
+            .release_with_receipt(request, verification_key)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))
+    })
+}
+
+pub(crate) fn recover_lease_claim_in_repository<R: ServiceStateRepository>(
+    repository: &R,
+    request: RecoverLeaseClaimRequest,
+) -> Result<LeaseClaimRecoveryOutcome, String> {
+    if let Some(replayed) = repository
+        .load_snapshot()?
+        .lease_authority()
+        .replay_recovery(&request)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+    {
+        return Ok(replayed);
+    }
+    let verification_key = load_existing_lease_authority_verification_key()?;
+    recover_lease_claim_in_repository_with_verification_key(repository, request, &verification_key)
+}
+
+fn recover_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: RecoverLeaseClaimRequest,
+    verification_key: &LeaseAuthorityVerificationKey,
+) -> Result<LeaseClaimRecoveryOutcome, String> {
+    repository.mutate(|state| {
+        if let Some(replayed) = state
+            .lease_authority()
+            .replay_recovery(&request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+        {
+            return Ok(replayed);
+        }
+        let controller = state
+            .service_principals
+            .profile_capabilities
+            .get(&request.authorization.recovery_controller_id)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "lease_authority_{}",
+                    LeaseAuthorityError::CapabilityUnavailable.as_str()
+                )
+            })?;
+        if controller.state != super::service_principal::ServiceProfileCapabilityState::Active {
+            return Err(format!(
+                "lease_authority_{}",
+                LeaseAuthorityError::CapabilityRevoked.as_str()
+            ));
+        }
+        if controller.capability_id != request.authorization.recovery_controller_id
+            || controller.revision != request.authorization.recovery_controller_revision
+            || controller.principal_id != request.authorization.principal_id
+            || (request.authorization.resource.kind == LeaseResourceKind::Profile
+                && controller.profile_id != request.authorization.resource.id)
+        {
+            return Err(format!(
+                "lease_authority_{}",
+                LeaseAuthorityError::RecoveryControllerMismatch.as_str()
+            ));
+        }
+        state
+            .lease_authority
+            .recover_with_receipt(request, verification_key)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))
+    })
+}
+
+pub(crate) fn revoke_lease_claim_in_repository<R: ServiceStateRepository>(
+    repository: &R,
+    request: RevokeLeaseClaimRequest,
+) -> Result<LeaseClaimRevocationOutcome, String> {
+    if let Some(replayed) = repository
+        .load_snapshot()?
+        .lease_authority()
+        .replay_revocation(&request)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+    {
+        return Ok(replayed);
+    }
+    let verification_key = load_existing_lease_authority_verification_key()?;
+    revoke_lease_claim_in_repository_with_verification_key(repository, request, &verification_key)
+}
+
+fn revoke_lease_claim_in_repository_with_verification_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: RevokeLeaseClaimRequest,
+    verification_key: &LeaseAuthorityVerificationKey,
+) -> Result<LeaseClaimRevocationOutcome, String> {
+    repository.mutate(|state| {
+        if let Some(replayed) = state
+            .lease_authority()
+            .replay_revocation(&request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+        {
+            return Ok(replayed);
+        }
+        state
+            .lease_authority
+            .revoke_with_receipt(request, verification_key)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -892,11 +2098,29 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
     repository: &R,
     authorization: &LeaseEffectAuthorization,
     now: &str,
+    context: &LeaseEffectContext<'_>,
+) -> Result<ActiveLeaseClaim, String> {
+    let verification_key = load_existing_lease_authority_verification_key()?;
+    authorize_lease_effect_in_repository_with_verification_key(
+        repository,
+        authorization,
+        now,
+        context,
+        &verification_key,
+    )
+}
+
+fn authorize_lease_effect_in_repository_with_verification_key<R: ServiceStateRepository>(
+    repository: &R,
+    authorization: &LeaseEffectAuthorization,
+    now: &str,
+    context: &LeaseEffectContext<'_>,
+    verification_key: &LeaseAuthorityVerificationKey,
 ) -> Result<ActiveLeaseClaim, String> {
     let state = repository.load_snapshot()?;
     let claim = state
         .lease_authority()
-        .authorize_effect(authorization, now)
+        .authorize_effect(authorization, now, context)
         .cloned()
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     let capability = state
@@ -927,7 +2151,7 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
             LeaseAuthorityError::CapabilityMismatch.as_str()
         ));
     }
-    verify_effect_authorization(authorization, capability)
+    verify_effect_authorization(authorization, verification_key)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     if claim.resource.kind == LeaseResourceKind::Profile {
         let profile = state
@@ -968,27 +2192,307 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
     Ok(claim)
 }
 
+#[cfg(test)]
+fn authorize_lease_effect_in_repository_with_signing_key<R: ServiceStateRepository>(
+    repository: &R,
+    authorization: &LeaseEffectAuthorization,
+    now: &str,
+    context: &LeaseEffectContext<'_>,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<ActiveLeaseClaim, String> {
+    authorize_lease_effect_in_repository_with_verification_key(
+        repository,
+        authorization,
+        now,
+        context,
+        &signing_key.verification_key(),
+    )
+}
+
+#[cfg(test)]
+fn release_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: ReleaseLeaseClaimRequest,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseClaimReleaseOutcome, String> {
+    release_lease_claim_in_repository_with_verification_key(
+        repository,
+        request,
+        &signing_key.verification_key(),
+    )
+}
+
+#[cfg(test)]
+fn recover_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: RecoverLeaseClaimRequest,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseClaimRecoveryOutcome, String> {
+    recover_lease_claim_in_repository_with_verification_key(
+        repository,
+        request,
+        &signing_key.verification_key(),
+    )
+}
+
+#[cfg(test)]
+fn revoke_lease_claim_in_repository_with_signing_key<R: ServiceStateRepository>(
+    repository: &R,
+    request: RevokeLeaseClaimRequest,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseClaimRevocationOutcome, String> {
+    revoke_lease_claim_in_repository_with_verification_key(
+        repository,
+        request,
+        &signing_key.verification_key(),
+    )
+}
+
 pub(crate) fn issue_lease_effect_authorization_for_state(
     state: &super::service_model::ServiceState,
     claim: &ActiveLeaseClaim,
+    intent: &LeaseEffectIntent,
+    raw_capability: &[u8],
 ) -> Result<LeaseEffectAuthorization, String> {
+    let authority = super::service_principal::authenticate_profile_capability(
+        &state.service_principals,
+        std::str::from_utf8(raw_capability)
+            .map_err(|_| "lease_authority_capability_mismatch".to_string())?,
+        claim.profile_id(),
+    )
+    .map_err(|error| format!("lease_authority_{}", error.code.as_str()))?;
+    if authority.principal_id != claim.principal_id
+        || authority.capability_id != claim.capability_id
+        || authority.capability_revision != claim.capability_revision
+    {
+        return Err("lease_authority_capability_mismatch".to_string());
+    }
+    let signing_key = load_or_create_lease_authority_signing_key()?;
+    issue_lease_effect_authorization_for_state_with_signing_key(state, claim, intent, &signing_key)
+}
+
+pub(crate) fn release_lease_claim_for_authenticated_state(
+    state: &mut super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    intent: &LeaseEffectIntent,
+    raw_capability: &[u8],
+    idempotency_key: String,
+    now: String,
+) -> Result<LeaseClaimReleaseOutcome, String> {
+    let authorization =
+        issue_lease_effect_authorization_for_state(state, claim, intent, raw_capability)?;
+    let verification_key = load_existing_lease_authority_verification_key()?;
+    state
+        .lease_authority
+        .release_with_receipt(
+            ReleaseLeaseClaimRequest {
+                authorization,
+                idempotency_key,
+                now,
+            },
+            &verification_key,
+        )
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))
+}
+
+fn issue_lease_effect_authorization_for_state_with_signing_key(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    intent: &LeaseEffectIntent,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseEffectAuthorization, String> {
+    validate_effect_intent(intent)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     let current = state
         .lease_authority()
-        .current_claim(&claim.resource, &claim.heartbeat_at)
+        .current_claim(&claim.resource, &intent.issued_at)
         .filter(|current| {
             current.claim_id == claim.claim_id
                 && current.revision == claim.revision
                 && current.fencing_token == claim.fencing_token
         })
         .ok_or_else(|| "lease_authority_claim_unavailable".to_string())?;
+    if !timestamp_at_or_after(&current.expires_at, &intent.authorization_expires_at) {
+        return Err("lease_authority_invalid_request".to_string());
+    }
     let capability = state
         .service_principals
         .profile_capabilities
         .get(current.capability_id())
         .ok_or_else(|| "lease_authority_capability_unavailable".to_string())?;
     current
-        .effect_authorization(capability)
+        .effect_authorization(capability, intent, signing_key)
         .map_err(|error| format!("lease_authority_{}", error.as_str()))
+}
+
+pub(crate) fn issue_lease_recovery_authorization_for_state(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    controller: &super::service_principal::ServiceProfileCapability,
+    intent: &LeaseRecoveryIntent,
+    raw_capability: &[u8],
+) -> Result<LeaseRecoveryAuthorization, String> {
+    let authority = super::service_principal::authenticate_profile_capability(
+        &state.service_principals,
+        std::str::from_utf8(raw_capability)
+            .map_err(|_| "lease_authority_recovery_controller_mismatch".to_string())?,
+        claim.profile_id(),
+    )
+    .map_err(|error| format!("lease_authority_{}", error.code.as_str()))?;
+    if authority.principal_id != claim.principal_id
+        || authority.capability_id != controller.capability_id
+        || authority.capability_revision != controller.revision
+    {
+        return Err("lease_authority_recovery_controller_mismatch".to_string());
+    }
+    let signing_key = load_or_create_lease_authority_signing_key()?;
+    issue_lease_recovery_authorization_for_state_with_signing_key(
+        state,
+        claim,
+        controller,
+        intent,
+        &signing_key,
+    )
+}
+
+fn issue_lease_recovery_authorization_for_state_with_signing_key(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    controller: &super::service_principal::ServiceProfileCapability,
+    intent: &LeaseRecoveryIntent,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseRecoveryAuthorization, String> {
+    let current = state
+        .lease_authority()
+        .current_claim(&claim.resource, &intent.issued_at)
+        .filter(|current| {
+            current.claim_id == claim.claim_id
+                && current.revision == claim.revision
+                && current.fencing_token == claim.fencing_token
+        })
+        .ok_or_else(|| "lease_authority_claim_unavailable".to_string())?;
+    let controller_id = current
+        .recovery_controller_id
+        .as_deref()
+        .ok_or_else(|| "lease_authority_strict_recovery_required".to_string())?;
+    let registered = state
+        .service_principals
+        .profile_capabilities
+        .get(controller_id)
+        .ok_or_else(|| "lease_authority_capability_unavailable".to_string())?;
+    if registered != controller
+        || controller.state != super::service_principal::ServiceProfileCapabilityState::Active
+        || controller.principal_id != current.principal_id
+        || current
+            .profile_id()
+            .is_some_and(|profile_id| controller.profile_id != profile_id)
+    {
+        return Err("lease_authority_recovery_controller_mismatch".to_string());
+    }
+    let mut authorization = LeaseRecoveryAuthorization {
+        schema_version: LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION.to_string(),
+        signing_key_id: signing_key.key_id.clone(),
+        resource: current.resource.clone(),
+        claim_id: current.claim_id.clone(),
+        principal_id: current.principal_id.clone(),
+        recovery_controller_id: controller.capability_id.clone(),
+        recovery_controller_revision: controller.revision,
+        claim_revision: current.revision,
+        fencing_token: current.fencing_token,
+        idempotency_key: intent.idempotency_key.clone(),
+        issued_at: intent.issued_at.clone(),
+        authorization_expires_at: intent.authorization_expires_at.clone(),
+        claim_expires_at: intent.claim_expires_at.clone(),
+        transition_deadline: intent.transition_deadline.clone(),
+        owner_generation: intent.owner_generation,
+        proof: String::new(),
+    };
+    authorization.proof = sign_recovery_authorization(&authorization, signing_key)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+    Ok(authorization)
+}
+
+pub(crate) fn issue_lease_administrative_authorization_for_state(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    intent: &LeaseAdministrativeIntent,
+    raw_administrator_capability: &[u8],
+) -> Result<LeaseAdministrativeAuthorization, String> {
+    if raw_administrator_capability.len() < 32 {
+        return Err("lease_authority_administrative_authority_mismatch".to_string());
+    }
+    let administrator = state
+        .lease_authority()
+        .administrators
+        .get(&intent.administrator_id)
+        .ok_or_else(|| "lease_authority_administrative_authority_mismatch".to_string())?;
+    if administrator.state != LeaseAdministratorState::Active
+        || administrator.revision != intent.administrator_revision
+        || administrator.capability_digest
+            != administrator_capability_digest(raw_administrator_capability)
+    {
+        return Err("lease_authority_administrative_authority_mismatch".to_string());
+    }
+    let signing_key = load_or_create_lease_authority_signing_key()?;
+    issue_lease_administrative_authorization_for_state_with_signing_key(
+        state,
+        claim,
+        intent,
+        &signing_key,
+    )
+}
+
+fn issue_lease_administrative_authorization_for_state_with_signing_key(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+    intent: &LeaseAdministrativeIntent,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseAdministrativeAuthorization, String> {
+    if intent.administrator_id.trim().is_empty()
+        || intent.administrator_revision == 0
+        || intent.idempotency_key.trim().is_empty()
+        || intent.reason_code.trim().is_empty()
+        || !timestamp_precedes(&intent.issued_at, &intent.authorization_expires_at)
+        || !timestamp_span_within(
+            &intent.issued_at,
+            &intent.authorization_expires_at,
+            MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+        )
+    {
+        return Err("lease_authority_invalid_request".to_string());
+    }
+    let current = state
+        .lease_authority()
+        .current_claim(&claim.resource, &intent.issued_at)
+        .filter(|current| {
+            current.claim_id == claim.claim_id
+                && current.revision == claim.revision
+                && current.fencing_token == claim.fencing_token
+        })
+        .ok_or_else(|| "lease_authority_claim_unavailable".to_string())?;
+    let mut authorization = LeaseAdministrativeAuthorization {
+        schema_version: LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION.to_string(),
+        signing_key_id: signing_key.key_id.clone(),
+        administrator_id: intent.administrator_id.clone(),
+        administrator_revision: intent.administrator_revision,
+        resource: current.resource.clone(),
+        claim_id: current.claim_id.clone(),
+        principal_id: current.principal_id.clone(),
+        claim_revision: current.revision,
+        fencing_token: current.fencing_token,
+        idempotency_key: intent.idempotency_key.clone(),
+        reason_code: intent.reason_code.clone(),
+        issued_at: intent.issued_at.clone(),
+        authorization_expires_at: intent.authorization_expires_at.clone(),
+        proof: String::new(),
+    };
+    authorization.proof = sign_administrative_authorization(&authorization, signing_key)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+    Ok(authorization)
+}
+
+fn administrator_capability_digest(raw_capability: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(raw_capability))
 }
 
 fn validate_request(request: &AcquireLeaseClaimRequest) -> Result<(), LeaseAuthorityError> {
@@ -998,6 +2502,11 @@ fn validate_request(request: &AcquireLeaseClaimRequest) -> Result<(), LeaseAutho
         || request.capability_revision == 0
         || request.idempotency_key.trim().is_empty()
         || !timestamp_precedes(&request.now, &request.expires_at)
+        || !timestamp_span_within(
+            &request.now,
+            &request.expires_at,
+            MAX_LEASE_CLAIM_TENURE_SECONDS,
+        )
     {
         return Err(LeaseAuthorityError::InvalidRequest);
     }
@@ -1016,6 +2525,22 @@ fn validate_request(request: &AcquireLeaseClaimRequest) -> Result<(), LeaseAutho
     Ok(())
 }
 
+fn validate_effect_intent(intent: &LeaseEffectIntent) -> Result<(), LeaseAuthorityError> {
+    if intent.action_class.trim().is_empty()
+        || intent.audience.trim().is_empty()
+        || intent.operation_idempotency_key.trim().is_empty()
+        || !timestamp_precedes(&intent.issued_at, &intent.authorization_expires_at)
+        || !timestamp_span_within(
+            &intent.issued_at,
+            &intent.authorization_expires_at,
+            MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+        )
+    {
+        return Err(LeaseAuthorityError::InvalidRequest);
+    }
+    Ok(())
+}
+
 fn timestamp_precedes(left: &str, right: &str) -> bool {
     let Ok(left) = chrono::DateTime::parse_from_rfc3339(left) else {
         return false;
@@ -1024,6 +2549,27 @@ fn timestamp_precedes(left: &str, right: &str) -> bool {
         return false;
     };
     left < right
+}
+
+fn timestamp_at_or_after(left: &str, right: &str) -> bool {
+    let Ok(left) = chrono::DateTime::parse_from_rfc3339(left) else {
+        return false;
+    };
+    let Ok(right) = chrono::DateTime::parse_from_rfc3339(right) else {
+        return false;
+    };
+    left >= right
+}
+
+fn timestamp_span_within(start: &str, end: &str, maximum_seconds: i64) -> bool {
+    let Ok(start) = chrono::DateTime::parse_from_rfc3339(start) else {
+        return false;
+    };
+    let Ok(end) = chrono::DateTime::parse_from_rfc3339(end) else {
+        return false;
+    };
+    let seconds = end.signed_duration_since(start).num_seconds();
+    seconds > 0 && seconds <= maximum_seconds
 }
 
 fn claim_matches_request(claim: &ActiveLeaseClaim, request: &AcquireLeaseClaimRequest) -> bool {
@@ -1101,62 +2647,124 @@ fn acquisition_request_digest(request: &AcquireLeaseClaimRequest) -> String {
 
 fn release_request_digest(request: &ReleaseLeaseClaimRequest) -> String {
     stable_id(
-        "lease-release-request-v1",
+        "lease-release-request-v2",
         &format!(
-            "{}\0{}\0{}\0{}\0{}\0{}\0{}",
-            request.authorization.resource.storage_key(),
-            request.authorization.claim_id,
-            request.authorization.principal_id,
-            request.authorization.capability_id,
-            request.authorization.capability_revision,
-            request.authorization.claim_revision,
-            request.authorization.fencing_token,
+            "{}\0{}\0{}",
+            effect_authorization_payload(&request.authorization),
+            request.authorization.proof,
+            request.idempotency_key,
+        ),
+    )
+}
+
+fn recovery_request_digest(request: &RecoverLeaseClaimRequest) -> String {
+    stable_id(
+        "lease-recovery-request-v1",
+        &format!(
+            "{}\0{}",
+            recovery_authorization_payload(&request.authorization),
+            request.authorization.proof
+        ),
+    )
+}
+
+fn revocation_request_digest(request: &RevokeLeaseClaimRequest) -> String {
+    stable_id(
+        "lease-revocation-request-v1",
+        &format!(
+            "{}\0{}",
+            administrative_authorization_payload(&request.authorization),
+            request.authorization.proof
         ),
     )
 }
 
 fn sign_effect_authorization(
     authorization: &LeaseEffectAuthorization,
-    capability: &super::service_principal::ServiceProfileCapability,
+    signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<String, LeaseAuthorityError> {
-    let key = capability_effect_proof_key(capability)?;
-    let mut mac =
-        HmacSha256::new_from_slice(&key).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
-    mac.update(effect_authorization_payload(authorization).as_bytes());
-    Ok(hex::encode(mac.finalize().into_bytes()))
+    let key = Ed25519KeyPair::from_seed_unchecked(&signing_key.private_key)
+        .map_err(|_| LeaseAuthorityError::SigningKeyMismatch)?;
+    Ok(hex::encode(
+        key.sign(effect_authorization_payload(authorization).as_bytes())
+            .as_ref(),
+    ))
 }
 
 fn verify_effect_authorization(
     authorization: &LeaseEffectAuthorization,
-    capability: &super::service_principal::ServiceProfileCapability,
+    verification_key: &LeaseAuthorityVerificationKey,
 ) -> Result<(), LeaseAuthorityError> {
-    let key = capability_effect_proof_key(capability)?;
+    verification_key.verify_key_id(&authorization.signing_key_id)?;
     let proof =
         hex::decode(&authorization.proof).map_err(|_| LeaseAuthorityError::InvalidEffectProof)?;
-    let mut mac =
-        HmacSha256::new_from_slice(&key).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
-    mac.update(effect_authorization_payload(authorization).as_bytes());
-    mac.verify_slice(&proof)
+    signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
+        .verify(
+            effect_authorization_payload(authorization).as_bytes(),
+            &proof,
+        )
         .map_err(|_| LeaseAuthorityError::InvalidEffectProof)
 }
 
-fn capability_effect_proof_key(
-    capability: &super::service_principal::ServiceProfileCapability,
-) -> Result<Vec<u8>, LeaseAuthorityError> {
-    let encoded = capability
-        .capability_digest
-        .strip_prefix("sha256:")
-        .ok_or(LeaseAuthorityError::CapabilityMismatch)?;
-    let key = hex::decode(encoded).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
-    (key.len() == 32)
-        .then_some(key)
-        .ok_or(LeaseAuthorityError::CapabilityMismatch)
+fn sign_recovery_authorization(
+    authorization: &LeaseRecoveryAuthorization,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<String, LeaseAuthorityError> {
+    let key = Ed25519KeyPair::from_seed_unchecked(&signing_key.private_key)
+        .map_err(|_| LeaseAuthorityError::SigningKeyMismatch)?;
+    Ok(hex::encode(
+        key.sign(recovery_authorization_payload(authorization).as_bytes())
+            .as_ref(),
+    ))
+}
+
+fn verify_recovery_authorization(
+    authorization: &LeaseRecoveryAuthorization,
+    verification_key: &LeaseAuthorityVerificationKey,
+) -> Result<(), LeaseAuthorityError> {
+    verification_key.verify_key_id(&authorization.signing_key_id)?;
+    let proof =
+        hex::decode(&authorization.proof).map_err(|_| LeaseAuthorityError::InvalidRecoveryProof)?;
+    signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
+        .verify(
+            recovery_authorization_payload(authorization).as_bytes(),
+            &proof,
+        )
+        .map_err(|_| LeaseAuthorityError::InvalidRecoveryProof)
+}
+
+fn sign_administrative_authorization(
+    authorization: &LeaseAdministrativeAuthorization,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<String, LeaseAuthorityError> {
+    let key = Ed25519KeyPair::from_seed_unchecked(&signing_key.private_key)
+        .map_err(|_| LeaseAuthorityError::SigningKeyMismatch)?;
+    Ok(hex::encode(
+        key.sign(administrative_authorization_payload(authorization).as_bytes())
+            .as_ref(),
+    ))
+}
+
+fn verify_administrative_authorization(
+    authorization: &LeaseAdministrativeAuthorization,
+    verification_key: &LeaseAuthorityVerificationKey,
+) -> Result<(), LeaseAuthorityError> {
+    verification_key.verify_key_id(&authorization.signing_key_id)?;
+    let proof = hex::decode(&authorization.proof)
+        .map_err(|_| LeaseAuthorityError::InvalidAdministrativeProof)?;
+    signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
+        .verify(
+            administrative_authorization_payload(authorization).as_bytes(),
+            &proof,
+        )
+        .map_err(|_| LeaseAuthorityError::InvalidAdministrativeProof)
 }
 
 fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> String {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authorization.schema_version,
+        authorization.signing_key_id,
         authorization.resource.storage_key(),
         authorization.claim_id,
         authorization.principal_id,
@@ -1165,6 +2773,53 @@ fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> Str
         authorization.claim_revision,
         authorization.fencing_token,
         authorization.owner_generation.unwrap_or_default(),
+        authorization.action_class,
+        authorization.audience,
+        authorization.operation_idempotency_key,
+        authorization.issued_at,
+        authorization.authorization_expires_at,
+    )
+}
+
+fn recovery_authorization_payload(authorization: &LeaseRecoveryAuthorization) -> String {
+    format!(
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        authorization.schema_version,
+        authorization.signing_key_id,
+        authorization.resource.storage_key(),
+        authorization.claim_id,
+        authorization.principal_id,
+        authorization.recovery_controller_id,
+        authorization.recovery_controller_revision,
+        authorization.claim_revision,
+        authorization.fencing_token,
+        authorization.idempotency_key,
+        authorization.issued_at,
+        authorization.authorization_expires_at,
+        authorization.claim_expires_at,
+        authorization.transition_deadline,
+        authorization.owner_generation.unwrap_or_default(),
+    )
+}
+
+fn administrative_authorization_payload(
+    authorization: &LeaseAdministrativeAuthorization,
+) -> String {
+    format!(
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        authorization.schema_version,
+        authorization.signing_key_id,
+        authorization.administrator_id,
+        authorization.administrator_revision,
+        authorization.resource.storage_key(),
+        authorization.claim_id,
+        authorization.principal_id,
+        authorization.claim_revision,
+        authorization.fencing_token,
+        authorization.idempotency_key,
+        authorization.reason_code,
+        authorization.issued_at,
+        authorization.authorization_expires_at,
     )
 }
 
@@ -1234,6 +2889,154 @@ mod tests {
         }
     }
 
+    fn signing_key() -> LeaseAuthoritySigningKey {
+        LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32])
+    }
+
+    fn issue_lease_effect_authorization_for_state(
+        state: &crate::native::service_model::ServiceState,
+        claim: &ActiveLeaseClaim,
+        intent: &LeaseEffectIntent,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseEffectAuthorization, String> {
+        issue_lease_effect_authorization_for_state_with_signing_key(
+            state,
+            claim,
+            intent,
+            signing_key,
+        )
+    }
+
+    fn issue_lease_recovery_authorization_for_state(
+        state: &crate::native::service_model::ServiceState,
+        claim: &ActiveLeaseClaim,
+        controller: &crate::native::service_principal::ServiceProfileCapability,
+        intent: &LeaseRecoveryIntent,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseRecoveryAuthorization, String> {
+        issue_lease_recovery_authorization_for_state_with_signing_key(
+            state,
+            claim,
+            controller,
+            intent,
+            signing_key,
+        )
+    }
+
+    fn effect_intent(
+        action_class: &str,
+        audience: &str,
+        operation_idempotency_key: &str,
+    ) -> LeaseEffectIntent {
+        LeaseEffectIntent {
+            action_class: action_class.to_string(),
+            audience: audience.to_string(),
+            operation_idempotency_key: operation_idempotency_key.to_string(),
+            issued_at: NOW.to_string(),
+            authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn signing_key_file_is_private_stable_and_never_serialized_into_a_bearer() {
+        let directory = std::env::temp_dir().join(format!(
+            "agent-browser-lease-signing-key-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join(LEASE_AUTHORITY_SIGNING_KEY_FILE);
+        let signing_key = signing_key();
+        let document = LeaseAuthoritySigningKeyFile {
+            schema_version: LEASE_AUTHORITY_SIGNING_KEY_SCHEMA_VERSION.to_string(),
+            key_id: signing_key.key_id.clone(),
+            private_key_hex: hex::encode(signing_key.private_key),
+            public_key_hex: hex::encode(signing_key.public_key),
+        };
+        write_private_signing_key_file(&path, &serde_json::to_vec(&document).unwrap()).unwrap();
+
+        let loaded = load_lease_authority_signing_key_file(&path).unwrap();
+        assert_eq!(loaded, signing_key);
+        let debug = format!("{loaded:?}");
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains(&document.private_key_hex));
+
+        let verification_path = directory.join(LEASE_AUTHORITY_VERIFICATION_KEY_FILE);
+        let verification_key = loaded.verification_key();
+        let verification_document = LeaseAuthorityVerificationKeyFile {
+            schema_version: LEASE_AUTHORITY_VERIFICATION_KEY_SCHEMA_VERSION.to_string(),
+            key_id: verification_key.key_id.clone(),
+            public_key_hex: hex::encode(verification_key.public_key),
+        };
+        let encoded_verification = serde_json::to_vec(&verification_document).unwrap();
+        write_private_signing_key_file(&verification_path, &encoded_verification).unwrap();
+        let loaded_verification =
+            load_lease_authority_verification_key_file(&verification_path).unwrap();
+        assert_eq!(loaded_verification, verification_key);
+        assert!(!String::from_utf8(encoded_verification)
+            .unwrap()
+            .contains(&document.private_key_hex));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(load_lease_authority_signing_key_file(&path)
+                .unwrap_err()
+                .starts_with("lease_authority_signing_key_permissions_too_broad:"));
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+
+        let mut authority = LeaseAuthorityState::default();
+        let claim = authority.acquire(request()).unwrap();
+        let authorization = claim
+            .effect_authorization(
+                &capability(),
+                &effect_intent("browser_launch", "session:last30days", "launch:tick-1"),
+                &loaded,
+            )
+            .unwrap();
+        let encoded_authorization = serde_json::to_string(&authorization).unwrap();
+        assert!(encoded_authorization.contains(&loaded.key_id));
+        assert!(!encoded_authorization.contains(&document.private_key_hex));
+        verify_effect_authorization(&authorization, &loaded_verification).unwrap();
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn surviving_verification_root_never_silently_mints_a_replacement_signer() {
+        assert!(signer_bootstrap_requires_recovery(false, true));
+        assert!(!signer_bootstrap_requires_recovery(false, false));
+        assert!(!signer_bootstrap_requires_recovery(true, true));
+        assert!(!signer_bootstrap_requires_recovery(true, false));
+    }
+
+    #[test]
+    fn public_signing_oracle_requires_the_exact_private_profile_capability() {
+        let mut state = ServiceState {
+            service_principals: crate::native::service_principal::ServicePrincipalRegistry {
+                profile_capabilities: BTreeMap::from([(
+                    "capability:last30days-social".to_string(),
+                    capability(),
+                )]),
+                ..crate::native::service_principal::ServicePrincipalRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        let claim = state.acquire_lease_claim(request()).unwrap();
+        let error = super::issue_lease_effect_authorization_for_state(
+            &state,
+            &claim,
+            &effect_intent("browser_launch", "session:last30days", "launch:tick-1"),
+            b"wrong-private-capability-material-with-sufficient-length",
+        )
+        .unwrap_err();
+        assert!(error.starts_with("lease_authority_capability_"));
+    }
+
     #[test]
     fn terminal_events_never_block_atomic_acquisition() {
         let resource = LeaseResourceKey::profile("last30days-social");
@@ -1293,6 +3096,20 @@ mod tests {
             Err(LeaseAuthorityError::StrictRecoveryRequired)
         );
         assert!(authority.active_claims.is_empty());
+    }
+
+    #[test]
+    fn caller_cannot_create_an_unbounded_claim() {
+        let mut authority = LeaseAuthorityState::default();
+        let mut excessive = request();
+        excessive.expires_at = "2026-08-31T12:05:01Z".to_string();
+        let before = authority.clone();
+
+        assert_eq!(
+            authority.acquire(excessive),
+            Err(LeaseAuthorityError::InvalidRequest)
+        );
+        assert_eq!(authority, before);
     }
 
     #[test]
@@ -1370,21 +3187,34 @@ mod tests {
     }
 
     #[test]
-    fn expired_claim_cannot_authorize_an_effect() {
+    fn effect_authorization_is_redacted_and_expires_independently() {
         let mut authority = LeaseAuthorityState::default();
         let acquired = authority.acquire_with_receipt(request()).unwrap();
         let authorization = acquired
             .claim
             .unwrap()
-            .effect_authorization(&capability())
+            .effect_authorization(
+                &capability(),
+                &effect_intent("browser_launch", "session:last30days", "launch:tick-1"),
+                &signing_key(),
+            )
             .unwrap();
+        let proof = authorization.proof.clone();
+        let debug = format!("{authorization:?}");
+        assert!(!debug.contains(&proof));
+        assert!(debug.contains("[REDACTED]"));
 
+        let context = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:last30days",
+            operation_idempotency_key: "launch:tick-1",
+        };
         assert!(authority
-            .authorize_effect(&authorization, "2026-08-31T12:04:59Z")
+            .authorize_effect(&authorization, "2026-08-31T12:01:59Z", &context)
             .is_ok());
         assert_eq!(
-            authority.authorize_effect(&authorization, "2026-08-31T12:05:00Z"),
-            Err(LeaseAuthorityError::ClaimExpired)
+            authority.authorize_effect(&authorization, "2026-08-31T12:02:00Z", &context),
+            Err(LeaseAuthorityError::EffectAuthorizationExpired)
         );
     }
 
@@ -1544,16 +3374,92 @@ mod tests {
         let mut claim_request = request();
         claim_request.owner_generation = Some(7);
         let claim = state.acquire_lease_claim(claim_request).unwrap();
-        let authorization = issue_lease_effect_authorization_for_state(&state, &claim).unwrap();
+        let signing_key = signing_key();
+        let intent = effect_intent("browser_launch", "session:last30days", "launch:tick-1");
+        let context = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:last30days",
+            operation_idempotency_key: "launch:tick-1",
+        };
+        let authorization =
+            issue_lease_effect_authorization_for_state(&state, &claim, &intent, &signing_key)
+                .unwrap();
         let repository = MemoryRepository {
             state: Arc::new(Mutex::new(state)),
         };
-        authorize_lease_effect_in_repository(&repository, &authorization, NOW).unwrap();
+        authorize_lease_effect_in_repository_with_signing_key(
+            &repository,
+            &authorization,
+            NOW,
+            &context,
+            &signing_key,
+        )
+        .unwrap();
+
+        let wrong_audience = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:foreign",
+            operation_idempotency_key: "launch:tick-1",
+        };
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                NOW,
+                &wrong_audience,
+                &signing_key,
+            ),
+            Err("lease_authority_effect_scope_mismatch".to_string())
+        );
+        let wrong_operation = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:last30days",
+            operation_idempotency_key: "launch:tick-2",
+        };
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                NOW,
+                &wrong_operation,
+                &signing_key,
+            ),
+            Err("lease_authority_effect_scope_mismatch".to_string())
+        );
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                NOW,
+                &context,
+                &LeaseAuthoritySigningKey::from_private_bytes([0x6b; 32]),
+            ),
+            Err("lease_authority_signing_key_mismatch".to_string())
+        );
+
+        let mut tampered_scope = authorization.clone();
+        tampered_scope.audience = "session:foreign".to_string();
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &tampered_scope,
+                NOW,
+                &wrong_audience,
+                &signing_key,
+            ),
+            Err("lease_authority_invalid_effect_proof".to_string())
+        );
 
         let mut tampered = authorization.clone();
         tampered.proof.replace_range(..2, "00");
         assert_eq!(
-            authorize_lease_effect_in_repository(&repository, &tampered, NOW),
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &tampered,
+                NOW,
+                &context,
+                &signing_key,
+            ),
             Err("lease_authority_invalid_effect_proof".to_string())
         );
 
@@ -1570,7 +3476,13 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            authorize_lease_effect_in_repository(&repository, &authorization, NOW),
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                NOW,
+                &context,
+                &signing_key,
+            ),
             Err("lease_authority_capability_revoked".to_string())
         );
 
@@ -1594,7 +3506,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            authorize_lease_effect_in_repository(&repository, &authorization, NOW),
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                NOW,
+                &context,
+                &signing_key,
+            ),
             Err("lease_authority_owner_generation_stale".to_string())
         );
     }
@@ -1642,7 +3560,24 @@ mod tests {
         };
         let acquired = state.acquire_lease_claim_with_receipt(request()).unwrap();
         let claim = acquired.claim.unwrap();
-        let authorization = issue_lease_effect_authorization_for_state(&state, &claim).unwrap();
+        let signing_key = signing_key();
+        let release_intent = effect_intent(
+            "lease_release",
+            "lease_authority_kernel",
+            "release:last30days:tick-1",
+        );
+        let release_context = LeaseEffectContext {
+            action_class: "lease_release",
+            audience: "lease_authority_kernel",
+            operation_idempotency_key: "release:last30days:tick-1",
+        };
+        let authorization = issue_lease_effect_authorization_for_state(
+            &state,
+            &claim,
+            &release_intent,
+            &signing_key,
+        )
+        .unwrap();
         let mut unrelated = request();
         unrelated.resource = LeaseResourceKey {
             kind: LeaseResourceKind::ServiceSession,
@@ -1664,12 +3599,17 @@ mod tests {
         let mut tampered = release.clone();
         tampered.authorization.proof.replace_range(..2, "00");
         assert_eq!(
-            release_lease_claim_in_repository(&repository, tampered),
+            release_lease_claim_in_repository_with_signing_key(&repository, tampered, &signing_key,),
             Err("lease_authority_invalid_effect_proof".to_string())
         );
         assert_eq!(repository.load_snapshot().unwrap(), before_tamper);
 
-        let first = release_lease_claim_in_repository(&repository, release.clone()).unwrap();
+        let first = release_lease_claim_in_repository_with_signing_key(
+            &repository,
+            release.clone(),
+            &signing_key,
+        )
+        .unwrap();
         assert!(!first.replayed);
         assert_eq!(first.receipt.terminal_fencing_token, 2);
         let after_release = repository.load_snapshot().unwrap();
@@ -1681,11 +3621,22 @@ mod tests {
             )
             .is_none());
         assert_eq!(
-            authorize_lease_effect_in_repository(&repository, &authorization, release.now.as_str()),
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &authorization,
+                release.now.as_str(),
+                &release_context,
+                &signing_key,
+            ),
             Err("lease_authority_claim_unavailable".to_string())
         );
 
-        let replayed = release_lease_claim_in_repository(&repository, release).unwrap();
+        let replayed = release_lease_claim_in_repository_with_signing_key(
+            &repository,
+            release,
+            &LeaseAuthoritySigningKey::from_private_bytes([0x7c; 32]),
+        )
+        .unwrap();
         assert!(replayed.replayed);
         assert_eq!(replayed.receipt, first.receipt);
 
@@ -1696,5 +3647,348 @@ mod tests {
         next.expires_at = "2026-08-31T12:07:00Z".to_string();
         let next_claim = acquire_lease_claim_in_repository(&repository, next).unwrap();
         assert_eq!(next_claim.fencing_token(), 3);
+    }
+
+    #[test]
+    fn strict_controller_recovery_advances_the_fence_and_replays_after_controller_revocation() {
+        let controller = capability();
+        let signing_key = signing_key();
+        let mut strict_request = request();
+        strict_request.mode = LeaseClaimMode::Strict;
+        strict_request.recovery_controller_id = Some(controller.capability_id.clone());
+        strict_request.transition_deadline = Some("2026-08-31T12:02:00Z".to_string());
+        let mut state = ServiceState {
+            service_principals: crate::native::service_principal::ServicePrincipalRegistry {
+                profile_capabilities: BTreeMap::from([(
+                    controller.capability_id.clone(),
+                    controller.clone(),
+                )]),
+                ..crate::native::service_principal::ServicePrincipalRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        let claim = state
+            .acquire_lease_claim_with_receipt(strict_request)
+            .unwrap()
+            .claim
+            .unwrap();
+        let expired_plan_intent = LeaseRecoveryIntent {
+            idempotency_key: "recover:last30days:expired-plan".to_string(),
+            issued_at: "2026-08-31T12:05:01Z".to_string(),
+            authorization_expires_at: "2026-08-31T12:06:00Z".to_string(),
+            claim_expires_at: "2026-08-31T12:10:00Z".to_string(),
+            transition_deadline: "2026-08-31T12:06:00Z".to_string(),
+            owner_generation: Some(58),
+        };
+        assert_eq!(
+            issue_lease_recovery_authorization_for_state(
+                &state,
+                &claim,
+                &controller,
+                &expired_plan_intent,
+                &signing_key,
+            ),
+            Err("lease_authority_claim_unavailable".to_string())
+        );
+        assert_eq!(
+            issue_lease_effect_authorization_for_state(
+                &state,
+                &claim,
+                &LeaseEffectIntent {
+                    action_class: "browser_launch".to_string(),
+                    audience: "session:last30days".to_string(),
+                    operation_idempotency_key: "launch:expired".to_string(),
+                    issued_at: "2026-08-31T12:05:01Z".to_string(),
+                    authorization_expires_at: "2026-08-31T12:06:00Z".to_string(),
+                },
+                &signing_key,
+            ),
+            Err("lease_authority_claim_unavailable".to_string())
+        );
+        let stale_effect_intent = LeaseEffectIntent {
+            action_class: "browser_launch".to_string(),
+            audience: "session:last30days".to_string(),
+            operation_idempotency_key: "launch:strict-recovery".to_string(),
+            issued_at: "2026-08-31T12:00:30Z".to_string(),
+            authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
+        };
+        let stale_effect = issue_lease_effect_authorization_for_state(
+            &state,
+            &claim,
+            &stale_effect_intent,
+            &signing_key,
+        )
+        .unwrap();
+        let stale_effect_context = LeaseEffectContext {
+            action_class: "browser_launch",
+            audience: "session:last30days",
+            operation_idempotency_key: "launch:strict-recovery",
+        };
+
+        let mut unrelated = request();
+        unrelated.resource = LeaseResourceKey::profile("unrelated-profile");
+        unrelated.idempotency_key = "acquire:unrelated:strict-recovery".to_string();
+        unrelated.expected_authority_revision = state.lease_authority().revision();
+        state.acquire_lease_claim_with_receipt(unrelated).unwrap();
+
+        let intent = LeaseRecoveryIntent {
+            idempotency_key: "recover:last30days:strict-1".to_string(),
+            issued_at: "2026-08-31T12:00:30Z".to_string(),
+            authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
+            claim_expires_at: "2026-08-31T12:06:00Z".to_string(),
+            transition_deadline: "2026-08-31T12:03:00Z".to_string(),
+            owner_generation: Some(58),
+        };
+        let authorization = issue_lease_recovery_authorization_for_state(
+            &state,
+            &claim,
+            &controller,
+            &intent,
+            &signing_key,
+        )
+        .unwrap();
+        let request = RecoverLeaseClaimRequest {
+            authorization,
+            now: "2026-08-31T12:01:00Z".to_string(),
+        };
+        let proof = request.authorization.proof.clone();
+        let debug = format!("{:?}", request.authorization);
+        assert!(!debug.contains(&proof));
+        assert!(debug.contains("[REDACTED]"));
+        let repository = MemoryRepository {
+            state: Arc::new(Mutex::new(state)),
+        };
+        let before_tamper = repository.load_snapshot().unwrap();
+        let mut tampered = request.clone();
+        tampered.authorization.proof.replace_range(..2, "00");
+        assert_eq!(
+            recover_lease_claim_in_repository_with_signing_key(&repository, tampered, &signing_key,),
+            Err("lease_authority_invalid_recovery_proof".to_string())
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before_tamper);
+
+        let mut tampered_plan = request.clone();
+        tampered_plan.authorization.claim_expires_at = "2026-08-31T12:05:00Z".to_string();
+        assert_eq!(
+            recover_lease_claim_in_repository_with_signing_key(
+                &repository,
+                tampered_plan,
+                &signing_key,
+            ),
+            Err("lease_authority_invalid_recovery_proof".to_string())
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before_tamper);
+
+        let recovered = recover_lease_claim_in_repository_with_signing_key(
+            &repository,
+            request.clone(),
+            &signing_key,
+        )
+        .unwrap();
+        assert!(!recovered.replayed);
+        let recovered_claim = recovered.claim.as_ref().unwrap();
+        assert_eq!(recovered_claim.claim_id, claim.claim_id);
+        assert_eq!(recovered_claim.revision, claim.revision + 1);
+        assert_eq!(recovered_claim.fencing_token, claim.fencing_token + 1);
+        assert_eq!(recovered_claim.owner_generation, Some(58));
+        assert_eq!(recovered_claim.expires_at, intent.claim_expires_at);
+        assert_eq!(recovered.receipt.terminal_result, "recovered");
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &stale_effect,
+                request.now.as_str(),
+                &stale_effect_context,
+                &signing_key,
+            ),
+            Err("lease_authority_stale_claim".to_string())
+        );
+
+        repository
+            .mutate(|state| {
+                state
+                    .service_principals
+                    .profile_capabilities
+                    .get_mut(&controller.capability_id)
+                    .unwrap()
+                    .state =
+                    crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
+                Ok(())
+            })
+            .unwrap();
+
+        let replay = recover_lease_claim_in_repository_with_signing_key(
+            &repository,
+            request,
+            &LeaseAuthoritySigningKey::from_private_bytes([0x7c; 32]),
+        )
+        .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt, recovered.receipt);
+        assert_eq!(replay.claim, recovered.claim);
+    }
+
+    #[test]
+    fn administrative_revocation_is_exact_holder_independent_and_replayable() {
+        let mut state = ServiceState {
+            service_principals: crate::native::service_principal::ServicePrincipalRegistry {
+                profile_capabilities: BTreeMap::from([(
+                    "capability:last30days-social".to_string(),
+                    capability(),
+                )]),
+                ..crate::native::service_principal::ServicePrincipalRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        state.lease_authority.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        state.lease_authority.administrators.insert(
+            "administrator:local-supervisor".to_string(),
+            LeaseAdministratorAuthority {
+                administrator_id: "administrator:local-supervisor".to_string(),
+                capability_digest: administrator_capability_digest(
+                    b"local-supervisor-private-administrator-capability",
+                ),
+                revision: 1,
+                state: LeaseAdministratorState::Active,
+            },
+        );
+        let claim = state.acquire_lease_claim(request()).unwrap();
+        let signing_key = signing_key();
+        let stale_effect = issue_lease_effect_authorization_for_state(
+            &state,
+            &claim,
+            &effect_intent("browser_launch", "session:last30days", "launch:tick-1"),
+            &signing_key,
+        )
+        .unwrap();
+        let administrative_intent = LeaseAdministrativeIntent {
+            administrator_id: "administrator:local-supervisor".to_string(),
+            administrator_revision: 1,
+            idempotency_key: "revoke:last30days:abandoned-1".to_string(),
+            reason_code: "abandoned_strict_holder".to_string(),
+            issued_at: NOW.to_string(),
+            authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
+        };
+        assert_eq!(
+            super::issue_lease_administrative_authorization_for_state(
+                &state,
+                &claim,
+                &administrative_intent,
+                b"wrong-private-administrator-capability-material",
+            ),
+            Err("lease_authority_administrative_authority_mismatch".to_string())
+        );
+        let authorization = issue_lease_administrative_authorization_for_state_with_signing_key(
+            &state,
+            &claim,
+            &administrative_intent,
+            &signing_key,
+        )
+        .unwrap();
+        let proof = authorization.proof.clone();
+        assert!(!format!("{authorization:?}").contains(&proof));
+        let request = RevokeLeaseClaimRequest {
+            authorization,
+            now: "2026-08-31T12:01:00Z".to_string(),
+        };
+        let repository = MemoryRepository {
+            state: Arc::new(Mutex::new(state)),
+        };
+
+        let before_tamper = repository.load_snapshot().unwrap();
+        let mut tampered = request.clone();
+        tampered.authorization.reason_code = "unreviewed_force_unlock".to_string();
+        assert_eq!(
+            revoke_lease_claim_in_repository_with_signing_key(&repository, tampered, &signing_key,),
+            Err("lease_authority_invalid_administrative_proof".to_string())
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before_tamper);
+
+        repository
+            .mutate(|state| {
+                state
+                    .lease_authority
+                    .administrators
+                    .get_mut("administrator:local-supervisor")
+                    .unwrap()
+                    .state = LeaseAdministratorState::Revoked;
+                Ok(())
+            })
+            .unwrap();
+        let before_revoked_administrator = repository.load_snapshot().unwrap();
+        assert_eq!(
+            revoke_lease_claim_in_repository_with_signing_key(
+                &repository,
+                request.clone(),
+                &signing_key,
+            ),
+            Err("lease_authority_administrative_authority_mismatch".to_string())
+        );
+        assert_eq!(
+            repository.load_snapshot().unwrap(),
+            before_revoked_administrator
+        );
+
+        repository
+            .mutate(|state| {
+                state
+                    .lease_authority
+                    .administrators
+                    .get_mut("administrator:local-supervisor")
+                    .unwrap()
+                    .state = LeaseAdministratorState::Active;
+                state
+                    .service_principals
+                    .profile_capabilities
+                    .get_mut("capability:last30days-social")
+                    .unwrap()
+                    .state =
+                    crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
+                Ok(())
+            })
+            .unwrap();
+        let revoked = revoke_lease_claim_in_repository_with_signing_key(
+            &repository,
+            request.clone(),
+            &signing_key,
+        )
+        .unwrap();
+        assert!(!revoked.replayed);
+        assert_eq!(revoked.receipt.operation, "revoke");
+        assert_eq!(revoked.receipt.terminal_result, "revoked");
+        assert_eq!(revoked.receipt.released_fencing_token, claim.fencing_token);
+        assert_eq!(
+            revoked.receipt.terminal_fencing_token,
+            claim.fencing_token + 1
+        );
+        assert!(repository
+            .load_snapshot()
+            .unwrap()
+            .lease_authority()
+            .current_claim(&claim.resource, &request.now)
+            .is_none());
+        assert_eq!(
+            authorize_lease_effect_in_repository_with_signing_key(
+                &repository,
+                &stale_effect,
+                &request.now,
+                &LeaseEffectContext {
+                    action_class: "browser_launch",
+                    audience: "session:last30days",
+                    operation_idempotency_key: "launch:tick-1",
+                },
+                &signing_key,
+            ),
+            Err("lease_authority_claim_unavailable".to_string())
+        );
+
+        let replay = revoke_lease_claim_in_repository_with_signing_key(
+            &repository,
+            request,
+            &LeaseAuthoritySigningKey::from_private_bytes([0x7c; 32]),
+        )
+        .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt, revoked.receipt);
     }
 }

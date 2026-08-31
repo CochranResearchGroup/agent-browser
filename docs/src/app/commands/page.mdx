@@ -688,6 +688,8 @@ agent-browser service profiles        # Show retained profile records
 agent-browser service leases          # Inspect principal-scoped profile lease authority and recourse
 agent-browser service leases <id> reconcile plan --revision <revision> --capability-file <path> --expires-at <rfc3339>
 agent-browser service leases <id> reconcile apply --revision <revision> --capability-file <path> --plan-file <path>
+agent-browser service leases <id> recover plan --revision <revision> --capability-file <path>
+agent-browser service leases <id> recover apply --capability-file <path> --plan-file <path>
 agent-browser service sessions        # Show retained session records
 agent-browser service browsers        # Show retained browser records and latest health evidence
 agent-browser service tabs            # Show retained tab records
@@ -790,10 +792,17 @@ An acquired response includes <code>leaseClaim</code>, the exact
 ephemeral expiry. Operation replay never grants new authority after expiry,
 while another operation from the same capability may join the current claim
 without renewing it or minting a new fence. The daemon validates the envelope
-immediately before launch. Effect authorization v2 carries an authenticated
-proof bound to the current capability ID and revision, so capability revocation
-or rotation invalidates it. Treat the short-lived envelope as bearer material;
-do not log it or expose it through status, history, or diagnostics.
+immediately before launch. Effect authorization v4 carries an Ed25519 signature
+from the private lease-authority root. Executors load only the public
+verification key and cannot mint authority. It binds the current capability ID
+and revision, the `browser_launch` action class, the exact daemon session, and
+the acquisition operation ID. Copy <code>operationIdempotencyKey</code> to
+<code>leaseEffectOperationId</code> when executing the planned launch.
+Capability revocation, scope changes, audience changes, or expiry prevent
+admission. Do not log or project the two-minute bearer. If the public verifier
+survives private-key loss, issuance returns
+<code>lease_authority_signing_key_recovery_required</code> and does not create a
+replacement signer.
 
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner

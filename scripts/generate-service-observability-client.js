@@ -1319,6 +1319,67 @@ export interface ServiceProfileLeaseReconcileReceipt {
 export interface ServiceProfileLeaseReconcilePlanResponse { plan: ServiceProfileLeaseReconcilePlan; }
 export interface ServiceProfileLeaseReconcileApplyResponse { receipt: ServiceProfileLeaseReconcileReceipt; }
 
+export interface ServiceLeaseRecoveryAuthorization {
+  schemaVersion: 'agent-browser.lease-recovery-authorization.v3';
+  signingKeyId: string;
+  resource: ServiceLeaseResourceKey;
+  claimId: string;
+  principalId: string;
+  recoveryControllerId: string;
+  recoveryControllerRevision: number;
+  claimRevision: number;
+  fencingToken: number;
+  idempotencyKey: string;
+  issuedAt: string;
+  authorizationExpiresAt: string;
+  claimExpiresAt: string;
+  transitionDeadline: string;
+  ownerGeneration: number | null;
+  proof: string;
+}
+
+export interface ServiceLeaseRecoveryReceipt {
+  schemaVersion: 'agent-browser.lease-recovery-receipt.v1';
+  receiptId: string;
+  requestDigest: string;
+  idempotencyKey: string;
+  operation: 'recover';
+  resource: ServiceLeaseResourceKey;
+  claimId: string;
+  principalId: string;
+  recoveryControllerId: string;
+  recoveryControllerRevision: number;
+  previousClaimRevision: number;
+  claimRevision: number;
+  previousFencingToken: number;
+  fencingToken: number;
+  authorityRevision: number;
+  expiresAt: string;
+  transitionDeadline: string;
+  ownerGeneration: number | null;
+  terminalResult: 'recovered';
+  occurredAt: string;
+}
+
+export interface ServiceProfileLeaseRecoveryPlanResponse {
+  schemaVersion: 'agent-browser.lease-recovery-plan-response.v1';
+  planId: string;
+  leaseId: string;
+  leaseRevision: string;
+  effectState: 'no_effect';
+  plan: ServiceLeaseRecoveryAuthorization;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ServiceProfileLeaseRecoveryApplyResponse {
+  schemaVersion: 'agent-browser.lease-recovery-apply-response.v1';
+  claimId: string;
+  claim: ServiceActiveLeaseClaim | null;
+  receipt: ServiceLeaseRecoveryReceipt;
+  replayed: boolean;
+}
+
 export interface ServiceProfileRecoveryPlan extends Record<string, unknown> {
   schemaVersion: 'agent-browser.profile-recovery-plan.v1';
   planId: string;
@@ -1360,7 +1421,8 @@ export interface ServiceActiveLeaseClaim {
   ownerGeneration: number | null;
 }
 export interface ServiceLeaseEffectAuthorization {
-  schemaVersion: 'agent-browser.lease-effect-authorization.v2';
+  schemaVersion: 'agent-browser.lease-effect-authorization.v4';
+  signingKeyId: string;
   resource: ServiceLeaseResourceKey;
   claimId: string;
   principalId: string;
@@ -1369,6 +1431,11 @@ export interface ServiceLeaseEffectAuthorization {
   claimRevision: number;
   fencingToken: number;
   ownerGeneration: number | null;
+  actionClass: string;
+  audience: string;
+  operationIdempotencyKey: string;
+  issuedAt: string;
+  authorizationExpiresAt: string;
   proof: string;
 }
 export interface ServiceLeaseAcquisitionReceipt {
@@ -2017,6 +2084,18 @@ export interface ServiceProfileLeaseReconcilePlanOptions extends ServiceProfileL
 export interface ServiceProfileLeaseReconcileApplyOptions extends ServiceProfileLeaseDetailOptions {
   profileCapability: string;
   plan: ServiceProfileLeaseReconcilePlan;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+
+export interface ServiceProfileLeaseRecoveryPlanOptions extends ServiceProfileLeaseMutationOptions {
+  idempotencyKey?: string;
+}
+
+export interface ServiceProfileLeaseRecoveryApplyOptions extends ServiceProfileLeaseDetailOptions {
+  profileCapability: string;
+  plan: ServiceLeaseRecoveryAuthorization;
   serviceName?: string;
   agentName?: string;
   taskName?: string;
@@ -3265,6 +3344,8 @@ export declare function renewServiceProfileLease(options: ServiceProfileLeaseRen
 export declare function releaseServiceProfileLease(options: ServiceProfileLeaseMutationOptions): Promise<ServiceProfileLeaseMutationResponse>;
 export declare function planServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcilePlanOptions): Promise<ServiceProfileLeaseReconcilePlanResponse>;
 export declare function applyServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcileApplyOptions): Promise<ServiceProfileLeaseReconcileApplyResponse>;
+export declare function planServiceProfileLeaseRecovery(options: ServiceProfileLeaseRecoveryPlanOptions): Promise<ServiceProfileLeaseRecoveryPlanResponse>;
+export declare function applyServiceProfileLeaseRecovery(options: ServiceProfileLeaseRecoveryApplyOptions): Promise<ServiceProfileLeaseRecoveryApplyResponse>;
 export declare function planServiceProfileRecovery(options: ServiceProfileRecoveryPlanOptions): Promise<ServiceProfileRecoveryPlanResponse>;
 export declare function acquireServiceProfile(options: ServiceProfileAcquireOptions): Promise<ServiceProfileAcquireResponse>;
 export declare function applyServiceProfileRecovery(options: ServiceProfileRecoveryApplyOptions): Promise<ServiceProfileRecoveryApplyResponse>;

@@ -232,6 +232,7 @@ fn profile_acquisition_retry_command_with_claim(
     });
     if let Some(authorization) = lease_effect_authorization {
         command["leaseEffectAuthorization"] = json!(authorization);
+        command["leaseEffectOperationId"] = json!(authorization.operation_idempotency_key());
     }
     command
 }
@@ -982,8 +983,13 @@ async fn acquire_profile_command(
         &claim_expires_at,
         &idempotency_key,
     )? {
-        let lease_effect_authorization =
-            issue_profile_effect_authorization(&repository, &replayed)?;
+        let lease_effect_authorization = issue_profile_effect_authorization(
+            &repository,
+            &replayed,
+            &retry_daemon_session_route,
+            &idempotency_key,
+            &raw_capability,
+        )?;
         return Ok(profile_acquisition_response(
             initial_outcome,
             Some(replayed),
@@ -1022,6 +1028,7 @@ async fn acquire_profile_command(
     let retry_claim_expires_at = claim_expires_at.clone();
     let retry_idempotency_key = idempotency_key.clone();
     let retry_repository = repository.clone();
+    let response_daemon_session_route = retry_daemon_session_route.clone();
     let coordinated = coordinate_profile_acquisition(
         &repository,
         intent,
@@ -1041,8 +1048,13 @@ async fn acquire_profile_command(
                 &retry_idempotency_key,
                 retry_capability.as_bytes(),
             )?;
-            let lease_effect_authorization =
-                issue_profile_effect_authorization(&retry_repository, &lease_acquisition)?;
+            let lease_effect_authorization = issue_profile_effect_authorization(
+                &retry_repository,
+                &lease_acquisition,
+                &retry_daemon_session_route,
+                &retry_idempotency_key,
+                &retry_capability,
+            )?;
             *retry_lease_acquisition_slot
                 .lock()
                 .map_err(|_| "profile_acquisition_claim_slot_poisoned".to_string())? =
@@ -1079,7 +1091,15 @@ async fn acquire_profile_command(
         Ok(outcome) => {
             let lease_effect_authorization = lease_acquisition
                 .as_ref()
-                .map(|acquisition| issue_profile_effect_authorization(&repository, acquisition))
+                .map(|acquisition| {
+                    issue_profile_effect_authorization(
+                        &repository,
+                        acquisition,
+                        &response_daemon_session_route,
+                        &idempotency_key,
+                        &raw_capability,
+                    )
+                })
                 .transpose()?
                 .flatten();
             Ok(profile_acquisition_response(
@@ -1148,12 +1168,32 @@ fn profile_acquisition_response(
 fn issue_profile_effect_authorization<R: ServiceStateRepository>(
     repository: &R,
     acquisition: &LeaseClaimAcquisitionOutcome,
+    daemon_session_route: &str,
+    operation_idempotency_key: &str,
+    raw_capability: &str,
 ) -> Result<Option<LeaseEffectAuthorization>, String> {
     let Some(claim) = acquisition.claim.as_ref() else {
         return Ok(None);
     };
     let state = repository.load_snapshot()?;
-    issue_lease_effect_authorization_for_state(&state, claim).map(Some)
+    let issued_at = service_now_timestamp();
+    let issued = chrono::DateTime::parse_from_rfc3339(&issued_at)
+        .map_err(|_| "lease_authority_time_invalid".to_string())?;
+    let claim_expires_at = chrono::DateTime::parse_from_rfc3339(claim.expires_at())
+        .map_err(|_| "lease_authority_claim_expiry_invalid".to_string())?;
+    let authorization_expires_at =
+        std::cmp::min(issued + chrono::Duration::minutes(2), claim_expires_at)
+            .with_timezone(&chrono::Utc)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let intent = super::service_lease_authority::LeaseEffectIntent {
+        action_class: "browser_launch".to_string(),
+        audience: daemon_session_route.to_string(),
+        operation_idempotency_key: operation_idempotency_key.to_string(),
+        issued_at,
+        authorization_expires_at,
+    };
+    issue_lease_effect_authorization_for_state(&state, claim, &intent, raw_capability.as_bytes())
+        .map(Some)
 }
 
 fn ephemeral_profile_claim_expiry(now: &str) -> Result<String, String> {

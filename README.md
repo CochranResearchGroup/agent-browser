@@ -3162,6 +3162,8 @@ The response includes worker state, browser health, queue depth, profile lease w
 
 Canonical release authenticates the profile capability and exact current claim inside one serialized mutation. It advances the resource fence, removes only that claim, and returns an idempotent `canonicalTerminalReceipt`. Unrelated authority mutations do not create a false release conflict, and replay returns the original terminal result without treating retained history as a current lease.
 
+A strict claim advertises `recover_plan`. Use `service leases <id> recover plan --revision <revision> --capability-file <path>` or `planServiceProfileLeaseRecovery()` to obtain a zero-effect, two-minute recovery authorization. Apply it through `service leases <id> recover apply --capability-file <path> --plan-file <path>` or `applyServiceProfileLeaseRecovery()`. Apply revalidates the exact strict claim and controller, advances its revision and fence, and returns an idempotent receipt. Replaying the exact completed authorization returns that receipt after controller rotation or revocation; it never recreates expired authority.
+
 `service recovery acquire --profile-id <id> --capability-file <path>` is the high-level, capability-bound profile acquisition entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. An exact process-backed lane for the same authenticated principal is reused. A conclusive terminal owner with satisfied cleanup, proven process exit, released profile lock, and no active foreign lease is repaired automatically before one acquisition retry. A current foreign principal remains hard blocked with wait or coordination recourse. `existing_session_profile_identity_unproven`, including the Odollo contractor portal fixture, returns a reviewed `reconcile_exact_principal_profile_identity` plan without launching another browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`.
 
 An acquired response includes the canonical `leaseClaim`, its exact
@@ -3170,11 +3172,28 @@ An acquired response includes the canonical `leaseClaim`, its exact
 expiry. Replaying one operation grants no new authority after expiry. A new
 operation from the same capability may join the current claim without changing
 its fencing token or expiry. The daemon validates the envelope immediately
-before launch. Effect authorization v2 binds the claim to the current capability
-ID and revision with an authenticated proof derived from the private registered
-capability digest. Revoking or rotating that capability invalidates the proof.
-Treat the effect envelope as a short-lived bearer: do not log it or expose it
-through status, history, or diagnostics.
+before launch. Effect authorization v4 binds the claim to the current capability
+ID and revision, the `browser_launch` action class, the exact daemon-session
+audience, and the acquisition operation ID. Its Ed25519 signature is produced
+by a private lease-authority root stored outside Service State. Executors load
+only its public verification key, so verification cannot mint a new
+authorization. Revoking or
+rotating the capability invalidates admission, while changing any sealed scope
+field invalidates the proof. Copy `operationIdempotencyKey` to
+`leaseEffectOperationId` when executing the planned launch. Treat the effect
+envelope as a two-minute bearer: do not log it or expose it through status,
+history, or diagnostics.
+
+The signing root is stored at
+`~/.agent-browser/service/lease-authority-signing-key.v2.json`; the matching
+public verifier is
+`~/.agent-browser/service/lease-authority-verification-key.v1.json`. Agent Browser
+creates it atomically with private permissions only while issuing authenticated
+authority. Effect and recovery verification load only the public key, never
+create a missing key, and reject symlinks, non-files, foreign ownership, or
+group and world access. If the public verifier survives private-key loss,
+issuance returns `lease_authority_signing_key_recovery_required` and never
+silently creates a replacement signer behind the existing trust root.
 
 `service recovery plan` creates a zero-effect, expiring recovery plan for explicit review. Apply with `service recovery apply --plan-file <path> --capability-file <path> --session-name <sealed-daemon-route>`. The daemon rechecks the plan seal, Service State revision, owner generation, process and lock evidence, then retries acquisition once and stores a durable receipt. Read it with `service recovery status <recovery-id> --capability-file <path>`.
 

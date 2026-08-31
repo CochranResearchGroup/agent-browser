@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lease-recovery-apply-response.v1.schema.json",
+  "title": "Agent Browser strict profile lease recovery apply response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "claimId", "claim", "receipt", "replayed"],
+  "$defs": {
+    "activeClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "claimId",
+        "resource",
+        "parentClaimId",
+        "principalId",
+        "capabilityId",
+        "capabilityRevision",
+        "mode",
+        "revision",
+        "fencingToken",
+        "idempotencyKey",
+        "acquiredAt",
+        "heartbeatAt",
+        "expiresAt",
+        "transitionDeadline",
+        "recoveryControllerId",
+        "bootEpoch",
+        "ownerGeneration"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.lease-authority.v1" },
+        "claimId": { "type": "string", "minLength": 1 },
+        "resource": { "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource" },
+        "parentClaimId": { "type": ["string", "null"] },
+        "principalId": { "type": "string", "minLength": 1 },
+        "capabilityId": { "type": "string", "minLength": 1 },
+        "capabilityRevision": { "type": "integer", "minimum": 1 },
+        "mode": { "enum": ["ephemeral", "strict"] },
+        "revision": { "type": "integer", "minimum": 1 },
+        "fencingToken": { "type": "integer", "minimum": 1 },
+        "idempotencyKey": { "type": "string", "minLength": 1 },
+        "acquiredAt": { "type": "string", "format": "date-time" },
+        "heartbeatAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "transitionDeadline": { "type": ["string", "null"], "format": "date-time" },
+        "recoveryControllerId": { "type": ["string", "null"] },
+        "bootEpoch": { "type": ["string", "null"] },
+        "ownerGeneration": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.lease-recovery-apply-response.v1" },
+    "claimId": { "type": "string", "minLength": 1 },
+    "claim": {
+      "oneOf": [
+        { "$ref": "#/$defs/activeClaim" },
+        { "type": "null" }
+      ]
+    },
+    "receipt": { "$ref": "lease-recovery-receipt.v1.schema.json" },
+    "replayed": { "type": "boolean" }
+  }
+}

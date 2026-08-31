@@ -41,6 +41,8 @@ assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "rej
 assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "reconcile"), true);
 assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true }, "acquire"), true);
 assert.equal(profileLeaseActionAllowed({ ...lease, authorizedActions: ["renew"] }, "release"), false);
+assert.equal(profileLeaseActionAllowed({ ...lease, authorizedActions: ["recover_plan"] }, "recover"), true);
+assert.equal(profileLeaseActionAllowed({ ...lease, observationOnly: true, authorizedActions: ["recover_plan"] }, "recover"), false);
 process.env.TZ = "America/Chicago";
 assert.equal(defaultProfileLeaseExpiry(new Date("2026-08-27T12:00:00.000Z")), "2026-08-27T08:00");
 assert.equal(profileLeaseExpiryToIso("2026-08-27T08:00"), "2026-08-27T13:00:00.000Z");
@@ -53,6 +55,7 @@ assert.match(servicePanel, /type="password"[\s\S]*autoComplete="off"[\s\S]*Paste
 assert.match(servicePanel, /rejoinServiceProfileLease[\s\S]*renewServiceProfileLease[\s\S]*releaseServiceProfileLease/);
 assert.match(servicePanel, /planServiceProfileLeaseReconciliation[\s\S]*Apply sealed plan/);
 assert.match(servicePanel, /reconcilePlan\?\.effectCapable/);
+assert.match(servicePanel, /applyServiceProfileLeaseRecovery/);
 assert.doesNotMatch(servicePanel, /localStorage[\s\S]{0,200}capability|sessionStorage[\s\S]{0,200}capability/i);
 
 console.log("Dashboard profile lease checks passed.");

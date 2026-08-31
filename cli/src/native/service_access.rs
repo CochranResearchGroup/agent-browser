@@ -6023,7 +6023,7 @@ mod tests {
                 expected_authority_revision: 0,
                 idempotency_key: "access-plan-claim".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
-                expires_at: "2999-08-31T12:05:00Z".to_string(),
+                expires_at: "2026-08-31T12:05:00Z".to_string(),
                 transition_deadline: None,
                 recovery_controller_id: None,
                 boot_epoch: None,

@@ -1459,6 +1459,30 @@ observation-only and cannot acquire authority from caller labels. Exact lease de
 are available through CLI, HTTP, MCP resources, and generated client helpers.
 Canonical release authenticates the profile capability and exact current claim inside one serialized mutation. It advances the resource fence, removes only that claim, and returns an idempotent <code>canonicalTerminalReceipt</code>. Unrelated authority mutations do not create a false release conflict, and replay returns the original terminal result without treating retained history as a current lease.
 
+A strict claim advertises <code>recover_plan</code>. CLI <code>service leases &lt;id&gt; recover plan</code>, HTTP <code>POST /api/service/profile-leases/&lt;id&gt;/recover/plan</code>, MCP <code>service_profile_lease_recover_plan</code>, and <code>planServiceProfileLeaseRecovery()</code> return the same zero-effect, two-minute authorization. Apply uses the matching CLI, HTTP, MCP, or <code>applyServiceProfileLeaseRecovery()</code> surface. It revalidates the exact strict claim and recovery controller inside the serialized authority mutation, advances the claim revision and resource fence, and returns an idempotent recovery receipt. Replaying the exact completed authorization returns that receipt after controller rotation or revocation and never recreates expired authority.
+
+Executable effect authorization uses a separate private lease-authority signing
+root outside Service State. A v4 Ed25519 launch envelope is valid only for its sealed
+<code>browser_launch</code> action class, exact daemon-session audience,
+operation ID, capability revision, claim revision, fence, and two-minute time
+window. Launch clients copy the envelope's
+<code>operationIdempotencyKey</code> to
+<code>leaseEffectOperationId</code>. Another session, operation, signing key,
+or altered envelope is rejected before browser launch.
+
+The signing root is the private file
+<code>~/.agent-browser/service/lease-authority-signing-key.v2.json</code>.
+Its public verifier is
+<code>~/.agent-browser/service/lease-authority-verification-key.v1.json</code>.
+Authenticated issuance atomically publishes the private root and
+crash-convergently publishes its matching verifier when absent. Executors load
+only the public verifier, so verification cannot mint authority.
+Verification never creates authority and rejects a symlink, non-file, foreign
+owner, or group-accessible key. If the public verifier survives private-key
+loss, issuance returns
+<code>lease_authority_signing_key_recovery_required</code> rather than silently
+replacing the signer behind the existing trust root.
+
 Observation-only legacy and unbound identity rows advertise
 <code>profile_acquire</code> when the capability-bound acquisition coordinator
 is their executable recourse. The dashboard exposes that route as Acquire

@@ -124,6 +124,10 @@ pub const SERVICE_PROFILE_LEASE_DOCTOR_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-lease-doctor-response.v1.schema.json";
 pub const SERVICE_PROFILE_LEASE_MUTATION_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-lease-mutation-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_RECOVERY_PLAN_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-recovery-plan-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_RECOVERY_APPLY_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-recovery-apply-response.v1.schema.json";
 pub const SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json";
 pub const SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID: &str =
@@ -770,7 +774,7 @@ pub fn service_contracts_metadata() -> Value {
                     "module": "@agent-browser/client/service-observability",
                     "helpers": ["getServiceProfileLeases", "watchServiceProfileLeases", "findServiceProfileLease"],
                 },
-                "operations": ["list", "inspect", "explain", "doctor", "watch", "rejoin", "renew", "release", "reconcile_plan", "reconcile_apply"],
+                "operations": ["list", "inspect", "explain", "doctor", "watch", "rejoin", "renew", "release", "reconcile_plan", "reconcile_apply", "recover_plan", "recover_apply"],
                 "noLaunch": true,
             },
             "serviceProfileLeaseDetailResponse": {
@@ -837,9 +841,36 @@ pub fn service_contracts_metadata() -> Value {
                 "blockedReason": "boot_epoch_unavailable",
                 "noLaunch": true,
             },
+            "serviceProfileLeaseRecovery": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "planSchemaId": SERVICE_PROFILE_LEASE_RECOVERY_PLAN_RESPONSE_SCHEMA_ID,
+                "planSchemaPath": "docs/dev/contracts/service-profile-lease-recovery-plan-response.v1.schema.json",
+                "applySchemaId": SERVICE_PROFILE_LEASE_RECOVERY_APPLY_RESPONSE_SCHEMA_ID,
+                "applySchemaPath": "docs/dev/contracts/service-profile-lease-recovery-apply-response.v1.schema.json",
+                "http": {
+                    "plan": "/api/service/profile-leases/<id>/recover/plan",
+                    "apply": "/api/service/profile-leases/<id>/recover/apply",
+                    "authentication": "Authorization: Bearer <profile-capability>",
+                },
+                "mcp": {
+                    "planTool": "service_profile_lease_recover_plan",
+                    "applyTool": "service_profile_lease_recover_apply",
+                    "capabilityField": "profileCapability",
+                    "ephemeral": true,
+                },
+                "client": {
+                    "planHelper": "planServiceProfileLeaseRecovery",
+                    "applyHelper": "applyServiceProfileLeaseRecovery",
+                },
+                "strictClaimsOnly": true,
+                "effectCapablePlan": false,
+                "idempotentApply": true,
+                "noLaunch": true,
+            },
             "serviceProfileRecovery": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaPath": "docs/dev/contracts/service-profile-recovery.v1.schema.json",
+                "effectAuthorizationSchemaPath": "docs/dev/contracts/lease-effect-authorization.v4.schema.json",
                 "http": {
                     "acquire": SERVICE_PROFILE_ACQUIRE_HTTP_ROUTE,
                     "plan": SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE,

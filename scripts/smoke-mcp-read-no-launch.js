@@ -59,7 +59,8 @@ const MCP_TOOL_ALLOWLIST = [
   'browser_set_content', 'browser_command',
   'service_profile_lease_rejoin', 'service_profile_lease_renew',
   'service_profile_lease_release', 'service_profile_lease_reconcile_plan',
-  'service_profile_lease_reconcile_apply', 'service_trace',
+  'service_profile_lease_reconcile_apply', 'service_profile_lease_recover_plan',
+  'service_profile_lease_recover_apply', 'service_trace',
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [

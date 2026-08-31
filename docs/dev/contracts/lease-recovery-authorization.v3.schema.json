@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/lease-recovery-authorization.v3.schema.json",
+  "title": "Agent Browser strict lease recovery authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "signingKeyId",
+    "resource",
+    "claimId",
+    "principalId",
+    "recoveryControllerId",
+    "recoveryControllerRevision",
+    "claimRevision",
+    "fencingToken",
+    "idempotencyKey",
+    "issuedAt",
+    "authorizationExpiresAt",
+    "claimExpiresAt",
+    "transitionDeadline",
+    "ownerGeneration",
+    "proof"
+  ],
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "profile",
+            "runtime_lane",
+            "service_session",
+            "tab",
+            "viewer",
+            "controller",
+            "presentation_route",
+            "installer_transaction"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.lease-recovery-authorization.v3" },
+    "signingKeyId": { "type": "string", "minLength": 1 },
+    "resource": { "$ref": "#/$defs/resource" },
+    "claimId": { "type": "string", "minLength": 1 },
+    "principalId": { "type": "string", "minLength": 1 },
+    "recoveryControllerId": { "type": "string", "minLength": 1 },
+    "recoveryControllerRevision": { "type": "integer", "minimum": 1 },
+    "claimRevision": { "type": "integer", "minimum": 1 },
+    "fencingToken": { "type": "integer", "minimum": 1 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "authorizationExpiresAt": { "type": "string", "format": "date-time" },
+    "claimExpiresAt": { "type": "string", "format": "date-time" },
+    "transitionDeadline": { "type": "string", "format": "date-time" },
+    "ownerGeneration": { "type": ["integer", "null"], "minimum": 1 },
+    "proof": { "type": "string", "pattern": "^[0-9a-f]{128}$" }
+  }
+}

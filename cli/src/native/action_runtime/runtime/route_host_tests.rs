@@ -2649,7 +2649,7 @@ fn test_service_profile_lease_guard_allows_same_session_reuse() {
 async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     use crate::native::service_lease_authority::{
         acquire_lease_claim_with_receipt_in_repository, issue_lease_effect_authorization_for_state,
-        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseEffectIntent, LeaseResourceKey,
     };
     use crate::native::service_principal::{
         register_profile_capability, ServicePrincipalRegistrationRequest,
@@ -2709,6 +2709,14 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     let authorization = issue_lease_effect_authorization_for_state(
         &repository.load_snapshot().unwrap(),
         acquired.claim.as_ref().unwrap(),
+        &LeaseEffectIntent {
+            action_class: "browser_launch".to_string(),
+            audience: "journal-session".to_string(),
+            operation_idempotency_key: "journal-launch-1".to_string(),
+            issued_at: now.to_rfc3339(),
+            authorization_expires_at: (now + chrono::Duration::minutes(2)).to_rfc3339(),
+        },
+        b"journal-canonical-effect-proof-capability-with-sufficient-length",
     )
     .unwrap();
     let metadata = ServiceLaunchMetadata {
@@ -2719,12 +2727,33 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     let command = json!({
         "action": "tab_new",
         "profileId": "acs-profile",
+        "leaseEffectOperationId": "journal-launch-1",
         "leaseEffectAuthorization": authorization,
     });
 
     ensure_service_profile_lease_available(&metadata, "journal-session", &command)
         .await
         .unwrap();
+
+    let wrong_audience =
+        ensure_service_profile_lease_available(&metadata, "foreign-session", &command)
+            .await
+            .unwrap_err();
+    assert_eq!(wrong_audience, "lease_authority_effect_scope_mismatch");
+
+    let mut missing_operation = command.clone();
+    missing_operation
+        .as_object_mut()
+        .unwrap()
+        .remove("leaseEffectOperationId");
+    let missing_operation_error =
+        ensure_service_profile_lease_available(&metadata, "journal-session", &missing_operation)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        missing_operation_error,
+        "lease_authority_effect_operation_id_missing"
+    );
 
     let mut stale_command = command.clone();
     stale_command["leaseEffectAuthorization"]["fencingToken"] = json!(999);
@@ -3118,7 +3147,7 @@ fn service_profile_lease_admission_never_rewrites_canonical_authorization() {
         "runtimeProfile": "acs-profile",
         "profileLeasePolicy": "wait",
         "leaseEffectAuthorization": {
-            "schemaVersion": "agent-browser.lease-effect-authorization.v2",
+            "schemaVersion": "agent-browser.lease-effect-authorization.v4",
             "claimId": "claim-a"
         }
     });
@@ -3310,8 +3339,10 @@ async fn canonical_effect_fence_precedes_retained_session_attach() {
     let command = json!({
         "action": "tab_list",
         "profileId": "last30days-facebook",
+        "leaseEffectOperationId": "launch:stale",
         "leaseEffectAuthorization": {
             "schemaVersion": "agent-browser.lease-effect-authorization.v0",
+            "signingKeyId": "lease-signing-key:stale",
             "resource": { "kind": "profile", "id": "last30days-facebook" },
             "claimId": "claim:stale",
             "principalId": "principal:last30days",
@@ -3320,6 +3351,11 @@ async fn canonical_effect_fence_precedes_retained_session_attach() {
             "claimRevision": 1,
             "fencingToken": 1,
             "ownerGeneration": null,
+            "actionClass": "browser_launch",
+            "audience": "last30days-facebook",
+            "operationIdempotencyKey": "launch:stale",
+            "issuedAt": "2026-08-31T12:00:00Z",
+            "authorizationExpiresAt": "2026-08-31T12:02:00Z",
             "proof": "00"
         }
     });

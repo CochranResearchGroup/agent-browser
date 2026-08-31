@@ -1,4 +1,4 @@
-export type ServiceProfileLeaseAction = "acquire" | "rejoin" | "renew" | "release" | "reconcile";
+export type ServiceProfileLeaseAction = "acquire" | "rejoin" | "renew" | "release" | "reconcile" | "recover";
 
 export type ServiceProfileLeaseRecord = {
   id: string;
@@ -81,6 +81,8 @@ export function profileLeaseActionAllowed(
 ): boolean {
   const authorizedAction = action === "reconcile"
     ? "reconcile_plan"
+    : action === "recover"
+      ? "recover_plan"
     : action === "acquire"
       ? "profile_acquire"
       : action;

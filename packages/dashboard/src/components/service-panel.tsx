@@ -4,14 +4,17 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   acquireServiceProfile,
+  applyServiceProfileLeaseRecovery,
   applyServiceProfileLeaseReconciliation,
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
+  planServiceProfileLeaseRecovery,
   planServiceProfileLeaseReconciliation,
   rejoinServiceProfileLease,
   releaseServiceProfileLease,
   renewServiceProfileLease,
   type ServiceCrashRegenerationStatus,
+  type ServiceLeaseRecoveryAuthorization,
   type ServiceProfileLeaseReconcilePlan,
 } from "@agent-browser/client/service-observability";
 import { useAtomValue } from "jotai/react";
@@ -5452,6 +5455,7 @@ function ProfileLeaseActionDialog({
   const [error, setError] = useState("");
   const [result, setResult] = useState<unknown>(null);
   const [reconcilePlan, setReconcilePlan] = useState<ServiceProfileLeaseReconcilePlan | null>(null);
+  const [recoveryPlan, setRecoveryPlan] = useState<ServiceLeaseRecoveryAuthorization | null>(null);
   const lease = target?.allocation.profileLease;
   const action = target?.action;
 
@@ -5462,12 +5466,14 @@ function ProfileLeaseActionDialog({
     setError("");
     setResult(null);
     setReconcilePlan(null);
+    setRecoveryPlan(null);
   }, [target]);
 
   const close = useCallback(() => {
     setCapability("");
     setResult(null);
     setReconcilePlan(null);
+    setRecoveryPlan(null);
     setError("");
     onOpenChange(false);
   }, [onOpenChange]);
@@ -5530,6 +5536,18 @@ function ProfileLeaseActionDialog({
           agentName,
           taskName: `profile-lease-${action}`,
         });
+      } else if (action === "recover") {
+        const planned = await planServiceProfileLeaseRecovery({
+          baseUrl,
+          id: lease.id,
+          leaseRevision: lease.leaseRevision,
+          profileCapability,
+          serviceName: "agent-browser-dashboard",
+          agentName,
+          taskName: "profile-lease-recover-plan",
+        });
+        response = planned;
+        setRecoveryPlan(planned.plan);
       } else {
         const planned = await planServiceProfileLeaseReconciliation({
           baseUrl,
@@ -5545,7 +5563,7 @@ function ProfileLeaseActionDialog({
         setReconcilePlan(planned.plan);
       }
       setResult(response);
-      if (action !== "reconcile") setCapability("");
+      if (action !== "reconcile" && action !== "recover") setCapability("");
       await onCompleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Profile lease ${action} failed`);
@@ -5584,13 +5602,43 @@ function ProfileLeaseActionDialog({
     }
   }, [agentName, baseUrl, capability, lease, onCompleted, reconcilePlan]);
 
+  const applyRecovery = useCallback(async () => {
+    if (!lease || !recoveryPlan) return;
+    const profileCapability = capability.trim();
+    if (!profileCapability) {
+      setError("Re-enter the private capability before applying this recovery plan.");
+      return;
+    }
+    setPending(true);
+    setError("");
+    try {
+      const response = await applyServiceProfileLeaseRecovery({
+        baseUrl,
+        id: lease.id,
+        profileCapability,
+        plan: recoveryPlan,
+        serviceName: "agent-browser-dashboard",
+        agentName,
+        taskName: "profile-lease-recover-apply",
+      });
+      setResult(response);
+      setCapability("");
+      setRecoveryPlan(null);
+      await onCompleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Profile lease recovery apply failed");
+    } finally {
+      setPending(false);
+    }
+  }, [agentName, baseUrl, capability, lease, onCompleted, recoveryPlan]);
+
   return (
     <Dialog open={!!target} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent className="sm:max-w-xl">
         {target && lease && action && (
           <>
             <DialogHeader>
-              <DialogTitle className="capitalize">{action === "reconcile" ? "Plan profile lease reconciliation" : action === "acquire" ? "Acquire profile" : `${action} profile lease`}</DialogTitle>
+              <DialogTitle className="capitalize">{action === "reconcile" ? "Plan profile lease reconciliation" : action === "recover" ? "Recover strict profile lease" : action === "acquire" ? "Acquire profile" : `${action} profile lease`}</DialogTitle>
               <DialogDescription>
                 {lease.profileId} / {lease.principalId ?? "unproven principal"}. The capability is held only in this dialog and is cleared when the dialog closes.
               </DialogDescription>
@@ -5643,7 +5691,13 @@ function ProfileLeaseActionDialog({
                   Apply sealed plan
                 </Button>
               )}
-              {!reconcilePlan && (
+              {recoveryPlan && (
+                <Button type="button" disabled={pending || !capability.trim()} onClick={applyRecovery}>
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Apply recovery plan
+                </Button>
+              )}
+              {!reconcilePlan && !recoveryPlan && (
                 <Button
                   type="button"
                   variant={action === "release" ? "destructive" : "default"}
@@ -5651,7 +5705,7 @@ function ProfileLeaseActionDialog({
                   onClick={runAction}
                 >
                   {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                  {action === "reconcile" ? "Create sealed plan" : action === "acquire" ? "Acquire profile" : `Confirm ${action}`}
+                  {action === "reconcile" || action === "recover" ? "Create sealed plan" : action === "acquire" ? "Acquire profile" : `Confirm ${action}`}
                 </Button>
               )}
             </div>
@@ -5804,7 +5858,7 @@ function ProfileAllocationDetailContent({
             <ProfileAllocationTokenSection title="Routes" values={allocation.profileLease.routeIds} />
             {onManageProfileLease && (
               <InspectorActionBar>
-                {(["acquire", "rejoin", "renew", "release", "reconcile"] as const).map((action) => (
+                {(["acquire", "rejoin", "renew", "release", "reconcile", "recover"] as const).map((action) => (
                   <Button
                     key={action}
                     type="button"
@@ -5818,7 +5872,7 @@ function ProfileAllocationDetailContent({
                     onClick={() => onManageProfileLease(allocation, action)}
                   >
                     <ShieldCheck className="size-3.5" />
-                    {action === "reconcile" ? "Reconcile plan" : action === "acquire" ? "Acquire profile" : action}
+                    {action === "reconcile" ? "Reconcile plan" : action === "recover" ? "Recover strict" : action === "acquire" ? "Acquire profile" : action}
                   </Button>
                 ))}
               </InspectorActionBar>

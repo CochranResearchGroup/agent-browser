@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   acquireServiceLoginProfile,
+  applyServiceProfileLeaseRecovery,
   applyServiceRemedies,
   createServiceStatusMcpToolCall,
   createServiceIncidentHandoff,
@@ -29,6 +30,7 @@ import {
   getServiceTrace,
   lookupServiceProfile,
   pauseServiceMonitor,
+  planServiceProfileLeaseRecovery,
   registerExternalProfile,
   registerServiceLoginProfile,
   rejoinServiceProfileLease,
@@ -200,6 +202,46 @@ async function main() {
     assert.equal(mutation.calls[0].body.profileCapability, undefined);
     assert.equal(mutation.calls[0].body.leaseRevision, 'sha256:one');
   }
+
+  const recoveryPlan = createFetchRecorder({
+    success: true,
+    data: { schemaVersion: 'agent-browser.lease-recovery-plan-response.v1' },
+  });
+  await planServiceProfileLeaseRecovery({
+    baseUrl: 'http://127.0.0.1:4849',
+    id: 'lease:one',
+    leaseRevision: 'canonical:3',
+    profileCapability: 'secret-capability',
+    idempotencyKey: 'recover:lease-one:3',
+    fetch: recoveryPlan.fetch,
+  });
+  assert.equal(
+    recoveryPlan.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases/lease%3Aone/recover/plan',
+  );
+  assert.equal(recoveryPlan.calls[0].init.headers.authorization, 'Bearer secret-capability');
+  assert.equal(recoveryPlan.calls[0].body.profileCapability, undefined);
+  assert.equal(recoveryPlan.calls[0].body.leaseRevision, 'canonical:3');
+
+  const recoveryApply = createFetchRecorder({
+    success: true,
+    data: { schemaVersion: 'agent-browser.lease-recovery-apply-response.v1' },
+  });
+  const sealedPlan = { schemaVersion: 'agent-browser.lease-recovery-authorization.v3' };
+  await applyServiceProfileLeaseRecovery({
+    baseUrl: 'http://127.0.0.1:4849',
+    id: 'lease:one',
+    profileCapability: 'secret-capability',
+    plan: sealedPlan,
+    fetch: recoveryApply.fetch,
+  });
+  assert.equal(
+    recoveryApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases/lease%3Aone/recover/apply',
+  );
+  assert.equal(recoveryApply.calls[0].init.headers.authorization, 'Bearer secret-capability');
+  assert.equal(recoveryApply.calls[0].body.profileCapability, undefined);
+  assert.deepEqual(recoveryApply.calls[0].body.plan, sealedPlan);
 
   const status = createFetchRecorder({
     success: true,

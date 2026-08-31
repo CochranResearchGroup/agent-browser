@@ -42,6 +42,10 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyOptions} ServiceProfileLeaseReconcileApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcilePlanResponse} ServiceProfileLeaseReconcilePlanResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyResponse} ServiceProfileLeaseReconcileApplyResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecoveryPlanOptions} ServiceProfileLeaseRecoveryPlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecoveryApplyOptions} ServiceProfileLeaseRecoveryApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecoveryPlanResponse} ServiceProfileLeaseRecoveryPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecoveryApplyResponse} ServiceProfileLeaseRecoveryApplyResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryPlanOptions} ServiceProfileRecoveryPlanOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryApplyOptions} ServiceProfileRecoveryApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryStatusOptions} ServiceProfileRecoveryStatusOptions
@@ -1009,6 +1013,36 @@ export function applyServiceProfileLeaseReconciliation({
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
     `/api/service/profile-leases/${encodeURIComponent(id)}/reconcile/apply`,
+    { plan, ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileLeaseRecoveryPlanOptions} options @returns {Promise<ServiceProfileLeaseRecoveryPlanResponse>} */
+export function planServiceProfileLeaseRecovery({
+  id, leaseRevision, profileCapability, idempotencyKey, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(id, 'planServiceProfileLeaseRecovery');
+  if (!leaseRevision || !profileCapability) {
+    throw new TypeError('planServiceProfileLeaseRecovery requires leaseRevision and profileCapability');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profile-leases/${encodeURIComponent(id)}/recover/plan`,
+    { leaseRevision, ...(idempotencyKey ? { idempotencyKey } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileLeaseRecoveryApplyOptions} options @returns {Promise<ServiceProfileLeaseRecoveryApplyResponse>} */
+export function applyServiceProfileLeaseRecovery({
+  id, profileCapability, plan, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(id, 'applyServiceProfileLeaseRecovery');
+  if (!profileCapability || !plan || typeof plan !== 'object') {
+    throw new TypeError('applyServiceProfileLeaseRecovery requires profileCapability and plan');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profile-leases/${encodeURIComponent(id)}/recover/apply`,
     { plan, ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
   );
 }

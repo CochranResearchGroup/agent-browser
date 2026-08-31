@@ -2507,16 +2507,6 @@ impl ServiceState {
         self.lease_authority.acquire_with_receipt(request)
     }
 
-    pub(crate) fn release_lease_claim_with_receipt(
-        &mut self,
-        request: super::service_lease_authority::ReleaseLeaseClaimRequest,
-    ) -> Result<
-        super::service_lease_authority::LeaseClaimReleaseOutcome,
-        super::service_lease_authority::LeaseAuthorityError,
-    > {
-        self.lease_authority.release_with_receipt(request)
-    }
-
     pub fn mark_persisted_entity_sources(&mut self) {
         for id in self.profiles.keys() {
             self.entity_sources

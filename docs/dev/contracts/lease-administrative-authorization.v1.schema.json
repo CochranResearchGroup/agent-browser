@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/lease-administrative-authorization.v1.schema.json",
+  "title": "Agent Browser scoped administrative lease authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "signingKeyId",
+    "administratorId",
+    "administratorRevision",
+    "resource",
+    "claimId",
+    "principalId",
+    "claimRevision",
+    "fencingToken",
+    "idempotencyKey",
+    "reasonCode",
+    "issuedAt",
+    "authorizationExpiresAt",
+    "proof"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.lease-administrative-authorization.v1" },
+    "signingKeyId": { "type": "string", "minLength": 1 },
+    "administratorId": { "type": "string", "minLength": 1 },
+    "administratorRevision": { "type": "integer", "minimum": 1 },
+    "resource": { "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource" },
+    "claimId": { "type": "string", "minLength": 1 },
+    "principalId": { "type": "string", "minLength": 1 },
+    "claimRevision": { "type": "integer", "minimum": 1 },
+    "fencingToken": { "type": "integer", "minimum": 1 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "reasonCode": { "type": "string", "minLength": 1 },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "authorizationExpiresAt": { "type": "string", "format": "date-time" },
+    "proof": { "type": "string", "pattern": "^[0-9a-f]{128}$" }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/lease-effect-authorization.v4.schema.json",
+  "title": "Agent Browser lease effect authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "signingKeyId",
+    "resource",
+    "claimId",
+    "principalId",
+    "capabilityId",
+    "capabilityRevision",
+    "claimRevision",
+    "fencingToken",
+    "ownerGeneration",
+    "actionClass",
+    "audience",
+    "operationIdempotencyKey",
+    "issuedAt",
+    "authorizationExpiresAt",
+    "proof"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.lease-effect-authorization.v4" },
+    "signingKeyId": { "type": "string", "minLength": 1 },
+    "resource": {
+      "$ref": "lease-recovery-authorization.v3.schema.json#/$defs/resource"
+    },
+    "claimId": { "type": "string", "minLength": 1 },
+    "principalId": { "type": "string", "minLength": 1 },
+    "capabilityId": { "type": "string", "minLength": 1 },
+    "capabilityRevision": { "type": "integer", "minimum": 1 },
+    "claimRevision": { "type": "integer", "minimum": 1 },
+    "fencingToken": { "type": "integer", "minimum": 1 },
+    "ownerGeneration": { "type": ["integer", "null"], "minimum": 1 },
+    "actionClass": { "type": "string", "minLength": 1 },
+    "audience": { "type": "string", "minLength": 1 },
+    "operationIdempotencyKey": { "type": "string", "minLength": 1 },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "authorizationExpiresAt": { "type": "string", "format": "date-time" },
+    "proof": { "type": "string", "pattern": "^[0-9a-f]{128}$" }
+  }
+}

@@ -915,6 +915,34 @@ fn service_profile_lease_reconcile_tool_schema(operation: &str, title: &str) -> 
     })
 }
 
+fn service_profile_lease_recovery_tool_schema(operation: &str, title: &str) -> Value {
+    let is_plan = operation == "plan";
+    json!({
+        "name": format!("service_profile_lease_recover_{operation}"),
+        "title": title,
+        "description": format!("{title}. The named strict recovery controller capability is ephemeral and never persisted or returned."),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "leaseId": { "type": "string" },
+                "leaseRevision": { "type": "string" },
+                "profileCapability": { "type": "string", "writeOnly": true },
+                "idempotencyKey": { "type": "string" },
+                "plan": { "type": "object" },
+                "serviceName": { "type": "string" },
+                "agentName": { "type": "string" },
+                "taskName": { "type": "string" }
+            },
+            "required": if is_plan {
+                vec!["leaseId", "leaseRevision", "profileCapability"]
+            } else {
+                vec!["leaseId", "profileCapability", "plan"]
+            }
+        }
+    })
+}
+
 fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
     let required = match operation {
         "acquire" => vec!["profileId", "profileCapability"],
@@ -3285,6 +3313,14 @@ fn service_mcp_tools() -> Vec<Value> {
             "apply",
             "Apply an exact sealed profile lease reconciliation plan",
         ),
+        service_profile_lease_recovery_tool_schema(
+            "plan",
+            "Plan strict profile lease recovery",
+        ),
+        service_profile_lease_recovery_tool_schema(
+            "apply",
+            "Apply an exact strict profile lease recovery plan",
+        ),
         service_profile_recovery_tool_schema("acquire", "Acquire an authenticated service profile"),
         service_profile_recovery_tool_schema("plan", "Plan profile acquisition recovery"),
         service_profile_recovery_tool_schema("apply", "Apply profile acquisition recovery"),
@@ -5354,6 +5390,9 @@ fn call_service_mcp_tool(
         "service_profile_lease_reconcile_plan" | "service_profile_lease_reconcile_apply" => {
             call_service_profile_lease_reconcile(name, arguments, session)
         }
+        "service_profile_lease_recover_plan" | "service_profile_lease_recover_apply" => {
+            call_service_profile_lease_recover(name, arguments, session)
+        }
         "service_profile_acquire"
         | "service_profile_recovery_plan"
         | "service_profile_recovery_apply"
@@ -5956,6 +5995,54 @@ fn call_service_profile_lease_reconcile(
     for (field, value) in [
         ("leaseRevision", lease_revision),
         ("expiresAt", expires_at),
+        ("idempotencyKey", idempotency_key),
+    ] {
+        if let Some(value) = value {
+            command[field] = json!(value);
+        }
+    }
+    if let Some(plan) = plan {
+        command["plan"] = plan;
+    }
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    send_queued_tool_command(action, session, trace, command)
+}
+
+fn call_service_profile_lease_recover(
+    action: &str,
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let lease_id = required_string_argument(arguments, "leaseId")?;
+    let profile_capability = required_string_argument(arguments, "profileCapability")?;
+    let lease_revision = optional_string_argument(arguments, "leaseRevision")?;
+    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
+    let plan = arguments
+        .get("plan")
+        .filter(|value| value.is_object())
+        .cloned();
+    if action.ends_with("_plan") && lease_revision.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_lease_recover_plan requires leaseRevision",
+        ));
+    }
+    if action.ends_with("_apply") && plan.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_lease_recover_apply requires plan",
+        ));
+    }
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let mut command = json!({
+        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "leaseId": lease_id,
+        "profileCapability": profile_capability,
+    });
+    for (field, value) in [
+        ("leaseRevision", lease_revision),
         ("idempotencyKey", idempotency_key),
     ] {
         if let Some(value) = value {

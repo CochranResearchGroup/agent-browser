@@ -59,6 +59,7 @@ dependencies = [
  "image",
  "libc",
  "reqwest",
+ "ring",
  "rust-embed",
  "serde",
  "serde_json",
