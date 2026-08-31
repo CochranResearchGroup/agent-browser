@@ -29,8 +29,9 @@ use super::dashboard_auth;
 use super::discovery::discover_sessions;
 use super::foreign_cdp_control;
 use super::http::{
-    relay_command_to_daemon, runtime_manifest_json, serve_embedded_file,
-    service_request_command_with_dashboard_generation, CORS_HEADERS,
+    ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
+    runtime_manifest_json, serve_embedded_file, service_request_command_with_dashboard_generation,
+    service_request_relay_session, CORS_HEADERS,
 };
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
@@ -642,6 +643,67 @@ async fn handle_service_api_request(
                     }
                 }
             }
+        }
+
+        if path == "/api/service/request"
+            && crate::native::service_lease_mode::profile_lease_mode_from_env()
+                == Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
+        {
+            let state = load_service_state();
+            let command = match service_request_command_with_dashboard_generation(
+                body,
+                Some(&state),
+                authenticated_dashboard_user,
+                DASHBOARD_SERVICE_BACKEND_SESSION,
+                std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+                    .ok()
+                    .as_deref(),
+            ) {
+                Ok(command) => command,
+                Err(err) => {
+                    write_json_error(stream, "400 Bad Request", &err).await;
+                    return;
+                }
+            };
+            let session_name =
+                service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
+            if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await {
+                write_json_error(stream, "502 Bad Gateway", &err).await;
+                return;
+            }
+            let Some(port) = session_port_for_name(&session_name) else {
+                write_json_error(
+                    stream,
+                    "503 Service Unavailable",
+                    &format!("Claimed service session '{session_name}' has no HTTP route"),
+                )
+                .await;
+                return;
+            };
+            match proxy_dashboard_service_api_request(
+                port,
+                "POST",
+                "/api/command",
+                &command.to_string(),
+                DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT,
+            )
+            .await
+            {
+                Ok(response) => {
+                    let _ = stream.write_all(&response).await;
+                }
+                Err(err) => {
+                    write_json_error_with_code(
+                        stream,
+                        "502 Bad Gateway",
+                        &format!("Unsafe claimed-session proxy failed: {err}"),
+                        Some(err.code),
+                        err.details,
+                    )
+                    .await;
+                }
+            }
+            return;
         }
     }
 

@@ -2,9 +2,9 @@
 
 Date: 2026-08-31
 
-State: COMPLETE
+State: OPEN
 
-Execution state: `validated_hotfix_checkpoint`
+Execution state: `unsafe_claim_any_scope_active`
 
 Lane: P145
 
@@ -23,10 +23,12 @@ validated commit and binary are reviewed against the active lease rewrite.
 
 ## Goal
 
-Provide one explicit emergency mode that keeps ordinary service clients able to
-acquire a browser while the profile lease system is under repair. On a duplicate
-or exclusive profile conflict, the service must route that acquisition to a
-deterministic isolated runtime profile instead of rejecting or waiting.
+Provide explicit emergency modes that keep ordinary service clients able to
+acquire a browser while the profile lease system is under repair. The existing
+safe fallback routes conflicts to an isolated profile. A second, loudly unsafe
+mode lets an attributable service request select and take an exact session and
+profile despite profile lease, principal, capability, or owner-generation claim
+conflicts.
 
 ## Acceptance Criteria
 
@@ -45,6 +47,12 @@ deterministic isolated runtime profile instead of rejecting or waiting.
    documentation describe the emergency-only semantics and authentication loss.
 7. Focused Rust tests, formatting, clippy, contract checks, and isolated
    development-runtime browser smoke pass.
+8. `AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any` accepts an explicitly
+   named session/profile route without principal continuity approval and admits
+   that route despite duplicate or exclusive profile lease conflicts.
+9. The unsafe override is recorded on the normalized command and response-facing
+   metadata. Dashboard authentication, action policy, confirmation, controller
+   and viewer authority, and workstation upgrade admission remain unchanged.
 
 ## Execution Sequence
 
@@ -61,8 +69,9 @@ deterministic isolated runtime profile instead of rejecting or waiting.
 ## Hard Stops
 
 - Do not disable workstation upgrade admission drain or transactional fencing.
-- Do not bypass profile capability, principal, owner-generation, controller, or
-  viewer authority.
+- Outside the exact `unsafe_claim_any` mode, do not bypass profile capability,
+  principal, or owner-generation authority. Never bypass controller or viewer
+  authority.
 - Do not launch two Chrome processes against the same user-data directory.
 - Do not claim the fallback preserves authenticated state; it intentionally uses
   an isolated profile.

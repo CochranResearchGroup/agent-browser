@@ -2926,6 +2926,50 @@ fn service_profile_lease_fail_open_rewrites_exclusive_conflict_without_waiting()
 }
 
 #[test]
+fn service_profile_lease_unsafe_claim_any_preserves_requested_profile_and_admits_conflict() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-unsafe-claim-any-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "unsafe_claim_any");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([(
+                "foreign-session".to_string(),
+                BrowserSession {
+                    id: "foreign-session".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "tab_new",
+        "serviceName": "EmergencyClient",
+        "runtimeProfile": "acs-profile",
+        "sessionName": "claiming-session",
+        "profileLeasePolicy": "reject"
+    });
+
+    let decision = service_profile_lease_admission(&mut command, "claiming-session", Some(0))
+        .expect("unsafe claim-any admission should evaluate");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(command["runtimeProfile"], "acs-profile");
+    assert_eq!(command["sessionName"], "claiming-session");
+    assert_eq!(command["profileLeaseUnsafeClaim"]["applied"], true);
+    assert_eq!(
+        command["profileLeaseUnsafeClaim"]["mode"],
+        "unsafe_claim_any"
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
     let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
     let home = unique_socket_dir("profile-lease-fail-open-clear-home");
