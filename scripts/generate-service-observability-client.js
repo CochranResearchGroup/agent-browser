@@ -1257,6 +1257,25 @@ export interface ServiceProfileLeaseDoctorResponse {
   doctor: ServiceProfileLeaseDoctorReport;
 }
 
+export interface ServiceLeaseTerminalReceipt {
+  schemaVersion: 'agent-browser.lease-terminal-receipt.v1';
+  receiptId: string;
+  requestDigest: string;
+  idempotencyKey: string;
+  operation: 'release';
+  resource: { kind: string; id: string };
+  claimId: string;
+  principalId: string;
+  capabilityId: string;
+  capabilityRevision: number;
+  claimRevision: number;
+  releasedFencingToken: number;
+  terminalFencingToken: number;
+  authorityRevision: number;
+  terminalResult: 'released';
+  occurredAt: string;
+}
+
 export interface ServiceProfileLeaseMutationResponse {
   operation: 'rejoin' | 'renew' | 'release';
   lease: ServiceProfileLeaseRecord;
@@ -1265,6 +1284,8 @@ export interface ServiceProfileLeaseMutationResponse {
   principalId: string;
   profileId: string;
   appliedAt: string;
+  canonicalTerminalReceipt?: ServiceLeaseTerminalReceipt;
+  replayed?: boolean;
 }
 
 export interface ServiceProfileLeaseReconcilePlan {

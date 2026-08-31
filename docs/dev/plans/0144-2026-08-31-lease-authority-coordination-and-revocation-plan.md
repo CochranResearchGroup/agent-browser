@@ -342,6 +342,25 @@ Every active claim contains at least:
     display, session, tab, installer, and control-input mutation enters through
     the sealed kernel authorization boundary or an explicitly non-lease
     physical-safety boundary.
+63. An active claim proves a time-bounded authority reservation, not process,
+    worker, session, or browser liveness. Public projections report its last
+    heartbeat and expiry separately and never describe a holder as running from
+    the claim alone. After an ephemeral holder disappears, the maximum logical
+    blocking interval is the policy-bounded remaining tenure, never retained
+    history or a renewed diagnostic observation.
+64. Exact holder release and scoped administrative recover or revoke require
+    the canonical claim plus their respective authenticated authority. They do
+    not require a derived daemon session, browser, runtime owner, process, or
+    presentation row to exist, so an absent projection cannot prevent removal
+    of logical authority.
+65. Observation and reconciliation are non-renewing. Reading a claim, finding
+    a stale row, repeating a warning, scanning after restart, or failing a
+    cleanup attempt cannot extend claim expiry, transition deadlines, maximum
+    tenure, or waiter position.
+66. Lease expiry uses a supervisor-owned monotonic time basis within one boot
+    epoch and a durable nondecreasing authority-time floor across restart.
+    Human-readable wall-clock timestamps are evidence only; clock rollback,
+    suspend, restore, or namespace skew cannot lengthen operational authority.
 
 ## Claim Modes
 
@@ -944,3 +963,59 @@ integration, runtime-owner transfer coordination, legacy no-envelope removal,
 authority-domain anti-rollback, public-surface parity, mixed-version migration,
 and installed acceptance. The merged checkpoint remains intentionally
 non-installable as the completed redesign.
+
+## Slice C Exact Holder Release And Third Recurrence Audit | 2026-08-31
+
+State transition: `emergency_branch_merged_and_semantically_reconciled` to
+`slice_c_exact_holder_release_complete`.
+
+Canonical exact-holder release now authenticates the current capability and
+claim inside one serialized repository mutation. It advances the resource
+fence, removes only the exact active claim, and commits the terminal event and
+idempotency receipt with the authority mutation. The operation is intentionally
+not coupled to a global expected authority revision, so unrelated resource
+activity cannot manufacture a false release conflict. A lost response can be
+replayed through CLI, HTTP, MCP, or the generated client surface using the same
+capability, exact original lease revision, and operation key. Replay returns
+the original terminal receipt and terminal projection without recreating
+authority or consulting a derived session, browser, owner, or history row.
+
+The third recurrence audit found four semantics that were still implicit and
+froze them as invariants 63 through 66: an active claim is a bounded authority
+reservation rather than process-liveness proof; logical release, recovery, and
+revocation cannot depend on optional runtime projections; observations and
+failed cleanup cannot renew authority; and expiry needs a monotonic
+supervisor-owned time basis with a durable nondecreasing floor across restart.
+These additions bound the unavoidable crash-detection window without allowing
+retained evidence or repeated warnings to extend it.
+
+The broader profile-gate regression also exposed two remaining compatibility
+seams. Exact broker route hints were still re-evaluated as an unproved new
+session, and non-acquiring service, handoff, and stream control commands could
+enter profile admission when they carried an explicit lease policy field. The
+compatibility gate now recognizes only a current browser/profile/session
+association as exact reuse and unconditionally excludes those non-acquiring
+control actions. This restores current clients while the legacy gate remains.
+It is not the final structural guarantee: Slice G must still remove the legacy
+no-envelope authority path and make the canonical entrypoint manifest the
+presubmit enforcement boundary.
+
+Focused evidence:
+
+- all 14 canonical lease-authority tests pass, including tamper rejection,
+  unrelated-authority mutation, terminal fence advancement, exact replay, and
+  later acquisition with a newer fence;
+- the public canonical release and replay regression passes with the exact same
+  terminal receipt and lease projection;
+- all 39 profile-lease and legacy admission regressions pass together,
+  including exact broker route reuse and non-acquiring control actions;
+- the generated service-client contract and type suite passes;
+- Rust formatting passes.
+
+Material blockers: automatic compensation around uncertain launch effects,
+strict recover and revision-bound revoke, durable effect intent and completion
+receipts, transition-deadline reconciliation, parent and child claim
+integration, runtime-owner transfer coordination, legacy no-envelope removal,
+authority-domain anti-rollback, remaining public-surface parity,
+mixed-version migration, and installed acceptance remain incomplete. This
+checkpoint is not installable as the completed redesign.

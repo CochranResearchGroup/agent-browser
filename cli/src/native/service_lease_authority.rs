@@ -13,6 +13,8 @@ use super::service_store::ServiceStateRepository;
 pub(crate) const LEASE_AUTHORITY_SCHEMA_VERSION: &str = "agent-browser.lease-authority.v1";
 pub(crate) const LEASE_ACQUISITION_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-acquisition-receipt.v1";
+pub(crate) const LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION: &str =
+    "agent-browser.lease-terminal-receipt.v1";
 pub(crate) const LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION: &str =
     "agent-browser.lease-effect-authorization.v2";
 
@@ -134,6 +136,85 @@ pub(crate) struct LeaseClaimAcquisitionReceipt {
 pub(crate) struct LeaseClaimAcquisitionOutcome {
     pub(crate) claim: Option<ActiveLeaseClaim>,
     pub(crate) receipt: LeaseClaimAcquisitionReceipt,
+    pub(crate) replayed: bool,
+}
+
+/// Authenticated, exact holder request to terminalize one current claim.
+/// The authorization is verified inside the same repository mutation that
+/// advances the fence and persists the terminal receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReleaseLeaseClaimRequest {
+    pub(crate) authorization: LeaseEffectAuthorization,
+    pub(crate) idempotency_key: String,
+    pub(crate) now: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LeaseClaimTerminalReceipt {
+    schema_version: String,
+    receipt_id: String,
+    request_digest: String,
+    idempotency_key: String,
+    operation: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    capability_id: String,
+    capability_revision: u64,
+    claim_revision: u64,
+    released_fencing_token: u64,
+    terminal_fencing_token: u64,
+    authority_revision: u64,
+    terminal_result: String,
+    occurred_at: String,
+}
+
+impl LeaseClaimTerminalReceipt {
+    pub(crate) fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
+
+    pub(crate) fn principal_id(&self) -> &str {
+        &self.principal_id
+    }
+
+    pub(crate) fn capability_id(&self) -> &str {
+        &self.capability_id
+    }
+
+    pub(crate) fn capability_revision(&self) -> u64 {
+        self.capability_revision
+    }
+
+    pub(crate) fn profile_id(&self) -> Option<&str> {
+        (self.resource.kind == LeaseResourceKind::Profile).then_some(self.resource.id.as_str())
+    }
+
+    pub(crate) fn claim_revision(&self) -> u64 {
+        self.claim_revision
+    }
+
+    pub(crate) fn released_fencing_token(&self) -> u64 {
+        self.released_fencing_token
+    }
+
+    pub(crate) fn authority_revision(&self) -> u64 {
+        self.authority_revision
+    }
+
+    pub(crate) fn terminal_fencing_token(&self) -> u64 {
+        self.terminal_fencing_token
+    }
+
+    pub(crate) fn occurred_at(&self) -> &str {
+        &self.occurred_at
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseClaimReleaseOutcome {
+    pub(crate) receipt: LeaseClaimTerminalReceipt,
     pub(crate) replayed: bool,
 }
 
@@ -265,6 +346,7 @@ pub(crate) struct LeaseAuthorityState {
     next_fencing_tokens: BTreeMap<String, u64>,
     events: Vec<LeaseAuthorityEvent>,
     acquisition_receipts: BTreeMap<String, LeaseClaimAcquisitionReceipt>,
+    terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
 }
 
 impl LeaseAuthorityState {
@@ -273,6 +355,7 @@ impl LeaseAuthorityState {
             && self.next_fencing_tokens.is_empty()
             && self.events.is_empty()
             && self.acquisition_receipts.is_empty()
+            && self.terminal_receipts.is_empty()
     }
 
     pub(crate) fn revision(&self) -> u64 {
@@ -494,6 +577,98 @@ impl LeaseAuthorityState {
         Ok(claim)
     }
 
+    pub(crate) fn release_with_receipt(
+        &mut self,
+        request: ReleaseLeaseClaimRequest,
+    ) -> Result<LeaseClaimReleaseOutcome, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        if let Some(replayed) = self.replay_release(&request)? {
+            return Ok(replayed);
+        }
+        let request_digest = release_request_digest(&request);
+        if request.idempotency_key.trim().is_empty()
+            || chrono::DateTime::parse_from_rfc3339(&request.now).is_err()
+        {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let resource_key = request.authorization.resource.storage_key();
+        let claim = self
+            .authorize_effect(&request.authorization, &request.now)?
+            .clone();
+        let fencing_high_water = self
+            .next_fencing_tokens
+            .get(&resource_key)
+            .copied()
+            .unwrap_or(claim.fencing_token)
+            .max(claim.fencing_token);
+        let terminal_fencing_token = fencing_high_water
+            .checked_add(1)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let next_authority_revision = self
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        let receipt = LeaseClaimTerminalReceipt {
+            schema_version: LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: stable_id(
+                "lease-terminal-receipt-v1",
+                &format!("release\0{}\0{}", claim.claim_id, request.idempotency_key),
+            ),
+            request_digest,
+            idempotency_key: request.idempotency_key.clone(),
+            operation: "release".to_string(),
+            resource: claim.resource.clone(),
+            claim_id: claim.claim_id.clone(),
+            principal_id: claim.principal_id.clone(),
+            capability_id: claim.capability_id.clone(),
+            capability_revision: claim.capability_revision,
+            claim_revision: claim.revision,
+            released_fencing_token: claim.fencing_token,
+            terminal_fencing_token,
+            authority_revision: next_authority_revision,
+            terminal_result: "released".to_string(),
+            occurred_at: request.now.clone(),
+        };
+        let mut event = terminal_event(&claim, LeaseEventKind::Released, &request.now);
+        event.fencing_token = terminal_fencing_token;
+
+        self.active_claims.remove(&resource_key);
+        self.next_fencing_tokens
+            .insert(resource_key, terminal_fencing_token);
+        self.revision = next_authority_revision;
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.events.push(event);
+        self.terminal_receipts
+            .insert(request.idempotency_key, receipt.clone());
+        Ok(LeaseClaimReleaseOutcome {
+            receipt,
+            replayed: false,
+        })
+    }
+
+    fn replay_release(
+        &self,
+        request: &ReleaseLeaseClaimRequest,
+    ) -> Result<Option<LeaseClaimReleaseOutcome>, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        let Some(receipt) = self.terminal_receipts.get(&request.idempotency_key) else {
+            return Ok(None);
+        };
+        if receipt.schema_version != LEASE_TERMINAL_RECEIPT_SCHEMA_VERSION {
+            return Err(LeaseAuthorityError::UnsupportedSchema);
+        }
+        if receipt.request_digest != release_request_digest(request)
+            || receipt.operation != "release"
+        {
+            return Err(LeaseAuthorityError::IdempotencyConflict);
+        }
+        Ok(Some(LeaseClaimReleaseOutcome {
+            receipt: receipt.clone(),
+            replayed: true,
+        }))
+    }
+
     pub(crate) fn current_claim(
         &self,
         resource: &LeaseResourceKey,
@@ -502,6 +677,27 @@ impl LeaseAuthorityState {
         self.active_claims
             .get(&resource.storage_key())
             .filter(|claim| timestamp_precedes(now, &claim.expires_at))
+    }
+
+    pub(crate) fn current_claim_by_id(
+        &self,
+        claim_id: &str,
+        now: &str,
+    ) -> Option<&ActiveLeaseClaim> {
+        self.active_claims
+            .values()
+            .find(|claim| claim.claim_id == claim_id && timestamp_precedes(now, &claim.expires_at))
+    }
+
+    /// Returns historical proof only. Callers must authenticate the requesting
+    /// principal and match every holder axis before exposing a replay.
+    pub(crate) fn terminal_release_receipt(
+        &self,
+        idempotency_key: &str,
+    ) -> Option<&LeaseClaimTerminalReceipt> {
+        self.terminal_receipts
+            .get(idempotency_key)
+            .filter(|receipt| receipt.operation == "release")
     }
 
     pub(crate) fn current_profile_claims<'a>(
@@ -634,6 +830,60 @@ pub(crate) fn acquire_lease_claim_with_receipt_in_repository<R: ServiceStateRepo
     repository.mutate(|state| {
         state
             .acquire_lease_claim_with_receipt(request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))
+    })
+}
+
+pub(crate) fn release_lease_claim_in_repository<R: ServiceStateRepository>(
+    repository: &R,
+    request: ReleaseLeaseClaimRequest,
+) -> Result<LeaseClaimReleaseOutcome, String> {
+    repository.mutate(|state| {
+        if let Some(replayed) = state
+            .lease_authority()
+            .replay_release(&request)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?
+        {
+            return Ok(replayed);
+        }
+        let claim = state
+            .lease_authority()
+            .authorize_effect(&request.authorization, &request.now)
+            .cloned()
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+        let capability = state
+            .service_principals
+            .profile_capabilities
+            .get(claim.capability_id())
+            .ok_or_else(|| {
+                format!(
+                    "lease_authority_{}",
+                    LeaseAuthorityError::CapabilityUnavailable.as_str()
+                )
+            })?;
+        if capability.state != super::service_principal::ServiceProfileCapabilityState::Active {
+            return Err(format!(
+                "lease_authority_{}",
+                LeaseAuthorityError::CapabilityRevoked.as_str()
+            ));
+        }
+        if capability.capability_id != claim.capability_id
+            || capability.principal_id != claim.principal_id
+            || capability.revision != claim.capability_revision
+            || claim
+                .profile_id()
+                .is_some_and(|profile_id| capability.profile_id != profile_id)
+        {
+            return Err(format!(
+                "lease_authority_{}",
+                LeaseAuthorityError::CapabilityMismatch.as_str()
+            ));
+        }
+        verify_effect_authorization(&request.authorization, capability)
+            .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+        state
+            .lease_authority
+            .release_with_receipt(request)
             .map_err(|error| format!("lease_authority_{}", error.as_str()))
     })
 }
@@ -845,6 +1095,22 @@ fn acquisition_request_digest(request: &AcquireLeaseClaimRequest) -> String {
                 .recovery_controller_id
                 .as_deref()
                 .unwrap_or_default(),
+        ),
+    )
+}
+
+fn release_request_digest(request: &ReleaseLeaseClaimRequest) -> String {
+    stable_id(
+        "lease-release-request-v1",
+        &format!(
+            "{}\0{}\0{}\0{}\0{}\0{}\0{}",
+            request.authorization.resource.storage_key(),
+            request.authorization.claim_id,
+            request.authorization.principal_id,
+            request.authorization.capability_id,
+            request.authorization.capability_revision,
+            request.authorization.claim_revision,
+            request.authorization.fencing_token,
         ),
     )
 }
@@ -1360,5 +1626,75 @@ mod tests {
         let state = repository.load_snapshot().unwrap();
         assert_eq!(state.lease_authority().active_claims.len(), 1);
         assert_eq!(state.lease_authority().events.len(), 1);
+    }
+
+    #[test]
+    fn exact_holder_release_fences_authority_and_replays_terminal_receipt() {
+        let mut state = ServiceState {
+            service_principals: crate::native::service_principal::ServicePrincipalRegistry {
+                profile_capabilities: BTreeMap::from([(
+                    "capability:last30days-social".to_string(),
+                    capability(),
+                )]),
+                ..crate::native::service_principal::ServicePrincipalRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        let acquired = state.acquire_lease_claim_with_receipt(request()).unwrap();
+        let claim = acquired.claim.unwrap();
+        let authorization = issue_lease_effect_authorization_for_state(&state, &claim).unwrap();
+        let mut unrelated = request();
+        unrelated.resource = LeaseResourceKey {
+            kind: LeaseResourceKind::ServiceSession,
+            id: "unrelated-session".to_string(),
+        };
+        unrelated.expected_authority_revision = 1;
+        unrelated.idempotency_key = "acquire:unrelated-session".to_string();
+        state.acquire_lease_claim_with_receipt(unrelated).unwrap();
+        let repository = MemoryRepository {
+            state: Arc::new(Mutex::new(state)),
+        };
+        let release = ReleaseLeaseClaimRequest {
+            authorization: authorization.clone(),
+            idempotency_key: "release:last30days:tick-1".to_string(),
+            now: "2026-08-31T12:01:00Z".to_string(),
+        };
+
+        let before_tamper = repository.load_snapshot().unwrap();
+        let mut tampered = release.clone();
+        tampered.authorization.proof.replace_range(..2, "00");
+        assert_eq!(
+            release_lease_claim_in_repository(&repository, tampered),
+            Err("lease_authority_invalid_effect_proof".to_string())
+        );
+        assert_eq!(repository.load_snapshot().unwrap(), before_tamper);
+
+        let first = release_lease_claim_in_repository(&repository, release.clone()).unwrap();
+        assert!(!first.replayed);
+        assert_eq!(first.receipt.terminal_fencing_token, 2);
+        let after_release = repository.load_snapshot().unwrap();
+        assert!(after_release
+            .lease_authority()
+            .current_claim(
+                &LeaseResourceKey::profile("last30days-social"),
+                release.now.as_str()
+            )
+            .is_none());
+        assert_eq!(
+            authorize_lease_effect_in_repository(&repository, &authorization, release.now.as_str()),
+            Err("lease_authority_claim_unavailable".to_string())
+        );
+
+        let replayed = release_lease_claim_in_repository(&repository, release).unwrap();
+        assert!(replayed.replayed);
+        assert_eq!(replayed.receipt, first.receipt);
+
+        let mut next = request();
+        next.expected_authority_revision = 3;
+        next.idempotency_key = "acquire:last30days:tick-2".to_string();
+        next.now = "2026-08-31T12:02:00Z".to_string();
+        next.expires_at = "2026-08-31T12:07:00Z".to_string();
+        let next_claim = acquire_lease_claim_in_repository(&repository, next).unwrap();
+        assert_eq!(next_claim.fencing_token(), 3);
     }
 }

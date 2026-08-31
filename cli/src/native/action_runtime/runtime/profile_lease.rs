@@ -154,6 +154,13 @@ pub(crate) fn service_profile_lease_gate(
     session_id: &str,
     waited_ms: Option<u64>,
 ) -> Result<ServiceProfileLeaseGate, String> {
+    // A broker-provided exact browser and session route reuses an existing
+    // lane. It is not a request to acquire a duplicate profile lane. Keep this
+    // compatibility branch read-only and require the current browser record to
+    // prove the profile and session association.
+    if command_routes_to_current_profile_lane(command) {
+        return Ok(ServiceProfileLeaseGate::Ready);
+    }
     let Some(metadata) = service_profile_lease_metadata_for_command(command, Some(session_id))?
     else {
         return Ok(ServiceProfileLeaseGate::Ready);
@@ -226,13 +233,13 @@ pub(crate) fn service_profile_lease_metadata_for_command(
     if command.get("action").and_then(Value::as_str) == Some("close") {
         return Ok(None);
     }
-    if command
-        .get("action")
-        .and_then(|value| value.as_str())
-        .is_some_and(action_skips_profile_lease_admission)
-        && command.get("profileLeasePolicy").is_none()
-    {
-        return Ok(None);
+    if let Some(action) = command.get("action").and_then(Value::as_str) {
+        if action_never_acquires_profile_lane(action)
+            || (action_skips_profile_lease_admission(action)
+                && command.get("profileLeasePolicy").is_none())
+        {
+            return Ok(None);
+        }
     }
     let mut launch_options = LaunchOptions {
         profile: launch_profile_from_sources(command, true),
@@ -261,28 +268,59 @@ pub(crate) fn service_profile_lease_metadata_for_command(
 /// small set of lifecycle coordinators own acquisition internally even though
 /// the generic action dispatcher does not auto-launch for them.
 fn action_skips_profile_lease_admission(action: &str) -> bool {
-    if action.starts_with("service_") {
-        return true;
-    }
-    if matches!(
-        action,
-        "runtime_handoff_prepare"
-            | "runtime_handoff_resume"
-            | "runtime_handoff_abort"
-            | "runtime_handoff_rollback"
-            | "runtime_handoff_finalize"
-    ) {
-        return true;
-    }
-    crate::native::actions::action_skips_browser_launch(action)
-        && !matches!(
+    action_never_acquires_profile_lane(action)
+        || (crate::native::actions::action_skips_browser_launch(action)
+            && !matches!(
+                action,
+                "launch"
+                    | "cdp_free_launch"
+                    | "external_byop_adopt"
+                    | "cdp_attach"
+                    | "remote_view_open"
+            ))
+}
+
+fn action_never_acquires_profile_lane(action: &str) -> bool {
+    action.starts_with("service_")
+        || matches!(
             action,
-            "launch"
-                | "cdp_free_launch"
-                | "external_byop_adopt"
-                | "cdp_attach"
-                | "remote_view_open"
+            "runtime_handoff_prepare"
+                | "runtime_handoff_resume"
+                | "runtime_handoff_abort"
+                | "runtime_handoff_rollback"
+                | "runtime_handoff_finalize"
+                | "stream_enable"
+                | "stream_disable"
+                | "stream_status"
         )
+}
+
+fn command_routes_to_current_profile_lane(command: &Value) -> bool {
+    let (Some(browser_id), Some(session_name), Some(profile_id)) = (
+        command.get("browserId").and_then(Value::as_str),
+        command.get("sessionName").and_then(Value::as_str),
+        runtime_profile_from_sources(command, true),
+    ) else {
+        return false;
+    };
+    let Ok(repository) = LockedServiceStateRepository::default_json() else {
+        return false;
+    };
+    let Ok(state) = repository.load_snapshot() else {
+        return false;
+    };
+    state.browsers.get(browser_id).is_some_and(|browser| {
+        browser.profile_id.as_deref() == Some(profile_id.as_str())
+            && service_browser_health_counts_as_live(browser.health)
+            && (browser
+                .active_session_ids
+                .iter()
+                .any(|active_session_id| active_session_id == session_name)
+                || state.sessions.get(session_name).is_some_and(|session| {
+                    session.profile_id.as_deref() == Some(profile_id.as_str())
+                        && session.browser_ids.iter().any(|id| id == browser_id)
+                }))
+    })
 }
 pub(crate) fn apply_explicit_launch_identity_from_command(
     options: &mut LaunchOptions,

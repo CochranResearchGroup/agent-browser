@@ -807,6 +807,12 @@ pub fn service_contracts_metadata() -> Value {
                 "http": { "method": "POST", "route": "/api/service/profile-leases/<id>/<rejoin|renew|release>", "authentication": "Authorization: Bearer <profile-capability>" },
                 "mcp": { "tools": ["service_profile_lease_rejoin", "service_profile_lease_renew", "service_profile_lease_release"], "capabilityField": "profileCapability", "ephemeral": true },
                 "client": { "helpers": ["rejoinServiceProfileLease", "renewServiceProfileLease", "releaseServiceProfileLease"] },
+                "canonicalRelease": {
+                    "terminalReceiptSchema": "agent-browser.lease-terminal-receipt.v1",
+                    "exactClaimRevisionRequired": true,
+                    "globalAuthorityRevisionRequired": false,
+                    "idempotentReplay": true,
+                },
                 "noLaunch": true,
             },
             "serviceProfileLeaseReconciliation": {

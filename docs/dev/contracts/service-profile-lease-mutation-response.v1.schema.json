@@ -11,7 +11,39 @@
     "leaseRevision": { "type": "string" },
     "principalId": { "type": "string" },
     "profileId": { "type": "string" },
-    "appliedAt": { "type": "string", "format": "date-time" }
+    "appliedAt": { "type": "string", "format": "date-time" },
+    "replayed": { "type": "boolean" },
+    "canonicalTerminalReceipt": {
+      "type": "object",
+      "required": ["schemaVersion", "receiptId", "requestDigest", "idempotencyKey", "operation", "resource", "claimId", "principalId", "capabilityId", "capabilityRevision", "claimRevision", "releasedFencingToken", "terminalFencingToken", "authorityRevision", "terminalResult", "occurredAt"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.lease-terminal-receipt.v1" },
+        "receiptId": { "type": "string" },
+        "requestDigest": { "type": "string" },
+        "idempotencyKey": { "type": "string" },
+        "operation": { "const": "release" },
+        "resource": {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "type": "string" },
+            "id": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "claimId": { "type": "string" },
+        "principalId": { "type": "string" },
+        "capabilityId": { "type": "string" },
+        "capabilityRevision": { "type": "integer", "minimum": 1 },
+        "claimRevision": { "type": "integer", "minimum": 1 },
+        "releasedFencingToken": { "type": "integer", "minimum": 1 },
+        "terminalFencingToken": { "type": "integer", "minimum": 1 },
+        "authorityRevision": { "type": "integer", "minimum": 1 },
+        "terminalResult": { "const": "released" },
+        "occurredAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

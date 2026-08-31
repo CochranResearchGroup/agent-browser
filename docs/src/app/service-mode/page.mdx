@@ -1457,6 +1457,8 @@ rows remain context but cannot add doctor blockers. The logical claim does not
 prove that a browser process exists. Legacy retained evidence remains
 observation-only and cannot acquire authority from caller labels. Exact lease detail, explanation, and doctor reads
 are available through CLI, HTTP, MCP resources, and generated client helpers.
+Canonical release authenticates the profile capability and exact current claim inside one serialized mutation. It advances the resource fence, removes only that claim, and returns an idempotent <code>canonicalTerminalReceipt</code>. Unrelated authority mutations do not create a false release conflict, and replay returns the original terminal result without treating retained history as a current lease.
+
 Observation-only legacy and unbound identity rows advertise
 <code>profile_acquire</code> when the capability-bound acquisition coordinator
 is their executable recourse. The dashboard exposes that route as Acquire

@@ -21,7 +21,10 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-use super::service_lease_authority::{ActiveLeaseClaim, LeaseClaimMode};
+use super::service_lease_authority::{
+    issue_lease_effect_authorization_for_state, ActiveLeaseClaim, LeaseClaimMode,
+    LeaseClaimTerminalReceipt, ReleaseLeaseClaimRequest,
+};
 use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
 };
@@ -519,7 +522,109 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
             None,
         )
         .map_err(principal_error_string)?;
+        let release_idempotency_key = (operation == "release").then(|| {
+            optional_command_string(command, "idempotencyKey")
+                .unwrap_or_else(|| format!("release:{lease_id}:{expected_revision}"))
+        });
+        if let Some(receipt) = release_idempotency_key.as_deref().and_then(|key| {
+            state
+                .lease_authority()
+                .terminal_release_receipt(key)
+                .cloned()
+        }) {
+            let expected_original_revision = format!(
+                "lease-authority-revision-v1:{}:{}",
+                receipt.claim_revision(),
+                receipt.released_fencing_token()
+            );
+            if receipt.claim_id() != lease_id
+                || receipt.profile_id() != Some(authority.profile_id.as_str())
+                || receipt.principal_id() != authority.principal_id
+                || receipt.capability_id() != authority.capability_id
+                || receipt.capability_revision() != authority.capability_revision
+                || expected_revision != expected_original_revision
+            {
+                return Err("lease_authority_idempotency_conflict".to_string());
+            }
+            let lease = canonical_terminal_profile_lease(&receipt);
+            return Ok(json!({
+                "operation": operation,
+                "lease": lease,
+                "previousLeaseRevision": expected_original_revision,
+                "leaseRevision": lease.lease_revision,
+                "principalId": authority.principal_id,
+                "profileId": authority.profile_id,
+                "appliedAt": receipt.occurred_at(),
+                "canonicalTerminalReceipt": receipt,
+                "replayed": true,
+            }));
+        }
         let before = inspect_profile_lease(state, &lease_id, &now).map_err(lease_error_string)?;
+        if operation == "release" {
+            if let Some(claim) = state
+                .lease_authority()
+                .current_claim_by_id(&lease_id, &now)
+                .cloned()
+            {
+                if before.lease_revision != expected_revision {
+                    return Err(lease_error_string(lease_error(
+                        ProfileLeaseFailureCode::RevisionMismatch,
+                        &lease_id,
+                    )));
+                }
+                if claim.profile_id() != Some(authority.profile_id.as_str())
+                    || claim.principal_id() != authority.principal_id
+                    || claim.capability_id() != authority.capability_id
+                {
+                    return Err(lease_error_string(lease_error(
+                        ProfileLeaseFailureCode::AuthorityMismatch,
+                        &lease_id,
+                    )));
+                }
+                require_action(&before, "release").map_err(lease_error_string)?;
+                if active_subordinate_tabs(state, &authority, &now)
+                    .next()
+                    .is_some()
+                {
+                    return Err(lease_error_string(lease_error(
+                        ProfileLeaseFailureCode::ActiveSubordinateWork,
+                        &lease_id,
+                    )));
+                }
+                let authorization = issue_lease_effect_authorization_for_state(state, &claim)?;
+                let released = state
+                    .release_lease_claim_with_receipt(ReleaseLeaseClaimRequest {
+                        authorization,
+                        idempotency_key: release_idempotency_key
+                            .expect("release idempotency key is present for release"),
+                        now: now.clone(),
+                    })
+                    .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+                let lease = canonical_terminal_profile_lease(&released.receipt);
+                append_profile_lease_event(
+                    state,
+                    operation,
+                    Some(&before),
+                    Some(&lease),
+                    &authority.principal_id,
+                    &authority.profile_id,
+                    lease.browser_id.as_deref(),
+                    &now,
+                    command,
+                );
+                return Ok(json!({
+                    "operation": operation,
+                    "lease": lease,
+                    "previousLeaseRevision": before.lease_revision,
+                    "leaseRevision": lease.lease_revision,
+                    "principalId": authority.principal_id,
+                    "profileId": authority.profile_id,
+                    "appliedAt": now,
+                    "canonicalTerminalReceipt": released.receipt,
+                    "replayed": released.replayed,
+                }));
+            }
+        }
         let lease = match operation {
             "rejoin" => rejoin_profile_lease(
                 state,
@@ -566,6 +671,40 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
             "appliedAt": now,
         }))
     })
+}
+
+fn canonical_terminal_profile_lease(receipt: &LeaseClaimTerminalReceipt) -> ProfileLeaseRecord {
+    ProfileLeaseRecord {
+        schema_version: PROFILE_LEASE_SCHEMA_VERSION.to_string(),
+        id: receipt.claim_id().to_string(),
+        lease_revision: format!(
+            "lease-authority-terminal-v1:{}:{}",
+            receipt.authority_revision(),
+            receipt.terminal_fencing_token()
+        ),
+        principal_id: Some(receipt.principal_id().to_string()),
+        principal_provenance: None,
+        profile_id: receipt
+            .profile_id()
+            .expect("profile release receipt requires a profile resource")
+            .to_string(),
+        profile_identity_digest: None,
+        browser_id: None,
+        session_ids: Vec::new(),
+        tab_ids: Vec::new(),
+        mode: "terminal".to_string(),
+        state: "released".to_string(),
+        owner_generation: None,
+        process_instance_digest: None,
+        route_ids: Vec::new(),
+        last_heartbeat_at: Some(receipt.occurred_at().to_string()),
+        expires_at: Some(receipt.occurred_at().to_string()),
+        cleanup_obligation: None,
+        blocking_identity_axes: Vec::new(),
+        authorized_actions: READ_ACTIONS.iter().map(ToString::to_string).collect(),
+        recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
+        observation_only: true,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1516,6 +1655,8 @@ fn canonical_profile_lease(state: &ServiceState, claim: &ActiveLeaseClaim) -> Pr
         .iter()
         .map(|session| session.id.clone())
         .collect::<Vec<_>>();
+    let mut authorized_actions = READ_ACTIONS.map(ToString::to_string).to_vec();
+    authorized_actions.push("release".to_string());
     ProfileLeaseRecord {
         schema_version: PROFILE_LEASE_SCHEMA_VERSION.to_string(),
         id: claim.claim_id().to_string(),
@@ -1544,7 +1685,7 @@ fn canonical_profile_lease(state: &ServiceState, claim: &ActiveLeaseClaim) -> Pr
         expires_at: Some(claim.expires_at().to_string()),
         cleanup_obligation: None,
         blocking_identity_axes: Vec::new(),
-        authorized_actions: READ_ACTIONS.map(ToString::to_string).to_vec(),
+        authorized_actions,
         recourse: PrincipalContinuityRecourse::ContinueWithActiveClaim,
         observation_only: false,
     }
@@ -2352,6 +2493,95 @@ mod tests {
             .unwrap();
         assert_eq!(event.details.as_ref().unwrap()["operation"], "renew");
         assert!(!serde_json::to_string(event).unwrap().contains(CAPABILITY));
+
+        drop(guard);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn public_release_terminalizes_the_canonical_claim_with_a_receipt() {
+        let home = temp_service_home("canonical-release");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let (mut state, authority, _) = state_with_lease();
+        let claim = state
+            .acquire_lease_claim_with_receipt(
+                super::super::service_lease_authority::AcquireLeaseClaimRequest {
+                    resource: super::super::service_lease_authority::LeaseResourceKey::profile(
+                        &authority.profile_id,
+                    ),
+                    parent_claim_id: None,
+                    principal_id: authority.principal_id.clone(),
+                    capability_id: authority.capability_id.clone(),
+                    capability_revision: authority.capability_revision,
+                    mode: super::super::service_lease_authority::LeaseClaimMode::Ephemeral,
+                    expected_authority_revision: 0,
+                    idempotency_key: "acquire:canonical-public-release".to_string(),
+                    now: "2026-08-31T12:00:00Z".to_string(),
+                    expires_at: "2100-08-31T12:05:00Z".to_string(),
+                    transition_deadline: None,
+                    recovery_controller_id: None,
+                    boot_epoch: Some("boot-public-release".to_string()),
+                    owner_generation: None,
+                },
+            )
+            .unwrap()
+            .claim
+            .unwrap();
+        let observed_at = service_now_timestamp();
+        let lease = profile_leases_for_state(&state, &observed_at)
+            .into_iter()
+            .find(|lease| lease.id == claim.claim_id())
+            .unwrap();
+        save_default_state(state);
+        let capability_path = home.join("odollo.cap");
+        write_private_capability_file(&capability_path, CAPABILITY).unwrap();
+
+        let response = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_release",
+            "leaseId": lease.id,
+            "leaseRevision": lease.lease_revision,
+            "profileCapabilityFile": capability_path,
+            "serviceName": "OdolloFulfillment",
+        }))
+        .await
+        .unwrap();
+
+        assert_eq!(response["operation"], "release");
+        assert_eq!(response["lease"]["state"], "released");
+        assert_eq!(
+            response["canonicalTerminalReceipt"]["terminalResult"],
+            "released"
+        );
+        let replay = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_release",
+            "leaseId": lease.id,
+            "leaseRevision": lease.lease_revision,
+            "profileCapabilityFile": capability_path,
+            "serviceName": "OdolloFulfillment",
+        }))
+        .await
+        .unwrap();
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(
+            replay["canonicalTerminalReceipt"],
+            response["canonicalTerminalReceipt"]
+        );
+        assert_eq!(replay["lease"], response["lease"]);
+        let persisted = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        assert!(persisted
+            .lease_authority()
+            .current_claim(
+                &super::super::service_lease_authority::LeaseResourceKey::profile(
+                    &authority.profile_id,
+                ),
+                &service_now_timestamp(),
+            )
+            .is_none());
 
         drop(guard);
         fs::remove_dir_all(home).unwrap();

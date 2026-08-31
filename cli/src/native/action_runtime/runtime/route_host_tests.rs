@@ -3063,11 +3063,16 @@ fn service_profile_lease_fail_open_rewrites_exclusive_conflict_without_waiting()
 
 #[test]
 fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
-    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let guard = EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_PROFILE_LEASE_MODE",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
     let home = unique_socket_dir("profile-lease-fail-open-clear-home");
     fs::create_dir_all(&home).expect("test home should be created");
     guard.set("HOME", home.to_str().expect("test home should be utf-8"));
     guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
     let mut command = json!({
         "action": "tab_new",
         "serviceName": "JournalDownloader",
