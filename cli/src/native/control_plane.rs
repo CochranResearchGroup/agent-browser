@@ -622,20 +622,38 @@ fn coordinated_execution_response(
             }
         }
     };
-    annotate_profile_lease_fail_open_response(&request.command, response)
+    annotate_profile_lease_override_response(&request.command, response)
 }
 
-fn annotate_profile_lease_fail_open_response(command: &Value, mut response: Value) -> Value {
-    let Some(fail_open) = command.get("profileLeaseFailOpen") else {
+fn annotate_profile_lease_override_response(command: &Value, mut response: Value) -> Value {
+    let Some((field, metadata, warning)) = command
+        .get("profileLeaseUnsafeClaim")
+        .map(|metadata| {
+            (
+                "profileLeaseUnsafeClaim",
+                metadata,
+                "UNSAFE: caller-selected session/profile route bypassed principal continuity and lease ownership",
+            )
+        })
+        .or_else(|| {
+            command.get("profileLeaseFailOpen").map(|metadata| {
+                (
+                    "profileLeaseFailOpen",
+                    metadata,
+                    "Profile lease fail-open used an isolated unauthenticated runtime profile",
+                )
+            })
+        })
+    else {
         return response;
     };
     let Some(object) = response.as_object_mut() else {
         return response;
     };
-    object.insert("profileLeaseFailOpen".to_string(), fail_open.clone());
-    object.entry("warning".to_string()).or_insert_with(|| {
-        json!("Profile lease fail-open used an isolated unauthenticated runtime profile")
-    });
+    object.insert(field.to_string(), metadata.clone());
+    object
+        .entry("warning".to_string())
+        .or_insert_with(|| json!(warning));
     response
 }
 enum SchedulerLeaseDecision {
@@ -2737,6 +2755,31 @@ mod tests {
         assert_eq!(
             response["warning"],
             "Profile lease fail-open used an isolated unauthenticated runtime profile"
+        );
+    }
+
+    #[test]
+    fn completed_service_response_reports_unsafe_profile_claim() {
+        let request = control_request_for_mode_test(json!({
+            "action": "tab_new",
+            "profileLeaseUnsafeClaim": {
+                "schemaVersion": "agent-browser.profile-lease-unsafe-claim.v1",
+                "applied": true,
+                "mode": "unsafe_claim_any",
+                "sessionName": "foreign-session"
+            }
+        }));
+
+        let response = coordinated_execution_response(
+            &request,
+            CoordinatedExecution::Completed(json!({ "success": true, "data": {} })),
+            None,
+        );
+
+        assert_eq!(response["profileLeaseUnsafeClaim"]["applied"], true);
+        assert_eq!(
+            response["warning"],
+            "UNSAFE: caller-selected session/profile route bypassed principal continuity and lease ownership"
         );
     }
 
