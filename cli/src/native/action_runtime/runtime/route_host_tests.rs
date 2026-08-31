@@ -2647,8 +2647,11 @@ fn test_service_profile_lease_guard_allows_same_session_reuse() {
 #[tokio::test]
 async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     use crate::native::service_lease_authority::{
-        acquire_lease_claim_with_receipt_in_repository, AcquireLeaseClaimRequest, LeaseClaimMode,
-        LeaseResourceKey,
+        acquire_lease_claim_with_receipt_in_repository, issue_lease_effect_authorization_for_state,
+        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+    };
+    use crate::native::service_principal::{
+        register_profile_capability, ServicePrincipalRegistrationRequest,
     };
 
     let guard = EnvGuard::new(&["HOME"]);
@@ -2657,7 +2660,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     guard.set("HOME", home.to_str().expect("test home should be utf-8"));
     let repository = LockedServiceStateRepository::default_json().unwrap();
     let profile_path = home.join("profiles/acs-profile");
-    repository
+    let registered = repository
         .mutate(|state| {
             state.profiles.insert(
                 "acs-profile".to_string(),
@@ -2667,7 +2670,18 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
                     ..BrowserProfile::default()
                 },
             );
-            Ok(())
+            register_profile_capability(
+                &mut state.service_principals,
+                ServicePrincipalRegistrationRequest {
+                    principal_id: "principal:journal".to_string(),
+                    display_name: Some("Journal".to_string()),
+                    profile_id: "acs-profile".to_string(),
+                    registered_at: Some(chrono::Utc::now().to_rfc3339()),
+                    registered_by: Some("canonical-effect-test".to_string()),
+                },
+                "journal-canonical-effect-proof-capability-with-sufficient-length",
+            )
+            .map_err(|error| format!("service_principal_{}", error.code.as_str()))
         })
         .unwrap();
     let now = chrono::Utc::now();
@@ -2677,7 +2691,8 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
             resource: LeaseResourceKey::profile("acs-profile"),
             parent_claim_id: None,
             principal_id: "principal:journal".to_string(),
-            capability_id: "capability:journal".to_string(),
+            capability_id: registered.capability.capability_id.clone(),
+            capability_revision: registered.capability.revision,
             mode: LeaseClaimMode::Ephemeral,
             expected_authority_revision: 0,
             idempotency_key: "journal-acquire-1".to_string(),
@@ -2690,7 +2705,11 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
         },
     )
     .unwrap();
-    let authorization = acquired.claim.unwrap().effect_authorization();
+    let authorization = issue_lease_effect_authorization_for_state(
+        &repository.load_snapshot().unwrap(),
+        acquired.claim.as_ref().unwrap(),
+    )
+    .unwrap();
     let metadata = ServiceLaunchMetadata {
         profile_id: Some("acs-profile".to_string()),
         service_name: Some("JournalDownloader".to_string()),
@@ -3054,8 +3073,12 @@ async fn canonical_effect_fence_precedes_retained_session_attach() {
             "resource": { "kind": "profile", "id": "last30days-facebook" },
             "claimId": "claim:stale",
             "principalId": "principal:last30days",
+            "capabilityId": "capability:last30days",
+            "capabilityRevision": 1,
             "claimRevision": 1,
-            "fencingToken": 1
+            "fencingToken": 1,
+            "ownerGeneration": null,
+            "proof": "00"
         }
     });
 

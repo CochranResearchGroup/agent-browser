@@ -3,6 +3,7 @@
 //! Only `active_claims` may authorize or block effects. `events` is retained
 //! append-only history and is never consulted for admission.
 
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -13,7 +14,9 @@ pub(crate) const LEASE_AUTHORITY_SCHEMA_VERSION: &str = "agent-browser.lease-aut
 pub(crate) const LEASE_ACQUISITION_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-acquisition-receipt.v1";
 pub(crate) const LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION: &str =
-    "agent-browser.lease-effect-authorization.v1";
+    "agent-browser.lease-effect-authorization.v2";
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -116,6 +119,8 @@ pub(crate) struct LeaseClaimAcquisitionReceipt {
     resource: LeaseResourceKey,
     principal_id: String,
     capability_id: String,
+    #[serde(default)]
+    capability_revision: u64,
     claim_id: String,
     claim_revision: u64,
     fencing_token: u64,
@@ -141,9 +146,12 @@ pub(crate) struct LeaseEffectAuthorization {
     resource: LeaseResourceKey,
     claim_id: String,
     principal_id: String,
+    capability_id: String,
+    capability_revision: u64,
     claim_revision: u64,
     fencing_token: u64,
     owner_generation: Option<u64>,
+    proof: String,
 }
 
 impl LeaseEffectAuthorization {
@@ -161,6 +169,8 @@ pub(crate) struct ActiveLeaseClaim {
     parent_claim_id: Option<String>,
     principal_id: String,
     capability_id: String,
+    #[serde(default)]
+    capability_revision: u64,
     mode: LeaseClaimMode,
     revision: u64,
     fencing_token: u64,
@@ -215,16 +225,34 @@ impl ActiveLeaseClaim {
         self.owner_generation
     }
 
-    pub(crate) fn effect_authorization(&self) -> LeaseEffectAuthorization {
-        LeaseEffectAuthorization {
+    pub(crate) fn effect_authorization(
+        &self,
+        capability: &super::service_principal::ServiceProfileCapability,
+    ) -> Result<LeaseEffectAuthorization, LeaseAuthorityError> {
+        if capability.capability_id != self.capability_id
+            || capability.principal_id != self.principal_id
+            || capability.revision != self.capability_revision
+            || capability.state != super::service_principal::ServiceProfileCapabilityState::Active
+            || self
+                .profile_id()
+                .is_some_and(|profile_id| capability.profile_id != profile_id)
+        {
+            return Err(LeaseAuthorityError::CapabilityMismatch);
+        }
+        let mut authorization = LeaseEffectAuthorization {
             schema_version: LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION.to_string(),
             resource: self.resource.clone(),
             claim_id: self.claim_id.clone(),
             principal_id: self.principal_id.clone(),
+            capability_id: self.capability_id.clone(),
+            capability_revision: self.capability_revision,
             claim_revision: self.revision,
             fencing_token: self.fencing_token,
             owner_generation: self.owner_generation,
-        }
+            proof: String::new(),
+        };
+        authorization.proof = sign_effect_authorization(&authorization, capability)?;
+        Ok(authorization)
     }
 }
 
@@ -437,6 +465,7 @@ impl LeaseAuthorityState {
             parent_claim_id: request.parent_claim_id,
             principal_id: request.principal_id,
             capability_id: request.capability_id,
+            capability_revision: request.capability_revision,
             mode: request.mode,
             revision: 1,
             fencing_token,
@@ -506,6 +535,8 @@ impl LeaseAuthorityState {
         }
         if claim.claim_id != authorization.claim_id
             || claim.principal_id != authorization.principal_id
+            || claim.capability_id != authorization.capability_id
+            || claim.capability_revision != authorization.capability_revision
             || claim.revision != authorization.claim_revision
             || claim.fencing_token != authorization.fencing_token
             || claim.owner_generation != authorization.owner_generation
@@ -530,6 +561,7 @@ pub(crate) struct AcquireLeaseClaimRequest {
     pub(crate) parent_claim_id: Option<String>,
     pub(crate) principal_id: String,
     pub(crate) capability_id: String,
+    pub(crate) capability_revision: u64,
     pub(crate) mode: LeaseClaimMode,
     pub(crate) expected_authority_revision: u64,
     pub(crate) idempotency_key: String,
@@ -553,6 +585,10 @@ pub(crate) enum LeaseAuthorityError {
     ClaimUnavailable,
     ClaimExpired,
     StaleClaim,
+    CapabilityUnavailable,
+    CapabilityRevoked,
+    CapabilityMismatch,
+    InvalidEffectProof,
     UnsupportedSchema,
 }
 
@@ -569,6 +605,10 @@ impl LeaseAuthorityError {
             Self::ClaimUnavailable => "claim_unavailable",
             Self::ClaimExpired => "claim_expired",
             Self::StaleClaim => "stale_claim",
+            Self::CapabilityUnavailable => "capability_unavailable",
+            Self::CapabilityRevoked => "capability_revoked",
+            Self::CapabilityMismatch => "capability_mismatch",
+            Self::InvalidEffectProof => "invalid_effect_proof",
             Self::UnsupportedSchema => "unsupported_schema",
         }
     }
@@ -609,6 +649,36 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
         .authorize_effect(authorization, now)
         .cloned()
         .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+    let capability = state
+        .service_principals
+        .profile_capabilities
+        .get(&claim.capability_id)
+        .ok_or_else(|| {
+            format!(
+                "lease_authority_{}",
+                LeaseAuthorityError::CapabilityUnavailable.as_str()
+            )
+        })?;
+    if capability.state != super::service_principal::ServiceProfileCapabilityState::Active {
+        return Err(format!(
+            "lease_authority_{}",
+            LeaseAuthorityError::CapabilityRevoked.as_str()
+        ));
+    }
+    if capability.capability_id != claim.capability_id
+        || capability.principal_id != claim.principal_id
+        || capability.revision != claim.capability_revision
+        || claim
+            .profile_id()
+            .is_some_and(|profile_id| capability.profile_id != profile_id)
+    {
+        return Err(format!(
+            "lease_authority_{}",
+            LeaseAuthorityError::CapabilityMismatch.as_str()
+        ));
+    }
+    verify_effect_authorization(authorization, capability)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     if claim.resource.kind == LeaseResourceKind::Profile {
         let profile = state
             .profiles
@@ -648,10 +718,34 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
     Ok(claim)
 }
 
+pub(crate) fn issue_lease_effect_authorization_for_state(
+    state: &super::service_model::ServiceState,
+    claim: &ActiveLeaseClaim,
+) -> Result<LeaseEffectAuthorization, String> {
+    let current = state
+        .lease_authority()
+        .current_claim(&claim.resource, &claim.heartbeat_at)
+        .filter(|current| {
+            current.claim_id == claim.claim_id
+                && current.revision == claim.revision
+                && current.fencing_token == claim.fencing_token
+        })
+        .ok_or_else(|| "lease_authority_claim_unavailable".to_string())?;
+    let capability = state
+        .service_principals
+        .profile_capabilities
+        .get(current.capability_id())
+        .ok_or_else(|| "lease_authority_capability_unavailable".to_string())?;
+    current
+        .effect_authorization(capability)
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))
+}
+
 fn validate_request(request: &AcquireLeaseClaimRequest) -> Result<(), LeaseAuthorityError> {
     if request.resource.id.trim().is_empty()
         || request.principal_id.trim().is_empty()
         || request.capability_id.trim().is_empty()
+        || request.capability_revision == 0
         || request.idempotency_key.trim().is_empty()
         || !timestamp_precedes(&request.now, &request.expires_at)
     {
@@ -687,6 +781,7 @@ fn claim_matches_request(claim: &ActiveLeaseClaim, request: &AcquireLeaseClaimRe
         && claim.parent_claim_id == request.parent_claim_id
         && claim.principal_id == request.principal_id
         && claim.capability_id == request.capability_id
+        && claim.capability_revision == request.capability_revision
         && claim.mode == request.mode
         && claim.expires_at == request.expires_at
         && claim.transition_deadline == request.transition_deadline
@@ -705,6 +800,7 @@ fn ephemeral_claim_can_be_rejoined(
         && claim.parent_claim_id == request.parent_claim_id
         && claim.principal_id == request.principal_id
         && claim.capability_id == request.capability_id
+        && claim.capability_revision == request.capability_revision
 }
 
 fn acquisition_receipt(
@@ -725,6 +821,7 @@ fn acquisition_receipt(
         resource: claim.resource.clone(),
         principal_id: claim.principal_id.clone(),
         capability_id: claim.capability_id.clone(),
+        capability_revision: claim.capability_revision,
         claim_id: claim.claim_id.clone(),
         claim_revision: claim.revision,
         fencing_token: claim.fencing_token,
@@ -737,17 +834,71 @@ fn acquisition_request_digest(request: &AcquireLeaseClaimRequest) -> String {
     stable_id(
         "lease-acquisition-request-v1",
         &format!(
-            "{}\0{}\0{}\0{}\0{}\0{}",
+            "{}\0{}\0{}\0{}\0{}\0{}\0{}",
             request.resource.storage_key(),
             request.mode.as_str(),
             request.parent_claim_id.as_deref().unwrap_or_default(),
             request.principal_id,
             request.capability_id,
+            request.capability_revision,
             request
                 .recovery_controller_id
                 .as_deref()
                 .unwrap_or_default(),
         ),
+    )
+}
+
+fn sign_effect_authorization(
+    authorization: &LeaseEffectAuthorization,
+    capability: &super::service_principal::ServiceProfileCapability,
+) -> Result<String, LeaseAuthorityError> {
+    let key = capability_effect_proof_key(capability)?;
+    let mut mac =
+        HmacSha256::new_from_slice(&key).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
+    mac.update(effect_authorization_payload(authorization).as_bytes());
+    Ok(hex::encode(mac.finalize().into_bytes()))
+}
+
+fn verify_effect_authorization(
+    authorization: &LeaseEffectAuthorization,
+    capability: &super::service_principal::ServiceProfileCapability,
+) -> Result<(), LeaseAuthorityError> {
+    let key = capability_effect_proof_key(capability)?;
+    let proof =
+        hex::decode(&authorization.proof).map_err(|_| LeaseAuthorityError::InvalidEffectProof)?;
+    let mut mac =
+        HmacSha256::new_from_slice(&key).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
+    mac.update(effect_authorization_payload(authorization).as_bytes());
+    mac.verify_slice(&proof)
+        .map_err(|_| LeaseAuthorityError::InvalidEffectProof)
+}
+
+fn capability_effect_proof_key(
+    capability: &super::service_principal::ServiceProfileCapability,
+) -> Result<Vec<u8>, LeaseAuthorityError> {
+    let encoded = capability
+        .capability_digest
+        .strip_prefix("sha256:")
+        .ok_or(LeaseAuthorityError::CapabilityMismatch)?;
+    let key = hex::decode(encoded).map_err(|_| LeaseAuthorityError::CapabilityMismatch)?;
+    (key.len() == 32)
+        .then_some(key)
+        .ok_or(LeaseAuthorityError::CapabilityMismatch)
+}
+
+fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> String {
+    format!(
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        authorization.schema_version,
+        authorization.resource.storage_key(),
+        authorization.claim_id,
+        authorization.principal_id,
+        authorization.capability_id,
+        authorization.capability_revision,
+        authorization.claim_revision,
+        authorization.fencing_token,
+        authorization.owner_generation.unwrap_or_default(),
     )
 }
 
@@ -789,6 +940,7 @@ mod tests {
             parent_claim_id: None,
             principal_id: "principal:last30days".to_string(),
             capability_id: "capability:last30days-social".to_string(),
+            capability_revision: 1,
             mode: LeaseClaimMode::Ephemeral,
             expected_authority_revision: 0,
             idempotency_key: "acquire:last30days:tick-1".to_string(),
@@ -798,6 +950,21 @@ mod tests {
             recovery_controller_id: None,
             boot_epoch: Some("boot-1".to_string()),
             owner_generation: None,
+        }
+    }
+
+    fn capability() -> crate::native::service_principal::ServiceProfileCapability {
+        crate::native::service_principal::ServiceProfileCapability {
+            capability_id: "capability:last30days-social".to_string(),
+            principal_id: "principal:last30days".to_string(),
+            profile_id: "last30days-social".to_string(),
+            capability_digest: format!(
+                "sha256:{:x}",
+                Sha256::digest(b"last30days-test-effect-proof-capability")
+            ),
+            state: crate::native::service_principal::ServiceProfileCapabilityState::Active,
+            revision: 1,
+            issued_at: Some(NOW.to_string()),
         }
     }
 
@@ -940,7 +1107,11 @@ mod tests {
     fn expired_claim_cannot_authorize_an_effect() {
         let mut authority = LeaseAuthorityState::default();
         let acquired = authority.acquire_with_receipt(request()).unwrap();
-        let authorization = acquired.claim.unwrap().effect_authorization();
+        let authorization = acquired
+            .claim
+            .unwrap()
+            .effect_authorization(&capability())
+            .unwrap();
 
         assert!(authority
             .authorize_effect(&authorization, "2026-08-31T12:04:59Z")
@@ -1094,22 +1265,58 @@ mod tests {
                     ..crate::native::service_model::BrowserProfile::default()
                 },
             )]),
+            service_principals: crate::native::service_principal::ServicePrincipalRegistry {
+                profile_capabilities: BTreeMap::from([(
+                    "capability:last30days-social".to_string(),
+                    capability(),
+                )]),
+                ..crate::native::service_principal::ServicePrincipalRegistry::default()
+            },
             runtime_owner_registry: registry,
             ..ServiceState::default()
         };
         let mut claim_request = request();
         claim_request.owner_generation = Some(7);
-        let authorization = state
-            .acquire_lease_claim(claim_request)
-            .unwrap()
-            .effect_authorization();
+        let claim = state.acquire_lease_claim(claim_request).unwrap();
+        let authorization = issue_lease_effect_authorization_for_state(&state, &claim).unwrap();
         let repository = MemoryRepository {
             state: Arc::new(Mutex::new(state)),
         };
         authorize_lease_effect_in_repository(&repository, &authorization, NOW).unwrap();
 
+        let mut tampered = authorization.clone();
+        tampered.proof.replace_range(..2, "00");
+        assert_eq!(
+            authorize_lease_effect_in_repository(&repository, &tampered, NOW),
+            Err("lease_authority_invalid_effect_proof".to_string())
+        );
+
         repository
             .mutate(|state| {
+                state
+                    .service_principals
+                    .profile_capabilities
+                    .get_mut("capability:last30days-social")
+                    .unwrap()
+                    .state =
+                    crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            authorize_lease_effect_in_repository(&repository, &authorization, NOW),
+            Err("lease_authority_capability_revoked".to_string())
+        );
+
+        repository
+            .mutate(|state| {
+                state
+                    .service_principals
+                    .profile_capabilities
+                    .get_mut("capability:last30days-social")
+                    .unwrap()
+                    .state =
+                    crate::native::service_principal::ServiceProfileCapabilityState::Active;
                 state
                     .runtime_owner_registry
                     .principal_bindings

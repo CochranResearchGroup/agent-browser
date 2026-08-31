@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 
 use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
 use super::service_lease_authority::{
-    AcquireLeaseClaimRequest, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
-    LeaseEffectAuthorization, LeaseResourceKey,
+    issue_lease_effect_authorization_for_state, AcquireLeaseClaimRequest,
+    LeaseClaimAcquisitionOutcome, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
 };
 use super::service_model::{BrowserProfile, ServiceState};
 use super::service_principal::{
@@ -808,6 +808,7 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
             parent_claim_id: None,
             principal_id: authority.principal_id,
             capability_id: authority.capability_id,
+            capability_revision: authority.capability_revision,
             mode: LeaseClaimMode::Ephemeral,
             expected_authority_revision: state.lease_authority().revision(),
             idempotency_key: idempotency_key.to_string(),
@@ -882,6 +883,7 @@ fn replay_profile_claim_for_intent<R: ServiceStateRepository>(
         parent_claim_id: None,
         principal_id: authority.principal_id,
         capability_id: authority.capability_id,
+        capability_revision: authority.capability_revision,
         mode: LeaseClaimMode::Ephemeral,
         expected_authority_revision: state.lease_authority().revision(),
         idempotency_key: idempotency_key.to_string(),
@@ -980,9 +982,12 @@ async fn acquire_profile_command(
         &claim_expires_at,
         &idempotency_key,
     )? {
+        let lease_effect_authorization =
+            issue_profile_effect_authorization(&repository, &replayed)?;
         return Ok(profile_acquisition_response(
             initial_outcome,
             Some(replayed),
+            lease_effect_authorization,
         ));
     }
     let initial_lease_acquisition = if initial_outcome.state == ProfileAcquisitionState::Acquired {
@@ -1006,6 +1011,7 @@ async fn acquire_profile_command(
         return Ok(profile_acquisition_response(
             initial_outcome,
             initial_lease_acquisition,
+            None,
         ));
     }
     let lease_acquisition_slot = Arc::new(Mutex::new(initial_lease_acquisition));
@@ -1035,10 +1041,8 @@ async fn acquire_profile_command(
                 &retry_idempotency_key,
                 retry_capability.as_bytes(),
             )?;
-            let lease_effect_authorization = lease_acquisition
-                .claim
-                .as_ref()
-                .map(|claim| claim.effect_authorization());
+            let lease_effect_authorization =
+                issue_profile_effect_authorization(&retry_repository, &lease_acquisition)?;
             *retry_lease_acquisition_slot
                 .lock()
                 .map_err(|_| "profile_acquisition_claim_slot_poisoned".to_string())? =
@@ -1072,9 +1076,20 @@ async fn acquire_profile_command(
         .map_err(|_| "profile_acquisition_claim_slot_poisoned".to_string())?
         .clone();
     match coordinated {
-        Ok(outcome) => Ok(profile_acquisition_response(outcome, lease_acquisition)),
+        Ok(outcome) => {
+            let lease_effect_authorization = lease_acquisition
+                .as_ref()
+                .map(|acquisition| issue_profile_effect_authorization(&repository, acquisition))
+                .transpose()?
+                .flatten();
+            Ok(profile_acquisition_response(
+                outcome,
+                lease_acquisition,
+                lease_effect_authorization,
+            ))
+        }
         Err(error) if error == "profile_acquisition_idempotency_replay_without_active_claim" => Ok(
-            profile_acquisition_response(initial_outcome, lease_acquisition),
+            profile_acquisition_response(initial_outcome, lease_acquisition, None),
         ),
         Err(error) => Err(error),
     }
@@ -1083,6 +1098,7 @@ async fn acquire_profile_command(
 fn profile_acquisition_response(
     outcome: ProfileAcquisitionOutcome,
     lease_acquisition: Option<LeaseClaimAcquisitionOutcome>,
+    lease_effect_authorization: Option<LeaseEffectAuthorization>,
 ) -> Value {
     let Some(lease_acquisition) = lease_acquisition else {
         return json!({ "outcome": outcome });
@@ -1107,7 +1123,19 @@ fn profile_acquisition_response(
             "leaseAcquisitionReplayed": lease_acquisition.replayed,
         });
     }
-    let lease_effect_authorization = lease_claim.effect_authorization();
+    let Some(lease_effect_authorization) = lease_effect_authorization else {
+        return json!({
+            "outcome": blocked_outcome_with_recourse(
+                "effect_authorization_unavailable",
+                true,
+                "The claim exists but no authenticated effect proof could be issued.",
+                "refresh_profile_acquisition",
+                Vec::new(),
+            ),
+            "leaseAcquisitionReceipt": lease_acquisition.receipt,
+            "leaseAcquisitionReplayed": lease_acquisition.replayed,
+        });
+    };
     json!({
         "outcome": outcome,
         "leaseClaim": lease_claim,
@@ -1115,6 +1143,17 @@ fn profile_acquisition_response(
         "leaseAcquisitionReceipt": lease_acquisition.receipt,
         "leaseAcquisitionReplayed": lease_acquisition.replayed,
     })
+}
+
+fn issue_profile_effect_authorization<R: ServiceStateRepository>(
+    repository: &R,
+    acquisition: &LeaseClaimAcquisitionOutcome,
+) -> Result<Option<LeaseEffectAuthorization>, String> {
+    let Some(claim) = acquisition.claim.as_ref() else {
+        return Ok(None);
+    };
+    let state = repository.load_snapshot()?;
+    issue_lease_effect_authorization_for_state(&state, claim).map(Some)
 }
 
 fn ephemeral_profile_claim_expiry(now: &str) -> Result<String, String> {
@@ -2746,7 +2785,7 @@ mod tests {
             seal_key(),
         )
         .unwrap();
-        let response = profile_acquisition_response(current_outcome, Some(replayed));
+        let response = profile_acquisition_response(current_outcome, Some(replayed), None);
         assert_eq!(response["outcome"]["state"], "blocked");
         assert!(response.get("leaseAcquisitionReceipt").is_some());
         assert!(response.get("leaseClaim").is_none());

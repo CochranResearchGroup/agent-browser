@@ -3154,7 +3154,11 @@ An acquired response includes the canonical `leaseClaim`, its exact
 expiry. Replaying one operation grants no new authority after expiry. A new
 operation from the same capability may join the current claim without changing
 its fencing token or expiry. The daemon validates the envelope immediately
-before launch.
+before launch. Effect authorization v2 binds the claim to the current capability
+ID and revision with an authenticated proof derived from the private registered
+capability digest. Revoking or rotating that capability invalidates the proof.
+Treat the effect envelope as a short-lived bearer: do not log it or expose it
+through status, history, or diagnostics.
 
 `service recovery plan` creates a zero-effect, expiring recovery plan for explicit review. Apply with `service recovery apply --plan-file <path> --capability-file <path> --session-name <sealed-daemon-route>`. The daemon rechecks the plan seal, Service State revision, owner generation, process and lock evidence, then retries acquisition once and stores a durable receipt. Read it with `service recovery status <recovery-id> --capability-file <path>`.
 

@@ -765,13 +765,50 @@ Evidence:
 - the validation selector's workstation fixture family passed earlier in this
   same uncommitted slice and no workstation implementation changed afterward.
 
-Material blockers: the serialized effect envelope is not yet bound to
-request authentication or an unforgeable bearer. Effect completion receipts,
-release compensation, strict recovery and revoke, transition deadlines,
-hierarchical claims, runtime-owner transfer coordination, and removal of the
-legacy no-envelope fallback remain incomplete. This checkpoint must not be
-installed as the completed redesign.
+Material blockers: the serialized effect envelope is not yet bound to request
+authentication or an unforgeable bearer. Effect completion receipts, release
+compensation, strict recovery and revoke, transition deadlines, hierarchical
+claims, runtime-owner transfer coordination, and removal of the legacy
+no-envelope fallback remain incomplete. This checkpoint must not be installed
+as the completed redesign.
 
 Next action: commit and push this coherent checkpoint, reconcile the isolated
 emergency fail-open branch, then add authenticated effect proof and exact
 release, strict recover, and revision-bound revoke operations.
+
+## Slice C Authenticated Effect Proof Checkpoint | 2026-08-31
+
+State transition: `slice_c_profile_acquisition_and_prelaunch_fence_complete` to
+`slice_c_authenticated_effect_proof_complete`.
+
+Acceptance state: effect authorization v2 is an authenticated bearer rather
+than a reconstruction of public claim fields. The envelope binds resource,
+claim, principal, capability ID and revision, claim revision, fencing token,
+and owner generation with an HMAC derived from the private registered
+capability digest. The digest and proof are not projected through status,
+history, or diagnostics. Effect admission rechecks that the exact capability is
+still active at the same revision before verifying the proof. Capability
+revocation, rotation, envelope alteration, stale claim state, and owner-binding
+divergence all fail before browser effects.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- all 13 canonical lease-authority tests pass, including proof tampering,
+  capability revocation, and later owner-binding divergence in one effect-time
+  sequence;
+- all 20 profile-acquisition tests and all 22 canonical-path tests pass;
+- wrapper Rust formatting and strict Clippy pass;
+- generated client contracts and JavaScript types pass with the v2 envelope;
+- the complete service-client suite, API/MCP parity, documentation build, and
+  remote-view documentation guard pass.
+
+Material blockers: exact release compensation, strict recovery and
+revision-bound revoke, effect completion receipts, transition deadlines,
+hierarchical claims, runtime-owner transfer coordination, and removal of the
+legacy no-envelope fallback remain incomplete. This checkpoint remains
+non-installable as the completed redesign.
+
+Next action: commit and push the authenticated-effect checkpoint, then add
+exact terminal claim mutations and public strict recovery and revoke plans.

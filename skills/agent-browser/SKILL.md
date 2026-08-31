@@ -1561,6 +1561,10 @@ five-minute ephemeral claim expiry. Replaying one operation grants no new
 authority after expiry. A new operation from the same capability may join the
 current claim without renewing it or minting another fence. Preserve the
 effect envelope because the daemon validates it immediately before launch.
+Effect authorization v2 includes an authenticated proof bound to the current
+capability ID and revision. Revoking or rotating the capability invalidates the
+proof. Treat the short-lived envelope as bearer material: do not log it or
+expose it through status, history, or diagnostics.
 
 For `existing_session_profile_identity_unproven`, reconcile the exact principal, profile, process, and daemon route before any retry. If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. Give the operator only the returned opaque `/remote-view/<handoff-id>` URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
 

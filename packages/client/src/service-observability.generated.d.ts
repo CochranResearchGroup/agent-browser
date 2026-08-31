@@ -1266,6 +1266,7 @@ export interface ServiceActiveLeaseClaim {
   parentClaimId: string | null;
   principalId: string;
   capabilityId: string;
+  capabilityRevision: number;
   mode: 'ephemeral' | 'strict';
   revision: number;
   fencingToken: number;
@@ -1279,13 +1280,16 @@ export interface ServiceActiveLeaseClaim {
   ownerGeneration: number | null;
 }
 export interface ServiceLeaseEffectAuthorization {
-  schemaVersion: 'agent-browser.lease-effect-authorization.v1';
+  schemaVersion: 'agent-browser.lease-effect-authorization.v2';
   resource: ServiceLeaseResourceKey;
   claimId: string;
   principalId: string;
+  capabilityId: string;
+  capabilityRevision: number;
   claimRevision: number;
   fencingToken: number;
   ownerGeneration: number | null;
+  proof: string;
 }
 export interface ServiceLeaseAcquisitionReceipt {
   schemaVersion: 'agent-browser.lease-acquisition-receipt.v1';
@@ -1295,6 +1299,7 @@ export interface ServiceLeaseAcquisitionReceipt {
   resource: ServiceLeaseResourceKey;
   principalId: string;
   capabilityId: string;
+  capabilityRevision: number;
   claimId: string;
   claimRevision: number;
   fencingToken: number;

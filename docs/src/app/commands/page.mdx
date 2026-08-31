@@ -790,7 +790,10 @@ An acquired response includes <code>leaseClaim</code>, the exact
 ephemeral expiry. Operation replay never grants new authority after expiry,
 while another operation from the same capability may join the current claim
 without renewing it or minting a new fence. The daemon validates the envelope
-immediately before launch.
+immediately before launch. Effect authorization v2 carries an authenticated
+proof bound to the current capability ID and revision, so capability revocation
+or rotation invalidates it. Treat the short-lived envelope as bearer material;
+do not log it or expose it through status, history, or diagnostics.
 
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner

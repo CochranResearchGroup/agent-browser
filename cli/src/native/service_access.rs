@@ -6018,6 +6018,7 @@ mod tests {
                 parent_claim_id: None,
                 principal_id: "principal:last30days".to_string(),
                 capability_id: "capability:last30days".to_string(),
+                capability_revision: 1,
                 mode: LeaseClaimMode::Ephemeral,
                 expected_authority_revision: 0,
                 idempotency_key: "access-plan-claim".to_string(),
