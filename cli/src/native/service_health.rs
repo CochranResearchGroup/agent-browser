@@ -383,7 +383,7 @@ async fn reconcile_service_state_with_controller_fence(
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
     let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
-    let completed_runtime_lifecycles = reconcile_absent_closing_runtime_lifecycles(state);
+    let completed_runtime_lifecycles = reconcile_absent_runtime_lifecycles(state);
     normalize_ready_browsers_without_runtime_evidence(state);
     state.refresh_service_tab_handles();
     record_health_transition_events(state, &before);
@@ -432,7 +432,7 @@ async fn reconcile_service_state_with_controller_fence(
     summary
 }
 
-fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usize {
+fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> usize {
     use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 
     let profile_roots = state
@@ -464,9 +464,18 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
         .values()
         .filter(|lifecycle| {
             matches!(
-                lifecycle.lifecycle_state,
-                RuntimeLaneLifecycleState::Closing | RuntimeLaneLifecycleState::Ready
-            ) && lifecycle.cleanup_obligation_state == CleanupObligationState::Owned
+                (
+                    lifecycle.lifecycle_state,
+                    lifecycle.cleanup_obligation_state
+                ),
+                (
+                    RuntimeLaneLifecycleState::Closing | RuntimeLaneLifecycleState::Ready,
+                    CleanupObligationState::Owned
+                ) | (
+                    RuntimeLaneLifecycleState::Transferring,
+                    CleanupObligationState::Transferring
+                )
+            )
         })
         .filter_map(|lifecycle| {
             let owner = state
@@ -481,7 +490,9 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
                 return None;
             }
             let abandoned_ready = lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready;
-            if abandoned_ready
+            let abandoned_transfer =
+                lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Transferring;
+            if (abandoned_ready || abandoned_transfer)
                 && (state.browsers.contains_key(&lifecycle.logical_browser_id)
                     || state.sessions.values().any(|session| {
                         session
@@ -505,6 +516,7 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
                 process_group_id,
                 profile_lock_evidence,
                 abandoned_ready,
+                abandoned_transfer,
             ))
         })
         .collect::<Vec<_>>();
@@ -519,13 +531,26 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
                 process_group_id,
                 profile_lock_evidence,
                 abandoned_ready,
+                abandoned_transfer,
             )| {
                 let mut evidence = vec![
                     format!("service_reconcile_process_group_absent:{process_group_id}"),
                     profile_lock_evidence.clone(),
                 ];
-                if *abandoned_ready {
+                if *abandoned_ready || *abandoned_transfer {
                     evidence.push("service_reconcile_browser_projection_absent".to_string());
+                }
+                if *abandoned_transfer {
+                    evidence.push("service_reconcile_transfer_authority_absent".to_string());
+                    crate::native::runtime_lifecycle::complete_reconciled_abandoned_transfer_lane(
+                        &mut state.runtime_owner_registry,
+                        logical_browser_id.clone(),
+                        profile_identity_digest.clone(),
+                        *owner_generation,
+                        evidence,
+                    )
+                    .is_ok()
+                } else if *abandoned_ready {
                     crate::native::runtime_lifecycle::complete_reconciled_abandoned_ready_lane(
                         &mut state.runtime_owner_registry,
                         logical_browser_id.clone(),
@@ -3512,6 +3537,118 @@ mod tests {
                 "service_reconcile_browser_projection_absent".to_string(),
             ]
         );
+        let _ = fs::remove_dir_all(profile_root);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconcile_completes_abandoned_transfer_lane_only_without_live_projection() {
+        use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+
+        let profile_root = temp_home("service-health-absent-transfer-lifecycle");
+        fs::create_dir_all(&profile_root).unwrap();
+        let absent_process_group = (2_020_000..2_021_000)
+            .find(|process_group_id| !process_group_is_running(*process_group_id))
+            .unwrap();
+        let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut("browser-closing")
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
+
+        reconcile_service_state(&mut state).await;
+
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
+        );
+        assert_eq!(
+            lifecycle.terminal_evidence,
+            vec![
+                format!("service_reconcile_process_group_absent:{absent_process_group}"),
+                "service_reconcile_profile_lock_absent".to_string(),
+                "service_reconcile_browser_projection_absent".to_string(),
+                "service_reconcile_transfer_authority_absent".to_string(),
+            ]
+        );
+        let _ = fs::remove_dir_all(profile_root);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconcile_preserves_transfer_lane_with_pending_authority() {
+        use crate::runtime_adoption::BrowserAdoptionMode;
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, OwnerTransferProposal, OwnerTransferRequest,
+            RuntimeLaneLifecycleState,
+        };
+
+        let profile_root = temp_home("service-health-pending-transfer-lifecycle");
+        fs::create_dir_all(&profile_root).unwrap();
+        let absent_process_group = (2_030_000..2_031_000)
+            .find(|process_group_id| !process_group_is_running(*process_group_id))
+            .unwrap();
+        let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
+        let profile_identity_digest = state
+            .runtime_owner_registry
+            .owners
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_identity_digest)
+            .unwrap();
+        owner.pending_transfer = Some(OwnerTransferProposal {
+            request: OwnerTransferRequest {
+                mode: BrowserAdoptionMode::CooperativeTransfer,
+                logical_browser_id: owner.browser_id.clone(),
+                profile_identity_digest: profile_identity_digest.clone(),
+                expected_owner_id: Some(owner.owner_id.clone()),
+                expected_owner_generation: owner.owner_generation,
+                candidate_owner_id: "candidate-owner".to_string(),
+                candidate_daemon_session_route: "candidate-route".to_string(),
+                process_instance_digest: owner.process_instance_digest.clone(),
+                browser_family: owner.browser_family.clone(),
+                cdp_endpoint_identity_digest: owner.cdp_endpoint_identity_digest.clone(),
+                target_set_digest: owner.target_set_digest.clone(),
+                selected_target_identity_digest: "selected-target".to_string(),
+                transfer_nonce_digest: "transfer-nonce".to_string(),
+            },
+            previous_owner_generation: owner.owner_generation,
+            candidate_owner_generation: owner.owner_generation + 1,
+            candidate_effect_capable: false,
+        });
+        let lifecycle = state
+            .runtime_owner_registry
+            .lifecycle_records
+            .get_mut("browser-closing")
+            .unwrap();
+        lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Transferring;
+        lifecycle.cleanup_obligation_state = CleanupObligationState::Transferring;
+
+        reconcile_service_state(&mut state).await;
+
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Transferring
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Transferring
+        );
+        assert!(lifecycle.terminal_evidence.is_empty());
         let _ = fs::remove_dir_all(profile_root);
     }
 

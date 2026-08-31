@@ -963,6 +963,53 @@ pub(crate) fn complete_reconciled_abandoned_ready_lane(
     )
 }
 
+/// Reconcile a transfer lifecycle row after its exact owner has already
+/// returned to ready without pending transfer authority. Service reconciliation
+/// calls this only after proving that the process group, profile lock, browser,
+/// session, and tab projections are absent.
+pub(crate) fn complete_reconciled_abandoned_transfer_lane(
+    registry: &mut RuntimeOwnerRegistry,
+    logical_browser_id: String,
+    profile_identity_digest: String,
+    expected_owner_generation: u64,
+    terminal_evidence: Vec<String>,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let owner = registry
+        .owner(&profile_identity_digest)
+        .filter(|owner| {
+            owner.browser_id == logical_browser_id
+                && owner.owner_generation == expected_owner_generation
+                && owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && owner.pending_transfer.is_none()
+        })
+        .cloned()
+        .ok_or_else(|| "runtime_lifecycle_abandoned_transfer_owner_mismatch".to_string())?;
+    let lifecycle = registry
+        .lifecycle_records
+        .get(&logical_browser_id)
+        .ok_or_else(|| "runtime_lifecycle_record_missing".to_string())?;
+    if lifecycle.profile_identity_digest != profile_identity_digest
+        || lifecycle.owner_generation != expected_owner_generation
+        || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Transferring
+        || lifecycle.cleanup_obligation_state != CleanupObligationState::Transferring
+    {
+        return Err("runtime_lifecycle_abandoned_transfer_compare_and_swap_mismatch".to_string());
+    }
+    apply_transition(
+        registry,
+        RuntimeLifecycleIntent::BeginClose {
+            claim: OwnerAuthorityClaim::from_owner(&owner),
+        },
+    )?;
+    complete_reconciled_close(
+        registry,
+        logical_browser_id,
+        profile_identity_digest,
+        expected_owner_generation,
+        terminal_evidence,
+    )
+}
+
 /// Revoke one exact ready owner inside an already locked Service State
 /// mutation while retaining lifecycle cleanup accountability.
 pub(crate) fn revoke_legacy_owner_in_registry(
