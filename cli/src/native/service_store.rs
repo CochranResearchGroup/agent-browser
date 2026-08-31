@@ -33,7 +33,11 @@ static SERVICE_STATE_ACTIVE_MUTATION: OnceLock<Mutex<Option<&'static str>>> = On
 static SERVICE_STATE_LOCK_TELEMETRY: OnceLock<Mutex<ServiceStateLockTelemetryState>> =
     OnceLock::new();
 static SERVICE_STATE_LOCK_TOKEN: AtomicU64 = AtomicU64::new(1);
+static SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES: OnceLock<Mutex<BTreeMap<u64, u64>>> =
+    OnceLock::new();
+static SERVICE_STATE_COMMAND_LOCK_TIMEOUT_TOKEN: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
+const MAX_SERVICE_STATE_COMMAND_LOCK_TIMEOUT_MS: u64 = 300_000;
 const SERVICE_STATE_LOCK_RECENT_CAPACITY: usize = 32;
 pub(crate) const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
@@ -258,9 +262,50 @@ where
 
 impl LockedServiceStateRepository<JsonServiceStateStore> {
     pub fn default_json() -> Result<Self, String> {
-        Ok(Self::new(JsonServiceStateStore::new(
-            default_service_state_path()?,
-        )))
+        let mut repository = Self::new(JsonServiceStateStore::new(default_service_state_path()?));
+        let override_ms = SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+            .get_or_init(|| Mutex::new(BTreeMap::new()))
+            .lock()
+            .map_err(|_| "Service State lock-timeout override registry was poisoned".to_string())?
+            .values()
+            .copied()
+            .max();
+        if let Some(override_ms) = override_ms {
+            repository.lock_timeout = Duration::from_millis(override_ms);
+        }
+        Ok(repository)
+    }
+}
+
+/// Scope an operator-selected Service State contention budget to one daemon
+/// command. The override changes only how long the command waits for the
+/// serialized mutation lane. It never overwrites a stale snapshot or weakens
+/// lifecycle, profile, route, or effect authority.
+pub(crate) fn service_state_lock_timeout_override(
+    timeout_ms: Option<u64>,
+) -> Option<ServiceStateLockTimeoutOverride> {
+    let timeout_ms = timeout_ms?.clamp(1, MAX_SERVICE_STATE_COMMAND_LOCK_TIMEOUT_MS);
+    let token = SERVICE_STATE_COMMAND_LOCK_TIMEOUT_TOKEN.fetch_add(1, Ordering::SeqCst);
+    SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("Service State lock-timeout override registry should not be poisoned")
+        .insert(token, timeout_ms);
+    Some(ServiceStateLockTimeoutOverride { token })
+}
+
+pub(crate) struct ServiceStateLockTimeoutOverride {
+    token: u64,
+}
+
+impl Drop for ServiceStateLockTimeoutOverride {
+    fn drop(&mut self) {
+        if let Ok(mut overrides) = SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+            .get_or_init(|| Mutex::new(BTreeMap::new()))
+            .lock()
+        {
+            overrides.remove(&self.token);
+        }
     }
 }
 
@@ -485,42 +530,34 @@ where
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
         if self.store.supports_prepared_save() {
-            let baseline = self.load_snapshot_with_lock_timeout(timeout)?;
+            let path = self
+                .store
+                .state_path()
+                .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
+            let _file_guard = acquire_service_state_file_lock_until(
+                path,
+                ServiceStateFileLockMode::Exclusive,
+                deadline,
+                "prepared_mutation",
+            )?;
+            let process_guard =
+                acquire_service_state_process_lock(lock, deadline, "prepared_mutation")?;
+            let baseline = if self.store.recovery_required() {
+                self.store.load()?
+            } else {
+                self.store.load_without_recovery()?
+            };
             let baseline_revision = baseline.state_revision;
             let mut candidate = baseline;
             candidate.state_revision = baseline_revision
                 .checked_add(1)
                 .ok_or_else(|| "service_state_revision_exhausted".to_string())?;
+            drop(process_guard);
             let result = mutator(&mut candidate)?;
             let transaction = self
                 .store
                 .prepare_save(&candidate)?
                 .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
-            let path = self
-                .store
-                .state_path()
-                .ok_or_else(|| "service_state_prepared_save_path_missing".to_string())?;
-            let commit_deadline = Instant::now() + timeout.max(Duration::from_millis(1));
-            let _file_guard = acquire_service_state_file_lock_until(
-                path,
-                ServiceStateFileLockMode::Exclusive,
-                commit_deadline,
-                "commit",
-            )?;
-            let process_guard =
-                acquire_service_state_process_lock(lock, commit_deadline, "commit")?;
-            let current = if self.store.recovery_required() {
-                self.store.load()?
-            } else {
-                self.store.load_without_recovery()?
-            };
-            if current.state_revision != baseline_revision {
-                return Err(format!(
-                    "service_state_stale_revision: expected={baseline_revision}; actual={}",
-                    current.state_revision
-                ));
-            }
-            drop(process_guard);
             self.store.save_prepared(&transaction)?;
             return Ok(result);
         }
@@ -1586,6 +1623,43 @@ mod tests {
     }
 
     #[test]
+    fn command_lock_timeout_overrides_are_independently_scoped() {
+        let first = service_state_lock_timeout_override(Some(12_345)).unwrap();
+        let second = service_state_lock_timeout_override(Some(23_456)).unwrap();
+        let first_token = first.token;
+        let second_token = second.token;
+
+        {
+            let overrides = SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap();
+            assert_eq!(overrides.get(&first_token), Some(&12_345));
+            assert_eq!(overrides.get(&second_token), Some(&23_456));
+        }
+
+        drop(first);
+        {
+            let overrides = SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap();
+            assert!(!overrides.contains_key(&first_token));
+            assert_eq!(overrides.get(&second_token), Some(&23_456));
+        }
+
+        drop(second);
+        assert!(!SERVICE_STATE_COMMAND_LOCK_TIMEOUT_OVERRIDES
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .contains_key(&second_token));
+    }
+
+    #[test]
     fn test_build_default_state_path_never_targets_process_home_without_explicit_escape_hatch() {
         let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
         let claimed_live_home = std::env::temp_dir().join(format!(
@@ -2124,16 +2198,16 @@ mod tests {
     }
 
     #[test]
-    fn stale_prepared_transaction_is_rejected_before_commit_effect() {
-        struct StaleRevisionStore {
+    fn prepared_transactions_serialize_competing_writers_before_commit() {
+        struct BlockingPreparedStore {
             path: PathBuf,
             state: Arc<Mutex<ServiceState>>,
             prepare_entered: Arc<std::sync::Barrier>,
             prepare_release: Arc<std::sync::Barrier>,
-            commit_count: Arc<std::sync::atomic::AtomicUsize>,
+            block_first_prepare: Arc<std::sync::atomic::AtomicBool>,
         }
 
-        impl ServiceStateStore for StaleRevisionStore {
+        impl ServiceStateStore for BlockingPreparedStore {
             fn load(&self) -> Result<ServiceState, String> {
                 Ok(self.state.lock().unwrap().clone())
             }
@@ -2156,49 +2230,77 @@ mod tests {
 
             fn prepare_save(
                 &self,
-                _state: &ServiceState,
+                state: &ServiceState,
             ) -> Result<Option<ServiceStateTransaction>, String> {
-                self.prepare_entered.wait();
-                self.prepare_release.wait();
+                if self
+                    .block_first_prepare
+                    .swap(false, std::sync::atomic::Ordering::SeqCst)
+                {
+                    self.prepare_entered.wait();
+                    self.prepare_release.wait();
+                }
                 Ok(Some(ServiceStateTransaction {
-                    state_payload: String::new(),
+                    state_payload: serde_json::to_string(state).unwrap(),
                     handoff_payload: String::new(),
                     owner_registry_payload: None,
                     lifecycle_registry_payload: None,
                 }))
             }
 
-            fn save_prepared(&self, _transaction: &ServiceStateTransaction) -> Result<(), String> {
-                self.commit_count
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            fn save_prepared(&self, transaction: &ServiceStateTransaction) -> Result<(), String> {
+                *self.state.lock().unwrap() =
+                    serde_json::from_str(&transaction.state_payload).unwrap();
                 Ok(())
             }
         }
 
-        let path = unique_state_path("stale-prepared-transaction");
+        let path = unique_state_path("serialized-prepared-transaction");
         let state = Arc::new(Mutex::new(ServiceState::default()));
         let prepare_entered = Arc::new(std::sync::Barrier::new(2));
         let prepare_release = Arc::new(std::sync::Barrier::new(2));
-        let commit_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let repository = LockedServiceStateRepository::new(StaleRevisionStore {
+        let block_first_prepare = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let first_repository = LockedServiceStateRepository::new(BlockingPreparedStore {
             path: path.clone(),
             state: Arc::clone(&state),
             prepare_entered: Arc::clone(&prepare_entered),
             prepare_release: Arc::clone(&prepare_release),
-            commit_count: Arc::clone(&commit_count),
+            block_first_prepare: Arc::clone(&block_first_prepare),
         });
-        let mutation = std::thread::spawn(move || repository.mutate(|_| Ok(())));
+        let second_repository = LockedServiceStateRepository::new(BlockingPreparedStore {
+            path: path.clone(),
+            state: Arc::clone(&state),
+            prepare_entered: Arc::clone(&prepare_entered),
+            prepare_release: Arc::clone(&prepare_release),
+            block_first_prepare,
+        });
+        let first = std::thread::spawn(move || {
+            first_repository.mutate(|state| {
+                state.jobs.insert(
+                    "first".to_string(),
+                    crate::native::service_model::ServiceJob::default(),
+                );
+                Ok(())
+            })
+        });
 
         prepare_entered.wait();
-        state.lock().unwrap().state_revision = 1;
+        let second = std::thread::spawn(move || {
+            second_repository.mutate(|state| {
+                state.jobs.insert(
+                    "second".to_string(),
+                    crate::native::service_model::ServiceJob::default(),
+                );
+                Ok(())
+            })
+        });
         prepare_release.wait();
 
-        let error = mutation
-            .join()
-            .expect("mutation thread should not panic")
-            .expect_err("stale prepared state must fail before commit");
-        assert_eq!(error, "service_state_stale_revision: expected=0; actual=1");
-        assert_eq!(commit_count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        first.join().unwrap().unwrap();
+        second.join().unwrap().unwrap();
+        let state = state.lock().unwrap();
+        assert_eq!(state.state_revision, 2);
+        assert!(state.jobs.contains_key("first"));
+        assert!(state.jobs.contains_key("second"));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -2258,52 +2360,31 @@ mod tests {
         for writer_index in 0..WRITER_COUNT {
             let path = path.clone();
             let start = Arc::clone(&start);
-            let lock_timeout_count = Arc::clone(&lock_timeout_count);
             let duplicate_effect_count = Arc::clone(&duplicate_effect_count);
             workers.push(std::thread::spawn(move || {
                 start.wait();
                 let repository =
                     LockedServiceStateRepository::new(JsonServiceStateStore::new(path));
                 let effect_id = format!("burst-effect-{writer_index}");
-                for attempt in 0..=1 {
-                    let outcome = repository.mutate(|state| {
-                        if state.jobs.contains_key(&effect_id) {
-                            duplicate_effect_count
-                                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                            return Ok(());
-                        }
-                        state.jobs.insert(
-                            effect_id.clone(),
-                            crate::native::service_model::ServiceJob {
-                                id: effect_id.clone(),
-                                action: if writer_index == 0 {
-                                    "tab_new".to_string()
-                                } else {
-                                    "remote_view_open".to_string()
-                                },
-                                ..crate::native::service_model::ServiceJob::default()
-                            },
-                        );
-                        Ok(())
-                    });
-                    match outcome {
-                        Ok(()) => return Ok(()),
-                        Err(error)
-                            if error.starts_with("service_state_stale_revision:")
-                                && attempt == 0 =>
-                        {
-                            continue
-                        }
-                        Err(error) => {
-                            if error.starts_with("service_state_lock_timeout:") {
-                                lock_timeout_count
-                                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                            }
-                            return Err(error);
-                        }
+                repository.mutate(|state| {
+                    if state.jobs.contains_key(&effect_id) {
+                        duplicate_effect_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
                     }
-                }
-                unreachable!("bounded retry loop always returns")
+                    state.jobs.insert(
+                        effect_id.clone(),
+                        crate::native::service_model::ServiceJob {
+                            id: effect_id.clone(),
+                            action: if writer_index == 0 {
+                                "tab_new".to_string()
+                            } else {
+                                "remote_view_open".to_string()
+                            },
+                            ..crate::native::service_model::ServiceJob::default()
+                        },
+                    );
+                    Ok(())
+                })
             }));
         }
 

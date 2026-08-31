@@ -179,6 +179,7 @@ enum InstallMode {
 struct WorkstationInstallArgs {
     mode: InstallMode,
     json: bool,
+    force_browserless_upgrade: bool,
     dashboard_port: u16,
     guacamole_port: u16,
 }
@@ -852,6 +853,7 @@ fn rehydrate_prepared_payload_transaction(
     let args = WorkstationInstallArgs {
         mode: InstallMode::Apply,
         json: true,
+        force_browserless_upgrade: false,
         dashboard_port: port("dashboardPort")?,
         guacamole_port: port("guacamolePort")?,
     };
@@ -2444,6 +2446,49 @@ fn workstation_candidate_presentation_prerequisite(
     }
 }
 
+/// Permit an explicit browserless upgrade only after two adjacent census rounds
+/// each prove that no Agent Browser-owned live browser needs transfer. External
+/// and manual-preservation churn remains preserved and does not block install.
+fn authorize_browserless_upgrade_override(prerequisite: &mut Value) -> Result<(), String> {
+    use crate::runtime_adoption::RuntimeClassification;
+
+    let census = collect_browserless_override_census_with(
+        crate::runtime_adoption::collect_host_runtime_census_round,
+    )?;
+    if !census.activation_allowed {
+        return Err("force_browserless_upgrade_runtime_census_ambiguous".to_string());
+    }
+    let live_owned = census
+        .records
+        .iter()
+        .filter(|record| {
+            !matches!(
+                record.classification,
+                RuntimeClassification::IdleDaemon
+                    | RuntimeClassification::StaleMetadata
+                    | RuntimeClassification::ExternalObserved
+                    | RuntimeClassification::ManualPreserveOnly
+            )
+        })
+        .map(|record| record.logical_browser_id.clone())
+        .collect::<Vec<_>>();
+    if !live_owned.is_empty() {
+        return Err(format!(
+            "force_browserless_upgrade_live_owned_browser_present:{}",
+            live_owned.join(",")
+        ));
+    }
+    prerequisite["ready"] = Value::Bool(true);
+    prerequisite["overrideRequested"] = Value::Bool(true);
+    prerequisite["overrideApplied"] = Value::Bool(true);
+    prerequisite["overrideReason"] =
+        Value::String("stable_census_proved_no_owned_live_browser".to_string());
+    prerequisite["overrideRuntimeCensusDigest"] = Value::String(census.digest);
+    prerequisite["nextAction"] =
+        Value::String("proceed_with_audited_browserless_upgrade".to_string());
+    Ok(())
+}
+
 fn run_workstation_install(args: &[String]) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
@@ -2464,8 +2509,23 @@ fn run_workstation_install(args: &[String]) {
     let mut phases = vec!["plan-validated"];
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
     let host_plan = build_host_plan(isolated_root, &root);
-    let candidate_presentation_prerequisite =
+    let mut candidate_presentation_prerequisite =
         workstation_candidate_presentation_prerequisite(&root, &paths, isolated_root);
+    let mut browserless_upgrade_override_applied = false;
+    if parsed.force_browserless_upgrade
+        && !isolated_root
+        && candidate_presentation_prerequisite
+            .get("ready")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        if let Err(error) =
+            authorize_browserless_upgrade_override(&mut candidate_presentation_prerequisite)
+        {
+            fail(&error, parsed.json);
+        }
+        browserless_upgrade_override_applied = true;
+    }
     let service_state_migration_preview = workstation_service_state_migration_preview(&root);
     if !host_plan.disk_space_ready {
         let mut error = format!(
@@ -2611,7 +2671,7 @@ fn run_workstation_install(args: &[String]) {
         let prepared = prepared_payload
             .as_mut()
             .expect("apply always prepares one payload transaction");
-        if !isolated_root {
+        if !isolated_root && !browserless_upgrade_override_applied {
             if let Err(error) =
                 prepare_dashboard_candidate_for_transaction(&root, &parsed, prepared)
             {
@@ -2649,7 +2709,7 @@ fn run_workstation_install(args: &[String]) {
             "presentations-rebound",
             "candidate-ready",
         ]);
-        if !isolated_root {
+        if !isolated_root && !browserless_upgrade_override_applied {
             if let Err(error) =
                 wait_for_dashboard_candidate_commit(prepared, DASHBOARD_PRESENTATION_TIMEOUT)
             {
@@ -2750,32 +2810,42 @@ fn run_workstation_install(args: &[String]) {
             next_action =
                 "run agent-browser install doctor --json and review the installed workstation state"
                     .to_string();
-            if let Err(error) = promote_dashboard_candidate_to_managed_backend(&parsed, prepared) {
-                let rollback = rollback_prepared_payload_transaction(
-                    &paths,
-                    prepared,
-                    true,
-                    "managed_dashboard_promotion_failed",
-                );
-                let message = rollback
-                    .err()
-                    .map_or(error.clone(), |rollback| format!("{error}; {rollback}"));
-                fail_with_user_unit_restoration(
-                    &message,
-                    parsed.json,
-                    &paths,
-                    apply_quiesced_user_units.as_ref(),
-                );
-            }
-            phases.push("candidate-dashboard-managed");
-            match validate_post_commit_transaction(&root, &paths, prepared) {
-                Ok(validation) => validation,
-                Err(error) => {
+            if browserless_upgrade_override_applied {
+                isolated_post_commit_validation(&paths, prepared)
+                    .map(|_| PostCommitValidationReceipt {
+                        dashboard_summary:
+                            "browserless_override_reconciled_selected_generation_validated"
+                                .to_string(),
+                        presentation_summary:
+                            "browserless_override_stable_census_proved_no_owned_live_browser"
+                                .to_string(),
+                    })
+                    .unwrap_or_else(|error| {
+                        let rollback = rollback_prepared_payload_transaction(
+                            &paths,
+                            prepared,
+                            true,
+                            "browserless_post_commit_readiness_unproven",
+                        );
+                        let message = rollback
+                            .err()
+                            .map_or(error.clone(), |rollback| format!("{error}; {rollback}"));
+                        fail_with_user_unit_restoration(
+                            &message,
+                            parsed.json,
+                            &paths,
+                            apply_quiesced_user_units.as_ref(),
+                        );
+                    })
+            } else {
+                if let Err(error) =
+                    promote_dashboard_candidate_to_managed_backend(&parsed, prepared)
+                {
                     let rollback = rollback_prepared_payload_transaction(
                         &paths,
                         prepared,
                         true,
-                        "post_commit_readiness_unproven",
+                        "managed_dashboard_promotion_failed",
                     );
                     let message = rollback
                         .err()
@@ -2786,6 +2856,27 @@ fn run_workstation_install(args: &[String]) {
                         &paths,
                         apply_quiesced_user_units.as_ref(),
                     );
+                }
+                phases.push("candidate-dashboard-managed");
+                match validate_post_commit_transaction(&root, &paths, prepared) {
+                    Ok(validation) => validation,
+                    Err(error) => {
+                        let rollback = rollback_prepared_payload_transaction(
+                            &paths,
+                            prepared,
+                            true,
+                            "post_commit_readiness_unproven",
+                        );
+                        let message = rollback
+                            .err()
+                            .map_or(error.clone(), |rollback| format!("{error}; {rollback}"));
+                        fail_with_user_unit_restoration(
+                            &message,
+                            parsed.json,
+                            &paths,
+                            apply_quiesced_user_units.as_ref(),
+                        );
+                    }
                 }
             }
         } else {
@@ -5364,6 +5455,55 @@ fn collect_stable_runtime_census_with(
     latest.ok_or_else(|| "runtime census did not collect two rounds".to_string())
 }
 
+fn browserless_override_census_is_safe(
+    census: &crate::runtime_adoption::StableRuntimeCensus,
+) -> bool {
+    use crate::runtime_adoption::RuntimeClassification;
+
+    census.activation_allowed
+        && census.records.iter().all(|record| {
+            matches!(
+                record.classification,
+                RuntimeClassification::IdleDaemon
+                    | RuntimeClassification::StaleMetadata
+                    | RuntimeClassification::ExternalObserved
+                    | RuntimeClassification::ManualPreserveOnly
+            )
+        })
+}
+
+/// The explicit browserless override requires two adjacent rounds that each
+/// independently prove there is no owned, adoptable, conflicting, or
+/// insufficiently identified browser. Churn confined to external or manual
+/// preservation records does not block installation and remains preserved.
+fn collect_browserless_override_census_with(
+    mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
+) -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
+    use crate::runtime_adoption::build_stable_runtime_census;
+
+    let mut previous = collect_round()?;
+    for _ in 1..MAX_RUNTIME_CENSUS_ROUNDS {
+        let current = collect_round()?;
+        let previous_census = build_stable_runtime_census(&previous, &previous)?;
+        let current_census = build_stable_runtime_census(&current, &current)?;
+        if browserless_override_census_is_safe(&previous_census)
+            && browserless_override_census_is_safe(&current_census)
+        {
+            let mut accepted = current_census;
+            accepted.digest = workstation_bytes_sha256(
+                format!(
+                    "browserless-override-v1\n{}\n{}",
+                    previous_census.digest, accepted.digest
+                )
+                .as_bytes(),
+            );
+            return Ok(accepted);
+        }
+        previous = current;
+    }
+    Err("force_browserless_upgrade_owned_or_ambiguous_runtime_present".to_string())
+}
+
 #[cfg(test)]
 fn require_stable_runtime_census_with(
     root: &Path,
@@ -6095,6 +6235,10 @@ fn prepare_payload_transaction(
 
     let census = if isolated_root {
         isolated_runtime_census()
+    } else if args.force_browserless_upgrade {
+        collect_browserless_override_census_with(
+            crate::runtime_adoption::collect_host_runtime_census_round,
+        )
     } else {
         collect_stable_runtime_census_with(
             crate::runtime_adoption::collect_host_runtime_census_round,
@@ -8822,11 +8966,7 @@ fn accept_prepared_payload_transaction(
 }
 
 fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
-    if !prepared
-        .runtime_handoffs
-        .iter()
-        .any(PreparedRuntimeHandoff::should_finalize_source)
-    {
+    if !runtime_finalization_required(&prepared.transaction, &prepared.runtime_handoffs) {
         return Ok(());
     }
     let transaction_client = prepared.staged.generation_path.join("bin/agent-browser");
@@ -8878,6 +9018,18 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
         )?;
     }
     Ok(())
+}
+
+/// Browserless upgrades still create a two-host convergence window. Retire the
+/// exact recorded old host even when no browser lane produced a handoff.
+fn runtime_finalization_required(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    handoffs: &[PreparedRuntimeHandoff],
+) -> bool {
+    source_runtime_host_retirement_is_recorded(transaction)
+        || handoffs
+            .iter()
+            .any(PreparedRuntimeHandoff::should_finalize_source)
 }
 
 fn source_runtime_host_retirement_is_recorded(
@@ -9375,6 +9527,7 @@ impl Drop for WorkstationLock {
 fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallArgs, String> {
     let mut mode = None;
     let mut json = false;
+    let mut force_browserless_upgrade = false;
     let mut dashboard_port = DEFAULT_DASHBOARD_PORT;
     let mut guacamole_port = DEFAULT_GUACAMOLE_PORT;
     let mut index = 0;
@@ -9385,6 +9538,7 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
             "--dry-run" => set_mode(&mut mode, InstallMode::DryRun)?,
             "--apply" => set_mode(&mut mode, InstallMode::Apply)?,
             "--json" => json = true,
+            "--force-browserless-upgrade" => force_browserless_upgrade = true,
             "--dashboard-port" => {
                 index += 1;
                 dashboard_port = parse_port(args.get(index), "--dashboard-port")?;
@@ -9427,6 +9581,7 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     Ok(WorkstationInstallArgs {
         mode,
         json,
+        force_browserless_upgrade,
         dashboard_port,
         guacamole_port,
     })
@@ -9453,7 +9608,7 @@ fn parse_port(value: Option<&String>, flag: &str) -> Result<u16, String> {
 }
 
 fn workstation_usage() -> &'static str {
-    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
+    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
 }
 
 #[derive(Debug)]
@@ -11261,6 +11416,37 @@ mod tests {
         );
 
         assert!(!source_runtime_host_retirement_is_recorded(&transaction));
+        assert!(!runtime_finalization_required(&transaction, &[]));
+    }
+
+    #[test]
+    fn browserless_upgrade_still_requires_recorded_source_host_retirement() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-browserless-source-host-retirement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction
+            .runtime_host_convergence
+            .as_mut()
+            .expect("new upgrade transaction has convergence")
+            .old_host = Some(crate::runtime_adoption::RuntimeHostIdentityEvidence {
+            endpoint_key: crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY.to_string(),
+            generation_id: "generation-old".to_string(),
+            binary_sha256: "c".repeat(64),
+            pid: 42,
+            process_start_token: "fixture-start-token".to_string(),
+            socket_identity: "unix:fixture:browserless-old-host".to_string(),
+            observation_only: false,
+        });
+
+        assert!(runtime_finalization_required(&transaction, &[]));
     }
 
     #[test]
@@ -12125,6 +12311,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_force_browserless_upgrade_for_apply() {
+        let args = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--apply".to_string(),
+            "--force-browserless-upgrade".to_string(),
+            "--json".to_string(),
+        ];
+        let parsed = parse_workstation_install_args(&args).unwrap();
+        assert_eq!(parsed.mode, InstallMode::Apply);
+        assert!(parsed.json);
+        assert!(parsed.force_browserless_upgrade);
+    }
+
+    #[test]
     fn recovery_requires_one_exact_transaction_id() {
         let args = vec![
             "install".to_string(),
@@ -12280,6 +12481,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -12939,6 +13141,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -13067,6 +13270,68 @@ mod tests {
     }
 
     #[test]
+    fn browserless_override_ignores_only_external_observation_churn() {
+        fn external_round(
+            registry_revision: u64,
+            observation_digest: char,
+        ) -> crate::runtime_adoption::RuntimeCensusRound {
+            use crate::runtime_adoption::{
+                RuntimeCensusCandidate, RuntimeCensusSourceSnapshot, RuntimeEvidenceSummary,
+            };
+
+            let runtime_id = "external-browser".to_string();
+            crate::runtime_adoption::collect_runtime_census_round(
+                registry_revision,
+                crate::runtime_adoption::runtime_census_sources()
+                    .into_iter()
+                    .map(|source| RuntimeCensusSourceSnapshot {
+                        source,
+                        source_revision: format!("{source:?}-{registry_revision}"),
+                        logical_browser_ids: vec![runtime_id.clone()],
+                    })
+                    .collect(),
+                vec![RuntimeCensusCandidate {
+                    logical_browser_id: runtime_id,
+                    session_names: Vec::new(),
+                    profile_identity_digest: "a".repeat(64),
+                    observation_digest: observation_digest.to_string().repeat(64),
+                    observed_sources: crate::runtime_adoption::runtime_census_sources().to_vec(),
+                    evidence: RuntimeEvidenceSummary {
+                        observation_rounds_agree: true,
+                        registry_revision_stable: true,
+                        browser_live: true,
+                        externally_owned: true,
+                        metadata_present: true,
+                        ..RuntimeEvidenceSummary::default()
+                    },
+                }],
+            )
+            .unwrap()
+        }
+
+        let first = external_round(41, 'b');
+        let second = external_round(42, 'c');
+        let ordinary = crate::runtime_adoption::build_stable_runtime_census(&first, &second)
+            .expect("ordinary census builds");
+        assert!(!ordinary.activation_allowed);
+
+        let mut rounds = std::collections::VecDeque::from([first, second]);
+        let overridden = collect_browserless_override_census_with(|| {
+            rounds
+                .pop_front()
+                .ok_or_else(|| "test census exhausted".to_string())
+        })
+        .expect("external-only churn remains preservable");
+        assert!(browserless_override_census_is_safe(&overridden));
+        assert_eq!(overridden.records.len(), 1);
+        assert_eq!(
+            overridden.records[0].classification,
+            crate::runtime_adoption::RuntimeClassification::ExternalObserved
+        );
+        assert!(rounds.is_empty());
+    }
+
+    #[test]
     fn blocked_precondition_records_one_transaction_without_staging_payload() {
         let root = env::temp_dir().join(format!(
             "agent-browser-blocked-upgrade-{}",
@@ -13077,6 +13342,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -13130,6 +13396,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15510,6 +15777,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15767,6 +16035,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15810,6 +16079,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15850,6 +16120,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15893,6 +16164,7 @@ mod tests {
         let args = WorkstationInstallArgs {
             mode: InstallMode::Apply,
             json: true,
+            force_browserless_upgrade: false,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };

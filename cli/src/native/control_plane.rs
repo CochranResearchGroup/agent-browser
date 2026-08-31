@@ -330,6 +330,12 @@ impl ControlPlaneHandle {
         let command = command_with_service_job_id(command, &job_id);
         let (command, timeout_ms) =
             command_with_effective_job_timeout(command, self.service_job_timeout_ms);
+        let _service_state_lock_timeout_override =
+            crate::native::service_store::service_state_lock_timeout_override(
+                command
+                    .get("serviceStateLockTimeoutMs")
+                    .and_then(Value::as_u64),
+            );
         let timeout_ms = timeout_ms.filter(|ms| *ms > 0);
         let service_name = optional_command_string(&command, "serviceName");
         let agent_name = optional_command_string(&command, "agentName");
@@ -1112,31 +1118,38 @@ fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> V
         .get("success")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if request.action == "desktop_interact" {
-        return json!({
+    let mut persisted = if request.action == "desktop_interact" {
+        json!({
             "success": success,
             "data": redact_desktop_interaction_stream_result(
                 response.get("data").unwrap_or(&Value::Null),
             ),
-        });
-    }
-    if request.action == "desktop_evidence_observe" {
-        return json!({
+        })
+    } else if request.action == "desktop_evidence_observe" {
+        json!({
             "success": success,
             "data": redact_desktop_evidence_stream_result(
                 response.get("data").unwrap_or(&Value::Null),
             ),
-        });
-    }
-    if request.action == "desktop_prompt_observe" {
-        return json!({
+        })
+    } else if request.action == "desktop_prompt_observe" {
+        json!({
             "success": success,
             "data": redact_desktop_prompt_stream_result(
                 response.get("data").unwrap_or(&Value::Null),
             ),
-        });
+        })
+    } else {
+        json!({ "success": success })
+    };
+    if let Some(timeout_ms) = request
+        .command
+        .get("serviceStateLockTimeoutMs")
+        .and_then(Value::as_u64)
+    {
+        persisted["serviceStateLockTimeoutMs"] = json!(timeout_ms);
     }
-    json!({ "success": success })
+    persisted
 }
 
 fn persist_service_job_timed_out(request: &ControlRequest) {
@@ -2095,6 +2108,19 @@ mod tests {
 
         assert_eq!(persisted, json!({ "success": true }));
         assert!(!persisted.to_string().contains("sensitive-pixels"));
+    }
+
+    #[test]
+    fn persisted_job_result_audits_service_state_lock_timeout_override() {
+        let request = control_request_for_mode_test(json!({
+            "action": "viewport",
+            "serviceStateLockTimeoutMs": 30_000
+        }));
+
+        let persisted = service_job_persisted_result(&request, &json!({ "success": true }));
+
+        assert_eq!(persisted["success"], json!(true));
+        assert_eq!(persisted["serviceStateLockTimeoutMs"], json!(30_000));
     }
 
     #[test]
