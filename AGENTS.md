@@ -183,7 +183,9 @@ Runs all unit tests (~320 tests). These are fast and don't require Chrome.
 On WSL, every Cargo command that can compile code must run through
 `scripts/ci/cargo-safe.sh`. The wrapper admits up to two concurrent repository
 Cargo invocations when current memory, swap, CPU, disk, and active claims can
-preserve the configured host reserve. Each invocation defaults to four Cargo
+preserve the configured host reserve. Low free swap is treated as current
+pressure only when available memory cannot also cover the missing swap reserve;
+stale swapped pages alone do not block admission. Each invocation defaults to four Cargo
 jobs and runs in a user-systemd scope with `MemoryHigh=20G`, `MemoryMax=24G`,
 and `MemorySwapMax=4G`; all admitted scopes share an aggregate
 `agent-browser-cargo.slice` capped at `MemoryHigh=28G`, `MemoryMax=32G`, and

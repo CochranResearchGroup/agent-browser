@@ -85,6 +85,16 @@ try {
   assert.equal(pressure.status, 75);
   assert.match(pressure.stderr, /reason=memory_pressure/);
 
+  writeMeminfo({ available: 64 * 1024 * 1024, swapFree: 1 });
+  const historicalSwap = await probe({ noWait: true }).completed;
+  assert.equal(historicalSwap.status, 0, historicalSwap.stderr);
+  assert.equal(JSON.parse(historicalSwap.stdout).admitted, true);
+
+  writeMeminfo({ available: 31 * 1024 * 1024, swapFree: 1 });
+  const currentSwapPressure = await probe({ noWait: true }).completed;
+  assert.equal(currentSwapPressure.status, 75);
+  assert.match(currentSwapPressure.stderr, /reason=swap_pressure/);
+
   writeMeminfo();
   const claimsDir = join(admissionDir, 'claims');
   writeFileSync(join(claimsDir, 'stale.claim'), 'pid=999999\nstart=1\n');

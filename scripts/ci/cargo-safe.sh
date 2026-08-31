@@ -119,6 +119,8 @@ while [[ -z "$claim_path" ]]; do
   available_cpus="$(cpu_count)"
   reserved_for_claims=$((active * memory_claim_kib))
   required_memory=$((memory_reserve_kib + memory_claim_kib + reserved_for_claims))
+  swap_shortfall_kib=$((minimum_swap_free_kib > available_swap ? minimum_swap_free_kib - available_swap : 0))
+  required_memory_with_swap_shortfall=$((required_memory + swap_shortfall_kib))
   required_cpus=$(((active + 1) * build_jobs))
   reason=""
 
@@ -126,7 +128,7 @@ while [[ -z "$claim_path" ]]; do
     reason="concurrency_limit"
   elif (( available_memory < required_memory )); then
     reason="memory_pressure"
-  elif (( available_swap < minimum_swap_free_kib )); then
+  elif (( available_swap < minimum_swap_free_kib && available_memory < required_memory_with_swap_shortfall )); then
     reason="swap_pressure"
   elif (( available_disk < minimum_disk_free_kib )); then
     reason="disk_pressure"
