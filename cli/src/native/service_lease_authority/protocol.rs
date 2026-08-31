@@ -3,8 +3,10 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    AcquireLeaseClaimRequest, LeaseAuthorityState, LeaseClaimAcquisitionOutcome, LeaseClaimMode,
-    LeaseResourceKey, LeaseResourceKind,
+    AcquireLeaseClaimRequest, ActiveLeaseClaim, LeaseAdministratorAuthority, LeaseAuthorityEvent,
+    LeaseAuthorityState, LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt,
+    LeaseClaimMode, LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey,
+    LeaseResourceKind,
 };
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
 
@@ -14,6 +16,10 @@ const LEASE_AUTHORITY_PROTECTED_STATE_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-protected-state.v1";
 const LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-resource-registry.v1";
+const LEASE_AUTHORITY_DOMAIN_SCHEMA_VERSION: &str = "agent-browser.lease-authority-domain.v1";
+const LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-owner-registry.v1";
+const LEASE_AUTHORITY_HISTORY_SCHEMA_VERSION: &str = "agent-browser.lease-authority-history.v1";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -79,13 +85,31 @@ struct LeaseAuthorityProtocolKernel {
     state: LeaseAuthorityProtectedState,
 }
 
+#[derive(Clone, Copy)]
+struct LeaseAuthorityProtectedLoadContext<'a> {
+    expected_authority_domain_id: &'a str,
+    minimum_authority_epoch: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityDomainState {
+    schema_version: String,
+    authority_domain_id: String,
+    authority_epoch: u64,
+    boot_epoch: String,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityProtectedState {
     schema_version: String,
+    domain: LeaseAuthorityDomainState,
+    #[serde(with = "lease_authority_operational_state_serde")]
     authority: LeaseAuthorityState,
     principals: ServicePrincipalRegistry,
     resources: LeaseAuthorityResourceRegistry,
+    owners: LeaseAuthorityOwnerRegistry,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -104,11 +128,61 @@ struct LeaseAuthorityResourceRegistry {
     registrations: BTreeMap<String, LeaseAuthorityResourceRegistration>,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityOwnerBinding {
+    resource: LeaseResourceKey,
+    physical_identity_digest: String,
+    owner_id: String,
+    owner_generation: u64,
+    logical_browser_id: String,
+    daemon_session_route: String,
+    process_instance_digest: String,
+    principal_id: String,
+    capability_id: String,
+    revision: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityOwnerRegistry {
+    schema_version: String,
+    revision: u64,
+    bindings: BTreeMap<String, LeaseAuthorityOwnerBinding>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LeaseAuthorityHistoryRef<'a> {
+    schema_version: &'static str,
+    events: &'a [LeaseAuthorityEvent],
+}
+
 impl LeaseAuthorityProtocolKernel {
-    fn new(authority: LeaseAuthorityState, principals: ServicePrincipalRegistry) -> Self {
-        Self {
+    fn bootstrap(
+        authority_domain_id: &str,
+        authority_epoch: u64,
+        boot_epoch: &str,
+        authority: LeaseAuthorityState,
+        principals: ServicePrincipalRegistry,
+    ) -> Result<Self, LeaseAuthorityProtocolError> {
+        if !valid_sha256_digest(authority_domain_id)
+            || authority_epoch == 0
+            || boot_epoch.trim().is_empty()
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_bootstrap_invalid",
+            });
+        }
+        let kernel = Self {
             state: LeaseAuthorityProtectedState {
                 schema_version: LEASE_AUTHORITY_PROTECTED_STATE_SCHEMA_VERSION.to_string(),
+                domain: LeaseAuthorityDomainState {
+                    schema_version: LEASE_AUTHORITY_DOMAIN_SCHEMA_VERSION.to_string(),
+                    authority_domain_id: authority_domain_id.to_string(),
+                    authority_epoch,
+                    boot_epoch: boot_epoch.to_string(),
+                },
                 authority,
                 principals,
                 resources: LeaseAuthorityResourceRegistry {
@@ -116,8 +190,15 @@ impl LeaseAuthorityProtocolKernel {
                     revision: 0,
                     registrations: BTreeMap::new(),
                 },
+                owners: LeaseAuthorityOwnerRegistry {
+                    schema_version: LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION.to_string(),
+                    revision: 0,
+                    bindings: BTreeMap::new(),
+                },
             },
-        }
+        };
+        validate_protected_state(&kernel.state)?;
+        Ok(kernel)
     }
 
     fn bootstrap_profile_resource(
@@ -178,7 +259,20 @@ impl LeaseAuthorityProtocolKernel {
         })
     }
 
-    fn from_protected_state(encoded: &[u8]) -> Result<Self, LeaseAuthorityProtocolError> {
+    fn encode_history_state(&self) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+        serde_json::to_vec_pretty(&LeaseAuthorityHistoryRef {
+            schema_version: LEASE_AUTHORITY_HISTORY_SCHEMA_VERSION,
+            events: &self.state.authority.events,
+        })
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_history_encode_failed",
+        })
+    }
+
+    fn from_protected_state(
+        encoded: &[u8],
+        context: LeaseAuthorityProtectedLoadContext<'_>,
+    ) -> Result<Self, LeaseAuthorityProtocolError> {
         let state: LeaseAuthorityProtectedState =
             serde_json::from_slice(encoded).map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_state_invalid",
@@ -189,6 +283,16 @@ impl LeaseAuthorityProtocolKernel {
             });
         }
         validate_protected_state(&state)?;
+        if state.domain.authority_domain_id != context.expected_authority_domain_id {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_domain_mismatch",
+            });
+        }
+        if state.domain.authority_epoch < context.minimum_authority_epoch {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_epoch_rollback",
+            });
+        }
         Ok(Self { state })
     }
 
@@ -267,13 +371,86 @@ impl LeaseAuthorityProtocolKernel {
     }
 }
 
+mod lease_authority_operational_state_serde {
+    use super::*;
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OperationalStateRef<'a> {
+        schema_version: &'a str,
+        revision: u64,
+        active_claims: &'a BTreeMap<String, ActiveLeaseClaim>,
+        next_fencing_tokens: &'a BTreeMap<String, u64>,
+        acquisition_receipts: &'a BTreeMap<String, LeaseClaimAcquisitionReceipt>,
+        terminal_receipts: &'a BTreeMap<String, LeaseClaimTerminalReceipt>,
+        recovery_receipts: &'a BTreeMap<String, LeaseClaimRecoveryReceipt>,
+        administrators: &'a BTreeMap<String, LeaseAdministratorAuthority>,
+    }
+
+    #[derive(Default, Deserialize)]
+    #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+    struct OperationalState {
+        schema_version: String,
+        revision: u64,
+        active_claims: BTreeMap<String, ActiveLeaseClaim>,
+        next_fencing_tokens: BTreeMap<String, u64>,
+        acquisition_receipts: BTreeMap<String, LeaseClaimAcquisitionReceipt>,
+        terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
+        recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
+        administrators: BTreeMap<String, LeaseAdministratorAuthority>,
+    }
+
+    pub(super) fn serialize<S>(
+        state: &LeaseAuthorityState,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        OperationalStateRef {
+            schema_version: &state.schema_version,
+            revision: state.revision,
+            active_claims: &state.active_claims,
+            next_fencing_tokens: &state.next_fencing_tokens,
+            acquisition_receipts: &state.acquisition_receipts,
+            terminal_receipts: &state.terminal_receipts,
+            recovery_receipts: &state.recovery_receipts,
+            administrators: &state.administrators,
+        }
+        .serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<LeaseAuthorityState, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let state = OperationalState::deserialize(deserializer)?;
+        Ok(LeaseAuthorityState {
+            schema_version: state.schema_version,
+            revision: state.revision,
+            active_claims: state.active_claims,
+            next_fencing_tokens: state.next_fencing_tokens,
+            events: Vec::new(),
+            acquisition_receipts: state.acquisition_receipts,
+            terminal_receipts: state.terminal_receipts,
+            recovery_receipts: state.recovery_receipts,
+            administrators: state.administrators,
+        })
+    }
+}
+
 fn validate_protected_state(
     state: &LeaseAuthorityProtectedState,
 ) -> Result<(), LeaseAuthorityProtocolError> {
     let invalid = || LeaseAuthorityProtocolError {
         code: "lease_authority_protocol_state_invalid",
     };
-    if state.resources.schema_version != LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION {
+    if state.domain.schema_version != LEASE_AUTHORITY_DOMAIN_SCHEMA_VERSION
+        || !valid_sha256_digest(&state.domain.authority_domain_id)
+        || state.domain.authority_epoch == 0
+        || state.domain.boot_epoch.trim().is_empty()
+        || state.resources.schema_version != LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION
+    {
         return Err(invalid());
     }
 
@@ -293,6 +470,46 @@ fn validate_protected_state(
     }
 
     if highest_revision != state.resources.revision {
+        return Err(invalid());
+    }
+
+    if state.owners.schema_version != LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION {
+        return Err(invalid());
+    }
+    let mut highest_owner_revision = 0;
+    for (storage_key, binding) in &state.owners.bindings {
+        let registration = state.resources.registrations.get(storage_key);
+        let principal = state.principals.principals.get(&binding.principal_id);
+        let capability = state
+            .principals
+            .profile_capabilities
+            .get(&binding.capability_id);
+        if storage_key != &binding.resource.storage_key()
+            || binding.resource.kind != LeaseResourceKind::Profile
+            || !valid_sha256_digest(&binding.physical_identity_digest)
+            || !valid_sha256_digest(&binding.process_instance_digest)
+            || binding.owner_id.trim().is_empty()
+            || binding.owner_generation == 0
+            || binding.logical_browser_id.trim().is_empty()
+            || binding.daemon_session_route.trim().is_empty()
+            || binding.revision == 0
+            || binding.revision > state.owners.revision
+            || registration.is_none_or(|registration| {
+                registration.resource != binding.resource
+                    || registration.physical_identity_digest != binding.physical_identity_digest
+            })
+            || principal.is_none_or(|principal| principal.principal_id != binding.principal_id)
+            || capability.is_none_or(|capability| {
+                capability.capability_id != binding.capability_id
+                    || capability.principal_id != binding.principal_id
+                    || capability.profile_id != binding.resource.id
+            })
+        {
+            return Err(invalid());
+        }
+        highest_owner_revision = highest_owner_revision.max(binding.revision);
+    }
+    if highest_owner_revision != state.owners.revision {
         return Err(invalid());
     }
     Ok(())
@@ -353,6 +570,30 @@ fn decode_lease_authority_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TEST_AUTHORITY_DOMAIN_ID: &str =
+        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+
+    fn test_kernel(
+        authority: super::super::LeaseAuthorityState,
+        principals: crate::native::service_principal::ServicePrincipalRegistry,
+    ) -> LeaseAuthorityProtocolKernel {
+        LeaseAuthorityProtocolKernel::bootstrap(
+            TEST_AUTHORITY_DOMAIN_ID,
+            7,
+            "boot-1",
+            authority,
+            principals,
+        )
+        .unwrap()
+    }
+
+    fn test_load_context() -> LeaseAuthorityProtectedLoadContext<'static> {
+        LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id: TEST_AUTHORITY_DOMAIN_ID,
+            minimum_authority_epoch: 7,
+        }
+    }
 
     #[test]
     fn protocol_rejects_generic_signing_and_state_mutation_oracles() {
@@ -443,10 +684,7 @@ mod tests {
             Ok(request) => request,
             Err(error) => panic!("typed acquire request must decode: {}", error.code()),
         };
-        let mut kernel = LeaseAuthorityProtocolKernel::new(
-            super::super::LeaseAuthorityState::default(),
-            principals,
-        );
+        let mut kernel = test_kernel(super::super::LeaseAuthorityState::default(), principals);
         kernel
             .bootstrap_profile_resource(
                 "last30days-social",
@@ -503,10 +741,7 @@ mod tests {
         };
         let request = decode_lease_authority_request(&encode_request())
             .unwrap_or_else(|error| panic!("typed acquire request must decode: {}", error.code()));
-        let mut kernel = LeaseAuthorityProtocolKernel::new(
-            super::super::LeaseAuthorityState::default(),
-            principals,
-        );
+        let mut kernel = test_kernel(super::super::LeaseAuthorityState::default(), principals);
         kernel
             .bootstrap_profile_resource(
                 "last30days-social",
@@ -521,7 +756,21 @@ mod tests {
 
         let protected = kernel.encode_protected_state().unwrap();
         assert!(!String::from_utf8_lossy(&protected).contains(raw_capability));
-        let mut restarted = LeaseAuthorityProtocolKernel::from_protected_state(&protected).unwrap();
+        let protected_json: serde_json::Value = serde_json::from_slice(&protected).unwrap();
+        assert!(
+            protected_json.pointer("/authority/events").is_none(),
+            "lease-event history must not share the protected authority load path"
+        );
+        let history: serde_json::Value =
+            serde_json::from_slice(&kernel.encode_history_state().unwrap()).unwrap();
+        assert_eq!(
+            history["schemaVersion"],
+            "agent-browser.lease-authority-history.v1"
+        );
+        assert_eq!(history["events"].as_array().map(Vec::len), Some(1));
+        let mut restarted =
+            LeaseAuthorityProtocolKernel::from_protected_state(&protected, test_load_context())
+                .unwrap();
         let replay_request = decode_lease_authority_request(&encode_request())
             .unwrap_or_else(|error| panic!("replay acquire request must decode: {}", error.code()));
         let replay = restarted
@@ -569,10 +818,7 @@ mod tests {
         .unwrap();
         let request = decode_lease_authority_request(&encoded)
             .unwrap_or_else(|error| panic!("request must decode: {}", error.code()));
-        let mut kernel = LeaseAuthorityProtocolKernel::new(
-            super::super::LeaseAuthorityState::default(),
-            principals,
-        );
+        let mut kernel = test_kernel(super::super::LeaseAuthorityState::default(), principals);
 
         let error = match kernel.execute(request) {
             Ok(_) => panic!("unregistered profile must not become authority"),
@@ -586,7 +832,7 @@ mod tests {
 
     #[test]
     fn protected_state_rejects_two_profile_ids_for_one_physical_identity() {
-        let mut kernel = LeaseAuthorityProtocolKernel::new(
+        let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
             crate::native::service_principal::ServicePrincipalRegistry::default(),
         );
@@ -609,16 +855,18 @@ mod tests {
         protected["resources"]["registrations"]["profile:last30days-alias"] = alias;
         let encoded = serde_json::to_vec(&protected).unwrap();
 
-        let error = match LeaseAuthorityProtocolKernel::from_protected_state(&encoded) {
-            Ok(_) => panic!("one physical profile must not load as two resources"),
-            Err(error) => error,
-        };
+        let error =
+            match LeaseAuthorityProtocolKernel::from_protected_state(&encoded, test_load_context())
+            {
+                Ok(_) => panic!("one physical profile must not load as two resources"),
+                Err(error) => error,
+            };
         assert_eq!(error.code(), "lease_authority_protocol_state_invalid");
     }
 
     #[test]
     fn protected_state_rejects_noncanonical_physical_identity_digest() {
-        let mut kernel = LeaseAuthorityProtocolKernel::new(
+        let mut kernel = test_kernel(
             super::super::LeaseAuthorityState::default(),
             crate::native::service_principal::ServicePrincipalRegistry::default(),
         );
@@ -636,10 +884,142 @@ mod tests {
         );
         let protected = serde_json::to_vec(&protected).unwrap();
 
-        let error = match LeaseAuthorityProtocolKernel::from_protected_state(&protected) {
+        let error = match LeaseAuthorityProtocolKernel::from_protected_state(
+            &protected,
+            test_load_context(),
+        ) {
             Ok(_) => panic!("physical identity digests must have one canonical spelling"),
             Err(error) => error,
         };
         assert_eq!(error.code(), "lease_authority_protocol_state_invalid");
+    }
+
+    #[test]
+    fn protected_state_cannot_prove_its_own_epoch_after_rollback() {
+        let kernel = LeaseAuthorityProtocolKernel::bootstrap(
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            7,
+            "boot-1",
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        )
+        .unwrap();
+        let protected = kernel.encode_protected_state().unwrap();
+        let load_context = LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id:
+                "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            minimum_authority_epoch: 8,
+        };
+
+        let error =
+            match LeaseAuthorityProtocolKernel::from_protected_state(&protected, load_context) {
+                Ok(_) => panic!("a restored authority cannot lower the external epoch floor"),
+                Err(error) => error,
+            };
+        assert_eq!(error.code(), "lease_authority_protocol_epoch_rollback");
+    }
+
+    #[test]
+    fn protected_state_rejects_owner_for_unregistered_physical_resource() {
+        let kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let mut protected: serde_json::Value =
+            serde_json::from_slice(&kernel.encode_protected_state().unwrap()).unwrap();
+        let profile_digest =
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        protected["owners"]["revision"] = serde_json::Value::from(1);
+        protected["owners"]["bindings"]["profile:unregistered-profile"] = serde_json::json!({
+            "resource": {"kind": "profile", "id": "unregistered-profile"},
+            "physicalIdentityDigest": profile_digest,
+            "ownerId": "owner-unregistered",
+            "ownerGeneration": 1,
+            "logicalBrowserId": "browser-unregistered",
+            "daemonSessionRoute": "session-unregistered",
+            "processInstanceDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "principalId": "principal:unregistered",
+            "capabilityId": "profile-capability-v1:unregistered",
+            "revision": 1
+        });
+        let protected = serde_json::to_vec(&protected).unwrap();
+
+        let error = match LeaseAuthorityProtocolKernel::from_protected_state(
+            &protected,
+            test_load_context(),
+        ) {
+            Ok(_) => panic!("an owner cannot invent an unregistered physical resource"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_state_invalid");
+    }
+
+    #[test]
+    fn protected_state_rejects_owner_binding_without_registered_capability() {
+        let raw_capability = "last30days-profile-capability-secret-v1";
+        let mut principals = crate::native::service_principal::ServicePrincipalRegistry::default();
+        crate::native::service_principal::register_profile_capability(
+            &mut principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".to_string(),
+                display_name: Some("Last30days".to_string()),
+                profile_id: "last30days-social".to_string(),
+                registered_at: Some("2026-08-31T12:00:00Z".to_string()),
+                registered_by: Some("authority-bootstrap".to_string()),
+            },
+            raw_capability,
+        )
+        .unwrap();
+        let mut kernel = test_kernel(super::super::LeaseAuthorityState::default(), principals);
+        let profile_digest =
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        kernel
+            .bootstrap_profile_resource("last30days-social", profile_digest)
+            .unwrap();
+        let mut protected: serde_json::Value =
+            serde_json::from_slice(&kernel.encode_protected_state().unwrap()).unwrap();
+        protected["owners"]["revision"] = serde_json::Value::from(1);
+        protected["owners"]["bindings"]["profile:last30days-social"] = serde_json::json!({
+            "resource": {"kind": "profile", "id": "last30days-social"},
+            "physicalIdentityDigest": profile_digest,
+            "ownerId": "owner-last30days",
+            "ownerGeneration": 1,
+            "logicalBrowserId": "browser-last30days",
+            "daemonSessionRoute": "session-last30days",
+            "processInstanceDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "principalId": "principal:last30days",
+            "capabilityId": "profile-capability-v1:invented",
+            "revision": 1
+        });
+        let protected = serde_json::to_vec(&protected).unwrap();
+
+        let error = match LeaseAuthorityProtocolKernel::from_protected_state(
+            &protected,
+            test_load_context(),
+        ) {
+            Ok(_) => panic!("an owner binding cannot invent capability authority"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_state_invalid");
+    }
+
+    #[test]
+    fn protected_owner_registry_cannot_serialize_runtime_lifecycle_history() {
+        let kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let protected: serde_json::Value =
+            serde_json::from_slice(&kernel.encode_protected_state().unwrap()).unwrap();
+
+        assert_eq!(
+            protected["owners"],
+            serde_json::json!({
+                "schemaVersion": "agent-browser.lease-authority-owner-registry.v1",
+                "revision": 0,
+                "bindings": {}
+            }),
+            "protected authority must not ingest lifecycle or terminal owner history"
+        );
     }
 }

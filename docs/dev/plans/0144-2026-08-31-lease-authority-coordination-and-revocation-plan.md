@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_protected_authority_protocol_resource_registry_in_progress`
+Execution state: `slice_g_protected_domain_owner_history_source_accepted_custody_in_progress`
 
 Lane: P144
 
@@ -529,6 +529,15 @@ Every active claim contains at least:
     rebind is an explicit atomic migration that advances the resource fence,
     reconciles active descendants and cleanup obligations, and cannot alias one
     physical profile, route, display, browser, or installer under two keys.
+97. Non-authoritative history and diagnostic projections occupy a separate
+    load and validation failure domain from active authority, fences, policy,
+    principal grants, canonical resources, current owner bindings, and
+    completed-operation high-water marks. Reading or authorizing current work
+    never deserializes lease events, terminal lifecycle history, warnings, or
+    compatibility projections. Corrupt or unavailable history degrades the
+    audit surface only. A mutation whose required audit append cannot become
+    durable fails before effect as a typed audit-durability outage, while
+    existing current authority remains readable without interpreting history.
 
 ## Claim Modes
 
@@ -923,6 +932,19 @@ rebinding. The first protocol regression now proves that a duplicate physical
 profile identity is rejected on protected-state load. The broader
 cross-collection validator, protected transport, and administrative rebind
 surface remain incomplete, so the candidate remains noninstallable.
+
+An eighth recurrence pass followed the history boundary through protected
+state loading. Excluding lifecycle rows from admission logic is insufficient
+when those rows still share the same serialized envelope and parser as current
+authority: a malformed historical row could make authority unavailable before
+the kernel reaches its no-history decision. Invariant 97 therefore separates
+non-authoritative event, lifecycle, warning, and compatibility history from the
+operational state load path. Required audit appends remain transactionally
+coupled to new mutations, but reading or authorizing already-current work does
+not parse history. The in-progress private owner registry now excludes runtime
+lifecycle and terminal history by construction. The canonical lease event log
+is still embedded in `LeaseAuthorityState`, so the broader invariant remains
+open and the candidate remains noninstallable.
 
 ## Validation Contract
 
@@ -1417,14 +1439,20 @@ survives a protected-state round trip without persisting the raw bearer.
 
 Current evidence:
 
-- the focused protocol suite has seven passing tests;
+- the focused protocol suite has eleven passing tests;
 - the duplicate-physical-profile and noncanonical-digest defects were each
-  demonstrated by a failing regression before their fixes; and
+  demonstrated by a failing regression before their fixes;
+- external epoch rollback, unregistered owner authority, invented capability
+  binding, and runtime-history serialization each have focused regressions;
+- protected-state replay retains acquisition receipts without retaining the
+  raw capability or consulting lease-event history;
+- lease events remain serializable through a separate versioned history
+  encoding rather than being silently discarded; and
 - repository Rust formatting and strict Clippy pass.
 
 This is a source-only private protocol seam. It does not yet provide complete
 cross-collection load validation, a durable atomic store, protected IPC,
-stable-supervisor custody, authority domain and external epoch binding, owner
-generation custody, typed effect and terminal operations, public administrator
-bootstrap and rotation, or installed acceptance. The candidate remains
-noninstallable.
+stable-supervisor custody, an independently durable external epoch source,
+transactional operational-state and history publication, typed effect and
+terminal operations, public administrator bootstrap and rotation, or installed
+acceptance. The candidate remains noninstallable.
