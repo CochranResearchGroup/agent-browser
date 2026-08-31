@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_b_kernel_and_access_in_progress`
+Execution state: `slice_b_kernel_access_and_doctor_in_progress`
 
 Lane: P144
 
@@ -589,3 +589,43 @@ the completed lease redesign.
 Next action: project canonical claims through profile-lease doctor, then make
 profile acquisition and daemon effects consume the same atomic claim before
 adding renew, release, recovery, and revocation.
+
+## Slice B Doctor Projection Checkpoint | 2026-08-31
+
+State transition: `slice_b_kernel_and_access_in_progress` to
+`slice_b_kernel_access_and_doctor_in_progress`.
+
+Acceptance state: profile-lease collection, inspect, explain, and doctor now
+give a current canonical profile claim precedence over retained session,
+capability, binding, and owner compatibility rows for the same profile. Those
+rows remain visible as subordinate context on the canonical projection but
+cannot add operational blockers. The canonical row reports `state=active` and
+`recourse=continue_with_active_claim` without claiming that a logical lease
+proves a browser process exists.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- Red: a current canonical claim plus one retained active unproven session was
+  projected as a legacy lease id and made doctor unhealthy.
+- Green: the same fixture yields exactly one canonical claim row, retains the
+  session id as context, has no blocking identity axes, and leaves doctor
+  healthy.
+- All 17 profile-lease tests and all 10 service-principal tests pass.
+- The generated service-observability contract check, JavaScript type check,
+  API and MCP parity check, documentation build, Rust formatting, and strict
+  Clippy pass.
+- The full service-client suite, remote-view documentation guard, source-free
+  workstation installer fixture, host-provision fixture, fresh-VM harness,
+  Guacamole asset check, PostgreSQL durability check, and route-specific user
+  synchronization check pass.
+
+Material blockers: canonical acquisition, renewal, release, recovery,
+revocation, and daemon effects remain unmigrated. Canonical rows therefore
+advertise read operations only at this checkpoint. The compatibility candidate
+must not be installed yet.
+
+Next action: replace the public profile-acquisition mutation with one atomic
+canonical acquisition and a durable idempotent receipt, then require that
+claim at the first daemon effect seam.

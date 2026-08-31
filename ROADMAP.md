@@ -13,10 +13,11 @@ State: IN PROGRESS
 Current state: retained historical lease records are nonblocking. Slice B now
 persists a canonical active-claim map with revision compare-and-swap, fencing,
 strict recovery metadata, and repository-level atomic acquisition. Access
-planning consumes current claims without relying on a client-session
-projection. Doctor, public mutation, and daemon effect admission migration are
-still in progress. No live runtime state or tenant profile has been changed by
-this lane.
+planning and profile-lease doctor consume current claims without relying on a
+client-session projection; retained rows remain context and cannot add doctor
+blockers when a canonical claim exists. Public mutation and daemon effect
+admission migration are still in progress. No live runtime state or tenant
+profile has been changed by this lane.
 
 ### Plan
 

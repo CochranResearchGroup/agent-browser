@@ -161,6 +161,7 @@ pub(crate) struct ServicePrincipalError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PrincipalContinuityRecourse {
+    ContinueWithActiveClaim,
     RejoinOwnedBrowser,
     ReplaceStaleSamePrincipalSession,
     WaitForForeignPrincipal,
@@ -170,6 +171,7 @@ pub(crate) enum PrincipalContinuityRecourse {
 impl PrincipalContinuityRecourse {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
+            Self::ContinueWithActiveClaim => "continue_with_active_claim",
             Self::RejoinOwnedBrowser => "rejoin_owned_browser",
             Self::ReplaceStaleSamePrincipalSession => "replace_stale_same_principal_session",
             Self::WaitForForeignPrincipal => "wait_for_foreign_principal",

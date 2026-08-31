@@ -59,6 +59,10 @@ new work.
 
 Every continuity decision returns exactly one of these states:
 
+- `continue_with_active_claim`: the canonical lease authority has a current
+  claim for the exact profile. The claim authorizes only operations that
+  validate its revision and fencing token, and does not prove that a browser
+  process exists;
 - `rejoin_owned_browser`: current capability and owner binding agree, and the
   retained lane is available to the same principal;
 - `replace_stale_same_principal_session`: the same principal has only released
@@ -68,9 +72,10 @@ Every continuity decision returns exactly one of these states:
 - `reconcile_principal_identity`: capability, owner binding, or legacy holder
   evidence is missing or contradictory, so effects remain unavailable.
 
-Only the first two states are effect-capable for the authenticated principal.
-Neither state permits owner transfer, takeover, broad cleanup, browser close,
-or profile deletion.
+`continue_with_active_claim` is effect-capable only at migrated operations that
+accept and revalidate the exact claim. The next two states are effect-capable
+for the authenticated legacy principal. None permits owner transfer, takeover,
+broad cleanup, browser close, or profile deletion.
 
 ## Legacy migration
 

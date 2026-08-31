@@ -1435,8 +1435,12 @@ Use <code>agent-browser service leases</code>, HTTP
 authority without launching a browser. Records expose the authenticated
 principal, exact owner generation, subordinate session and tab work, blocking
 identity axes, authorized actions, typed continuity recourse, and doctor
-findings. Legacy retained evidence remains observation-only and cannot acquire
-authority from caller labels. Exact lease detail, explanation, and doctor reads
+findings. A current canonical profile claim is the sole operational projection
+for that profile. It reports <code>state=active</code> with
+<code>recourse=continue_with_active_claim</code>; retained session and owner
+rows remain context but cannot add doctor blockers. The logical claim does not
+prove that a browser process exists. Legacy retained evidence remains
+observation-only and cannot acquire authority from caller labels. Exact lease detail, explanation, and doctor reads
 are available through CLI, HTTP, MCP resources, and generated client helpers.
 Observation-only legacy and unbound identity rows advertise
 <code>profile_acquire</code> when the capability-bound acquisition coordinator

@@ -121,12 +121,36 @@ impl ActiveLeaseClaim {
         &self.principal_id
     }
 
+    pub(crate) fn capability_id(&self) -> &str {
+        &self.capability_id
+    }
+
+    pub(crate) fn profile_id(&self) -> Option<&str> {
+        (self.resource.kind == LeaseResourceKind::Profile).then_some(self.resource.id.as_str())
+    }
+
+    pub(crate) fn mode(&self) -> LeaseClaimMode {
+        self.mode
+    }
+
     pub(crate) fn revision(&self) -> u64 {
         self.revision
     }
 
     pub(crate) fn fencing_token(&self) -> u64 {
         self.fencing_token
+    }
+
+    pub(crate) fn heartbeat_at(&self) -> &str {
+        &self.heartbeat_at
+    }
+
+    pub(crate) fn expires_at(&self) -> &str {
+        &self.expires_at
+    }
+
+    pub(crate) fn owner_generation(&self) -> Option<u64> {
+        self.owner_generation
     }
 }
 
@@ -261,6 +285,16 @@ impl LeaseAuthorityState {
         self.active_claims
             .get(&resource.storage_key())
             .filter(|claim| timestamp_precedes(now, &claim.expires_at))
+    }
+
+    pub(crate) fn current_profile_claims<'a>(
+        &'a self,
+        now: &'a str,
+    ) -> impl Iterator<Item = &'a ActiveLeaseClaim> + 'a {
+        self.active_claims.values().filter(move |claim| {
+            claim.resource.kind == LeaseResourceKind::Profile
+                && timestamp_precedes(now, &claim.expires_at)
+        })
     }
 }
 

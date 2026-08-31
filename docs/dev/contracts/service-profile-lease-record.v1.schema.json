@@ -32,7 +32,7 @@
     "cleanupObligation": { "type": ["string", "null"] },
     "blockingIdentityAxes": { "type": "array", "items": { "type": "string" } },
     "authorizedActions": { "type": "array", "items": { "type": "string" } },
-    "recourse": { "type": "string", "enum": ["rejoin_owned_browser", "replace_stale_same_principal_session", "wait_for_foreign_principal", "reconcile_principal_identity"] },
+    "recourse": { "type": "string", "enum": ["continue_with_active_claim", "rejoin_owned_browser", "replace_stale_same_principal_session", "wait_for_foreign_principal", "reconcile_principal_identity"] },
     "observationOnly": { "type": "boolean" }
   },
   "additionalProperties": false

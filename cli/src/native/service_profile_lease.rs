@@ -1,8 +1,9 @@
 //! First-class profile lease projection and guarded lifecycle operations.
 //!
-//! Profile leases are derived from authenticated principal capability, the
-//! existing runtime owner registry, and subordinate session and tab work
-//! leases. Labels never grant authority. Every mutation uses an exact lease
+//! A current canonical profile claim is the sole operational lease projection.
+//! Without one, compatibility rows are derived from authenticated principal
+//! capability, the existing runtime owner registry, and subordinate session
+//! and tab work leases. Labels never grant authority. Every legacy mutation uses an exact lease
 //! revision and the caller's authenticated profile capability.
 //! Rejoin may repair one unproven live session only when it is the unique exact
 //! session of the capability-bound runtime owner. It may compare-and-swap the
@@ -20,6 +21,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
+use super::service_lease_authority::{ActiveLeaseClaim, LeaseClaimMode};
 use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
 };
@@ -173,23 +175,42 @@ impl ProfileLeaseFailureCode {
 /// only current legacy session or owner evidence requires identity reconciliation.
 pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<ProfileLeaseRecord> {
     let mut records = Vec::new();
-    let mut bound_profiles = BTreeSet::new();
-    let mut bound_capability_ids = BTreeSet::new();
-    for binding in state.runtime_owner_registry.principal_bindings.values() {
+    let canonical_claims = state
+        .lease_authority()
+        .current_profile_claims(now)
+        .collect::<Vec<_>>();
+    let canonical_profile_ids = canonical_claims
+        .iter()
+        .filter_map(|claim| claim.profile_id().map(ToString::to_string))
+        .collect::<BTreeSet<_>>();
+    let mut bound_profiles = canonical_profile_ids.clone();
+    let mut bound_capability_ids = canonical_claims
+        .iter()
+        .map(|claim| claim.capability_id().to_string())
+        .collect::<BTreeSet<_>>();
+    let legacy_bindings = state
+        .runtime_owner_registry
+        .principal_bindings
+        .values()
+        .filter(|binding| !canonical_profile_ids.contains(&binding.profile_id))
+        .collect::<Vec<_>>();
+    for binding in legacy_bindings {
         bound_profiles.insert(binding.profile_id.clone());
         bound_capability_ids.insert(binding.capability_id.clone());
         records.push(bound_profile_lease(state, binding, now));
     }
 
-    for capability in state
+    let unbound_capabilities = state
         .service_principals
         .profile_capabilities
         .values()
         .filter(|capability| {
             capability.state == ServiceProfileCapabilityState::Active
                 && !bound_capability_ids.contains(&capability.capability_id)
+                && !bound_profiles.contains(&capability.profile_id)
         })
-    {
+        .collect::<Vec<_>>();
+    for capability in unbound_capabilities {
         bound_profiles.insert(capability.profile_id.clone());
         records.push(unbound_capability_profile_lease(state, capability, now));
     }
@@ -219,6 +240,11 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
     for profile_id in legacy_profiles {
         records.push(legacy_profile_lease(state, &profile_id, now));
     }
+    records.extend(
+        canonical_claims
+            .into_iter()
+            .map(|claim| canonical_profile_lease(state, claim)),
+    );
     records.sort_by(|left, right| left.id.cmp(&right.id));
     records
 }
@@ -1481,6 +1507,49 @@ fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> Pr
     record
 }
 
+fn canonical_profile_lease(state: &ServiceState, claim: &ActiveLeaseClaim) -> ProfileLeaseRecord {
+    let profile_id = claim
+        .profile_id()
+        .expect("profile-claim projection requires a profile resource");
+    let sessions = sessions_for_profile(state, profile_id);
+    let session_ids = sessions
+        .iter()
+        .map(|session| session.id.clone())
+        .collect::<Vec<_>>();
+    ProfileLeaseRecord {
+        schema_version: PROFILE_LEASE_SCHEMA_VERSION.to_string(),
+        id: claim.claim_id().to_string(),
+        lease_revision: format!(
+            "lease-authority-revision-v1:{}:{}",
+            claim.revision(),
+            claim.fencing_token()
+        ),
+        principal_id: Some(claim.principal_id().to_string()),
+        principal_provenance: None,
+        profile_id: profile_id.to_string(),
+        profile_identity_digest: None,
+        browser_id: None,
+        session_ids: session_ids.clone(),
+        tab_ids: tabs_for_sessions(state, &session_ids),
+        mode: match claim.mode() {
+            LeaseClaimMode::Ephemeral => "ephemeral",
+            LeaseClaimMode::Strict => "strict",
+        }
+        .to_string(),
+        state: "active".to_string(),
+        owner_generation: claim.owner_generation(),
+        process_instance_digest: None,
+        route_ids: Vec::new(),
+        last_heartbeat_at: Some(claim.heartbeat_at().to_string()),
+        expires_at: Some(claim.expires_at().to_string()),
+        cleanup_obligation: None,
+        blocking_identity_axes: Vec::new(),
+        authorized_actions: READ_ACTIONS.map(ToString::to_string).to_vec(),
+        recourse: PrincipalContinuityRecourse::ContinueWithActiveClaim,
+        observation_only: false,
+    }
+}
+
 fn authorized_lease(
     state: &ServiceState,
     lease_id: &str,
@@ -2355,6 +2424,73 @@ mod tests {
         assert_eq!(
             leases[0].authorized_actions,
             READ_ACTIONS.map(ToString::to_string)
+        );
+
+        let doctor = doctor_profile_leases(&state, NOW);
+        assert!(doctor.healthy);
+        assert!(doctor.findings.is_empty());
+    }
+
+    #[test]
+    fn canonical_profile_claim_is_the_only_doctor_authority() {
+        use crate::native::service_lease_authority::{
+            AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+        };
+
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-social".to_string(),
+                BrowserProfile {
+                    id: "last30days-social".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "retained-unproven-session".to_string(),
+                BrowserSession {
+                    id: "retained-unproven-session".to_string(),
+                    profile_id: Some("last30days-social".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let claim = state
+            .acquire_lease_claim(AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days".to_string(),
+                mode: LeaseClaimMode::Ephemeral,
+                expected_authority_revision: 0,
+                idempotency_key: "doctor-canonical-claim".to_string(),
+                now: NOW.to_string(),
+                expires_at: "2026-08-27T12:05:00Z".to_string(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: Some("boot-doctor".to_string()),
+                owner_generation: None,
+            })
+            .unwrap();
+
+        let leases = profile_leases_for_state(&state, NOW);
+        assert_eq!(leases.len(), 1);
+        assert_eq!(leases[0].id, claim.claim_id());
+        assert_eq!(leases[0].state, "active");
+        assert_eq!(
+            leases[0].principal_id.as_deref(),
+            Some("principal:last30days")
+        );
+        assert_eq!(
+            leases[0].session_ids,
+            ["retained-unproven-session".to_string()]
+        );
+        assert!(leases[0].blocking_identity_axes.is_empty());
+        assert!(!leases[0].observation_only);
+        assert_eq!(
+            leases[0].recourse,
+            PrincipalContinuityRecourse::ContinueWithActiveClaim
         );
 
         let doctor = doctor_profile_leases(&state, NOW);
