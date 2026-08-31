@@ -10,10 +10,13 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P144 | Lease Authority Coordination And Revocation
 
 State: IN PROGRESS
-Current state: the historical hotfix inventory is reconciled into one lease
-authority redesign. Slice A is test-driving the structural separation between
-active operational claims and append-only lease history. No live runtime state
-or tenant profile has been changed by this lane.
+Current state: retained historical lease records are nonblocking. Slice B now
+persists a canonical active-claim map with revision compare-and-swap, fencing,
+strict recovery metadata, and repository-level atomic acquisition. Access
+planning consumes current claims without relying on a client-session
+projection. Doctor, public mutation, and daemon effect admission migration are
+still in progress. No live runtime state or tenant profile has been changed by
+this lane.
 
 ### Plan
 

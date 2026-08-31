@@ -1036,7 +1036,11 @@ The private workspace package <code>@agent-browser/client</code> generates servi
 
 Direct HTTP and MCP callers get the same guard as the client helpers when they submit a copied request carrying <code>blockedByManualAction</code> and <code>manualSeedingRequired</code>.
 
-Principal-bound profile access uses an ephemeral capability. Send it only as
+Principal-bound profile access uses an ephemeral capability. A canonical
+active claim remains authoritative without a client-session projection, and
+the access plan reports its claim id, revision, fencing token, and principal.
+The matching principal may continue, an unauthenticated caller must
+authenticate, and a foreign principal must wait. Send the capability only as
 <code>Authorization: Bearer &lt;profile-capability&gt;</code> for HTTP
 <code>GET /api/service/access-plan</code> and <code>POST
 /api/service/request</code>, or as <code>profileCapability</code> for MCP

@@ -12,6 +12,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
+use super::service_lease_authority::LeaseResourceKey;
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
@@ -1651,6 +1652,16 @@ fn profile_reuse_decision(
         });
     }
 
+    let observed_at = Utc::now().to_rfc3339();
+    let active_claim = service_state
+        .lease_authority
+        .current_claim(&LeaseResourceKey::profile(&profile.id), &observed_at);
+    let active_claim_requires_authentication =
+        active_claim.is_some() && authenticated_principal.is_none();
+    let active_claim_is_foreign = active_claim
+        .zip(authenticated_principal)
+        .is_some_and(|(claim, authority)| claim.principal_id != authority.principal_id);
+
     let browser_host = launch_posture
         .get("browserHost")
         .and_then(|value| serde_json::from_value::<BrowserHost>(value.clone()).ok());
@@ -1738,10 +1749,13 @@ fn profile_reuse_decision(
         same_principal_profile_mismatch_browser_ids.sort();
         same_principal_profile_mismatch_browser_ids.dedup();
         capability_profile_mismatch = authority.profile_id != profile.id;
-        if !foreign_principal_session_ids.is_empty() || capability_profile_mismatch {
+        if !foreign_principal_session_ids.is_empty()
+            || capability_profile_mismatch
+            || active_claim_is_foreign
+        {
             reusable_browser_ids.clear();
         }
-    } else if !principal_bound_session_ids.is_empty() {
+    } else if !principal_bound_session_ids.is_empty() || active_claim_requires_authentication {
         reusable_browser_ids.clear();
     }
 
@@ -1823,7 +1837,15 @@ fn profile_reuse_decision(
     if !foreign_principal_session_ids.is_empty() {
         reasons.push("foreign_principal_profile_lease");
     }
-    if authenticated_principal.is_none() && !principal_bound_session_ids.is_empty() {
+    if active_claim.is_some() {
+        reasons.push("canonical_active_profile_claim");
+    }
+    if active_claim_is_foreign {
+        reasons.push("foreign_principal_active_claim");
+    }
+    if authenticated_principal.is_none()
+        && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
+    {
         reasons.push("profile_capability_required");
     }
     let profile_identity_inconsistent =
@@ -1870,9 +1892,11 @@ fn profile_reuse_decision(
         "seed_profile_before_reuse"
     } else if explicit_session_route_error.is_some() {
         "blocked_by_explicit_session_route"
-    } else if !foreign_principal_session_ids.is_empty() {
+    } else if !foreign_principal_session_ids.is_empty() || active_claim_is_foreign {
         "wait_for_foreign_principal"
-    } else if authenticated_principal.is_none() && !principal_bound_session_ids.is_empty() {
+    } else if authenticated_principal.is_none()
+        && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
+    {
         "authenticate_for_profile_reuse"
     } else if profile_identity_inconsistent {
         "lifecycle_profile_identity_inconsistent"
@@ -1892,6 +1916,11 @@ fn profile_reuse_decision(
                 .and_then(|browser_id| reusable_session_name_for_browser(service_state, browser_id))
         });
 
+    let active_lease_count = if active_claim.is_some() {
+        1
+    } else {
+        active_lease_session_ids.len()
+    };
     json!({
         "recommendedAction": recommended_action,
         "selectedProfileId": profile.id,
@@ -1918,7 +1947,11 @@ fn profile_reuse_decision(
         "sameProfileLiveBrowserCount": same_profile_live_browser_ids.len(),
         "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
         "activeLeaseSessionIds": active_lease_session_ids,
-        "activeLeaseCount": active_lease_session_ids.len(),
+        "activeLeaseCount": active_lease_count,
+        "activeClaimId": active_claim.map(|claim| claim.claim_id.clone()),
+        "activeClaimRevision": active_claim.map(|claim| claim.revision),
+        "activeClaimFencingToken": active_claim.map(|claim| claim.fencing_token),
+        "activeClaimPrincipalId": active_claim.map(|claim| claim.principal_id.clone()),
         "foreignPrincipalSessionIds": foreign_principal_session_ids,
         "principalBoundSessionIds": principal_bound_session_ids,
         "profileMismatchBrowserIds": same_principal_profile_mismatch_browser_ids,
@@ -5957,6 +5990,102 @@ mod tests {
 
         let after = service_access_plan_for_state(&state, request());
         assert_eq!(after["decision"], before["decision"]);
+    }
+
+    #[test]
+    fn canonical_active_claim_controls_access_without_session_projection() {
+        use crate::native::service_lease_authority::{
+            AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey,
+        };
+
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-social".to_string(),
+                BrowserProfile {
+                    id: "last30days-social".to_string(),
+                    target_service_ids: vec!["social".to_string()],
+                    authenticated_service_ids: vec!["social".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let claim = state
+            .lease_authority
+            .acquire(AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days".to_string(),
+                mode: LeaseClaimMode::Ephemeral,
+                expected_authority_revision: 0,
+                idempotency_key: "access-plan-claim".to_string(),
+                now: "2026-08-31T12:00:00Z".to_string(),
+                expires_at: "2999-08-31T12:05:00Z".to_string(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: None,
+                owner_generation: None,
+            })
+            .unwrap();
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["social".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "authenticate_for_profile_reuse"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["activeClaimId"],
+            claim.claim_id
+        );
+        assert_eq!(plan["decision"]["profileReuse"]["activeLeaseCount"], 1);
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+
+        let same_principal = AuthenticatedServicePrincipal {
+            principal_id: "principal:last30days".to_string(),
+            profile_id: "last30days-social".to_string(),
+            capability_id: "capability:last30days".to_string(),
+            capability_revision: 1,
+            provenance:
+                crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let same = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["social".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&same_principal),
+        );
+        assert_eq!(
+            same["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+
+        let foreign_principal = AuthenticatedServicePrincipal {
+            principal_id: "principal:foreign".to_string(),
+            capability_id: "capability:foreign".to_string(),
+            ..same_principal
+        };
+        let foreign = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["social".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&foreign_principal),
+        );
+        assert_eq!(
+            foreign["decision"]["profileReuse"]["recommendedAction"],
+            "wait_for_foreign_principal"
+        );
     }
 
     #[test]

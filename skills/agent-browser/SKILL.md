@@ -289,7 +289,11 @@ acquisition is blocked merely because every Guacamole route is checked out or
 install doctor reports a global advisory. Require a blocker from the requested
 action, requested profile, scoped remote-view doctor, or route preflight.
 
-For a principal-bound profile, pass the lease capability ephemerally. HTTP
+For a principal-bound profile, pass the lease capability ephemerally. A
+canonical active claim is authoritative even when no client session remains;
+access-plan `profileReuse` reports its id, revision, fencing token, and
+principal. The matching principal may continue, an unauthenticated caller must
+authenticate, and a foreign principal must wait. HTTP
 clients use `Authorization: Bearer <profile-capability>` for both access-plan
 and service-request calls. MCP clients use `profileCapability` on
 `service_access_plan` and `service_request`. Generated clients accept the same

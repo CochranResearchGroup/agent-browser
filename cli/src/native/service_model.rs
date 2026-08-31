@@ -2431,6 +2431,13 @@ pub struct ServiceState {
         skip_serializing_if = "super::service_principal::ServicePrincipalRegistry::is_empty"
     )]
     pub(crate) service_principals: super::service_principal::ServicePrincipalRegistry,
+    /// Canonical current service-resource claims and their append-only history.
+    /// Only `active_claims` grants authority; terminal events are never blockers.
+    #[serde(
+        default,
+        skip_serializing_if = "super::service_lease_authority::LeaseAuthorityState::is_empty"
+    )]
+    pub(crate) lease_authority: super::service_lease_authority::LeaseAuthorityState,
     /// Idempotent receipts for applied profile-lease reconciliation plans.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lease_reconcile_receipts:

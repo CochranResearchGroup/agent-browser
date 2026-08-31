@@ -764,7 +764,11 @@ response or the tab response to get requested profile, planned profile, retained
 browser/session hints, tab handle, acquisition mode, and duplicate-process
 policy without parsing nested profile reuse fields.
 
-Principal-bound profile reuse is capability authenticated. HTTP callers send
+Principal-bound profile reuse is capability authenticated. A canonical active
+claim remains authoritative without a client-session projection. The access
+plan reports its claim id, revision, fencing token, and principal, allowing the
+matching principal to continue while unauthenticated callers authenticate and
+foreign principals wait. HTTP callers send
 the capability only in the <code>Authorization: Bearer
 &lt;profile-capability&gt;</code> header on both <code>GET
 /api/service/access-plan</code> and <code>POST /api/service/request</code>. MCP

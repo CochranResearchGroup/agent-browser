@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_a_complete_slice_b_ready`
+Execution state: `slice_b_kernel_and_access_in_progress`
 
 Lane: P144
 
@@ -199,6 +199,25 @@ Every active claim contains at least:
     than generic force unlock.
 24. Doctor health is based on current safety and recoverability. Historical
     warnings remain queryable but do not make the current system unhealthy.
+25. Lease time is authority-owned. Callers request a policy class, not an
+    arbitrary expiry, and wall-clock rollback cannot lengthen a claim.
+26. Resource keys are canonicalized before admission. Aliases, profile
+    shorthands, paths, and route projections cannot create two claims for one
+    physical resource.
+27. Revision and fencing counters fail before mutation on exhaustion. They
+    never saturate, wrap, or reuse an earlier value.
+28. Idempotency survives terminalization and history archival. Replaying an
+    acquire, renew, release, recover, revoke, or effect operation returns its
+    original receipt rather than creating new authority.
+29. Multi-resource work is acquired as one ordered bundle or as a bounded,
+    receipted saga. A partial profile, route, display, browser, or installer
+    acquisition cannot become an indefinite blocker.
+30. Parent authority is revalidated recursively at every child effect, not
+    only when the child is created. Parent expiry or fencing invalidates the
+    child immediately even if a stale child row remains.
+31. History retention and compaction preserve fencing high-water marks and
+    idempotency receipts. Unbounded history growth cannot exhaust the active
+    authority store or change admission.
 
 ## Claim Modes
 
@@ -373,6 +392,34 @@ runtime receipts all satisfy the acceptance matrix.
 | candidate runtime cannot read claim schema | installation fails before runtime-owner mutation |
 | rollback to compatible old generation | authority and history remain readable without split ownership |
 | doctor sees historical inconsistencies only | current health remains healthy with history count reported |
+| caller requests an excessive or backdated TTL | server selects a bounded expiry from current authority time |
+| wall clock moves backward after acquisition | remaining authority never increases |
+| profile shorthand and canonical path name the same profile | one canonical resource key and one possible winner |
+| revision or fencing counter reaches its numeric limit | mutation fails atomically before authority changes |
+| completed acquisition operation is replayed after expiry | original terminal receipt, no new claim |
+| route bundle fails after profile admission | bounded compensation or exact cleanup obligation, no stranded claim |
+| child row remains after parent expiry | every child effect is rejected immediately |
+| historical events are archived | fencing and idempotency high-water marks remain unchanged |
+
+## Design Completeness Audit | 2026-08-31
+
+The six hotfix families are covered by the architecture, but the first draft
+did not state five cross-cutting failure modes strongly enough. They are now
+part of the frozen invariants and acceptance matrix:
+
+1. authority-owned time and bounded TTL policy, including wall-clock rollback;
+2. canonical resource identity across shorthand, path, route, and owner aliases;
+3. non-saturating revision and fencing counters;
+4. terminal idempotency retained independently of active claims and event
+   history; and
+5. ordered bundle or bounded-saga semantics for operations that need several
+   resources.
+
+The audit also makes recursive parent fencing and history compaction explicit.
+Without these controls, a single kernel could still admit duplicate aliases,
+revive a completed request, strand a partial acquisition, or allow a child to
+outlive its parent. These are required before the redesign can be described as
+structurally recurrence-resistant.
 
 ## Validation Contract
 
@@ -487,3 +534,45 @@ uncommitted note and does not overlap this lane.
 
 Next action: introduce the canonical active-claim kernel behind a compatibility
 projection, beginning with the smallest profile authority seam.
+
+## Slice B Kernel And Access Checkpoint | 2026-08-31
+
+State transition: `slice_a_complete_slice_b_ready` to
+`slice_b_kernel_and_access_in_progress`.
+
+Acceptance state: Service State now has a backward-readable canonical lease
+authority envelope containing a resource-keyed active-claim map, durable
+fencing counters, authority revision, and append-only events. Atomic
+acquisition validates expiry, expected revision, parent authority, strict
+recovery metadata, and idempotent replay. Access planning consults the current
+profile claim even when no session projection exists. A matching principal may
+continue, an unauthenticated caller must authenticate, and a foreign principal
+must wait.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- Red: the first kernel regression failed with `Unsupported` while retained
+  terminal history was present.
+- Green: five kernel tests pass for history independence, revision
+  compare-and-swap, strict recovery requirements, Service State round-trip,
+  and repository-level two-contender atomicity.
+- Red: a fencing high-water mark at the numeric limit had no typed failure and
+  would have saturated, reusing the prior token.
+- Green: counter exhaustion now fails before any authority mutation; the six
+  kernel tests include an exact state-equality regression for this boundary.
+- Red: an access plan with a canonical claim but no session incorrectly
+  returned `launch_new_browser`.
+- Green: the access plan now returns `authenticate_for_profile_reuse`, exposes
+  the claim id, revision, fencing token, and principal, and reports one active
+  lease. Matching and foreign principal controls also pass.
+
+Material blockers: profile-lease doctor and effect admission still use the
+legacy compatibility projection. The public acquire, renew, release, recovery,
+and revocation operations do not yet issue or consume canonical claim tokens.
+This checkpoint must not be installed as the completed lease redesign.
+
+Next action: project canonical claims through profile-lease doctor, then make
+profile acquisition and daemon effects consume the same atomic claim before
+adding renew, release, recovery, and revocation.

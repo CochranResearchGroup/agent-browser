@@ -142,6 +142,8 @@ pub mod service_inventory;
 #[allow(dead_code)]
 pub mod service_jobs;
 #[allow(dead_code)]
+pub(crate) mod service_lease_authority;
+#[allow(dead_code)]
 pub mod service_lifecycle;
 #[allow(dead_code)]
 pub mod service_model;
