@@ -2,7 +2,7 @@
 
 Date: 2026-09-01
 
-State: OPEN
+State: CLOSED
 
 Lane: P148
 
@@ -15,6 +15,10 @@ Source baseline: `31a1ea9cda1fd42bbc09ac21251040123663d61d`
 Design checkpoint: `360fbd6daccdef6ff43ceaac20e64b8b119738d0`
 
 Implementation checkpoint: `aad5ce20`
+
+Integration checkpoint: `a8091c5b`
+
+Production qualification repairs: `040f67e8`, `46414041`
 
 Depends on: P147 Runtime Host Ingress Supervisor Restart Repair
 
@@ -366,5 +370,49 @@ installing a production candidate or touching a production runtime:
   lone failure observed another test's injected phase, and that exact test
   passed immediately with `--test-threads=1`.
 
-Production installation and live takeover remain intentionally unexecuted and
-out of scope for this checkpoint.
+Production installation and live takeover remained intentionally unexecuted at
+that checkpoint.
+
+## Production Acceptance | 2026-09-01
+
+P148 merged to `main` at `a8091c5b`. The first production installation exposed
+two fail-closed defects before takeover could signal a process. A configured
+but free supervisor port was incorrectly classified as an unrelated owner;
+`040f67e8` now permits a free port while continuing to block any reachable port
+not owned by the selected PID. A `/proc/<pid>/fd` descriptor could also vanish
+between enumeration and `readlink`; `46414041` skips only that normal
+`NotFound` race and retains fail-closed behavior for every other observation
+error. The focused free-versus-unrelated-port regression was red before the
+repair and green after it. Formatting, strict Clippy, focused tests, and the
+complete provider-free no-launch takeover smoke passed on the repaired source.
+
+The accepted production generation is
+`0.28.0-895c9e201710-c6baf23f7b65`, SHA-256
+`895c9e20171089e8cf1780e72cb01254a23443b3bab485b1cbb2d80489072b42`.
+The audited browserless workstation transaction
+`upgrade-384e3b7f-4284-4e30-8df3-ad93d1a16e26` accepted stable census digest
+`64fae707a79c3343bef9a68d4163f33105f09ac241da1cd1b0c0630231d158fb`.
+It launched no browser and preserved profiles, routes, tabs, and retained
+evidence.
+
+Read-only takeover plan digest
+`5f2517d220c32b4bdc91b147339e7958a96708924b086962be4223aa772d9015`
+had zero blockers and no unsafe census records. Transaction
+`runtime-host-takeover-1612ea37-9a98-4f73-a724-b5e7847a67a9` retired exact
+browserless source PID `78976`, started the configured supervisor once, and
+accepted at revision `9` only after P147 selected replacement PID `82961` at
+ingress revision `219`. The receipt reports `browserLaunched=false`, the
+admission drain is absent, and the source PID is gone.
+
+Final readback proves one current executable generation, one runtime host, zero
+legacy daemons, converged dashboard ingress, and
+`agent-browser-runtime-host.service` active with main PID `82961`. Lane
+`dashboard-service-backend` is ready and reachable on fixed port `39717`.
+A fresh takeover dry-run returns `already_supervised` with zero blockers.
+
+The separately root-owned protected lease authority remains healthy, enabled,
+and active on its prior reviewed SHA
+`f8fdb05e80fef05f210e1d5f3fab17c8f647f87e568c6c200b4dedf30ff0e4a0`.
+The exact parity upgrade to the P148 production SHA was planned but not applied
+because sudo requires an interactive password. That external privilege step is
+not part of runtime-host supervisor custody and does not reopen P148.

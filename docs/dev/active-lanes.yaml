@@ -32,20 +32,3 @@ lanes:
     overlaps: [plan/lease-authority-coordination]
     reconciled_overlaps: []
     updated_at: 2026-09-01
-  - id: P148 Runtime Host Supervisor Takeover
-    objective: Transactionally retire one exact browserless selected host and start its configured supervisor
-    plan: docs/dev/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md
-    plan_ref: refs/heads/plan/runtime-host-supervisor-takeover
-    branch: plan/runtime-host-supervisor-takeover
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: aad5ce20
-    remote_ref: refs/remotes/origin/plan/runtime-host-supervisor-takeover
-    integration_receipt: null
-    integration: merge
-    dependencies: [plan/runtime-ingress-same-generation-adoption]
-    overlaps: [fix/runtime-ingress-same-generation-adoption]
-    reconciled_overlaps:
-      - P147 retains sole ownership of same-generation ingress adoption; P148 owns only pre-adoption live-host takeover
-    updated_at: 2026-09-01
