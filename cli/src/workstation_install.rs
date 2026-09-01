@@ -5455,6 +5455,11 @@ fn collect_stable_runtime_census_with(
     latest.ok_or_else(|| "runtime census did not collect two rounds".to_string())
 }
 
+pub(crate) fn collect_stable_host_runtime_census(
+) -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
+    collect_stable_runtime_census_with(crate::runtime_adoption::collect_host_runtime_census_round)
+}
+
 fn browserless_override_census_is_safe(
     census: &crate::runtime_adoption::StableRuntimeCensus,
 ) -> bool {

@@ -2,7 +2,7 @@
 
 Date: 2026-09-01
 
-State: PLANNED
+State: OPEN
 
 Lane: P148
 
@@ -13,6 +13,8 @@ Target: `main`
 Source baseline: `31a1ea9cda1fd42bbc09ac21251040123663d61d`
 
 Design checkpoint: `360fbd6daccdef6ff43ceaac20e64b8b119738d0`
+
+Implementation checkpoint: `aad5ce20`
 
 Depends on: P147 Runtime Host Ingress Supervisor Restart Repair
 
@@ -89,6 +91,11 @@ pub(crate) fn plan_supervisor_takeover() -> Result<SupervisorTakeoverPlan, Strin
 pub(crate) fn apply_supervisor_takeover(
     expected_plan_digest: &str,
 ) -> Result<SupervisorTakeoverOutcome, String>;
+
+pub(crate) fn resume_supervisor_takeover(
+    transaction_id: &str,
+    expected_revision: u64,
+) -> Result<SupervisorTakeoverOutcome, String>;
 ```
 
 The plan is read-only. Apply recomputes all observations and requires the exact
@@ -101,6 +108,8 @@ The user-facing interface is:
 agent-browser session supervisor recover-host --dry-run [--json]
 agent-browser session supervisor recover-host --apply \
   --expected-plan-digest <sha256> [--json]
+agent-browser session supervisor recover-host --resume \
+  --transaction-id <id> --expected-revision <revision> [--json]
 ```
 
 `recover-host` has no session argument because the configured supervisor owns
@@ -338,3 +347,24 @@ wrapper where applicable.
 - Do not add an option that accepts a raw PID, signal, socket path, port, or
   browser-closure list from the caller.
 - Stop if P147 cannot remain the sole ingress-adoption authority.
+
+## Development Qualification Record
+
+The isolated implementation checkpoint proves the source-only workflow without
+installing a production candidate or touching a production runtime:
+
+- focused parser and takeover-module Rust tests pass;
+- strict Rust Clippy with warnings denied passes;
+- Rust formatting and patch hygiene pass;
+- the P147 runtime-host supervisor no-launch smoke passes unchanged;
+- the P148 no-launch smoke reproduces `port_conflict`, obtains a blocker-free
+  plan, retires only the exact fixture host, starts the fixture supervisor once,
+  observes P147 select the replacement, clears the drain, and proves a
+  subsequent apply is `already_supervised` and zero-effect;
+- the full docs site build and remote-view documentation checks pass;
+- the workstation-install slice completed 122 of 123 tests in parallel; the
+  lone failure observed another test's injected phase, and that exact test
+  passed immediately with `--test-threads=1`.
+
+Production installation and live takeover remain intentionally unexecuted and
+out of scope for this checkpoint.

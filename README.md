@@ -1373,8 +1373,27 @@ agent-browser session supervisor install messages-v4 --stream-port 39716
 # Inspect the exact unit, executable, restart, and port state
 agent-browser session supervisor status messages-v4 --json
 
+# Plan a browserless transfer of the selected host into systemd custody
+agent-browser session supervisor recover-host --dry-run --json
+
+# Apply only the exact plan returned by dry-run
+agent-browser session supervisor recover-host --apply \
+  --expected-plan-digest <sha256> --json
+
 # Close and remove only this lane
 agent-browser session supervisor remove messages-v4
+```
+
+`recover-host` is host-scoped and never launches or closes a browser. It
+fails closed unless the selected single host, exact process identity, fixed
+ports, supervisor manifests, current boot, and two-round browserless census
+all agree. If an effect becomes uncertain, inspect the durable transaction and
+resume it once with its exact transaction ID and revision; do not repeat
+`--apply`:
+
+```bash
+agent-browser session supervisor recover-host --resume \
+  --transaction-id <id> --expected-revision <revision> --json
 ```
 
 The remove operation preserves browser profiles, browser storage, service

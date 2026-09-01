@@ -57,6 +57,7 @@ pub(crate) struct SessionSupervisorPaths {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct SystemdUnitObservation {
     load_state: String,
+    unit_file_state: String,
     active_state: String,
     sub_state: String,
     result: String,
@@ -93,6 +94,34 @@ struct InstallRequest {
     stream_port: u16,
     runtime_profile: Option<String>,
     service_config_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeHostSupervisorObservation {
+    pub(crate) unit: String,
+    pub(crate) manifests: Vec<SessionSupervisorManifest>,
+    pub(crate) load_state: String,
+    pub(crate) unit_file_state: String,
+    pub(crate) active_state: String,
+    pub(crate) sub_state: String,
+    pub(crate) result: String,
+    pub(crate) restart_count: u64,
+    pub(crate) main_pid: Option<u32>,
+    pub(crate) executable_matches: bool,
+    pub(crate) reachable_stream_ports: Vec<u16>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RecoverHostRequest {
+    DryRun,
+    Apply {
+        expected_plan_digest: String,
+    },
+    Resume {
+        transaction_id: String,
+        expected_revision: u64,
+    },
 }
 
 pub(crate) fn validate_manifest(manifest: &SessionSupervisorManifest) -> Result<(), String> {
@@ -227,6 +256,28 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
     if operation == "run-host" {
         return run_supervised_host(&paths);
     }
+    if operation == "recover-host" {
+        return match parse_recover_host_request(args, base)? {
+            RecoverHostRequest::DryRun => {
+                crate::runtime_host_supervisor_takeover::plan_supervisor_takeover()
+                    .and_then(|plan| serde_json::to_value(plan).map_err(|error| error.to_string()))
+            }
+            RecoverHostRequest::Apply {
+                expected_plan_digest,
+            } => crate::runtime_host_supervisor_takeover::apply_supervisor_takeover(
+                &expected_plan_digest,
+            )
+            .and_then(|outcome| serde_json::to_value(outcome).map_err(|error| error.to_string())),
+            RecoverHostRequest::Resume {
+                transaction_id,
+                expected_revision,
+            } => crate::runtime_host_supervisor_takeover::resume_supervisor_takeover(
+                &transaction_id,
+                expected_revision,
+            )
+            .and_then(|outcome| serde_json::to_value(outcome).map_err(|error| error.to_string())),
+        };
+    }
     let session = args
         .get(base + 3)
         .map(String::as_str)
@@ -247,7 +298,7 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
 }
 
 fn supervisor_usage() -> String {
-    "Usage: agent-browser session supervisor <install|status|remove> <session> [--stream-port <port>] [--runtime-profile <id>] [--config <path>]".to_string()
+    "Usage: agent-browser session supervisor <install|status|remove> <session> [--stream-port <port>] [--runtime-profile <id>] [--config <path>]\n       agent-browser session supervisor recover-host <--dry-run|--apply> [--expected-plan-digest <sha256>]\n       agent-browser session supervisor recover-host --resume --transaction-id <id> --expected-revision <revision>".to_string()
 }
 
 fn parse_install_request(
@@ -297,6 +348,97 @@ fn parse_install_request(
     Ok(request)
 }
 
+fn parse_recover_host_request(args: &[String], base: usize) -> Result<RecoverHostRequest, String> {
+    let mut dry_run = false;
+    let mut apply = false;
+    let mut resume = false;
+    let mut expected_plan_digest = None;
+    let mut transaction_id = None;
+    let mut expected_revision = None;
+    let mut index = base + 3;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--dry-run" => dry_run = true,
+            "--apply" => apply = true,
+            "--resume" => resume = true,
+            "--expected-plan-digest" => {
+                index += 1;
+                expected_plan_digest = Some(
+                    args.get(index)
+                        .filter(|value| !value.starts_with("--"))
+                        .cloned()
+                        .ok_or_else(|| {
+                            "--expected-plan-digest requires a SHA-256 value".to_string()
+                        })?,
+                );
+            }
+            "--transaction-id" => {
+                index += 1;
+                transaction_id = Some(
+                    args.get(index)
+                        .filter(|value| !value.starts_with("--"))
+                        .cloned()
+                        .ok_or_else(|| "--transaction-id requires a value".to_string())?,
+                );
+            }
+            "--expected-revision" => {
+                index += 1;
+                expected_revision = Some(
+                    args.get(index)
+                        .filter(|value| !value.starts_with("--"))
+                        .ok_or_else(|| "--expected-revision requires a value".to_string())?
+                        .parse::<u64>()
+                        .map_err(|_| "--expected-revision must be an integer".to_string())?,
+                );
+            }
+            "--json" => {}
+            unknown => return Err(format!("unknown session supervisor option: {unknown}")),
+        }
+        index += 1;
+    }
+    if usize::from(dry_run) + usize::from(apply) + usize::from(resume) != 1 {
+        return Err(
+            "recover-host requires exactly one of --dry-run, --apply, or --resume".to_string(),
+        );
+    }
+    if resume {
+        if expected_plan_digest.is_some() {
+            return Err("--expected-plan-digest is not valid with --resume".to_string());
+        }
+        return Ok(RecoverHostRequest::Resume {
+            transaction_id: transaction_id
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "recover-host --resume requires --transaction-id".to_string())?,
+            expected_revision: expected_revision
+                .ok_or_else(|| "recover-host --resume requires --expected-revision".to_string())?,
+        });
+    }
+    if transaction_id.is_some() || expected_revision.is_some() {
+        return Err(
+            "--transaction-id and --expected-revision are valid only with --resume".to_string(),
+        );
+    }
+    if dry_run {
+        if expected_plan_digest.is_some() {
+            return Err("--expected-plan-digest is valid only with --apply".to_string());
+        }
+        return Ok(RecoverHostRequest::DryRun);
+    }
+    let expected_plan_digest = expected_plan_digest.ok_or_else(|| {
+        "recover-host --apply requires --expected-plan-digest <sha256>".to_string()
+    })?;
+    if expected_plan_digest.len() != 64
+        || !expected_plan_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("recover-host expected plan digest is not a SHA-256 value".to_string());
+    }
+    Ok(RecoverHostRequest::Apply {
+        expected_plan_digest: expected_plan_digest.to_ascii_lowercase(),
+    })
+}
+
 fn validate_install_request(request: &InstallRequest) -> Result<(), String> {
     if !is_valid_session_name(&request.session) {
         return Err(crate::validation::session_name_error(&request.session));
@@ -331,6 +473,49 @@ fn default_paths() -> Result<SessionSupervisorPaths, String> {
             .join("session-supervisors"),
         unit_dir: home.join(".config").join("systemd").join("user"),
     })
+}
+
+pub(crate) fn runtime_host_supervisor_observation(
+) -> Result<RuntimeHostSupervisorObservation, String> {
+    let paths = default_paths()?;
+    let manifests = supervised_manifests(&paths)?;
+    let first = manifests.first().ok_or_else(|| {
+        "runtime_host_supervisor_empty: no lane manifests are installed".to_string()
+    })?;
+    let systemd = observe_systemd_unit(&first.session)?;
+    let executable_matches = manifests
+        .iter()
+        .all(|manifest| verify_manifest_executable(manifest).is_ok());
+    let mut reachable_stream_ports = manifests
+        .iter()
+        .filter(|manifest| loopback_port_reachable(manifest.stream_port))
+        .map(|manifest| manifest.stream_port)
+        .collect::<Vec<_>>();
+    reachable_stream_ports.sort_unstable();
+    Ok(RuntimeHostSupervisorObservation {
+        unit: SUPERVISOR_UNIT_NAME.to_string(),
+        manifests,
+        load_state: systemd.load_state,
+        unit_file_state: systemd.unit_file_state,
+        active_state: systemd.active_state,
+        sub_state: systemd.sub_state,
+        result: systemd.result,
+        restart_count: systemd.restart_count,
+        main_pid: systemd.main_pid,
+        executable_matches,
+        reachable_stream_ports,
+    })
+}
+
+pub(crate) fn start_runtime_host_supervisor_once() -> Result<(), String> {
+    let observation = runtime_host_supervisor_observation()?;
+    if observation.active_state == "active" && observation.main_pid.is_some() {
+        return Ok(());
+    }
+    if observation.result == "start-limit-hit" {
+        run_systemctl(&["--user", "reset-failed", SUPERVISOR_UNIT_NAME])?;
+    }
+    run_systemctl(&["--user", "start", SUPERVISOR_UNIT_NAME])
 }
 
 fn install_supervisor(
@@ -1006,6 +1191,7 @@ fn observe_systemd_unit(session: &str) -> Result<SystemdUnitObservation, String>
         "show",
         &unit,
         "--property=LoadState",
+        "--property=UnitFileState",
         "--property=ActiveState",
         "--property=SubState",
         "--property=Result",
@@ -1021,6 +1207,7 @@ fn observe_systemd_unit(session: &str) -> Result<SystemdUnitObservation, String>
     let values = parse_systemd_properties(&String::from_utf8_lossy(&output.stdout));
     Ok(SystemdUnitObservation {
         load_state: values.get("LoadState").cloned().unwrap_or_default(),
+        unit_file_state: values.get("UnitFileState").cloned().unwrap_or_default(),
         active_state: values.get("ActiveState").cloned().unwrap_or_default(),
         sub_state: values.get("SubState").cloned().unwrap_or_default(),
         result: values.get("Result").cloned().unwrap_or_default(),
@@ -1344,6 +1531,7 @@ mod tests {
             Ok(manifest()),
             Ok(SystemdUnitObservation {
                 load_state: "loaded".to_string(),
+                unit_file_state: "enabled".to_string(),
                 active_state: "inactive".to_string(),
                 sub_state: "dead".to_string(),
                 result: "success".to_string(),
@@ -1364,6 +1552,7 @@ mod tests {
             Ok(manifest()),
             Ok(SystemdUnitObservation {
                 load_state: "loaded".to_string(),
+                unit_file_state: "enabled".to_string(),
                 active_state: "inactive".to_string(),
                 sub_state: "dead".to_string(),
                 result: "success".to_string(),
@@ -1387,6 +1576,7 @@ mod tests {
             Ok(manifest()),
             Ok(SystemdUnitObservation {
                 load_state: "loaded".to_string(),
+                unit_file_state: "enabled".to_string(),
                 active_state: "active".to_string(),
                 sub_state: "running".to_string(),
                 result: "success".to_string(),
@@ -1525,6 +1715,7 @@ mod tests {
     fn active_unit() -> SystemdUnitObservation {
         SystemdUnitObservation {
             load_state: "loaded".to_string(),
+            unit_file_state: "enabled".to_string(),
             active_state: "active".to_string(),
             sub_state: "running".to_string(),
             result: "success".to_string(),
@@ -1642,6 +1833,56 @@ mod tests {
         ]
         .map(str::to_string);
         assert!(parse_install_request(&unknown, 0, "messages-v4").is_err());
+    }
+
+    #[test]
+    fn recover_host_is_shared_host_scoped_and_apply_requires_a_plan_digest() {
+        let dry_run = ["session", "supervisor", "recover-host", "--dry-run"].map(str::to_string);
+        assert_eq!(
+            parse_recover_host_request(&dry_run, 0).expect("dry-run request"),
+            RecoverHostRequest::DryRun
+        );
+
+        let apply = [
+            "session",
+            "supervisor",
+            "recover-host",
+            "--apply",
+            "--expected-plan-digest",
+            &"a".repeat(64),
+        ]
+        .map(str::to_string);
+        assert_eq!(
+            parse_recover_host_request(&apply, 0).expect("apply request"),
+            RecoverHostRequest::Apply {
+                expected_plan_digest: "a".repeat(64),
+            }
+        );
+
+        let missing_digest =
+            ["session", "supervisor", "recover-host", "--apply"].map(str::to_string);
+        assert!(parse_recover_host_request(&missing_digest, 0)
+            .unwrap_err()
+            .contains("requires --expected-plan-digest"));
+
+        let resume = [
+            "session",
+            "supervisor",
+            "recover-host",
+            "--resume",
+            "--transaction-id",
+            "runtime-host-takeover-one",
+            "--expected-revision",
+            "7",
+        ]
+        .map(str::to_string);
+        assert_eq!(
+            parse_recover_host_request(&resume, 0).expect("resume request"),
+            RecoverHostRequest::Resume {
+                transaction_id: "runtime-host-takeover-one".to_string(),
+                expected_revision: 7,
+            }
+        );
     }
 
     #[test]
