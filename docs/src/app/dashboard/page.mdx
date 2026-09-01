@@ -18,8 +18,8 @@ All sessions automatically stream to the dashboard. No extra flags are needed.
 ## Development dashboard
 
 Experimental workstation builds have a separate runtime at
-<code>http://127.0.0.1:4948</code>. Run <code>pnpm build:dashboard</code>, build
-the Rust candidate through <code>scripts/ci/cargo-safe.sh</code>, then run
+<code>http://127.0.0.1:4948</code>. Run <code>pnpm build:dashboard</code>, then
+<code>pnpm build:development-candidate</code>, then run
 <code>pnpm development-runtime:install</code>. The installer stages an immutable
 development generation and activates only the
 <code>agent-browser-dev-&#42;.service</code> user units. It does not replace or
@@ -36,6 +36,16 @@ Production <code>agent-browser install doctor</code> scopes its daemon census to
 the exact production socket path. The sibling <code>agent-browser-dev</code>
 namespace is excluded from production runtime-host and executable-generation
 multiplicity.
+
+The development candidate uses the optimized Cargo <code>ci</code> profile at
+<code>cli/target/ci/agent-browser</code>. Reserve
+<code>pnpm build:native</code> for the final production or release gate. The
+resource-aware Cargo wrapper defaults to eight jobs and automatically uses
+<code>sccache</code> and <code>mold</code> when installed. Set
+<code>AGENT_BROWSER_CARGO_CACHE=off</code> or
+<code>AGENT_BROWSER_CARGO_FAST_LINKER=off</code> to disable either accelerator
+for one command. <code>pnpm benchmark:cargo-build-jobs</code> reruns the isolated
+4/6/8-job comparison without cleaning the shared target directory.
 
 Use <code>pnpm development-runtime:status</code> for a readback and
 <code>pnpm development-runtime:doctor</code> for the acceptance checks. The

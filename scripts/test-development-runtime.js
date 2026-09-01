@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   assertProductionUnchanged,
+  developmentCandidateBinary,
   developmentRuntimeDescriptor,
   evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
@@ -46,6 +47,11 @@ const env = {
 };
 
 try {
+  assert.equal(
+    developmentCandidateBinary('/repo'),
+    '/repo/cli/target/ci/agent-browser',
+    'development publication must default to the optimized CI-profile artifact',
+  );
   assert.deepEqual(
     evaluateProtectedLeaseAuthorityStatus({
       unit: {
@@ -292,6 +298,24 @@ try {
   });
   assert.match(developmentHelp, /provider-scale-out --apply/);
   assert.match(developmentHelp, /provider-scale-in --apply/);
+  const packageScripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
+  assert.match(
+    packageScripts['build:development-candidate'],
+    /cargo-safe\.sh build --profile ci --manifest-path cli\/Cargo\.toml/,
+  );
+  assert.match(packageScripts['build:native'], /cargo-safe\.sh build --release/);
+  assert.doesNotMatch(packageScripts['build:development-candidate'], /--release/);
+  for (const documentationPath of [
+    'README.md',
+    'AGENTS.md',
+    'skills/agent-browser/SKILL.md',
+    'docs/src/app/dashboard/page.mdx',
+  ]) {
+    const documentation = readFileSync(documentationPath, 'utf8');
+    assert.match(documentation, /pnpm build:development-candidate/);
+    assert.match(documentation, /AGENT_BROWSER_CARGO_CACHE=off/);
+    assert.match(documentation, /AGENT_BROWSER_CARGO_FAST_LINKER=off/);
+  }
   console.log('Development runtime fixture passed');
 } finally {
   rmSync(fixture, { recursive: true, force: true });

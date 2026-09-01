@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { resolve } from 'node:path';
 import {
   assertProductionUnchanged,
+  developmentCandidateBinary,
   developmentRuntimeStatus,
   doctorDevelopmentRuntime,
   garbageCollectDevelopmentRuntime,
@@ -36,7 +36,7 @@ const json = removeFlag(args, '--json');
 try {
   let result;
   if (command === 'install') {
-    const binary = takeOption(args, '--binary') || resolve('cli/target/release/agent-browser');
+    const binary = takeOption(args, '--binary') || developmentCandidateBinary();
     const activate = !removeFlag(args, '--no-activate');
     rejectArgs(args);
     result = installDevelopmentRuntime({ binary, activate });
