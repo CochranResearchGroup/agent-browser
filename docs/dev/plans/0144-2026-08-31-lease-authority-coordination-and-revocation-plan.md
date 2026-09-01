@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_protected_domain_owner_history_source_accepted_custody_in_progress`
+Execution state: `slice_g_crash_durable_authority_publication_source_accepted_custody_in_progress`
 
 Lane: P144
 
@@ -538,6 +538,18 @@ Every active claim contains at least:
     audit surface only. A mutation whose required audit append cannot become
     durable fails before effect as a typed audit-durability outage, while
     existing current authority remains readable without interpreting history.
+98. Every durable authority publication is a compare-and-swap against the
+    exact previously selected content-bound generation, not merely a valid
+    snapshot with a plausible epoch or collection revision. A stale writer,
+    restored kernel, or delayed mutation cannot repoint the selector to an
+    older or divergent but individually valid generation. The mismatch has
+    zero selector effect and requires a fresh load before retry.
+99. Operational read capability and mutation publication capability are
+    distinct. A read may load current authority without parsing history, but
+    that object cannot publish. A mutation load binds protected state and the
+    required audit history to the exact same selected generation before it
+    can mutate or publish. History failure therefore blocks new mutation
+    without truncating prior audit evidence or blocking current reads.
 
 ## Claim Modes
 
@@ -783,6 +795,8 @@ runtime receipts all satisfy the acceptance matrix.
 | rotation crashes with temporary, staged, or retired generations present | bounded reconciliation selects only an already committed generation and exposes first-class cleanup without blocking leases |
 | authority storage is on a platform or volume without proven replace, durability, ACL, or lock semantics | installation or mutation fails with a typed unsupported-storage outcome before authority can diverge |
 | long-lived executor retains verifier epoch N while the authority selects N+1 | it securely refreshes or is removed from routing within the declared deadline; no false lease conflict or global readiness denial is emitted |
+| stale writer publishes an older valid protected snapshot | selector compare-and-swap rejects it with zero effect and the current generation remains selected |
+| read-only authority snapshot is mutated and republished without loading history | publication is structurally unavailable; mutation must bind the exact selected history generation first |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -941,10 +955,37 @@ the kernel reaches its no-history decision. Invariant 97 therefore separates
 non-authoritative event, lifecycle, warning, and compatibility history from the
 operational state load path. Required audit appends remain transactionally
 coupled to new mutations, but reading or authorizing already-current work does
-not parse history. The in-progress private owner registry now excludes runtime
-lifecycle and terminal history by construction. The canonical lease event log
-is still embedded in `LeaseAuthorityState`, so the broader invariant remains
-open and the candidate remains noninstallable.
+not parse history. The private store now serializes the canonical lease event
+log through a separate history file and manifest; operational load never opens
+them. Public service wiring and protected custody remain open, so the candidate
+remains noninstallable.
+
+A ninth recurrence pass exercised the durable publication protocol and found
+that serialization alone did not prevent a stale writer from selecting an
+older, internally valid protected snapshot. Load-time epoch checks cannot
+close a rollback path created by the publisher itself. Invariant 98 therefore
+binds every publication to the exact selected predecessor generation. The
+failing stale-publisher regression demonstrated the selector rollback before
+the compare-and-swap was added.
+
+The same pass audited current effect surfaces rather than treating the future
+entrypoint manifest as already enforced. The legacy emergency profile gate,
+route-bound and manual-seeding browser launch, foreign CDP input grants,
+runtime-owner transfer, workstation installation, and dashboard lease actions
+still have compatibility or independent authority paths. The dashboard is an
+advisory client and can never be an enforcement boundary. These are migration
+inventory, not accepted exceptions: source acceptance requires each effectful
+sink to consume the sealed kernel intent or become explicitly non-effectful,
+followed by a presubmit manifest that fails when a new sink lacks that type.
+
+The publication review found a second capability-boundary defect. Protected
+operational load correctly omitted history, but the resulting kernel could
+still be passed back to publication with an empty event vector. That could
+truncate retained audit evidence in a later generation. Invariant 99 makes
+read-only load non-publishable and adds an exact-generation mutation load that
+must validate history before changing authority. This preserves history's
+nonblocking read semantics without weakening required audit durability for new
+mutations.
 
 ## Validation Contract
 
@@ -1348,7 +1389,7 @@ load only the separate public verification-key file. Private and public key
 publication syncs file contents and the containing directory before authority
 is returned, and verification cannot bootstrap a missing authority root.
 
-Current evidence:
+Current evidence at the protected-registry checkpoint:
 
 - generated service-client contracts and observability helper tests pass;
 - dashboard profile-lease tests and dashboard TypeScript pass;
@@ -1456,3 +1497,44 @@ stable-supervisor custody, an independently durable external epoch source,
 transactional operational-state and history publication, typed effect and
 terminal operations, public administrator bootstrap and rotation, or installed
 acceptance. The candidate remains noninstallable.
+
+## Slice G Crash-Durable Authority Publication Checkpoint | 2026-08-31
+
+State transition: `slice_g_protected_authority_protocol_resource_registry_in_progress`
+to `slice_g_crash_durable_authority_publication_source_accepted_custody_in_progress`.
+
+The private authority store now publishes immutable, content-bound
+generations. Protected operational state and non-authoritative history have
+separate manifests and digests. Files and generation directories become
+durable before one atomic selected-generation pointer changes. Operational
+load validates only the protected generation, so corrupt history degrades the
+audit read without making current authority unavailable. Corrupt selected
+authority fails closed and never falls back to an older generation.
+
+Publication fault injection covers protected-state write, history write,
+manifest write, and final generation publication. Every interruption leaves
+the prior generation selected. Publication also compares the kernel's exact
+loaded predecessor generation with the current selector. A stale writer
+cannot reselect an older valid snapshot even when its domain and external
+epoch remain valid.
+
+Evidence:
+
+- Red: a stale loaded kernel successfully repointed the selector to its older
+  valid generation.
+- Green: the same publication returns
+  `lease_authority_protocol_store_stale_publication`; the newer resource state
+  remains selected.
+- All 17 focused protected-protocol tests pass, including four publication
+  interruption boundaries, history-only degradation, corrupt-authority
+  no-fallback, stale-publisher compare-and-swap, and read-versus-mutation
+  history binding.
+- Wrapper Rust formatting and strict Clippy pass.
+
+This remains private source acceptance, not operating-system custody or an
+installable authority service. Protected supervisor ownership, authenticated
+IPC, an independently durable external epoch, bounded orphan-generation
+reconciliation, platform filesystem qualification, transactional wiring of
+every kernel mutation, public administrator bootstrap and rotation, concrete
+effect-sink migration, mixed-version migration, and installed acceptance
+remain open. No production install is authorized at this checkpoint.
