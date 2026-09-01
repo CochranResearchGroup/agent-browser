@@ -546,10 +546,14 @@ Every active claim contains at least:
     zero selector effect and requires a fresh load before retry.
 99. Operational read capability and mutation publication capability are
     distinct. A read may load current authority without parsing history, but
-    that object cannot publish. A mutation load binds protected state and the
-    required audit history to the exact same selected generation before it
-    can mutate or publish. History failure therefore blocks new mutation
-    without truncating prior audit evidence or blocking current reads.
+    that object cannot publish. A mutation load binds protected state to the
+    exact selected generation and publishes the new minimum authority journal
+    record with the state change. It does not deserialize or require the
+    availability of prior narrative history. Prior history bytes are retained
+    or referenced immutably, and archival history may degrade without blocking
+    a new ordinary lease operation. Only failure to durably commit the current
+    authority mutation, its fence, receipt, and minimum audit record can stop
+    the mutation.
 100. A service-identity proof is accepted only when its signed endpoint and
     executable identities equal evidence observed locally from the exact
     connected transport. On Linux, the client binds that evidence to kernel
@@ -557,6 +561,53 @@ Every active claim contains at least:
     root and group ownership plus mode, the root-owned non-writable executable
     digest, and the root-only state root. A valid signature for a different or
     replaced endpoint is invalid for the current connection.
+101. A signed authorization is not offline proof that a claim is still
+    current. Every effect consumes a single-use kernel intent against the
+    current claim, fence, capability revision, parent authority, and
+    revocation state. Offline signature verification may authenticate the
+    issuer and immutable request fields, but cannot bypass this current-state
+    consume. Expiry or revocation that wins the serialization order fences the
+    effect before its sink.
+102. Raw profile and administrator capabilities have an explicit client
+    custody and delegation contract. A mode `0600` file readable by every
+    same-user candidate process is not sufficient when same-user candidates
+    are outside the authority boundary. Capability use is bound to an enrolled
+    workload or broker identity, is narrowly delegated by action and resource,
+    and has supported rotation and loss recovery without exposing a wildcard
+    signing or mutation oracle.
+103. Canonical authority and user-scoped Service State are not a distributed
+    dual-write transaction. Authority receipts are the source for idempotent,
+    revision-checked projection into jobs, sessions, browsers, lifecycle rows,
+    and dashboards. Projection failure cannot roll back authority, create a
+    second claim, or turn missing projection state into a denial; replay from
+    the receipt converges the projection. Every supported concurrent runtime
+    host uses the same serialized Service State mutation protocol during the
+    migration window.
+104. Compatibility is defined per action and resource hierarchy, not inferred
+    from profile-level exclusivity or a shared principal string. The policy
+    matrix states which profile, browser, session, tab, viewer, controller,
+    route, installer, and input operations may coexist. An ordinary client
+    receives only the shortest-lived child authority needed for its operation;
+    an idle parent supervisor is not a reason to deny compatible work.
+105. A fresh physical collision denial has a supported bounded resolution,
+    not only a better error label. Exact process adoption, wait, owner-assisted
+    close, administrator-fenced termination, stale-lock cleanup, or quarantine
+    is selected from boot, process-start, executable, resource, and lock-owner
+    evidence. If none is safe, the product reports a physical-safety outage
+    with a deadline and inspection locator rather than inventing a lease
+    holder or promising automatic recovery.
+106. The protected supervisor is singleton, least-privilege, and
+    resource-bounded. Socket activation, peer authentication, frame size,
+    request rate, in-flight work, secret lifetime, and parser failure are
+    bounded before expensive work. A malformed or flooding group member cannot
+    starve expiry, revocation, deadline reconciliation, or administrator
+    recovery, and the root process never performs browser or provider effects.
+107. External epoch and cross-host resource exclusion name a concrete trusted
+    coordinator and failure contract before installation. A second host with
+    a valid root service and a restored local store cannot authorize the same
+    physical profile during partition. When exclusive registration cannot be
+    proven current, the outcome is a physical-resource quarantine or explicit
+    isolated profile, never two local authorities or an invented remote owner.
 
 ## Claim Modes
 
@@ -803,8 +854,15 @@ runtime receipts all satisfy the acceptance matrix.
 | authority storage is on a platform or volume without proven replace, durability, ACL, or lock semantics | installation or mutation fails with a typed unsupported-storage outcome before authority can diverge |
 | long-lived executor retains verifier epoch N while the authority selects N+1 | it securely refreshes or is removed from routing within the declared deadline; no false lease conflict or global readiness denial is emitted |
 | stale writer publishes an older valid protected snapshot | selector compare-and-swap rejects it with zero effect and the current generation remains selected |
-| read-only authority snapshot is mutated and republished without loading history | publication is structurally unavailable; mutation must bind the exact selected history generation first |
+| read-only authority snapshot is mutated and republished | publication is structurally unavailable; mutation must bind the exact selected authority generation and durably add its own minimum audit fact without parsing prior narrative history |
 | same-user process creates a compatible authority socket or replays a valid proof from another socket | local peer, socket, executable, and signed endpoint identities disagree; no authority response is accepted |
+| holder authorization is signed and then the claim is revoked before the effect | the current-state intent consume loses to revocation and the effect sink receives no usable permit |
+| same-user candidate reads another client's capability file | file possession alone is not an enrolled workload identity and grants no authority outside an explicit narrow delegation |
+| authority commit succeeds but Service State projection loses a revision race | the authority receipt remains canonical and idempotent projection replay converges without a second claim or false denial |
+| two compatible tab operations share one profile | the action compatibility matrix grants attributable child authority without a profile-level self-conflict |
+| logical claim expires while the exact Chrome process still owns the profile lock | logical authority no longer blocks; fresh physical evidence selects bounded adoption, close, wait, cleanup, or quarantine recourse |
+| authenticated group member floods or malforms authority IPC | bounded parsing and admission preserve expiry, revocation, reconciliation, and administrator capacity |
+| two root authority services on partitioned hosts address one shared profile | the external coordinator admits one domain or quarantines the resource; local root custody alone cannot authorize it |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -990,10 +1048,39 @@ The publication review found a second capability-boundary defect. Protected
 operational load correctly omitted history, but the resulting kernel could
 still be passed back to publication with an empty event vector. That could
 truncate retained audit evidence in a later generation. Invariant 99 makes
-read-only load non-publishable and adds an exact-generation mutation load that
-must validate history before changing authority. This preserves history's
-nonblocking read semantics without weakening required audit durability for new
-mutations.
+read-only load non-publishable. The original follow-on implementation made a
+mutation parse and validate all selected history before changing authority.
+The tenth recurrence pass below rejects that coupling: a new mutation must
+durably publish its own minimum audit fact, but corrupt or unavailable prior
+narrative history cannot become a new ordinary-work gate.
+
+A tenth recurrence pass included the later Plan 0146 shared-Service-State
+writer failure and treated the protected authority service as an adversarial
+and unavailable dependency rather than merely a trusted implementation detail.
+It found seven remaining design gaps. First, a signed bearer verified offline
+cannot prove that its claim was not revoked after issuance, so effect authority
+must be a single-use current-state intent consume. Second, protecting signer
+and authority files from a same-user candidate is incomplete if that candidate
+can read another client's raw capability file. Third, authority state and
+user-scoped Service State cannot be maintained as an implicit dual write; the
+authority receipt must drive idempotent projection, including while selected
+and fallback runtime hosts coexist. Fourth, access compatibility needs a
+complete action-by-resource matrix or a new centralized kernel can still
+overblock at profile granularity. Fifth, logical expiry alone does not restore
+usability when a real orphan process or lock remains, so every fresh physical
+collision needs bounded first-class recourse. Sixth, the root IPC service needs
+singleton, parser, rate, and resource limits so an authenticated defective
+client cannot starve recovery. Seventh, local root custody is not cross-host
+exclusion; the external epoch and resource coordinator must be concrete before
+shared or restored profiles can be enabled.
+
+Invariants 101 through 107 and their acceptance rows close these gaps in the
+design. They are not implemented. In particular, the current mutation-load
+implementation still binds the complete selected history generation, the
+current bearer is not a single-use online consume, profile capabilities remain
+same-user files, and Plan 0146 has not yet been reconciled into this branch.
+The candidate therefore remains noninstallable and cannot yet claim structural
+recurrence resistance.
 
 ## Validation Contract
 
