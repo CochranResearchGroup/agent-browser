@@ -12,6 +12,8 @@ Target: `main`
 
 Source baseline: `31a1ea9cda1fd42bbc09ac21251040123663d61d`
 
+Design checkpoint: `360fbd6daccdef6ff43ceaac20e64b8b119738d0`
+
 Depends on: P147 Runtime Host Ingress Supervisor Restart Repair
 
 Integration model: merge after P147 remains present on `main`; reconcile any

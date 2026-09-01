@@ -40,8 +40,8 @@ lanes:
     target: main
     plan_state: PLANNED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 31a1ea9cda1fd42bbc09ac21251040123663d61d
-    remote_ref: null
+    checkpoint: 360fbd6daccdef6ff43ceaac20e64b8b119738d0
+    remote_ref: refs/remotes/origin/plan/runtime-host-supervisor-takeover
     integration_receipt: null
     integration: merge
     dependencies: [plan/runtime-ingress-same-generation-adoption]
