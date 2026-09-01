@@ -678,8 +678,13 @@ fn listener_ports_for_pid(pid: u32) -> Result<BTreeSet<u16>, String> {
         .map_err(|error| format!("runtime_host_listener_fd_observation_failed:{error}"))?
     {
         let entry = entry.map_err(|error| format!("runtime_host_listener_fd_invalid:{error}"))?;
-        let target = fs::read_link(entry.path())
-            .map_err(|error| format!("runtime_host_listener_fd_target_failed:{error}"))?;
+        let target = match fs::read_link(entry.path()) {
+            Ok(target) => target,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!("runtime_host_listener_fd_target_failed:{error}"));
+            }
+        };
         let target = target.to_string_lossy();
         if let Some(inode) = target
             .strip_prefix("socket:[")
