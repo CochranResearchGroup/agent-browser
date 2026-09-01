@@ -33,6 +33,15 @@ const PROTECTED_LEASE_AUTHORITY_SOCKET_PATH = '/run/agent-browser/lease-authorit
 const PROTECTED_LEASE_AUTHORITY_OPERATOR_GROUP = 'agent-browser';
 
 /**
+ * Returns the optimized, release-compatible artifact used for ordinary
+ * development publication. Full-LTO release artifacts are reserved for the
+ * final production installation gate.
+ */
+export function developmentCandidateBinary(repoRoot = process.cwd()) {
+  return resolve(repoRoot, 'cli', 'target', 'ci', 'agent-browser');
+}
+
+/**
  * Evaluates the shared root-owned authority endpoint without treating retained
  * lease records, browser history, or a per-lane process as live authority.
  */

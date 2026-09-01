@@ -66,7 +66,7 @@ production:
 
 ```bash
 pnpm build:dashboard
-scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml
+pnpm build:development-candidate
 pnpm development-runtime:install
 pnpm development-runtime:doctor
 pnpm development-runtime:provider-plan
@@ -81,6 +81,15 @@ pnpm development-runtime:skill-status
 pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
+
+The development candidate uses the optimized Cargo `ci` profile and publishes
+`cli/target/ci/agent-browser`. Reserve `pnpm build:native`, with full LTO and
+one codegen unit, for the final production or release gate. The Cargo wrapper
+defaults to eight jobs and automatically uses `sccache` and `mold` when they
+are installed. Set `AGENT_BROWSER_CARGO_CACHE=off` or
+`AGENT_BROWSER_CARGO_FAST_LINKER=off` for a deterministic one-command opt-out.
+Run `pnpm benchmark:cargo-build-jobs` to repeat the isolated 4/6/8-job
+comparison without deleting or reusing the shared Cargo target directory.
 
 The development doctor also requires the shared root-owned
 `agent-browser-lease-authority.socket` to be loaded, enabled, active, owned by

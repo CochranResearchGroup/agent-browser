@@ -10,7 +10,7 @@ runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
 admission_dir="${AGENT_BROWSER_CARGO_ADMISSION_DIR:-${runtime_dir}/agent-browser-cargo-${UID}}"
 claims_dir="${admission_dir}/claims"
 admission_lock="${admission_dir}/admission.lock"
-build_jobs="${AGENT_BROWSER_CARGO_BUILD_JOBS:-4}"
+build_jobs="${AGENT_BROWSER_CARGO_BUILD_JOBS:-8}"
 max_concurrent="${AGENT_BROWSER_CARGO_MAX_CONCURRENT:-2}"
 memory_reserve_kib="${AGENT_BROWSER_CARGO_MEMORY_RESERVE_KIB:-16777216}"
 memory_claim_kib="${AGENT_BROWSER_CARGO_MEMORY_CLAIM_KIB:-14680064}"
@@ -21,6 +21,8 @@ meminfo_file="${AGENT_BROWSER_CARGO_MEMINFO_FILE:-/proc/meminfo}"
 probe_only="${AGENT_BROWSER_CARGO_CAPACITY_PROBE_ONLY:-0}"
 probe_hold_seconds="${AGENT_BROWSER_CARGO_CAPACITY_HOLD_SECONDS:-0}"
 no_wait="${AGENT_BROWSER_CARGO_ADMISSION_NO_WAIT:-0}"
+cargo_cache_mode="${AGENT_BROWSER_CARGO_CACHE:-auto}"
+fast_linker_mode="${AGENT_BROWSER_CARGO_FAST_LINKER:-auto}"
 
 for numeric in "$build_jobs" "$max_concurrent" "$memory_reserve_kib" "$memory_claim_kib" "$minimum_swap_free_kib" "$minimum_disk_free_kib"; do
   if [[ ! "$numeric" =~ ^[0-9]+$ ]]; then
@@ -31,6 +33,80 @@ done
 if (( build_jobs == 0 || max_concurrent == 0 || memory_claim_kib == 0 )); then
   echo "Cargo jobs, maximum concurrency, and memory claim must be greater than zero" >&2
   exit 2
+fi
+
+case "$cargo_cache_mode" in
+  auto|off|required) ;;
+  *)
+    echo "AGENT_BROWSER_CARGO_CACHE must be auto, off, or required" >&2
+    exit 2
+    ;;
+esac
+case "$fast_linker_mode" in
+  auto|off|required) ;;
+  *)
+    echo "AGENT_BROWSER_CARGO_FAST_LINKER must be auto, off, or required" >&2
+    exit 2
+    ;;
+esac
+
+cargo_cache="none"
+cargo_cache_path=""
+if [[ "$cargo_cache_mode" != "off" ]]; then
+  cargo_cache_path="$(command -v sccache 2>/dev/null || true)"
+  if [[ -n "$cargo_cache_path" ]]; then
+    cargo_cache="sccache"
+  elif [[ "$cargo_cache_mode" == "required" ]]; then
+    echo "Cargo acceleration unavailable: sccache is required but was not found" >&2
+    exit 78
+  fi
+fi
+
+native_linux_target=0
+if [[ "$(uname -s 2>/dev/null || true)" == "Linux" ]]; then
+  native_linux_target=1
+  next_is_target=0
+  for cargo_argument in "$@"; do
+    if (( next_is_target == 1 )); then
+      [[ "$cargo_argument" == *linux* ]] || native_linux_target=0
+      next_is_target=0
+      continue
+    fi
+    case "$cargo_argument" in
+      --target) next_is_target=1 ;;
+      --target=*)
+        target_triple="${cargo_argument#--target=}"
+        [[ "$target_triple" == *linux* ]] || native_linux_target=0
+        ;;
+    esac
+  done
+fi
+
+fast_linker="none"
+if [[ "$fast_linker_mode" != "off" && "$native_linux_target" == "1" ]]; then
+  if command -v mold >/dev/null 2>&1; then
+    fast_linker="mold"
+  elif command -v ld.lld >/dev/null 2>&1; then
+    fast_linker="lld"
+  elif [[ "$fast_linker_mode" == "required" ]]; then
+    echo "Cargo acceleration unavailable: mold or lld is required but neither was found" >&2
+    exit 78
+  fi
+elif [[ "$fast_linker_mode" == "required" ]]; then
+  echo "Cargo acceleration unavailable: a fast linker is required for a non-native Linux target" >&2
+  exit 78
+fi
+
+cargo_environment=(env "CARGO_BUILD_JOBS=$build_jobs")
+if [[ "$cargo_cache" == "sccache" ]]; then
+  cargo_environment+=("RUSTC_WRAPPER=$cargo_cache_path")
+fi
+if [[ "$fast_linker" != "none" ]]; then
+  linker_flags="-C link-arg=-fuse-ld=$fast_linker"
+  if [[ -n "${RUSTFLAGS:-}" ]]; then
+    linker_flags="${RUSTFLAGS} ${linker_flags}"
+  fi
+  cargo_environment+=("RUSTFLAGS=$linker_flags")
 fi
 
 mkdir -p "$claims_dir"
@@ -166,7 +242,8 @@ while [[ -z "$claim_path" ]]; do
 done
 
 if [[ "$probe_only" == "1" ]]; then
-  printf '{"admitted":true,"pid":%s,"jobs":%s,"maxConcurrent":%s}\n' "$$" "$build_jobs" "$max_concurrent"
+  printf '{"admitted":true,"pid":%s,"jobs":%s,"maxConcurrent":%s,"acceleration":{"cache":"%s","linker":"%s"}}\n' \
+    "$$" "$build_jobs" "$max_concurrent" "$cargo_cache" "$fast_linker"
   sleep "$probe_hold_seconds"
   exit 0
 fi
@@ -189,13 +266,13 @@ if [[ "${AGENT_BROWSER_CARGO_FORCE_WSL:-0}" == "1" || "$kernel_release" == *micr
     if [[ "${AGENT_BROWSER_CARGO_ALLOW_UNCAPPED:-0}" != "1" ]]; then
       exit 78
     fi
-    env CARGO_BUILD_JOBS="$build_jobs" cargo "$@"
+    "${cargo_environment[@]}" cargo "$@"
     exit $?
   fi
 
   systemctl --user set-property --runtime "$cargo_slice" "MemoryHigh=$aggregate_memory_high" "MemoryMax=$aggregate_memory_max" "MemorySwapMax=$aggregate_swap_max" "TasksMax=$aggregate_tasks_max" >/dev/null
 
-  echo "Running admitted Cargo in a WSL cgroup: jobs=$build_jobs active_capacity=$max_concurrent MemoryHigh=$memory_high MemoryMax=$memory_max aggregate_slice=$cargo_slice" >&2
+  echo "Running admitted Cargo in a WSL cgroup: jobs=$build_jobs active_capacity=$max_concurrent MemoryHigh=$memory_high MemoryMax=$memory_max aggregate_slice=$cargo_slice cache=$cargo_cache linker=$fast_linker" >&2
   systemd-run \
     --user \
     --scope \
@@ -205,8 +282,9 @@ if [[ "${AGENT_BROWSER_CARGO_FORCE_WSL:-0}" == "1" || "$kernel_release" == *micr
     --property="MemoryMax=$memory_max" \
     --property="MemorySwapMax=$swap_max" \
     --property="TasksMax=$tasks_max" \
-    env CARGO_BUILD_JOBS="$build_jobs" cargo "$@"
+    "${cargo_environment[@]}" cargo "$@"
   exit $?
 fi
 
-env CARGO_BUILD_JOBS="$build_jobs" cargo "$@"
+echo "Running admitted Cargo: jobs=$build_jobs active_capacity=$max_concurrent cache=$cargo_cache linker=$fast_linker" >&2
+"${cargo_environment[@]}" cargo "$@"

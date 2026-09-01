@@ -956,8 +956,8 @@ because it terminates an owned browser. The local publisher inventories active
 named supervisors and performs this transaction automatically.
 
 Repository feature development uses the isolated `agent-browser-dev` runtime
-instead of publishing candidates into production. Build the dashboard, build
-the Rust binary through `scripts/ci/cargo-safe.sh`, and run
+instead of publishing candidates into production. Build the dashboard, run
+`pnpm build:development-candidate`, and run
 `pnpm development-runtime:install`. Verify it with
 `pnpm development-runtime:doctor`. The development installation has its own
 executable, immutable generation store, pseudo-home, socket directory, auth
@@ -1043,7 +1043,10 @@ Never apply a candidate merely because a global Xvfb, Chrome, or Agent Browser
 process is absent from development Service State.
 
 The repository Cargo wrapper admits at most two bounded builds by default, with
-four Cargo jobs per build and aggregate cgroup limits on WSL. Admission is based
+eight Cargo jobs per build and aggregate cgroup limits on WSL. It automatically
+uses `sccache` and `mold` when installed. Use
+`AGENT_BROWSER_CARGO_CACHE=off` or `AGENT_BROWSER_CARGO_FAST_LINKER=off` for a
+bounded opt-out. Admission is based
 on current memory, swap, CPU, disk, and live claims, so pressure may temporarily
 reduce concurrency to one. Do not bypass the wrapper or interpret pressure
 throttling as a global serialization requirement.

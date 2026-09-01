@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -44,6 +44,28 @@ function probe({ hold = 0, noWait = false, overrides = {} } = {}) {
     child.on('close', (status) => completionResolve({ status, stdout, stderr }));
   });
   return { child, completed };
+}
+
+function executeCargo({ overrides = {} } = {}) {
+  return new Promise((completionResolve) => {
+    const child = spawn(wrapper, ['check'], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        AGENT_BROWSER_CARGO_ADMISSION_DIR: admissionDir,
+        AGENT_BROWSER_CARGO_MEMINFO_FILE: meminfo,
+        AGENT_BROWSER_CARGO_DISK_AVAILABLE_KIB: String(1024 * 1024 * 1024),
+        AGENT_BROWSER_CARGO_CPU_COUNT: '20',
+        ...overrides,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => completionResolve({ status, stdout, stderr }));
+  });
 }
 
 async function waitForClaimCount(expected) {
@@ -101,6 +123,48 @@ try {
   const stale = await probe({ noWait: true }).completed;
   assert.equal(stale.status, 0, stale.stderr);
   assert.equal(JSON.parse(stale.stdout).admitted, true);
+
+  const accelerationBin = join(fixtureRoot, 'acceleration-bin');
+  mkdirSync(accelerationBin);
+  for (const tool of ['sccache', 'mold']) {
+    const toolPath = join(accelerationBin, tool);
+    writeFileSync(toolPath, '#!/bin/sh\nexit 0\n');
+    chmodSync(toolPath, 0o755);
+  }
+  const accelerated = await probe({
+    noWait: true,
+    overrides: { PATH: `${accelerationBin}:${process.env.PATH}` },
+  }).completed;
+  assert.equal(accelerated.status, 0, accelerated.stderr);
+  assert.deepEqual(JSON.parse(accelerated.stdout).acceleration, {
+    cache: 'sccache',
+    linker: 'mold',
+  });
+
+  const cargoPath = join(accelerationBin, 'cargo');
+  writeFileSync(cargoPath, '#!/bin/sh\nprintf \'%s|%s|%s\\n\' "$CARGO_BUILD_JOBS" "$RUSTC_WRAPPER" "$RUSTFLAGS"\n');
+  chmodSync(cargoPath, 0o755);
+  const unamePath = join(accelerationBin, 'uname');
+  writeFileSync(unamePath, '#!/bin/sh\nprintf \'Linux\\n\'\n');
+  chmodSync(unamePath, 0o755);
+
+  const executed = await executeCargo({
+    overrides: { PATH: `${accelerationBin}:${process.env.PATH}` },
+  });
+  assert.equal(executed.status, 0, executed.stderr);
+  assert.equal(executed.stdout.trim(), `8|${join(accelerationBin, 'sccache')}|-C link-arg=-fuse-ld=mold`);
+  assert.match(executed.stderr, /cache=sccache linker=mold/);
+
+  const optedOut = await executeCargo({
+    overrides: {
+      PATH: `${accelerationBin}:${process.env.PATH}`,
+      AGENT_BROWSER_CARGO_CACHE: 'off',
+      AGENT_BROWSER_CARGO_FAST_LINKER: 'off',
+    },
+  });
+  assert.equal(optedOut.status, 0, optedOut.stderr);
+  assert.equal(optedOut.stdout.trim(), '8||');
+  assert.match(optedOut.stderr, /cache=none linker=none/);
 
   console.log('Cargo capacity admission tests passed');
 } finally {

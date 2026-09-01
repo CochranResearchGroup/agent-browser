@@ -115,6 +115,10 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 - Use `agent-browser-dev` and the `development-runtime:*` package scripts for
   experimental installed validation. Do not publish experimental binaries into
   production.
+- Build ordinary installed candidates with
+  `pnpm build:development-candidate`. It uses the optimized Cargo `ci` profile
+  at `cli/target/ci/agent-browser`. Reserve `pnpm build:native` and its full
+  release profile for the final production or release gate.
 - The development publisher pins a Linux-compatible browser executable. Set
   `AGENT_BROWSER_DEV_BROWSER_EXECUTABLE` only to an absolute reviewed
   executable before installation.
@@ -185,8 +189,8 @@ On WSL, every Cargo command that can compile code must run through
 Cargo invocations when current memory, swap, CPU, disk, and active claims can
 preserve the configured host reserve. Low free swap is treated as current
 pressure only when available memory cannot also cover the missing swap reserve;
-stale swapped pages alone do not block admission. Each invocation defaults to four Cargo
-jobs and runs in a user-systemd scope with `MemoryHigh=20G`, `MemoryMax=24G`,
+stale swapped pages alone do not block admission. Each invocation defaults to
+eight Cargo jobs and runs in a user-systemd scope with `MemoryHigh=20G`, `MemoryMax=24G`,
 and `MemorySwapMax=4G`; all admitted scopes share an aggregate
 `agent-browser-cargo.slice` capped at `MemoryHigh=28G`, `MemoryMax=32G`, and
 `MemorySwapMax=4G`. It fails closed when the WSL user-systemd manager is
@@ -197,6 +201,12 @@ different bounded parallelism level. Capacity admission holds an exclusive
 lock only while reconciling claims; Cargo does not hold that lock. A third
 invocation waits with a typed pressure reason, and admission automatically
 drops below two when current resources cannot preserve the reserve.
+The wrapper automatically uses `sccache` and `mold` for native Linux builds
+when those exact executables are available. Set `AGENT_BROWSER_CARGO_CACHE=off`
+or `AGENT_BROWSER_CARGO_FAST_LINKER=off` for a deterministic opt-out. Run
+`pnpm benchmark:cargo-build-jobs` for an isolated 4/6/8-job comparison. The
+benchmark uses disposable target directories and never cleans the shared
+target directory.
 
 ### End-to-End Tests
 
