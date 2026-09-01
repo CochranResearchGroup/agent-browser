@@ -1077,9 +1077,14 @@ shared or restored profiles can be enabled.
 Invariants 101 through 107 and their acceptance rows close these gaps in the
 design. They are not implemented. In particular, the current mutation-load
 implementation still binds the complete selected history generation, the
-current bearer is not a single-use online consume, profile capabilities remain
-same-user files, and Plan 0146 has not yet been reconciled into this branch.
-The candidate therefore remains noninstallable and cannot yet claim structural
+current bearer is not a single-use online consume, and profile capabilities
+remain same-user files. Plan 0146 was merged at `b9d6d0ae`; the combined branch
+passes strict Clippy, 29 Service Store tests, 25 protected-authority protocol
+tests, the required serial 122-test workstation installer partition, the
+source-free workstation fixture, the service-client suite, and the docs build.
+That merge closes the known shared-Service-State writer race but does not
+implement the authority-to-projection receipt contract in invariant 103. The
+candidate therefore remains noninstallable and cannot yet claim structural
 recurrence resistance.
 
 ## Validation Contract
