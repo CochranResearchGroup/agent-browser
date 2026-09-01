@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 191 | 2026-09-01
+
+Scope: install the P152 companion repairs, execute the single authorized
+Last30days acceptance tick, and reconcile its remaining browser-acquisition
+failure against the public planner and executor seams.
+
+Actions:
+
+- installed Agent Browser generation `0.28.0-390ee922ae7b-e2f4b5e5d874`
+  and Last30days service 0.3.93 with schema 17;
+- executed the one authorized X and LinkedIn acceptance tick; both providers
+  reached all three configured attempts and released every resource lease;
+- proved Last30days copied the planner's fresh `terminal-profile-*` session but
+  supplied no profile capability to either access planning or execution; and
+- made unauthenticated terminal replacement planning fail closed with
+  `profile_capability_required` before daemon relay.
+
+Validation:
+
+- the installed Agent Browser source and binary digests match, doctor succeeds,
+  and runtime state has one current host with zero legacy daemons;
+- Last30days reports service 0.3.93, schema 17, compatible MCP 4.0.4, database
+  quick-check success, and zero active ticks, attempts, or leases;
+- the acceptance tick terminalized `complete_degraded`; X and LinkedIn each
+  persisted retry ordinals zero, one, and two; and
+- all 61 Agent Browser service-access tests, focused Plan 0137 regressions,
+  formatting, and production-target Clippy pass for the truthful-planning fix.
+
+Result:
+
+- the retry-persistence repair is production-proven;
+- the original planner/executor disagreement is repaired in source: an
+  unauthenticated caller is no longer given an executor-inadmissible request;
+- successful Last30days acquisition still requires an operator-authorized,
+  privately stored capability registration and client wiring; and
+- the single authorized acceptance tick is consumed and must not be retried
+  without new authority.
+
 ## Turn 190 | 2026-09-01
 
 Scope: reconcile P152 with P150/P151 and qualify the exact integrated terminal

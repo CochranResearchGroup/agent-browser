@@ -10,11 +10,12 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P152 | Terminal Session Replacement Planner Executor Parity
 
 State: IN PROGRESS
-Current state: source repair is validated on top of integrated P150. Access
-planning now derives a fresh deterministic terminal replacement lane, request
-normalization preserves only that exact planned lane, and daemon admission
-revalidates the current owner, profile, capability, generation, and registry
-revision. No runtime or profile state has been changed by this lane.
+Current state: the terminal replacement and Last30days schema-17 repairs are
+merged and installed. The single acceptance tick proved three-attempt
+persistence for both X and LinkedIn, then exposed that Last30days has no profile
+capability. A follow-up source repair now prevents unauthenticated planning from
+advertising the protected terminal replacement as executable. No credentials,
+profile identity, or authentication authority has been mutated.
 
 ### Plan
 
@@ -22,9 +23,9 @@ revision. No runtime or profile state has been changed by this lane.
 
 ### Next Recommendation
 
-Qualify an isolated development candidate on the integrated P150 base, then
-install and exercise one bounded Last30days acceptance tick after its schema-17
-candidate is installed.
+Merge and install the truthful-planning follow-up. Then obtain explicit
+authority before registering and privately wiring a Last30days profile
+capability; the consumed acceptance tick must not be repeated implicitly.
 
 ## P150 | Automatic Terminal Quarantine Convergence
 
