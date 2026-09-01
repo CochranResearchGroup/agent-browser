@@ -217,7 +217,7 @@ pub async fn run_daemon(session: &str) {
             crate::runtime_host::write_manifest(&socket_dir, generation)
                 .map_err(std::io::Error::other)
         }) {
-            Ok(path) => Some(path),
+            Ok((path, manifest)) => Some((path, manifest)),
             Err(error) => {
                 let _ = writeln!(std::io::stderr(), "Failed to publish runtime host: {error}");
                 #[cfg(unix)]
@@ -274,6 +274,28 @@ pub async fn run_daemon(session: &str) {
             log_startup_milestone(startup_started, "stream-server-failed");
             if strict_stream_port {
                 process::exit(1);
+            }
+        }
+    }
+
+    // Do not move stable ingress merely because the replacement control socket
+    // exists. Publish it only after the host's stream surface is also ready.
+    if let Some((_, manifest)) = runtime_host_manifest_path.as_ref() {
+        let ingress_path =
+            crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path();
+        if ingress_path.is_file() {
+            let repository =
+                crate::runtime_host_ingress::RuntimeHostIngressRepository::new(ingress_path);
+            if let Err(error) = repository.adopt_current_process_replacement(
+                socket_dir.clone(),
+                manifest.executable_generation.clone(),
+                manifest.host_id.clone(),
+                manifest.socket_identity.clone(),
+            ) {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "Runtime host ingress reconciliation deferred: {error}"
+                );
             }
         }
     }
@@ -337,7 +359,7 @@ pub async fn run_daemon(session: &str) {
         let _ = fs::remove_file(socket_dir.join(format!("{}.engine", session)));
         let _ = fs::remove_file(socket_dir.join(format!("{}.provider", session)));
         let _ = fs::remove_file(socket_dir.join(format!("{}.extensions", session)));
-        if let Some(path) = runtime_host_manifest_path.as_deref() {
+        if let Some((path, _)) = runtime_host_manifest_path.as_ref() {
             crate::runtime_host::remove_manifest_if_owned(path);
         }
     }

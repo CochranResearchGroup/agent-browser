@@ -8117,6 +8117,61 @@ fn capture_runtime_host_identity(
     Ok((evidence, backend))
 }
 
+/// Find one exact live replacement beside a dead selected runtime-host socket.
+/// Partial directories are ignored as retained evidence. More than one exact
+/// same-generation process is ambiguous and remains an operator-visible stop.
+fn discover_same_generation_runtime_host_replacement(
+    selected: &crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<
+    Option<(
+        crate::runtime_adoption::RuntimeHostIdentityEvidence,
+        crate::runtime_host_ingress::RuntimeHostBackend,
+    )>,
+    String,
+> {
+    let root = selected
+        .socket_dir
+        .parent()
+        .ok_or_else(|| "runtime_host_ingress_selected_socket_root_missing".to_string())?;
+    let entries = fs::read_dir(root).map_err(display_io("read runtime host socket root", root))?;
+    let mut replacements = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let socket_dir = entry.path();
+        if socket_dir == selected.socket_dir || !socket_dir.is_dir() {
+            continue;
+        }
+        if !socket_dir.join("runtime-host.json").is_file()
+            || !socket_dir.join("runtime-host.identity.json").is_file()
+            || !socket_dir.join("runtime-host.sha256").is_file()
+        {
+            continue;
+        }
+        let Ok((evidence, backend)) = capture_runtime_host_identity(
+            &socket_dir,
+            &selected.generation_id,
+            &selected.binary_sha256,
+            false,
+        ) else {
+            continue;
+        };
+        let exact_process = matches!(
+            crate::process_identity::observe_process(backend.pid),
+            crate::process_identity::ProcessObservation::Observed(observed)
+                if observed.start_token.as_deref() == Some(evidence.process_start_token.as_str())
+        );
+        if exact_process {
+            replacements.push((evidence, backend));
+        }
+    }
+    if replacements.len() > 1 {
+        return Err(format!(
+            "runtime_host_ingress_same_generation_replacement_ambiguous:{}",
+            replacements.len()
+        ));
+    }
+    Ok(replacements.pop())
+}
+
 fn stage_candidate_runtime_host_ingress(
     paths: &InstallPaths,
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
@@ -8319,6 +8374,24 @@ fn capture_selected_runtime_host_before_transfer(
                     true,
                 )?;
                 return Ok(());
+            }
+            Err(error) if selected_host_absent => {
+                let Some((replacement_identity, replacement_backend)) =
+                    discover_same_generation_runtime_host_replacement(&expected_selected)?
+                else {
+                    return Err(error);
+                };
+                repository.adopt_observed_process_replacement(
+                    registry.revision,
+                    &expected_selected,
+                    replacement_backend,
+                    &replacement_identity.process_start_token,
+                )?;
+                return crate::runtime_adoption::record_runtime_host_identity(
+                    transaction,
+                    false,
+                    replacement_identity,
+                );
             }
             Err(error) => return Err(error),
         };
@@ -11949,6 +12022,65 @@ mod tests {
 
         assert_eq!(identity.binary_sha256, binary_sha256);
         assert_eq!(backend.pid, 4100);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn dead_selected_socket_discovers_one_exact_live_same_generation_replacement() {
+        let fixture = env::temp_dir().join(format!(
+            "agent-browser-runtime-host-replacement-discovery-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let selected_dir = fixture.join("selected-dead");
+        let replacement_dir = fixture.join("replacement-live");
+        fs::create_dir_all(&replacement_dir).unwrap();
+        let executable = env::current_exe().unwrap();
+        let binary_sha256 = workstation_bytes_sha256(&fs::read(&executable).unwrap());
+        let identity = crate::process_identity::capture_process_identity(
+            std::process::id(),
+            Some(&executable),
+            None,
+        )
+        .unwrap();
+        fs::write(
+            replacement_dir.join("runtime-host.json"),
+            serde_json::to_vec(&crate::runtime_host::RuntimeHostManifest {
+                schema_version: "agent-browser.runtime-host.v1".to_string(),
+                host_id: format!("runtime-host:{}", identity.pid),
+                pid: identity.pid,
+                executable_generation: binary_sha256.clone(),
+                socket_identity: "unix:fixture-live-replacement".to_string(),
+                authentication_record: "runtime-host.token".to_string(),
+                max_lanes: crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            replacement_dir.join("runtime-host.identity.json"),
+            serde_json::to_vec(&identity).unwrap(),
+        )
+        .unwrap();
+        fs::write(replacement_dir.join("runtime-host.sha256"), &binary_sha256).unwrap();
+        let selected = crate::runtime_host_ingress::RuntimeHostBackend {
+            topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            generation_id: "same-generation".to_string(),
+            socket_dir: selected_dir,
+            binary_sha256,
+            host_id: "runtime-host:dead".to_string(),
+            pid: u32::MAX,
+            socket_identity: "unix:fixture-dead-selected".to_string(),
+        };
+
+        let (observed_identity, observed_backend) =
+            discover_same_generation_runtime_host_replacement(&selected)
+                .unwrap()
+                .expect("one exact replacement should be discoverable");
+
+        assert_eq!(observed_identity.process_start_token, identity.start_token);
+        assert_eq!(observed_backend.socket_dir, replacement_dir);
+        assert_eq!(observed_backend.pid, std::process::id());
         fs::remove_dir_all(fixture).unwrap();
     }
 

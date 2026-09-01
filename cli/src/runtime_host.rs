@@ -147,7 +147,7 @@ pub(crate) struct RuntimeHostManifest {
 pub(crate) fn write_manifest(
     socket_dir: &Path,
     executable_generation: String,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, RuntimeHostManifest), String> {
     let path = socket_dir.join("runtime-host.json");
     let socket_path = socket_dir.join(format!("{RUNTIME_HOST_ENDPOINT_KEY}.sock"));
     let manifest = RuntimeHostManifest {
@@ -169,7 +169,7 @@ pub(crate) fn write_manifest(
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
             .map_err(|error| format!("runtime_host_manifest_permissions_failed: {error}"))?;
     }
-    Ok(path)
+    Ok((path, manifest))
 }
 
 #[cfg(unix)]

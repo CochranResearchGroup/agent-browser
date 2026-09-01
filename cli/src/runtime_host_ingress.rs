@@ -370,6 +370,125 @@ impl RuntimeHostIngressRepository {
         })
     }
 
+    /// Atomically selects the calling runtime host when it is an exact
+    /// same-generation replacement for a selected process proven absent.
+    /// This is the bounded recovery path used by a supervised host restart;
+    /// it never crosses an active upgrade transaction or a binary boundary.
+    pub(crate) fn adopt_current_process_replacement(
+        &self,
+        socket_dir: PathBuf,
+        binary_sha256: String,
+        host_id: String,
+        socket_identity: String,
+    ) -> Result<Option<RuntimeHostIngressRegistry>, String> {
+        let _lock = acquire_lock(&self.path)?;
+        let mut registry = load_registry(&self.path)?;
+        let selected = registry.selected_backend.clone();
+        if registry.active_transaction_id.is_some()
+            || registry.candidate_backend.is_some()
+            || selected.topology != RuntimeHostTopology::SingleHost
+            || selected.binary_sha256 != binary_sha256
+            || selected.pid == std::process::id()
+        {
+            return Ok(None);
+        }
+        registry.require_current_boot_epoch()?;
+        match crate::process_identity::observe_process(selected.pid) {
+            crate::process_identity::ProcessObservation::Missing => {}
+            crate::process_identity::ProcessObservation::Observed(_) => return Ok(None),
+            crate::process_identity::ProcessObservation::Failed { reason } => {
+                return Err(format!(
+                    "runtime_host_ingress_selected_process_observation_failed: {reason}"
+                ))
+            }
+        }
+        let replacement = RuntimeHostBackend {
+            topology: RuntimeHostTopology::SingleHost,
+            generation_id: selected.generation_id,
+            socket_dir,
+            binary_sha256,
+            host_id,
+            pid: std::process::id(),
+            socket_identity,
+        };
+        replacement.validate()?;
+        registry.selected_backend = replacement;
+        registry.boot_epoch = crate::process_identity::current_boot_epoch();
+        registry.selected_transaction_id = None;
+        registry.fallback_backend = None;
+        registry.revision = registry.revision.saturating_add(1);
+        write_registry_atomic(&self.path, &registry)?;
+        Ok(Some(registry))
+    }
+
+    /// CAS-adopt a separately observed replacement during installer preflight.
+    /// The caller supplies the exact selected snapshot and replacement process
+    /// start token captured from the replacement host's own control metadata.
+    pub(crate) fn adopt_observed_process_replacement(
+        &self,
+        expected_revision: u64,
+        expected_selected: &RuntimeHostBackend,
+        replacement: RuntimeHostBackend,
+        replacement_start_token: &str,
+    ) -> Result<RuntimeHostIngressRegistry, String> {
+        let _lock = acquire_lock(&self.path)?;
+        let mut registry = load_registry(&self.path)?;
+        require_revision(&registry, expected_revision)?;
+        if registry.selected_backend() != expected_selected {
+            return Err(
+                "runtime host selected backend changed before replacement adoption".to_string(),
+            );
+        }
+        if registry.active_transaction_id.is_some() || registry.candidate_backend.is_some() {
+            return Err(
+                "runtime host ingress transaction changed before replacement adoption".to_string(),
+            );
+        }
+        registry.require_current_boot_epoch()?;
+        replacement.validate()?;
+        if replacement.topology != RuntimeHostTopology::SingleHost
+            || replacement.generation_id != expected_selected.generation_id
+            || replacement.binary_sha256 != expected_selected.binary_sha256
+            || replacement.pid == expected_selected.pid
+            || replacement_start_token.trim().is_empty()
+        {
+            return Err("runtime host replacement identity changed selected scope".to_string());
+        }
+        match crate::process_identity::observe_process(expected_selected.pid) {
+            crate::process_identity::ProcessObservation::Missing => {}
+            crate::process_identity::ProcessObservation::Observed(_) => {
+                return Err("runtime host selected process remains live".to_string())
+            }
+            crate::process_identity::ProcessObservation::Failed { reason } => {
+                return Err(format!(
+                    "runtime_host_ingress_selected_process_observation_failed: {reason}"
+                ))
+            }
+        }
+        match crate::process_identity::observe_process(replacement.pid) {
+            crate::process_identity::ProcessObservation::Observed(observed)
+                if observed.start_token.as_deref() == Some(replacement_start_token) => {}
+            crate::process_identity::ProcessObservation::Observed(_) => {
+                return Err("runtime host replacement process identity changed".to_string())
+            }
+            crate::process_identity::ProcessObservation::Missing => {
+                return Err("runtime host replacement process is absent".to_string())
+            }
+            crate::process_identity::ProcessObservation::Failed { reason } => {
+                return Err(format!(
+                    "runtime_host_ingress_replacement_process_observation_failed: {reason}"
+                ))
+            }
+        }
+        registry.selected_backend = replacement;
+        registry.boot_epoch = crate::process_identity::current_boot_epoch();
+        registry.selected_transaction_id = None;
+        registry.fallback_backend = None;
+        registry.revision = registry.revision.saturating_add(1);
+        write_registry_atomic(&self.path, &registry)?;
+        Ok(registry)
+    }
+
     fn mutate(
         &self,
         expected_revision: u64,
@@ -677,6 +796,131 @@ mod tests {
             .refresh_selected_backend_identity(refreshed.revision, &replacement, wrong_scope,)
             .unwrap_err()
             .contains("changed selected scope"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dead_selected_backend_can_adopt_current_same_generation_host_on_a_new_socket() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-supervisor-restart-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let selected = backend(&root, "selected", u32::MAX);
+        let initial = repository.initialize(selected.clone()).unwrap();
+        let replacement_socket_dir = root.join("replacement");
+        let replacement_host_id = "host-selected-restarted".to_string();
+        let replacement_socket_identity = "socket-selected-restarted".to_string();
+
+        let adopted = repository
+            .adopt_current_process_replacement(
+                replacement_socket_dir.clone(),
+                selected.binary_sha256.clone(),
+                replacement_host_id.clone(),
+                replacement_socket_identity.clone(),
+            )
+            .unwrap();
+
+        let replacement = RuntimeHostBackend {
+            topology: RuntimeHostTopology::SingleHost,
+            generation_id: selected.generation_id.clone(),
+            socket_dir: replacement_socket_dir,
+            binary_sha256: selected.binary_sha256.clone(),
+            host_id: replacement_host_id,
+            pid: std::process::id(),
+            socket_identity: replacement_socket_identity,
+        };
+
+        assert_eq!(
+            adopted.as_ref().map(|registry| registry.revision),
+            Some(initial.revision + 1)
+        );
+        assert_eq!(
+            adopted
+                .as_ref()
+                .map(RuntimeHostIngressRegistry::selected_backend),
+            Some(&replacement)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn supervised_replacement_adoption_preserves_live_and_transaction_fences() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-supervisor-fences-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let selected = backend(&root, "selected", u32::MAX);
+        let initial = repository.initialize(selected.clone()).unwrap();
+
+        let mismatch = repository
+            .adopt_current_process_replacement(
+                root.join("replacement"),
+                "different-binary".to_string(),
+                "host-replacement".to_string(),
+                "socket-replacement".to_string(),
+            )
+            .unwrap();
+        assert!(mismatch.is_none());
+        assert_eq!(repository.load().unwrap(), initial);
+
+        let staged = repository
+            .stage_candidate(
+                initial.revision,
+                "tx-active",
+                backend(&root, "candidate", 202),
+            )
+            .unwrap();
+        let transaction_blocked = repository
+            .adopt_current_process_replacement(
+                root.join("replacement"),
+                selected.binary_sha256,
+                "host-replacement".to_string(),
+                "socket-replacement".to_string(),
+            )
+            .unwrap();
+        assert!(transaction_blocked.is_none());
+        assert_eq!(repository.load().unwrap(), staged);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn installer_can_cas_adopt_an_exact_observed_same_generation_replacement() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-installer-adoption-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let selected = backend(&root, "selected", u32::MAX);
+        let initial = repository.initialize(selected.clone()).unwrap();
+        let identity = crate::process_identity::capture_process_identity(
+            std::process::id(),
+            std::env::current_exe().ok().as_deref(),
+            None,
+        )
+        .unwrap();
+        let replacement = RuntimeHostBackend {
+            topology: RuntimeHostTopology::SingleHost,
+            generation_id: selected.generation_id.clone(),
+            socket_dir: root.join("replacement"),
+            binary_sha256: selected.binary_sha256.clone(),
+            host_id: "host-selected-restarted".to_string(),
+            pid: identity.pid,
+            socket_identity: "socket-selected-restarted".to_string(),
+        };
+
+        let adopted = repository
+            .adopt_observed_process_replacement(
+                initial.revision,
+                &selected,
+                replacement.clone(),
+                &identity.start_token,
+            )
+            .unwrap();
+
+        assert_eq!(adopted.selected_backend(), &replacement);
+        assert_eq!(adopted.revision, initial.revision + 1);
         let _ = fs::remove_dir_all(root);
     }
 
