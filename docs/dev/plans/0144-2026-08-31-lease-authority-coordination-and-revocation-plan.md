@@ -3074,10 +3074,13 @@ The result includes typed reasons for every failed axis. Fixture coverage proves
 both exact-ready and exact-absent evaluations, and the live doctor now fails
 only this authority check after development skill synchronization.
 
-The reviewed one-sudo bootstrap dry run selected candidate SHA-256
-`efb07bfb29978f50fdaa901a476ab84e40f1b58660d885c36f51049178de7562` and
-reported the existing group membership and narrow helper ready, with only the
-protected authority absent. Application reached the intentional interactive
-sudo password boundary and was stopped without mutation. Installed acquisition,
-exact-session cleanup, smoke validation, main integration, and production
-installation remain contingent on completing that one operator authorization.
+After integration at `05e2aef7`, the exact-main release build and isolated
+publication selected candidate SHA-256
+`806c9069f9c2d770761bcaaa82b54aaf194f2b34279a3b35653d1c29a40ce747` as
+development generation `0.28.0-806c9069f9c2`. Production identity remained
+unchanged. The reviewed one-sudo bootstrap dry run reported the existing group
+membership and narrow helper ready, with only the protected authority absent.
+Application reached the intentional interactive sudo password boundary and was
+stopped without mutation. Installed acquisition, exact-session cleanup, smoke
+validation, and production installation remain contingent on completing that
+one operator authorization.
