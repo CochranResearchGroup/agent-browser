@@ -5707,7 +5707,10 @@ versions are retained across byte-only bundle drift.
 The protected lease-authority service has read-only home visibility so it can
 prove an enrolled user-owned managed profile without modifying that profile.
 A healthy privilege-installer rerun migrates only the exact prior
-ProtectHome=true unit to this contract. Any other unit drift still fails closed.
+ProtectHome=true unit to this contract. It can recover that exact migration's
+prior interrupted candidate-path form only when the candidate is absent and
+one valid retained banked generation is uniquely proven. Any other unit drift
+still fails closed.
 Routine workstation reconciliation preserves live XRDP desktops and applies
 route-user credential changes at the next login without restarting sesman.
 Host preparation includes display inspection, visual-proof tools, and a

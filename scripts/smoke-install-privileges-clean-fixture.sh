@@ -231,7 +231,7 @@ run_installer_mode() {
     AGENT_BROWSER_PRIVILEGED_HELPER="$HELPER_PATH" \
     AGENT_BROWSER_PRIVILEGED_SUDOERS="$SUDOERS_PATH" \
     AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
-    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
+    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="${AUTHORITY_RUN_SOURCE:-$AUTHORITY_SOURCE}" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" "$@"
 }
 
@@ -354,7 +354,11 @@ fi
 # preserve state and the banked binary, stop only the protected service, and
 # replace only the service unit with read-only home visibility.
 sed -i 's/^ProtectHome=read-only$/ProtectHome=true/' "$AUTHORITY_SERVICE_UNIT"
-home_migration_dry_run="$(run_installer_mode --dry-run)"
+AUTHORITY_CANDIDATE="$WORKDIR/source/agent-browser-candidate"
+cp "$AUTHORITY_SOURCE" "$AUTHORITY_CANDIDATE"
+printf '\n# different reviewed candidate generation\n' >>"$AUTHORITY_CANDIDATE"
+chmod +x "$AUTHORITY_CANDIDATE"
+home_migration_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" run_installer_mode --dry-run)"
 if ! grep -q 'migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only' \
   <<<"$home_migration_dry_run"; then
   echo "Lease-authority home-visibility dry run did not describe the exact migration." >&2
@@ -367,7 +371,8 @@ if grep -q 'initialize absent lease-authority state exactly once' <<<"$home_migr
   exit 1
 fi
 sudo_v_count_before_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-home-migration.out
+AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" \
+  run_installer >/tmp/agent-browser-install-privileges-clean-fixture-home-migration.out
 sudo_v_count_after_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
 if [[ "$sudo_v_count_after_home_migration" != "$((sudo_v_count_before_home_migration + 1))" ]]; then
   echo "Lease-authority home-visibility migration must cross one explicit sudo boundary." >&2
@@ -385,6 +390,44 @@ if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || 
 fi
 if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
   echo "Lease-authority home-visibility migration unexpectedly replaced the banked binary." >&2
+  exit 1
+fi
+
+# Recover only the exact interrupted state produced by the prior migration bug:
+# the current read-only unit points at the reviewed but absent candidate, while
+# one exact valid installed generation remains available.
+candidate_sha256="$(sha256sum "$AUTHORITY_CANDIDATE" | awk '{print $1}')"
+candidate_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$candidate_sha256/agent-browser"
+sed -i "s#^ExecStart=.*#ExecStart=$candidate_banked_binary#" "$AUTHORITY_SERVICE_UNIT"
+partial_recovery_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" run_installer_mode --dry-run)"
+if ! grep -q 'repair the exact interrupted lease-authority home-visibility migration' \
+  <<<"$partial_recovery_dry_run"; then
+  echo "Interrupted lease-authority migration dry run did not describe exact recovery." >&2
+  printf '%s\n' "$partial_recovery_dry_run" >&2
+  exit 1
+fi
+if grep -q 'initialize absent lease-authority state exactly once' <<<"$partial_recovery_dry_run"; then
+  echo "Interrupted lease-authority migration dry run falsely described a fresh bootstrap." >&2
+  exit 1
+fi
+sudo_v_count_before_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
+AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" \
+  run_installer >/tmp/agent-browser-install-privileges-clean-fixture-partial-recovery.out
+sudo_v_count_after_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_partial_recovery" != "$((sudo_v_count_before_partial_recovery + 1))" ]]; then
+  echo "Interrupted lease-authority migration recovery must cross one explicit sudo boundary." >&2
+  exit 1
+fi
+if ! grep -q "^ExecStart=$AUTHORITY_BANKED_BINARY$" "$AUTHORITY_SERVICE_UNIT"; then
+  echo "Interrupted lease-authority migration recovery did not retain the valid banked generation." >&2
+  exit 1
+fi
+if [[ -e "$candidate_banked_binary" ]]; then
+  echo "Interrupted lease-authority migration recovery unexpectedly installed the candidate binary." >&2
+  exit 1
+fi
+if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Interrupted lease-authority migration recovery unexpectedly repeated bootstrap." >&2
   exit 1
 fi
 

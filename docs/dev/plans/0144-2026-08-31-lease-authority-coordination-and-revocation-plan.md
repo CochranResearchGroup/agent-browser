@@ -3140,3 +3140,32 @@ though apply would select the guarded legacy-unit migration. Dry-run planning
 now branches on the same exact current, legacy, recoverable, untrusted, and
 absent artifact predicates as apply, and fixture coverage rejects any legacy
 migration preview that claims it will initialize absent state.
+
+## Slice K Interrupted Home-Visibility Migration Recovery | 2026-09-01
+
+The first live migration stopped the protected service and installed
+`ProtectHome=read-only`, but readiness failed. The installed unit had also
+changed `ExecStart` from the retained `806c9069...ce747` generation to the
+reviewed but uninstalled `902aeaa3...be12` candidate path. The socket remained
+enabled, active, root-owned, group-owned, and mode `0660`; the service remained
+inactive and no browser acquisition was attempted. A second installer run
+correctly refused the now-unrecognized artifact combination.
+
+The cause was deterministic. The installer rendered its temporary service unit
+from the candidate generation before classifying existing authority state. The
+original fixture used the same binary as both installed and candidate, so it
+could not detect that substitution. A new differing-generation fixture
+reproduced the exact readiness failure before the fix. Legacy migration now
+renders the unit from the validated installed `ExecStart`, and the same fixture
+passes while proving the candidate is neither installed nor selected.
+
+A second red-green case covers only the interrupted state created by the prior
+bug. Recovery requires the service unit to be the exact current read-only
+template pointing at the reviewed candidate path, that candidate target to be
+absent, exact root custody and modes for authority state and both units, the
+exact socket unit, and exactly one valid retained generation whose directory
+name matches its executable SHA-256. Recovery rewrites only the service unit to
+that retained executable, reloads systemd, and re-enables the socket. Extra,
+altered, ambiguous, or nonmatching artifacts remain untrusted. The live dry run
+now selects this exact recovery and names retained generation
+`806c9069...ce747`; operator application and acquisition acceptance remain.

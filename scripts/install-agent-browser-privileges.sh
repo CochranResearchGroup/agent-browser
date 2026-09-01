@@ -210,19 +210,24 @@ WantedBy=sockets.target
 EOF
 }
 
+lease_authority_banked_binary_integrity_ready() {
+  local banked_binary="$1"
+  local installed_generation installed_sha256
+  [[ "$(dirname "$(dirname "$banked_binary")")" == "$LEASE_AUTHORITY_GENERATIONS_ROOT" ]] || return 1
+  [[ "$(basename "$banked_binary")" == "agent-browser" ]] || return 1
+  installed_generation="$(basename "$(dirname "$banked_binary")")"
+  [[ "$installed_generation" =~ ^sha256-[a-f0-9]{64}$ ]] || return 1
+  [[ -x "$banked_binary" && ! -L "$banked_binary" ]] || return 1
+  installed_sha256="$(sha256sum "$banked_binary" 2>/dev/null | awk '{print $1}')"
+  [[ "sha256-$installed_sha256" == "$installed_generation" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$banked_binary" 2>/dev/null)" == "root:root:755" ]] || return 1
+}
+
 lease_authority_artifacts_integrity_ready() {
   [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
   local installed_binary
   installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  local installed_generation installed_sha256
-  [[ "$(dirname "$(dirname "$installed_binary")")" == "$LEASE_AUTHORITY_GENERATIONS_ROOT" ]] || return 1
-  [[ "$(basename "$installed_binary")" == "agent-browser" ]] || return 1
-  installed_generation="$(basename "$(dirname "$installed_binary")")"
-  [[ "$installed_generation" =~ ^sha256-[a-f0-9]{64}$ ]] || return 1
-  [[ -x "$installed_binary" && ! -L "$installed_binary" ]] || return 1
-  installed_sha256="$(sha256sum "$installed_binary" 2>/dev/null | awk '{print $1}')"
-  [[ "sha256-$installed_sha256" == "$installed_generation" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$installed_binary" 2>/dev/null)" == "root:root:755" ]] || return 1
+  lease_authority_banked_binary_integrity_ready "$installed_binary" || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
@@ -243,6 +248,28 @@ lease_authority_legacy_home_protection_ready() {
   lease_authority_legacy_home_protection_service_unit_content "$installed_binary" \
     | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
   lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
+}
+
+lease_authority_interrupted_home_migration_recovery_binary() {
+  [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
+  [[ ! -e "$LEASE_AUTHORITY_BANKED_BINARY" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
+  lease_authority_service_unit_content "$LEASE_AUTHORITY_BANKED_BINARY" \
+    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
+  lease_authority_socket_unit_content \
+    | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
+
+  local generation_entries=()
+  while IFS= read -r -d '' entry; do
+    generation_entries+=("$entry")
+  done < <(find "$LEASE_AUTHORITY_GENERATIONS_ROOT" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+  [[ "${#generation_entries[@]}" == "1" ]] || return 1
+
+  local retained_binary="${generation_entries[0]}/agent-browser"
+  lease_authority_banked_binary_integrity_ready "$retained_binary" || return 1
+  printf '%s\n' "$retained_binary"
 }
 
 lease_authority_contract_ready() {
@@ -545,6 +572,10 @@ EOF
       echo "  sudo migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only"
       echo "  retain protected authority state and banked binary at $installed_authority_binary"
       echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
+    elif retained_authority_binary="$(lease_authority_interrupted_home_migration_recovery_binary)"; then
+      echo "  sudo repair the exact interrupted lease-authority home-visibility migration"
+      echo "  retain protected authority state and banked binary at $retained_authority_binary"
+      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
     elif lease_authority_artifacts_ready; then
       echo "  retain protected authority state, units, and banked binary"
       echo "  sudo recover the exact protected lease-authority socket lifecycle"
@@ -657,6 +688,12 @@ if ! lease_authority_contract_ready; then
   if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
     if ! lease_authority_artifacts_ready; then
       if lease_authority_legacy_home_protection_ready; then
+        installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+        lease_authority_service_unit_content "$installed_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
+        sudo -n systemctl stop agent-browser-lease-authority.service
+        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
+      elif retained_authority_binary="$(lease_authority_interrupted_home_migration_recovery_binary)"; then
+        lease_authority_service_unit_content "$retained_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
         sudo -n systemctl stop agent-browser-lease-authority.service
         sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
       else
