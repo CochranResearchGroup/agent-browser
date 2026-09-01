@@ -1904,3 +1904,27 @@ packet must add root-peer-authenticated, authority-timed revoke planning and
 revision-bound apply, load the root capability only for that operation, publish
 the resulting protected generation before success, and keep ordinary challenge
 and lease operations independent of administrator-credential availability.
+
+## Slice E Kernel-Authenticated Administrative Peer Gate | 2026-08-31
+
+Every accepted Linux authority connection now captures the peer UID, GID, and
+PID from `SO_PEERCRED` on that exact connected Unix stream. These fields are
+not accepted from request JSON, environment variables, filesystem metadata, or
+caller assertions. An invalid or processless peer fails before request dispatch.
+
+The protocol now distinguishes `revoke_plan` from revoke apply and places both
+behind a root-peer gate before either can reach an operation handler. A regular
+member of the socket group may request the signed service challenge but receives
+`lease_authority_protocol_administrator_peer_required` for either administrative
+operation. A root peer reaches the typed operation boundary, which remains
+explicitly not implemented until authority-owned time, capability loading,
+single-use intent persistence, and durable apply publication land together.
+
+Focused tests prove that the request peer is read from a real connected Unix
+socket, that ordinary challenge dispatch remains available to a non-root peer,
+that a non-root administrative request cannot reach its handler, and that root
+reaches only the typed placeholder rather than a generic mutation surface.
+
+This gate is necessary but not a public revoke surface. The next packet remains
+the authority-timed, root-capability-authenticated revoke plan, followed by
+revision-bound apply and crash-durable publication.

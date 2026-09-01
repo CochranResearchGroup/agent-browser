@@ -144,6 +144,7 @@ enum LeaseAuthorityProtocolRequest {
     AuthorizeEffect(Value),
     Release(Value),
     Recover(Value),
+    RevokePlan(Value),
     Revoke(Value),
     Inspect(Value),
 }
@@ -899,6 +900,7 @@ impl LeaseAuthorityProtocolKernel {
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
+            | LeaseAuthorityProtocolRequest::RevokePlan(_)
             | LeaseAuthorityProtocolRequest::Revoke(_)
             | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_operation_not_implemented",
@@ -1282,6 +1284,7 @@ fn decode_lease_authority_request(
         )),
         "release" => Ok(LeaseAuthorityProtocolRequest::Release(envelope.payload)),
         "recover" => Ok(LeaseAuthorityProtocolRequest::Recover(envelope.payload)),
+        "revoke_plan" => Ok(LeaseAuthorityProtocolRequest::RevokePlan(envelope.payload)),
         "revoke" => Ok(LeaseAuthorityProtocolRequest::Revoke(envelope.payload)),
         "inspect" => Ok(LeaseAuthorityProtocolRequest::Inspect(envelope.payload)),
         _ => Err(LeaseAuthorityProtocolError {
@@ -1352,6 +1355,7 @@ fn dispatch_lease_authority_request(
     kernel: &mut LeaseAuthorityProtocolKernel,
     encoded: &[u8],
     custody: &custody::LeaseAuthorityCustodyIdentity,
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
     signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
     if encoded.len() > LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES {
@@ -1371,10 +1375,18 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
+        LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
+            if !peer.is_root_administrator() =>
+        {
+            Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_administrator_peer_required",
+            })
+        }
         LeaseAuthorityProtocolRequest::Acquire(_)
         | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
         | LeaseAuthorityProtocolRequest::Release(_)
         | LeaseAuthorityProtocolRequest::Recover(_)
+        | LeaseAuthorityProtocolRequest::RevokePlan(_)
         | LeaseAuthorityProtocolRequest::Revoke(_)
         | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
@@ -1387,10 +1399,11 @@ fn serve_lease_authority_connection<R: Read, W: Write>(
     reader: &mut R,
     writer: &mut W,
     custody: &custody::LeaseAuthorityCustodyIdentity,
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
     signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<(), LeaseAuthorityProtocolError> {
     let response = match read_lease_authority_frame(reader).and_then(|request| {
-        dispatch_lease_authority_request(kernel, &request, custody, signing_key)
+        dispatch_lease_authority_request(kernel, &request, custody, peer, signing_key)
     }) {
         Ok(response) => response,
         Err(error) => serde_json::to_vec(&serde_json::json!({
@@ -1430,6 +1443,14 @@ mod tests {
         LeaseAuthorityProtectedLoadContext {
             expected_authority_domain_id: TEST_AUTHORITY_DOMAIN_ID,
             minimum_authority_epoch: 7,
+        }
+    }
+
+    fn test_peer(uid: u32) -> custody::LeaseAuthorityRequestPeerIdentity {
+        custody::LeaseAuthorityRequestPeerIdentity {
+            uid,
+            gid: if uid == 0 { 0 } else { 991 },
+            pid: 4101,
         }
     }
 
@@ -1479,8 +1500,14 @@ mod tests {
             }
         }"#;
 
-        let encoded =
-            dispatch_lease_authority_request(&mut kernel, request, &custody, &signing_key).unwrap();
+        let encoded = dispatch_lease_authority_request(
+            &mut kernel,
+            request,
+            &custody,
+            test_peer(1000),
+            &signing_key,
+        )
+        .unwrap();
         let response: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
         assert_eq!(
             response["schemaVersion"],
@@ -1526,6 +1553,7 @@ mod tests {
             &mut reader,
             &mut framed_response,
             &custody,
+            test_peer(1000),
             &signing_key,
         )
         .unwrap();
@@ -1538,6 +1566,53 @@ mod tests {
         assert_eq!(
             response["error"]["code"],
             "lease_authority_protocol_operation_unsupported"
+        );
+    }
+
+    #[test]
+    fn administrative_dispatch_requires_a_kernel_authenticated_root_peer() {
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let request = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"revoke_plan",
+            "payload":{}
+        }"#;
+
+        let mut unprivileged_kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let error = dispatch_lease_authority_request(
+            &mut unprivileged_kernel,
+            request,
+            &custody,
+            test_peer(1000),
+            &signing_key,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_administrator_peer_required"
+        );
+
+        let mut root_kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let error = dispatch_lease_authority_request(
+            &mut root_kernel,
+            request,
+            &custody,
+            test_peer(0),
+            &signing_key,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_operation_not_implemented"
         );
     }
 

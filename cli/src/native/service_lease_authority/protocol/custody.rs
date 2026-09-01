@@ -33,6 +33,19 @@ pub(super) struct LeaseAuthorityCustodyIdentity {
     pub(super) executable_sha256: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct LeaseAuthorityRequestPeerIdentity {
+    pub(super) uid: u32,
+    pub(super) gid: u32,
+    pub(super) pid: u32,
+}
+
+impl LeaseAuthorityRequestPeerIdentity {
+    pub(super) fn is_root_administrator(self) -> bool {
+        self.uid == LEASE_AUTHORITY_ROOT_UID && self.pid > 1
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LeaseAuthorityCustodyError {
     code: &'static str,
@@ -151,13 +164,28 @@ pub(super) fn inspect_linux_authority_endpoint(
     stream: &std::os::unix::net::UnixStream,
     expected_group_id: u32,
 ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+    // SO_PEERCRED is the kernel-authenticated identity of the process at the
+    // connected end of this exact Unix stream. Filesystem ownership alone
+    // cannot establish that the process answering the socket is the owner.
+    let peer = inspect_linux_request_peer(stream)?;
+
+    inspect_linux_authority_identity(
+        state_root,
+        socket_path,
+        peer.pid,
+        peer.uid,
+        expected_group_id,
+    )
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn inspect_linux_request_peer(
+    stream: &std::os::unix::net::UnixStream,
+) -> Result<LeaseAuthorityRequestPeerIdentity, LeaseAuthorityCustodyError> {
     use std::os::fd::AsRawFd;
 
     let mut credentials: libc::ucred = unsafe { std::mem::zeroed() };
     let mut credentials_length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-    // SO_PEERCRED is the kernel-authenticated identity of the process at the
-    // connected end of this exact Unix stream. Filesystem ownership alone
-    // cannot establish that the process answering the socket is the owner.
     let result = unsafe {
         libc::getsockopt(
             stream.as_raw_fd(),
@@ -173,16 +201,11 @@ pub(super) fn inspect_linux_authority_endpoint(
     {
         return Err(custody_inspection_error());
     }
-    let service_pid = u32::try_from(credentials.pid).map_err(|_| custody_inspection_error())?;
-    let service_uid = credentials.uid;
-
-    inspect_linux_authority_identity(
-        state_root,
-        socket_path,
-        service_pid,
-        service_uid,
-        expected_group_id,
-    )
+    Ok(LeaseAuthorityRequestPeerIdentity {
+        uid: credentials.uid,
+        gid: credentials.gid,
+        pid: u32::try_from(credentials.pid).map_err(|_| custody_inspection_error())?,
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -349,6 +372,18 @@ mod tests {
             error.code(),
             "lease_authority_custody_peer_identity_mismatch"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_request_peer_identity_comes_from_the_connected_socket() {
+        let (client, server) = std::os::unix::net::UnixStream::pair().unwrap();
+        let peer = inspect_linux_request_peer(&server).unwrap();
+        assert_eq!(peer.uid, unsafe { libc::geteuid() });
+        assert_eq!(peer.gid, unsafe { libc::getegid() });
+        assert_eq!(peer.pid, std::process::id());
+        assert_eq!(peer.is_root_administrator(), peer.uid == 0);
+        drop(client);
     }
 
     #[cfg(target_os = "linux")]

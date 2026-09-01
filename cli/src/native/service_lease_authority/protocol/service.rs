@@ -203,6 +203,8 @@ pub(super) fn run_linux_service() -> Result<(), LeaseAuthorityProtocolError> {
             .set_read_timeout(Some(LEASE_AUTHORITY_CONNECTION_TIMEOUT))
             .and_then(|_| stream.set_write_timeout(Some(LEASE_AUTHORITY_CONNECTION_TIMEOUT)))
             .map_err(|_| service_error("lease_authority_service_connection_timeout_failed"))?;
+        let peer = custody::inspect_linux_request_peer(&stream)
+            .map_err(|_| service_error("lease_authority_service_peer_identity_invalid"))?;
         let signing_key =
             super::super::load_selected_lease_authority_signing_key_in(&trust_root)
                 .map_err(|_| service_error("lease_authority_service_trust_unavailable"))?;
@@ -218,6 +220,7 @@ pub(super) fn run_linux_service() -> Result<(), LeaseAuthorityProtocolError> {
             &mut stream,
             &mut writer,
             &custody,
+            peer,
             &signing_key,
         )?;
     }
