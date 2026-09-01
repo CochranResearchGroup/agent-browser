@@ -675,6 +675,48 @@ Every active claim contains at least:
     and preserves administrator and lease-recovery capacity. It cannot create
     an unbounded daemon tree or consume the reserves needed to revoke, inspect,
     reconcile, or roll back.
+116. Effect-channel custody is fenced as strongly as logical authority. A stale
+    daemon or executor cannot retain or reacquire a raw CDP, route, display,
+    input, process-signal, or profile-write channel after its owner generation
+    is superseded. The selected architecture either mediates every such effect
+    through a generation-checking broker or uses an operating-system boundary
+    that makes the channel inaccessible to nonowners. Closing a logical claim
+    while an old executor can still command or terminate the browser is not a
+    completed transfer or revocation.
+117. Live-browser adoption is a two-phase, single-use custody transition. The
+    authority pins a stable process handle where supported and binds boot,
+    process-start, executable, physical profile, profile-lock, endpoint-socket,
+    current owner, and selected candidate-peer evidence. Commit reobserves every
+    replaceable axis after candidate attachment. PID reuse, executable change,
+    endpoint or socket substitution, profile replacement, candidate fork or
+    exec, inherited descriptors, and transferable bearer material can produce
+    only a typed no-transfer or uncertain outcome, never a second owner.
+118. Public state uses separate machine-readable axes for reservation currency,
+    holder observation, physical occupancy, effect progress, cleanup obligation,
+    and historical evidence. No API, dashboard, doctor, planner, or client may
+    derive `active session`, `running browser`, `authenticated profile`, or
+    `current owner` from a lease row or receipt alone. Contract tests prohibit
+    combined convenience states that silently restore those inferences.
+119. Canonical physical identity survives path aliasing and detects replacement.
+    Registration accounts for the platform's device or volume identity, file or
+    directory identity, mount or namespace view, links and reparse points, and a
+    protected resource sentinel where required. A bind mount, hard link,
+    delete-and-recreate at the same path, copied authority home, or changed
+    namespace cannot create two authorities or let old evidence describe a new
+    profile. Unprovable identity requires explicit rebind or quarantine.
+120. Bounded safety is paired with an ordinary-work usability objective. For an
+    authenticated client using its own compatible profile with no fresh exact
+    physical collision, the broker cannot return a lease blocker. An
+    incompatible in-flight operation returns a durable queue or exact current
+    conflict with a machine-readable deadline, and abandoned ephemeral work
+    reaches its policy terminal within a frozen installed-acceptance maximum.
+    A formally finite but operator-hostile wait does not satisfy this plan.
+121. Migration closes authority paths rather than merely preferring the new one.
+    The accepted candidate contains no effect-capable legacy lease, lifecycle
+    transfer, direct Service State owner mutation, or unfenced raw sink path.
+    Mixed-version adapters may observe or obtain canonical authority, but an
+    unsupported or downgraded component fails before effect and cannot keep a
+    hidden second writer alive.
 
 ## Claim Modes
 
@@ -2858,3 +2900,44 @@ Focused tests prove exact executor persistence, restart validation, response
 compatibility, and rejection after executor-PID tampering. This is the custody
 prerequisite for orphan adoption; it does not itself transfer a live browser or
 make Service State an adoption authority.
+
+## Eighth Hotfix Recurrence Gap Audit | 2026-09-01
+
+The full incident review confirms that the canonical kernel model covers every
+reported hotfix family, but it also exposes a distinction that the prior audits
+did not state strongly enough: logical fencing does not revoke an already-open
+physical effect channel. An old daemon that retains a CDP connection, can
+reconnect to the debugging endpoint, can write the profile, or can signal the
+browser process may diverge from a perfectly correct owner record. Structural
+closure therefore requires effect-channel custody, not only signed intents and
+owner generations. The accepted architecture must mediate each raw channel
+through a generation-checking broker or isolate it so a superseded executor can
+no longer use it.
+
+The adoption protocol must also close the observation-to-commit race. Initial
+process and endpoint evidence is insufficient if the PID is reused, the
+candidate execs, the profile is replaced through an alias, the endpoint socket
+changes, or a descriptor or bearer is delegated before commit. Invariants 116
+through 119 require stable handles where supported, replaceable-axis
+reobservation, nondelegable executor selection, exact physical profile identity,
+and a typed no-transfer or uncertain outcome whenever exclusivity cannot be
+proved.
+
+Finally, a mathematically bounded lease can still recreate the operator's
+experience of a gate maze. Invariants 118 and 120 require truthful independent
+state axes and a frozen ordinary-work usability maximum. An authenticated
+client with a compatible profile and no fresh exact physical collision must not
+receive a lease blocker, and an abandoned ephemeral operation must converge
+within the installed acceptance bound rather than merely before a generous
+internal TTL. Invariant 121 makes the migration exit explicit: the legacy
+runtime-owner transfer, direct Service State owner mutation, and unfenced raw
+effect paths must be absent from the accepted candidate, not merely lower
+priority than the new kernel.
+
+With these additions, no known hotfix requires a different authority model.
+The design is sufficient to make the reported failure taxonomy structurally
+unrepresentable, but the current product is not. That claim becomes truthful
+only after effect-channel mediation or isolation, two-phase adoption, physical
+identity hardening, the usability bound, exhaustive denial and sink manifests,
+legacy-path deletion, reference-model and fault tests, mixed-version migration,
+and exact installed acceptance all pass for one candidate.
