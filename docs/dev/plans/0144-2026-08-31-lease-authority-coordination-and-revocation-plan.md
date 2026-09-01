@@ -1967,11 +1967,13 @@ The known hotfix reports are covered by the frozen model, but they are not yet
 structurally impossible in the product. The current source has the protected
 kernel, atomic acquisition primitive, fenced claim model, durable authority
 publication, service identity challenge, root peer gate, administrator
-bootstrap, and durable administrative revoke intent. Production service
-dispatch still leaves effect authorization, release, recovery, revoke plan,
-revoke apply, and inspection unimplemented. Browser spawn, runtime-owner
-transfer, profile and session mutation, physical-collision denial, and
-installer selection are not yet exhaustively sealed behind the kernel.
+bootstrap, durable administrative revoke, and strict-controller recovery.
+Production protected dispatch still leaves effect authorization, exact-holder
+release, and inspection unimplemented, while CLI, HTTP, MCP, generated-client,
+dashboard, and shared-skill recovery parity remain open. Browser spawn,
+runtime-owner transfer, profile and session mutation, physical-collision
+denial, and installer selection are not yet exhaustively sealed behind the
+kernel.
 
 The historical incident families map to the following mandatory invariants:
 
@@ -1979,7 +1981,7 @@ The historical incident families map to the following mandatory invariants:
 | --- | --- | --- |
 | Retained sessions, terminal owners, or lease warnings block ordinary work | 1, 2, 24, 37, 42, 49, 63, 65, 80, 97, and 99 | Modelled; production gates and projections not yet exhaustively sealed |
 | An absent client or crashed worker leaves a permanent lease | 7, 25, 45, 61, 63, 65, 66, 84, and 89 | Modelled; authority clock and stable deadline reconciler remain |
-| An abandoned strict lease requires a hotfix or raw state edit | 9, 10, 23, 40, 57, 64, 69, 88, and 102 | Kernel revoke intent exists; public recover and revoke lifecycle remains |
+| An abandoned strict lease requires a hotfix or raw state edit | 9, 10, 23, 40, 57, 64, 69, 88, and 102 | Protected recover and revoke exist; administrator replacement, public parity, and disaster recovery remain |
 | Access plan says launch is executable, then execution rejects an invented session or owner identity | 12, 13, 35, 37, 38, 41, 42, 47, 60, 73, 80, and 95 | Modelled; shared planner, acquire, admission, and denial dispatcher remains |
 | `closing`, `prepared`, or `transferring` survives its owner indefinitely | 8, 16, 29, 39, 54, 61, 71, 76, and 89 | Modelled; transfer saga and supervisor reconciliation remain |
 | Dashboard or read reconciliation creates fictitious browsers or ready-looking owners | 6, 17, 32, 41, 63, 80, 94, 97, and 103 | Modelled; projections remain to be made receipt-only |
