@@ -878,9 +878,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         service_state,
         &launch_posture.value,
         manual_seeding_required,
-        lifecycle_replacement
-            .get("replacementSessionName")
-            .and_then(Value::as_str),
+        &lifecycle_replacement,
         input.authenticated_principal,
     );
     let acquisition_blocked_by_explicit_session =
@@ -1318,7 +1316,23 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
                             .any(|reason| reason == "explicit_authenticated_cold_route_selected")
                     })
                 && requested_session == planned_cold_session;
-            if !exact_terminal_replacement && !exact_authenticated_cold_route {
+            let exact_terminal_launch_route = !service_request_has_browser_hint(command)
+                && plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
+                    == Some(true)
+                && profile_reuse
+                    .get("reasons")
+                    .and_then(Value::as_array)
+                    .is_some_and(|reasons| {
+                        reasons
+                            .iter()
+                            .any(|reason| reason == "explicit_session_terminal_launch_selected")
+                    })
+                && requested_session == planned_cold_session
+                && requested_session != planned_terminal_session;
+            if !exact_terminal_replacement
+                && !exact_authenticated_cold_route
+                && !exact_terminal_launch_route
+            {
                 return Err("service_access_plan_incomplete_route_hints".to_string());
             }
             if let Some(authority) = authenticated_principal {
@@ -1633,7 +1647,7 @@ fn profile_reuse_decision(
     service_state: &ServiceState,
     launch_posture: &Value,
     manual_seeding_required: bool,
-    terminal_replacement_session_name: Option<&str>,
+    lifecycle_replacement: &Value,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Value {
     let Some(profile) = selected_profile else {
@@ -1653,6 +1667,11 @@ fn profile_reuse_decision(
             "reasons": ["no_selected_profile"],
         });
     };
+    let terminal_replacement_session_name = lifecycle_replacement
+        .get("replacementSessionName")
+        .and_then(Value::as_str);
+    let terminal_replacement_launch_session_name =
+        terminal_replacement_launch_session_name(profile, lifecycle_replacement);
 
     if profile.profile_origin == ProfileOrigin::ExternalObserved {
         let mut same_profile_live_browser_ids = service_state
@@ -1794,11 +1813,15 @@ fn profile_reuse_decision(
     let mut explicit_session_route_error = None;
     let mut explicit_session_route = None;
     let mut explicit_terminal_replacement_route = false;
+    let mut explicit_terminal_launch_route = false;
     let mut explicit_authenticated_cold_route = false;
     if let Some(session_name) = request.session_name.as_deref() {
         match service_state.sessions.get(session_name) {
             None if terminal_replacement_session_name == Some(session_name) => {
                 explicit_terminal_replacement_route = true;
+            }
+            None if terminal_replacement_launch_session_name.as_deref() == Some(session_name) => {
+                explicit_terminal_launch_route = true;
             }
             None if authenticated_principal
                 .and_then(|authority| authenticated_cold_session_name(authority, profile))
@@ -1914,6 +1937,8 @@ fn profile_reuse_decision(
         reasons.push("explicit_session_route_selected");
     } else if explicit_terminal_replacement_route {
         reasons.push("explicit_session_terminal_replacement_selected");
+    } else if explicit_terminal_launch_route {
+        reasons.push("explicit_session_terminal_launch_selected");
     } else if explicit_authenticated_cold_route {
         reasons.push("explicit_authenticated_cold_route_selected");
     }
@@ -2587,6 +2612,44 @@ pub(crate) fn authenticated_cold_session_name(
     Some(format!("principal-profile-{suffix}"))
 }
 
+/// Return a fresh daemon route for replacing one exact terminal owner.
+///
+/// The retained daemon route remains lifecycle evidence for the owner being
+/// superseded. Reusing it for the next launch would make the executor classify
+/// the request as existing-session work before the replacement can register
+/// its new owner generation.
+fn terminal_replacement_launch_session_name(
+    selected_profile: &BrowserProfile,
+    lifecycle_replacement: &Value,
+) -> Option<String> {
+    if lifecycle_replacement
+        .get("replacementEligible")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return None;
+    }
+    let logical_browser_id = lifecycle_replacement
+        .get("logicalBrowserId")
+        .and_then(Value::as_str)?;
+    let owner_generation = lifecycle_replacement
+        .get("ownerGeneration")
+        .and_then(Value::as_u64)?;
+    let mut hasher = Sha256::new();
+    hasher.update(selected_profile.id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(logical_browser_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(owner_generation.to_le_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Some(format!("terminal-profile-{suffix}"))
+}
+
 fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     let request = input.request;
     let selected_profile = input.selected_profile;
@@ -2666,11 +2729,23 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
             .and_then(|(authority, profile)| authenticated_cold_session_name(authority, profile))
     })
     .flatten();
+    let terminal_replacement_launch_session_name = (available
+        && profile_reuse
+            .get("recommendedAction")
+            .and_then(Value::as_str)
+            == Some("launch_new_browser"))
+    .then(|| {
+        selected_profile.and_then(|profile| {
+            terminal_replacement_launch_session_name(profile, lifecycle_replacement)
+        })
+    })
+    .flatten();
     if let Some(session_name) = request
         .session_name
         .as_deref()
-        .or(replacement_session_name)
+        .or(terminal_replacement_launch_session_name.as_deref())
         .or(authenticated_cold_session_name.as_deref())
+        .or(replacement_session_name)
     {
         service_request.insert("sessionName".to_string(), json!(session_name));
     }
@@ -6341,10 +6416,11 @@ mod tests {
             plan["decision"]["lifecycleReplacement"]["replacementSessionName"],
             "terminal-lane"
         );
-        assert_eq!(
-            plan["decision"]["serviceRequest"]["request"]["sessionName"],
-            "terminal-lane"
-        );
+        let launch_session = plan["decision"]["serviceRequest"]["request"]["sessionName"]
+            .as_str()
+            .expect("terminal replacement should expose a fresh launch session");
+        assert_ne!(launch_session, "terminal-lane");
+        assert!(launch_session.starts_with("terminal-profile-"));
         assert_eq!(
             plan["decision"]["lifecycleReplacement"]["terminalEvidence"],
             json!(["exact_process_exited", "profile_lock_released"])
@@ -6382,10 +6458,35 @@ mod tests {
             Some(&authority),
         )
         .unwrap();
-        assert_eq!(copied_request["sessionName"], "terminal-lane");
+        assert_eq!(copied_request["sessionName"], launch_session);
         assert_eq!(
             copied_request["serviceProfileRouteAuthorization"]["kind"],
-            "terminal_replacement"
+            "authenticated_cold"
+        );
+
+        let unattributed_plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        let mut copied_unattributed_request =
+            unattributed_plan["decision"]["serviceRequest"]["request"].clone();
+        let copied_launch_session = copied_unattributed_request["sessionName"]
+            .as_str()
+            .expect("unattributed plan should expose the same fresh launch session")
+            .to_string();
+        assert_eq!(copied_launch_session, launch_session);
+        apply_shared_profile_route_hints_for_service_request_with_principal(
+            &state,
+            &mut copied_unattributed_request,
+            Some(&authority),
+        )
+        .expect("the copied access-plan request must remain admissible");
+        assert_eq!(
+            copied_unattributed_request["serviceProfileRouteAuthorization"]["kind"],
+            "authenticated_cold"
         );
 
         let mut exact_explicit_request = json!({

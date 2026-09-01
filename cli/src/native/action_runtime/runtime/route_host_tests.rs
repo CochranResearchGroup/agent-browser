@@ -3957,21 +3957,26 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
             boot_epoch: None,
             profile_identity_digest,
             owner_generation: retained_owner.owner_generation,
-            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Transferring,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
             cleanup_obligation_state:
-                crate::runtime_owner_transfer::CleanupObligationState::Transferring,
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
             process_group_id: None,
             package_launch_identity_digest: None,
-            terminal_evidence: Vec::new(),
+            terminal_evidence: vec![
+                "exact_process_exited".to_string(),
+                "profile_lock_released".to_string(),
+            ],
         },
     );
-    state.sessions.insert(
-        "historical-exclusive-session".to_string(),
-        BrowserSession {
-            id: "historical-exclusive-session".to_string(),
-            profile_id: Some(profile_id.to_string()),
-            lease: LeaseState::Exclusive,
-            ..BrowserSession::default()
+    state.runtime_owner_registry.principal_bindings.insert(
+        retained_owner.profile_identity_digest.clone(),
+        crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+            principal_id: authority.principal_id.clone(),
+            profile_id: profile_id.to_string(),
+            profile_identity_digest: retained_owner.profile_identity_digest.clone(),
+            capability_id: authority.capability_id.clone(),
+            provenance: authority.provenance,
+            owner_generation: retained_owner.owner_generation - 1,
         },
     );
     command["serviceProfileRouteAuthorization"]["runtimeOwnerRegistryRevision"] =
@@ -3982,6 +3987,68 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&state)
         .expect("stale projection fixture should be persisted");
+
+    let access_plan = service_access_plan_for_state_with_principal(
+        &state,
+        ServiceAccessPlanRequest {
+            runtime_profile: Some(profile_id.to_string()),
+            target_service_ids: vec!["social".to_string()],
+            ..ServiceAccessPlanRequest::default()
+        },
+        Some(&authority),
+    );
+    let mut terminal_replacement_command =
+        access_plan["decision"]["serviceRequest"]["request"].clone();
+    let terminal_replacement_session = terminal_replacement_command["sessionName"]
+        .as_str()
+        .expect("terminal replacement should expose a launch session")
+        .to_string();
+    assert_ne!(
+        terminal_replacement_session,
+        retained_owner.daemon_session_route
+    );
+    apply_shared_profile_route_hints_for_service_request_with_principal(
+        &state,
+        &mut terminal_replacement_command,
+        Some(&authority),
+    )
+    .expect("the copied terminal replacement request should remain admissible");
+    terminal_replacement_command["servicePrincipalId"] = json!(authority.principal_id);
+    terminal_replacement_command["servicePrincipalProvenance"] =
+        json!(authority.provenance.as_str());
+    terminal_replacement_command["serviceProfileCapabilityId"] = json!(authority.capability_id);
+    terminal_replacement_command["serviceProfileCapabilityRevision"] =
+        json!(authority.capability_revision);
+    let mut terminal_replacement_options = LaunchOptions::default();
+    assert!(apply_authenticated_access_plan_profile_selection(
+        &mut terminal_replacement_options,
+        &terminal_replacement_command,
+        &terminal_replacement_session,
+        &state,
+    )
+    .expect("the executor should admit the exact fresh terminal replacement lane"));
+    assert!(matches!(
+        service_profile_lease_gate(
+            &terminal_replacement_command,
+            &terminal_replacement_session,
+            Some(0),
+        )
+        .unwrap(),
+        ServiceProfileLeaseGate::Ready
+    ));
+
+    state.sessions.insert(
+        "historical-exclusive-session".to_string(),
+        BrowserSession {
+            id: "historical-exclusive-session".to_string(),
+            profile_id: Some(profile_id.to_string()),
+            lease: LeaseState::Exclusive,
+            ..BrowserSession::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .expect("historical projection fixture should be persisted");
 
     let mut stale_projection_options = LaunchOptions::default();
     assert!(apply_authenticated_access_plan_profile_selection(
