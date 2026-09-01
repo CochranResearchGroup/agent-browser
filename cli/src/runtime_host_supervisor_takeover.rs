@@ -518,15 +518,10 @@ fn validate_runtime_conflicts(
         );
     }
     for manifest in &supervisor.manifests {
-        let published = fs::read_to_string(
-            selected
-                .socket_dir
-                .join(format!("{}.stream", manifest.session)),
-        )
-        .ok()
-        .and_then(|value| value.trim().parse::<u16>().ok());
-        if published != Some(manifest.stream_port)
-            || !listener_ports.contains(&manifest.stream_port)
+        if supervisor
+            .reachable_stream_ports
+            .contains(&manifest.stream_port)
+            && !listener_ports.contains(&manifest.stream_port)
         {
             push_blocker(
                 blockers,
@@ -579,12 +574,16 @@ fn revalidate_source(
         return Err("blocked_runtime_census_changed_before_signal".to_string());
     }
     let ports = listener_ports_for_pid(plan.selected_backend.pid)?;
-    if plan
-        .supervisor
-        .manifests
-        .iter()
-        .any(|manifest| !ports.contains(&manifest.stream_port))
-    {
+    let supervisor = crate::session_supervisor::runtime_host_supervisor_observation()?;
+    if digest_json(&supervisor.manifests)? != digest_json(&plan.supervisor.manifests)? {
+        return Err("blocked_supervisor_manifest_changed_before_signal".to_string());
+    }
+    if supervisor.manifests.iter().any(|manifest| {
+        supervisor
+            .reachable_stream_ports
+            .contains(&manifest.stream_port)
+            && !ports.contains(&manifest.stream_port)
+    }) {
         return Err("blocked_listener_identity_changed_before_signal".to_string());
     }
     let drain: crate::runtime_adoption::RuntimeAdmissionDrain = serde_json::from_slice(
@@ -1016,6 +1015,7 @@ fn set_private_directory(_path: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::runtime_adoption::{RuntimeCensusRecord, RuntimeDisposition};
+    use crate::session_supervisor::{SessionSupervisorManifest, SessionSupervisorProvenance};
 
     fn census(classifications: &[RuntimeClassification]) -> StableRuntimeCensus {
         StableRuntimeCensus {
@@ -1037,6 +1037,78 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    fn selected_backend(socket_dir: PathBuf) -> RuntimeHostBackend {
+        RuntimeHostBackend {
+            topology: RuntimeHostTopology::SingleHost,
+            generation_id: "generation-one".to_string(),
+            socket_dir,
+            binary_sha256: "a".repeat(64),
+            host_id: "runtime-host:41".to_string(),
+            pid: 41,
+            socket_identity: "unix:one".to_string(),
+        }
+    }
+
+    fn supervisor(reachable_stream_ports: Vec<u16>) -> RuntimeHostSupervisorObservation {
+        RuntimeHostSupervisorObservation {
+            unit: "agent-browser-runtime-host.service".to_string(),
+            manifests: vec![SessionSupervisorManifest {
+                schema_version: "agent-browser.session-supervisor.v1".to_string(),
+                session: "fixture".to_string(),
+                executable_path: "/fixture/agent-browser".to_string(),
+                executable_sha256: "a".repeat(64),
+                stream_port: 39717,
+                runtime_profile: None,
+                service_config_path: None,
+                provenance: SessionSupervisorProvenance {
+                    package_version: "0.28.0".to_string(),
+                    installed_at: "2026-09-01T00:00:00Z".to_string(),
+                    installed_by: "takeover regression".to_string(),
+                },
+            }],
+            load_state: "loaded".to_string(),
+            unit_file_state: "enabled".to_string(),
+            active_state: "inactive".to_string(),
+            sub_state: "dead".to_string(),
+            result: "success".to_string(),
+            restart_count: 0,
+            main_pid: None,
+            executable_matches: true,
+            reachable_stream_ports,
+        }
+    }
+
+    #[test]
+    fn free_manifest_port_is_safe_but_reachable_non_selected_port_blocks() {
+        let socket_dir = std::env::temp_dir().join(format!(
+            "agent-browser-takeover-free-port-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected = selected_backend(socket_dir);
+        let safe_census = census(&[]);
+        let mut blockers = Vec::new();
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(Vec::new()),
+            &safe_census,
+            &BTreeSet::new(),
+            false,
+            &mut blockers,
+        );
+        assert!(blockers.is_empty(), "free configured port must be safe");
+
+        validate_runtime_conflicts(
+            &selected,
+            &supervisor(vec![39717]),
+            &safe_census,
+            &BTreeSet::new(),
+            false,
+            &mut blockers,
+        );
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].code, "blocked_unrelated_port_owner");
     }
 
     #[test]
