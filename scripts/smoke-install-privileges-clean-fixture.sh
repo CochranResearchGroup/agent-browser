@@ -399,7 +399,13 @@ fi
 candidate_sha256="$(sha256sum "$AUTHORITY_CANDIDATE" | awk '{print $1}')"
 candidate_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$candidate_sha256/agent-browser"
 sed -i "s#^ExecStart=.*#ExecStart=$candidate_banked_binary#" "$AUTHORITY_SERVICE_UNIT"
-partial_recovery_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" run_installer_mode --dry-run)"
+AUTHORITY_RETRY_CANDIDATE="$WORKDIR/source/agent-browser-retry-candidate"
+cp "$AUTHORITY_CANDIDATE" "$AUTHORITY_RETRY_CANDIDATE"
+printf '\n# later reviewed retry generation\n' >>"$AUTHORITY_RETRY_CANDIDATE"
+chmod +x "$AUTHORITY_RETRY_CANDIDATE"
+retry_candidate_sha256="$(sha256sum "$AUTHORITY_RETRY_CANDIDATE" | awk '{print $1}')"
+retry_candidate_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$retry_candidate_sha256/agent-browser"
+partial_recovery_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_RETRY_CANDIDATE" run_installer_mode --dry-run)"
 if ! grep -q 'repair the exact interrupted lease-authority home-visibility migration' \
   <<<"$partial_recovery_dry_run"; then
   echo "Interrupted lease-authority migration dry run did not describe exact recovery." >&2
@@ -411,7 +417,7 @@ if grep -q 'initialize absent lease-authority state exactly once' <<<"$partial_r
   exit 1
 fi
 sudo_v_count_before_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
-AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" \
+AUTHORITY_RUN_SOURCE="$AUTHORITY_RETRY_CANDIDATE" \
   run_installer >/tmp/agent-browser-install-privileges-clean-fixture-partial-recovery.out
 sudo_v_count_after_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
 if [[ "$sudo_v_count_after_partial_recovery" != "$((sudo_v_count_before_partial_recovery + 1))" ]]; then
@@ -424,6 +430,10 @@ if ! grep -q "^ExecStart=$AUTHORITY_BANKED_BINARY$" "$AUTHORITY_SERVICE_UNIT"; t
 fi
 if [[ -e "$candidate_banked_binary" ]]; then
   echo "Interrupted lease-authority migration recovery unexpectedly installed the candidate binary." >&2
+  exit 1
+fi
+if [[ -e "$retry_candidate_banked_binary" ]]; then
+  echo "Interrupted lease-authority migration recovery unexpectedly installed the retry candidate binary." >&2
   exit 1
 fi
 if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then

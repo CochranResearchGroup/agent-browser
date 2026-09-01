@@ -252,11 +252,17 @@ lease_authority_legacy_home_protection_ready() {
 
 lease_authority_interrupted_home_migration_recovery_binary() {
   [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
-  [[ ! -e "$LEASE_AUTHORITY_BANKED_BINARY" ]] || return 1
+  local interrupted_binary interrupted_generation
+  interrupted_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+  [[ "$(dirname "$(dirname "$interrupted_binary")")" == "$LEASE_AUTHORITY_GENERATIONS_ROOT" ]] || return 1
+  [[ "$(basename "$interrupted_binary")" == "agent-browser" ]] || return 1
+  interrupted_generation="$(basename "$(dirname "$interrupted_binary")")"
+  [[ "$interrupted_generation" =~ ^sha256-[a-f0-9]{64}$ ]] || return 1
+  [[ ! -e "$interrupted_binary" && ! -L "$interrupted_binary" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
-  lease_authority_service_unit_content "$LEASE_AUTHORITY_BANKED_BINARY" \
+  lease_authority_service_unit_content "$interrupted_binary" \
     | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
   lease_authority_socket_unit_content \
     | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1

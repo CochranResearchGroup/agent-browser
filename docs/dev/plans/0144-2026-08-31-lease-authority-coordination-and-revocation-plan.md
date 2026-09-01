@@ -3161,11 +3161,24 @@ passes while proving the candidate is neither installed nor selected.
 
 A second red-green case covers only the interrupted state created by the prior
 bug. Recovery requires the service unit to be the exact current read-only
-template pointing at the reviewed candidate path, that candidate target to be
-absent, exact root custody and modes for authority state and both units, the
-exact socket unit, and exactly one valid retained generation whose directory
-name matches its executable SHA-256. Recovery rewrites only the service unit to
-that retained executable, reloads systemd, and re-enables the socket. Extra,
-altered, ambiguous, or nonmatching artifacts remain untrusted. The live dry run
-now selects this exact recovery and names retained generation
-`806c9069...ce747`; operator application and acquisition acceptance remain.
+template pointing at an absent, well-formed banked-generation path, exact root
+custody and modes for authority state and both units, the exact socket unit,
+and exactly one valid retained generation whose directory name matches its
+executable SHA-256. The retry may use a later candidate because the interrupted
+unit path is validated independently of the retry source. Recovery rewrites
+only the service unit to that retained executable, reloads systemd, and
+re-enables the socket. Extra, altered, ambiguous, or nonmatching artifacts
+remain untrusted. The live dry run now selects this exact recovery and names
+retained generation `806c9069...ce747`; operator application and acquisition
+acceptance remain.
+
+## Slice L Cross-Candidate Interrupted Migration Recovery | 2026-09-01
+
+The first live retry used candidate `902aeaa3...be12` and left its missing
+generation path in the read-only service unit. A later production repair used
+candidate `9fd9c1e8...acbd3`. Recovery incorrectly compared the interrupted
+unit to the later candidate path and classified the otherwise exact state as
+untrusted. The fixture now reproduces that cross-candidate sequence. Recovery
+validates the missing unit path as its own banked-generation identity and then
+restores the one uniquely proven retained generation. It never installs either
+candidate and preserves all ambiguity and tamper fences.

@@ -978,9 +978,10 @@ protected service has read-only home visibility so it can prove an enrolled
 user-owned managed profile without modifying it. A healthy rerun automatically
 migrates only the exact prior `ProtectHome=true` unit to this read-only
 contract. If that exact migration was interrupted by the prior candidate-path
-rendering defect, a rerun recovers only when the absent candidate unit and one
-valid retained banked generation are uniquely proven. Any other unit drift
-still fails closed.
+rendering defect, a rerun recovers only when the unit names an absent,
+well-formed banked generation and one valid retained generation is uniquely
+proven. The retry candidate may differ from the interrupted candidate. Any
+other unit drift still fails closed.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped
