@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_protected_service_identity_source_accepted_custody_install_in_progress`
+Execution state: `slice_g_history_decoupling_source_accepted_custody_install_in_progress`
 
 Lane: P144
 
@@ -1682,3 +1682,44 @@ bootstrap and rollback generations, installer and doctor integration, and
 installed adversarial acceptance remain open. The same-user production
 runtime still lacks this custody boundary, so no production install is
 authorized.
+
+## Slice G Nonblocking Historical Archive Checkpoint | 2026-08-31
+
+State transition: `slice_g_protected_service_identity_source_accepted_custody_install_in_progress`
+to `slice_g_history_decoupling_source_accepted_custody_install_in_progress`.
+
+The tenth recurrence audit exposed a contradiction in the first durable-store
+implementation. Read-only authority loading did not parse history, but mutation
+loading reconstructed the complete event vector from the selected history
+file. A corrupt historical record therefore could not affect an existing
+claim, yet it could still prevent the next ordinary acquisition or resource
+registration. That violated the requirement that historical records are
+operationally irrelevant.
+
+The store now publishes a versioned immutable history segment with each
+authority generation. Its manifest references the prior generation without
+copying or parsing the prior segment. A mutation load binds the exact selected
+protected generation and gains publication authority without opening history.
+Publication compare-and-swap, current-state durability, and read-versus-mutate
+capability separation remain enforced. Audit reads traverse the bounded,
+cycle-checked segment chain; corruption anywhere degrades that audit read only.
+The v2 manifest can link to a legacy v1 full-snapshot generation, preserving
+source migration compatibility.
+
+Evidence:
+
+- Red: corrupting the selected generation's history made
+  `load_for_mutation` fail with `lease_authority_protocol_history_unavailable`.
+- Green: the same corrupt history permits a new protected resource mutation and
+  durable publication; current authority loads with the new resource while the
+  history read remains explicitly unavailable.
+- A two-generation healthy chain returns the historical and current events in
+  order without rewriting the first segment.
+- A v2 segment linked to a legacy v1 full-snapshot history remains readable.
+- All 26 focused protocol and custody tests pass. Wrapper Rust formatting and
+  strict Clippy pass.
+
+This is still private source acceptance. Segment retention and compaction,
+root-service custody, framed authenticated IPC, current-state intent consume,
+client capability custody, public administration, full effect-sink migration,
+and installed acceptance remain open. No production install is authorized.

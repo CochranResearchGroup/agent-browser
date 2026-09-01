@@ -28,8 +28,11 @@ const LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION: &str =
 const LEASE_AUTHORITY_HISTORY_SCHEMA_VERSION: &str = "agent-browser.lease-authority-history.v1";
 const LEASE_AUTHORITY_STORE_GENERATION_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-store-generation.v1";
-const LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION: &str =
+const LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1: &str =
     "agent-browser.lease-authority-store-history-manifest.v1";
+const LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-store-history-manifest.v2";
+const LEASE_AUTHORITY_STORE_MAX_HISTORY_GENERATIONS: usize = 4096;
 const LEASE_AUTHORITY_STORE_SELECTOR_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-store-selector.v1";
 const LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY: &str = "generations";
@@ -127,7 +130,7 @@ enum LeaseAuthorityProtocolResponse {
 struct LeaseAuthorityProtocolKernel {
     state: LeaseAuthorityProtectedState,
     selected_generation_id: Option<String>,
-    history_bound_for_publication: bool,
+    publication_authorized: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -226,6 +229,8 @@ struct LeaseAuthorityStoreGenerationManifest {
 struct LeaseAuthorityStoreHistoryManifest {
     schema_version: String,
     generation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    previous_generation_id: Option<String>,
     history_sha256: String,
 }
 
@@ -281,9 +286,9 @@ impl LeaseAuthorityDurableStore {
                 code: "lease_authority_protocol_store_stale_publication",
             });
         }
-        if selected_generation_id.is_some() && !kernel.history_bound_for_publication {
+        if selected_generation_id.is_some() && !kernel.publication_authorized {
             return Err(LeaseAuthorityProtocolError {
-                code: "lease_authority_protocol_store_history_binding_required",
+                code: "lease_authority_protocol_store_mutation_load_required",
             });
         }
 
@@ -312,6 +317,7 @@ impl LeaseAuthorityDurableStore {
         let history_manifest = LeaseAuthorityStoreHistoryManifest {
             schema_version: LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION.to_string(),
             generation_id: generation_id.clone(),
+            previous_generation_id: selected_generation_id.clone(),
             history_sha256,
         };
 
@@ -446,15 +452,7 @@ impl LeaseAuthorityDurableStore {
         context: LeaseAuthorityProtectedLoadContext<'_>,
     ) -> Result<LeaseAuthorityProtocolKernel, LeaseAuthorityProtocolError> {
         let mut kernel = self.load(context)?;
-        let generation_id =
-            kernel
-                .selected_generation_id
-                .as_deref()
-                .ok_or(LeaseAuthorityProtocolError {
-                    code: "lease_authority_protocol_store_selection_missing",
-                })?;
-        kernel.state.authority.events = self.load_history_generation(generation_id)?;
-        kernel.history_bound_for_publication = true;
+        kernel.publication_authorized = true;
         Ok(kernel)
     }
 
@@ -498,44 +496,47 @@ impl LeaseAuthorityDurableStore {
                     code: "lease_authority_protocol_store_selector_invalid",
                 });
             }
-            let generation_path = self
+            let selected_path = self
                 .root
                 .join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY)
                 .join(&selector.generation_id);
-            super::ensure_private_directory(&generation_path).map_err(store_io_error)?;
-            let manifest: LeaseAuthorityStoreGenerationManifest = super::load_private_json_file(
-                &generation_path.join(LEASE_AUTHORITY_STORE_MANIFEST_FILE),
-                "lease_authority_protocol_store_manifest_decode_failed",
-            )
-            .map_err(store_io_error)?;
-            if manifest.generation_id != selector.generation_id
-                || manifest.authority_domain_id != selector.authority_domain_id
-                || manifest.authority_epoch != selector.authority_epoch
-                || manifest.authority_revision != selector.authority_revision
+            let selected_manifest: LeaseAuthorityStoreGenerationManifest =
+                super::load_private_json_file(
+                    &selected_path.join(LEASE_AUTHORITY_STORE_MANIFEST_FILE),
+                    "lease_authority_protocol_store_manifest_decode_failed",
+                )
+                .map_err(store_io_error)?;
+            if selected_manifest.generation_id != selector.generation_id
+                || selected_manifest.authority_domain_id != selector.authority_domain_id
+                || selected_manifest.authority_epoch != selector.authority_epoch
+                || selected_manifest.authority_revision != selector.authority_revision
             {
                 return Err(LeaseAuthorityProtocolError {
                     code: "lease_authority_protocol_store_selection_mismatch",
                 });
             }
-            self.validate_generation(&generation_path, &manifest)?;
-            let history_manifest: LeaseAuthorityStoreHistoryManifest =
-                super::load_private_json_file(
-                    &generation_path.join(LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_FILE),
-                    "lease_authority_protocol_store_history_manifest_decode_failed",
-                )
-                .map_err(store_io_error)?;
-            self.validate_history_generation(&generation_path, &history_manifest)?;
-            let history: LeaseAuthorityHistoryState = super::load_private_json_file(
-                &generation_path.join(LEASE_AUTHORITY_STORE_HISTORY_FILE),
-                "lease_authority_protocol_history_decode_failed",
-            )
-            .map_err(store_io_error)?;
-            if history.schema_version != LEASE_AUTHORITY_HISTORY_SCHEMA_VERSION {
-                return Err(LeaseAuthorityProtocolError {
-                    code: "lease_authority_protocol_history_schema_unsupported",
-                });
+            self.validate_generation(&selected_path, &selected_manifest)?;
+            let mut generation_id = selector.generation_id.clone();
+            let mut visited = BTreeSet::new();
+            let mut segments = Vec::new();
+            loop {
+                if visited.len() >= LEASE_AUTHORITY_STORE_MAX_HISTORY_GENERATIONS
+                    || !visited.insert(generation_id.clone())
+                {
+                    return Err(LeaseAuthorityProtocolError {
+                        code: "lease_authority_protocol_history_chain_invalid",
+                    });
+                }
+                let (events, previous_generation_id) =
+                    self.load_history_generation(&generation_id)?;
+                segments.push(events);
+                match previous_generation_id {
+                    Some(previous) => generation_id = previous,
+                    None => break,
+                }
             }
-            Ok(history.events)
+            segments.reverse();
+            Ok(segments.into_iter().flatten().collect())
         })();
         loaded.map_err(|_| LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_history_unavailable",
@@ -545,7 +546,7 @@ impl LeaseAuthorityDurableStore {
     fn load_history_generation(
         &self,
         generation_id: &str,
-    ) -> Result<Vec<LeaseAuthorityEvent>, LeaseAuthorityProtocolError> {
+    ) -> Result<(Vec<LeaseAuthorityEvent>, Option<String>), LeaseAuthorityProtocolError> {
         let loaded = (|| {
             if !authority_store_generation_component_is_safe(generation_id) {
                 return Err(LeaseAuthorityProtocolError {
@@ -585,7 +586,7 @@ impl LeaseAuthorityDurableStore {
                     code: "lease_authority_protocol_history_schema_unsupported",
                 });
             }
-            Ok(history.events)
+            Ok((history.events, history_manifest.previous_generation_id))
         })();
         loaded.map_err(|_| LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_history_unavailable",
@@ -626,9 +627,19 @@ impl LeaseAuthorityDurableStore {
         generation_path: &Path,
         manifest: &LeaseAuthorityStoreHistoryManifest,
     ) -> Result<(), LeaseAuthorityProtocolError> {
-        if manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION
+        if (manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION
+            && manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1)
+            || (manifest.schema_version == LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1
+                && manifest.previous_generation_id.is_some())
             || generation_path.file_name().and_then(|name| name.to_str())
                 != Some(manifest.generation_id.as_str())
+            || manifest
+                .previous_generation_id
+                .as_deref()
+                .is_some_and(|previous| {
+                    !authority_store_generation_component_is_safe(previous)
+                        || previous == manifest.generation_id
+                })
             || !valid_bare_sha256(&manifest.history_sha256)
         {
             return Err(LeaseAuthorityProtocolError {
@@ -683,7 +694,7 @@ impl LeaseAuthorityProtocolKernel {
                 },
             },
             selected_generation_id: None,
-            history_bound_for_publication: true,
+            publication_authorized: true,
         };
         validate_protected_state(&kernel.state)?;
         Ok(kernel)
@@ -825,7 +836,7 @@ impl LeaseAuthorityProtocolKernel {
         Ok(Self {
             state,
             selected_generation_id: None,
-            history_bound_for_publication: false,
+            publication_authorized: false,
         })
     }
 
@@ -1739,7 +1750,7 @@ mod tests {
     }
 
     #[test]
-    fn only_history_bound_mutation_load_can_publish_without_truncating_history() {
+    fn only_mutation_load_can_publish_without_rewriting_prior_history() {
         let root = std::env::temp_dir().join(format!(
             "agent-browser-lease-authority-store-{}",
             uuid::Uuid::new_v4()
@@ -1764,7 +1775,7 @@ mod tests {
         let error = store.publish(&read_only, None).unwrap_err();
         assert_eq!(
             error.code(),
-            "lease_authority_protocol_store_history_binding_required"
+            "lease_authority_protocol_store_mutation_load_required"
         );
 
         let mut mutation = store.load_for_mutation(test_load_context()).unwrap();
@@ -1774,8 +1785,79 @@ mod tests {
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             )
             .unwrap();
+        let current_event = LeaseAuthorityEvent {
+            event_id: "event:current".to_string(),
+            resource: LeaseResourceKey::profile("last30days-social"),
+            claim_id: "claim:current".to_string(),
+            principal_id: "principal:last30days".to_string(),
+            fencing_token: 2,
+            kind: super::super::LeaseEventKind::Acquired,
+            occurred_at: "2026-08-31T12:01:00Z".to_string(),
+        };
+        mutation.state.authority.events.push(current_event.clone());
         store.publish(&mutation, None).unwrap();
-        assert_eq!(store.load_history().unwrap(), first.state.authority.events);
+        let mut expected_history = first.state.authority.events;
+        expected_history.push(current_event);
+        assert_eq!(store.load_history().unwrap(), expected_history);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn segmented_history_keeps_legacy_full_snapshot_generation_readable() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-lease-authority-store-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
+        let historical_event = LeaseAuthorityEvent {
+            event_id: "event:legacy".to_string(),
+            resource: LeaseResourceKey::profile("last30days-social"),
+            claim_id: "claim:legacy".to_string(),
+            principal_id: "principal:last30days".to_string(),
+            fencing_token: 1,
+            kind: super::super::LeaseEventKind::Released,
+            occurred_at: "2026-08-31T12:00:00Z".to_string(),
+        };
+        let mut legacy = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        legacy.state.authority.events.push(historical_event.clone());
+        store.publish(&legacy, None).unwrap();
+
+        let selector: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(root.join(LEASE_AUTHORITY_STORE_SELECTOR_FILE)).unwrap(),
+        )
+        .unwrap();
+        let generation_id = selector["generationId"].as_str().unwrap();
+        let history_manifest_path = root
+            .join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY)
+            .join(generation_id)
+            .join(LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_FILE);
+        let mut history_manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&history_manifest_path).unwrap()).unwrap();
+        history_manifest["schemaVersion"] = serde_json::Value::String(
+            LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1.into(),
+        );
+        history_manifest
+            .as_object_mut()
+            .unwrap()
+            .remove("previousGenerationId");
+        std::fs::write(
+            &history_manifest_path,
+            serde_json::to_vec_pretty(&history_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let mut mutation = store.load_for_mutation(test_load_context()).unwrap();
+        mutation
+            .bootstrap_profile_resource(
+                "last30days-social",
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            )
+            .unwrap();
+        store.publish(&mutation, None).unwrap();
+        assert_eq!(store.load_history().unwrap(), vec![historical_event]);
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1803,6 +1885,20 @@ mod tests {
         std::fs::write(&history_path, b"corrupt-history\n").unwrap();
 
         store.load(test_load_context()).unwrap();
+        let mut mutation = store.load_for_mutation(test_load_context()).unwrap();
+        mutation
+            .bootstrap_profile_resource(
+                "last30days-social",
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            )
+            .unwrap();
+        store.publish(&mutation, None).unwrap();
+        let current = store.load(test_load_context()).unwrap();
+        assert!(current
+            .state
+            .resources
+            .registrations
+            .contains_key("profile:last30days-social"));
         let error = store.load_history().unwrap_err();
         assert_eq!(error.code(), "lease_authority_protocol_history_unavailable");
         std::fs::remove_dir_all(&root).unwrap();
