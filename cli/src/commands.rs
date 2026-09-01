@@ -2311,6 +2311,14 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
             usage: "<command> [args...]",
         });
     }
+    if let Some(raw) = flags.command_service_state_lock_timeout_invalid.as_deref() {
+        return Err(ParseError::InvalidValue {
+            message: format!(
+                "Invalid --service-state-lock-timeout-ms: expected 1 to 300000 milliseconds, got {raw}"
+            ),
+            usage: "<command> [args...]",
+        });
+    }
     let mut result = parse_command_inner(args, flags)?;
 
     if result.get("action").and_then(Value::as_str) == Some("desktop_interact") {
@@ -2362,6 +2370,9 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
         if let Some(timeout_ms) = flags.command_job_timeout_ms {
             result["jobTimeoutMs"] = json!(timeout_ms);
         }
+    }
+    if let Some(timeout_ms) = flags.command_service_state_lock_timeout_ms {
+        result["serviceStateLockTimeoutMs"] = json!(timeout_ms);
     }
 
     Ok(result)
@@ -6396,6 +6407,8 @@ mod tests {
             service_job_timeout_ms: None,
             command_job_timeout_ms: None,
             command_job_timeout_invalid: None,
+            command_service_state_lock_timeout_ms: None,
+            command_service_state_lock_timeout_invalid: None,
             service_monitor_interval_ms: None,
             service_recovery_retry_budget: 3,
             service_recovery_base_backoff_ms: 1_000,
@@ -7907,6 +7920,17 @@ mod tests {
 
         assert_eq!(cmd["action"], "evaluate");
         assert_eq!(cmd["jobTimeoutMs"], 20_000);
+    }
+
+    #[test]
+    fn test_service_state_lock_timeout_is_injected_into_viewport_command() {
+        let mut flags = default_flags();
+        flags.command_service_state_lock_timeout_ms = Some(30_000);
+
+        let cmd = parse_command(&args("set viewport 1440 1000"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "viewport");
+        assert_eq!(cmd["serviceStateLockTimeoutMs"], 30_000);
     }
 
     // === Connect (CDP) tests ===

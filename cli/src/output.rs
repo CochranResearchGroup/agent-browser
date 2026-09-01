@@ -5524,7 +5524,7 @@ Examples:
 agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
-       agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]
+       agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--dashboard-port <port>] [--guacamole-port <port>]
        agent-browser install workstation status [--json]
        agent-browser install workstation recover --transaction-id <id> [--json]
        agent-browser install workstation finalize [--json]
@@ -5643,6 +5643,13 @@ handoff exists. Fresh and isolated installs do not require a retained
 presentation handoff. A structured
 handoff never falls back to a stale session label when current owner evidence
 is absent.
+Pass --force-browserless-upgrade only after intentionally closing managed
+browsers. Two adjacent runtime census rounds must each prove that no
+cooperative, adoptable, conflicting, or insufficiently identified owned browser
+remains. External or manual-preservation process churn stays preserved and does
+not block the browserless install. The transaction records both-round census
+evidence and its browserless validation reason. Ambiguous or live-owned runtimes
+still block.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. The shadow stays backend-only while all old-generation cooperative
 lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
@@ -5715,6 +5722,8 @@ Options:
   --force              Replace an existing chromium-stealthcdp artifact
   --dry-run            Plan workstation payload installation without mutation
   --apply              Materialize the installed workstation payload
+  --force-browserless-upgrade
+                       Bypass stale presentation history only when a stable census proves no owned live browser remains
   --dashboard-port <port>
                        Set the workstation dashboard port (default: 4848)
   --guacamole-port <port>
@@ -5738,6 +5747,7 @@ Examples:
   agent-browser install --with-deps --with-remote-view-privileges
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
+  agent-browser install workstation --apply --force-browserless-upgrade --json
   agent-browser install workstation status --json
   agent-browser install workstation recover --transaction-id upgrade-... --json
   agent-browser install workstation finalize --json
@@ -6037,6 +6047,8 @@ Options:
   --agent-name <name>          Caller agent label for service trace records
   --task-name <name>           Caller task label for service trace records
   --job-timeout-ms <ms>        Positive per-request service job timeout for slow launches
+  --service-state-lock-timeout-ms <ms>
+                               Serialized Service State wait budget from 1 to 300000 ms
   --manual-login-launch        Use the minimal headed Chrome flag posture while keeping managed CDP
   --dry-run                    Show planned route, launch, tab, and checkout commands
   --json                       Output JSON
@@ -7213,6 +7225,8 @@ Options:
   --service-monitor-interval <ms> Background active service-monitor scheduling interval (default: 60000); 0 disables it
   --service-job-timeout <ms> Timeout for dispatched service control jobs (default: 900000); 0 selects the default
   --job-timeout-ms <ms>     Worker deadline for this command; keep it shorter than any caller process deadline
+  --service-state-lock-timeout-ms <ms>
+                             Wait 1 to 300000 ms for the serialized Service State mutation lane
   --service-recovery-retry-budget <n> Browser recovery attempts before faulting (default: 3)
   --service-recovery-base-backoff <ms> Browser recovery backoff base delay (default: 1000)
   --service-recovery-max-backoff <ms> Browser recovery backoff ceiling (default: 30000)

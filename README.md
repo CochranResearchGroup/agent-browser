@@ -1312,6 +1312,16 @@ connect to an existing legacy per-session daemon for an explicit handoff, but
 it will not create a new legacy daemon. If no runtime host is selected, run
 `agent-browser install workstation --apply --json` before launching a lane.
 
+For an intentionally browserless upgrade blocked only by stale presentation
+history, close managed browsers and run
+`agent-browser install workstation --apply --force-browserless-upgrade --json`.
+The override proceeds only when two adjacent runtime census rounds each prove
+that no cooperative, adoptable, conflicting, or insufficiently identified
+owned browser remains. Churn confined to external or manual-preservation
+processes stays preserved and does not block the browserless install. The
+transaction records both-round census evidence and its browserless validation
+reason; ambiguous or live-owned runtimes still block.
+
 On Linux, named sessions can run as lanes under one bounded user-scoped runtime
 host service without launching a browser. Each install records the exact
 executable and fixed loopback stream port in a lane manifest. Status reports
@@ -1991,6 +2001,7 @@ profile.
 | `--service-reconcile-interval <ms>` | Background service browser-health reconciliation interval; `0` disables it (or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` env) |
 | `--service-monitor-interval <ms>` | Background active service-monitor scheduling interval; `0` disables it (or `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` env) |
 | `--service-job-timeout <ms>` | Timeout for dispatched service control jobs; defaults to 900000 ms and `0` selects that default (or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` env) |
+| `--service-state-lock-timeout-ms <ms>` | Per-command wait budget from 1 to 300000 ms for the serialized Service State mutation lane |
 | `--service-recovery-retry-budget <n>` | Browser recovery attempts before faulting (or `AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET` env) |
 | `--service-recovery-base-backoff <ms>` | Browser recovery backoff base delay (or `AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS` env) |
 | `--service-recovery-max-backoff <ms>` | Browser recovery backoff ceiling (or `AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS` env) |
@@ -4376,6 +4387,16 @@ Service browser-health reconciliation runs in the daemon background every 60000 
 Due active service monitors are enqueued through the same service worker every 60000 ms by default. Set `service.monitorIntervalMs`, `--service-monitor-interval <ms>`, or `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` to change the interval. Use `0` to disable it. Use `service monitors run-due`, `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately.
 
 Service control jobs use a 900000 ms worker deadline by default. Set `service.jobTimeoutMs`, `--service-job-timeout <ms>`, or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to choose another deadline. A zero or absent configured value selects the built-in default. For one ordinary CLI command, pass `--job-timeout-ms <ms>` so the daemon cancels that job and releases its serialized queue before any longer caller-side subprocess deadline expires.
+
+Service State prepared mutations are serialized across runtime-host processes
+from authoritative load through durable commit. A selected and fallback host
+can therefore coexist during an upgrade without producing a stale-revision
+failure. If a known long-running state commit needs a larger contention budget,
+pass `--service-state-lock-timeout-ms <ms>` on that command. This operator
+override changes only the wait budget, is capped at five minutes, and does not
+overwrite stale state or weaken browser, profile, lifecycle, route, or effect
+authority. When the command creates a Service job, its retained result records
+the requested `serviceStateLockTimeoutMs` value for audit.
 
 Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so clients can audit whether each active value came from defaults, config, environment, or CLI flags.
 

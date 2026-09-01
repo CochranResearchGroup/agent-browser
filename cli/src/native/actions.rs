@@ -486,6 +486,10 @@ pub(crate) async fn handle_dependent_batch(cmd: &Value, state: &mut DaemonState)
 }
 
 pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+    let _service_state_lock_timeout_override =
+        crate::native::service_store::service_state_lock_timeout_override(
+            cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
+        );
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
         .get("id")

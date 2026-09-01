@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P146 Service State Stale-Revision Operability Repair
+    objective: Serialize prepared Service State mutations and provide a bounded contention override
+    plan: docs/dev/plans/0146-2026-08-31-service-state-stale-revision-operability-repair-plan.md
+    plan_ref: refs/heads/fix/service-state-stale-revision-recovery-20260831
+    branch: fix/service-state-stale-revision-recovery-20260831
+    target: main
+    plan_state: COMPLETE
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: c22a208703bf8efdc22d87b51784b25e5866f707
+    remote_ref: refs/remotes/origin/fix/service-state-stale-revision-recovery-20260831
+    integration: merge
+    dependencies:
+      - P142 Service State Concurrency And Client Recourse Reliability
+    overlaps:
+      - plan/lease-authority-coordination
+    updated_at: 2026-08-31
   - id: P145 Emergency Profile Lease Fail-Open
     objective: Keep ordinary browser acquisition available through isolated profile fallback
     plan: docs/dev/plans/0145-2026-08-31-emergency-profile-lease-fail-open-plan.md
