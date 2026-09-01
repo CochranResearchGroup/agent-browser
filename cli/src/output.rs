@@ -7351,7 +7351,7 @@ Environment:
   AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH
                                  Force an unsafe launch when a runtime profile browserFamily does not match the resolved executable family
   AGENT_BROWSER_PROFILE_LEASE_MODE
-                                 Emergency legacy service acquisition mode. Set to fail_open_ephemeral to redirect only duplicate or exclusively leased requests without canonical lease authorization to isolated managed-one-time profiles. Canonical authorizations are never rewritten. Authentication is not preserved.
+                                 Emergency service acquisition mode. fail_open_ephemeral redirects duplicate or exclusively leased requests to an isolated unauthenticated profile. unsafe_claim_any lets an attributable client reuse an explicitly named session/profile across principal-continuity and profile-lease conflicts. Upgrade, action-policy, owner-generation, viewer, and controller authority remain enforced.
   AGENT_BROWSER_EXTENSIONS       Comma-separated browser extension paths
   AGENT_BROWSER_HEADED           Show browser window (not headless)
   AGENT_BROWSER_JSON             JSON output

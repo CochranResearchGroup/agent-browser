@@ -2,9 +2,9 @@
 
 Date: 2026-08-31
 
-State: COMPLETE
+State: CLOSED
 
-Execution state: `validated_hotfix_checkpoint`
+Execution state: `unsafe_claim_any_validated_development_runtime`
 
 Lane: P145
 
@@ -23,10 +23,12 @@ validated commit and binary are reviewed against the active lease rewrite.
 
 ## Goal
 
-Provide one explicit emergency mode that keeps ordinary service clients able to
-acquire a browser while the profile lease system is under repair. On a duplicate
-or exclusive profile conflict, the service must route that acquisition to a
-deterministic isolated runtime profile instead of rejecting or waiting.
+Provide explicit emergency modes that keep ordinary service clients able to
+acquire a browser while the profile lease system is under repair. The existing
+safe fallback routes conflicts to an isolated profile. A second, loudly unsafe
+mode lets an attributable service request select and take an exact session and
+profile despite profile lease, principal, capability, or owner-generation claim
+conflicts.
 
 ## Acceptance Criteria
 
@@ -45,6 +47,12 @@ deterministic isolated runtime profile instead of rejecting or waiting.
    documentation describe the emergency-only semantics and authentication loss.
 7. Focused Rust tests, formatting, clippy, contract checks, and isolated
    development-runtime browser smoke pass.
+8. `AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any` accepts an explicitly
+   named session/profile route without principal continuity approval and admits
+   that route despite duplicate or exclusive profile lease conflicts.
+9. The unsafe override is recorded on the normalized command and scheduler
+   response metadata. Dashboard authentication, action policy, confirmation, controller
+   and viewer authority, and workstation upgrade admission remain unchanged.
 
 ## Execution Sequence
 
@@ -61,8 +69,9 @@ deterministic isolated runtime profile instead of rejecting or waiting.
 ## Hard Stops
 
 - Do not disable workstation upgrade admission drain or transactional fencing.
-- Do not bypass profile capability, principal, owner-generation, controller, or
-  viewer authority.
+- Outside the exact `unsafe_claim_any` mode, do not bypass profile capability,
+  principal, or owner-generation authority. Never bypass controller or viewer
+  authority.
 - Do not launch two Chrome processes against the same user-data directory.
 - Do not claim the fallback preserves authenticated state; it intentionally uses
   an isolated profile.
@@ -98,3 +107,22 @@ deterministic isolated runtime profile instead of rejecting or waiting.
   `existing_session_profile_identity_unproven` and a service-control admission
   assertion, including under a clean temporary HOME. P145 does not modify the
   failing control-action list or existing-session identity proof path.
+- Unsafe claim-any focused coverage passed: explicit foreign-session route
+  adoption, exclusive profile-conflict admission, dashboard relay-session
+  recovery for a non-capability client, and scheduler response annotation.
+- Existing safe fail-open coverage (3 tests) and disabled-mode regression (1
+  test) remained green after the unsafe mode was added.
+- `cargo fmt --check`, `cargo clippy -- -D warnings`, `git diff --check`, the
+  documentation production build, and remote-view documentation checks passed.
+- The tenant-neutral checker named by repo policy is absent from this checkout;
+  the changed active surfaces contain no tenant-specific defaults.
+- Development generation `0.28.0-5be1285b1898` is installed. The runtime-host
+  and dashboard-backend unit environments both read
+  `AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any`; production is unchanged.
+- Unauthenticated dashboard service access returned HTTP 401. Authenticated
+  dashboard login returned HTTP 200, and an explicit named session/profile
+  request returned HTTP 200 with the requested browser session. Both live smoke
+  sessions were closed; the final session census contains only `runtime-host`.
+- The development doctor still reports only the pre-existing absent
+  `development-default` lane port. The unsafe dashboard path no longer depends
+  on that lane: it recovers and proxies directly to the client-named session.

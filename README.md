@@ -1989,6 +1989,16 @@ the environment value to restore normal reject and wait behavior. A redirected
 response includes top-level `profileLeaseFailOpen` metadata and a warning so
 clients can distinguish the unauthenticated fallback from the requested
 profile.
+
+For a short, explicitly unsafe repair window,
+`AGENT_BROWSER_PROFILE_LEASE_MODE=unsafe_claim_any` lets any attributable
+service request name and take an exact `sessionName` and profile despite
+principal-continuity, capability-owner, owner-generation, or profile-lease
+conflicts. When retained state identifies one browser for that session, the
+request adopts it instead of launching another profile process. Commands carry
+`profileLeaseUnsafeClaim` warning metadata. Dashboard authentication,
+workstation upgrade admission, action policy and confirmation, and
+viewer/controller authority remain enforced. Never leave this mode enabled.
 | `--color-scheme <scheme>` | Color scheme: `dark`, `light`, `no-preference` (or `AGENT_BROWSER_COLOR_SCHEME` env) |
 | `--download-path <path>` | Default download directory (or `AGENT_BROWSER_DOWNLOAD_PATH` env) |
 | `--content-boundaries` | Wrap page output in boundary markers for LLM safety (or `AGENT_BROWSER_CONTENT_BOUNDARIES` env) |
