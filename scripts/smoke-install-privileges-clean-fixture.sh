@@ -132,6 +132,11 @@ case "${1:-}" in
   daemon-reload)
     exit 0
     ;;
+  stop)
+    if [[ "${2:-}" == "agent-browser-lease-authority.service" ]]; then
+      exit 0
+    fi
+    ;;
   enable)
     if [[ "${2:-}" == "--now" && "${3:-}" == "agent-browser-lease-authority.socket" ]]; then
       touch "$AGENT_BROWSER_FIXTURE_STATE/lease-authority-socket-enabled"
@@ -338,6 +343,32 @@ if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || 
 fi
 if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
   echo "Socket recovery unexpectedly replaced the banked authority binary." >&2
+  exit 1
+fi
+
+# The exact previous ProtectHome=true unit has one guarded migration. It must
+# preserve state and the banked binary, stop only the protected service, and
+# replace only the service unit with read-only home visibility.
+sed -i 's/^ProtectHome=read-only$/ProtectHome=true/' "$AUTHORITY_SERVICE_UNIT"
+sudo_v_count_before_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-home-migration.out
+sudo_v_count_after_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_home_migration" != "$((sudo_v_count_before_home_migration + 1))" ]]; then
+  echo "Lease-authority home-visibility migration must cross one explicit sudo boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if ! grep -q '^ProtectHome=read-only$' "$AUTHORITY_SERVICE_UNIT"; then
+  echo "Lease-authority home-visibility migration did not publish the exact current unit." >&2
+  exit 1
+fi
+if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Lease-authority home-visibility migration unexpectedly repeated bootstrap." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
+  echo "Lease-authority home-visibility migration unexpectedly replaced the banked binary." >&2
   exit 1
 fi
 

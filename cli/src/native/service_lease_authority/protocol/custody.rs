@@ -60,7 +60,22 @@ impl LeaseAuthorityCustodyError {
 impl LeaseAuthorityCustodySnapshot {
     pub(super) fn validate(
         &self,
-        _expected_group_id: u32,
+        expected_group_id: u32,
+    ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+        self.validate_for_peer(expected_group_id, false)
+    }
+
+    pub(super) fn validate_systemd_socket_activated_endpoint(
+        &self,
+        expected_group_id: u32,
+    ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+        self.validate_for_peer(expected_group_id, true)
+    }
+
+    fn validate_for_peer(
+        &self,
+        expected_group_id: u32,
+        systemd_socket_activated_endpoint: bool,
     ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
         if self.service_uid != LEASE_AUTHORITY_ROOT_UID || self.peer_uid != LEASE_AUTHORITY_ROOT_UID
         {
@@ -68,7 +83,12 @@ impl LeaseAuthorityCustodySnapshot {
                 code: "lease_authority_custody_service_identity_unprotected",
             });
         }
-        if self.service_pid <= 1 || self.peer_pid != self.service_pid {
+        let peer_identity_matches = if systemd_socket_activated_endpoint {
+            self.service_pid == 1 && self.peer_pid == 1
+        } else {
+            self.service_pid > 1 && self.peer_pid == self.service_pid
+        };
+        if !peer_identity_matches {
             return Err(LeaseAuthorityCustodyError {
                 code: "lease_authority_custody_peer_identity_mismatch",
             });
@@ -97,7 +117,7 @@ impl LeaseAuthorityCustodySnapshot {
             });
         }
         if self.socket_owner_uid != LEASE_AUTHORITY_ROOT_UID
-            || self.socket_owner_gid != _expected_group_id
+            || self.socket_owner_gid != expected_group_id
             || self.socket_mode != 0o660
         {
             return Err(LeaseAuthorityCustodyError {
@@ -110,7 +130,7 @@ impl LeaseAuthorityCustodySnapshot {
         hasher.update(self.service_pid.to_be_bytes());
         hasher.update(self.peer_uid.to_be_bytes());
         hasher.update(self.peer_pid.to_be_bytes());
-        hasher.update(_expected_group_id.to_be_bytes());
+        hasher.update(expected_group_id.to_be_bytes());
         hasher.update(self.executable_sha256.as_bytes());
         hasher.update(self.socket_owner_uid.to_be_bytes());
         hasher.update(self.socket_owner_gid.to_be_bytes());
@@ -164,18 +184,15 @@ pub(super) fn inspect_linux_authority_endpoint(
     stream: &std::os::unix::net::UnixStream,
     expected_group_id: u32,
 ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
-    // SO_PEERCRED is the kernel-authenticated identity of the process at the
-    // connected end of this exact Unix stream. Filesystem ownership alone
-    // cannot establish that the process answering the socket is the owner.
+    // A systemd-created listening socket reports PID 1 as the connected peer
+    // before the socket-activated service accepts the connection. Prove that
+    // exact root activator and the protected socket inode here. The service
+    // separately proves its own root process and banked executable before it
+    // reads any request frame.
     let peer = inspect_linux_request_peer(stream)?;
 
-    inspect_linux_authority_identity(
-        state_root,
-        socket_path,
-        peer.pid,
-        peer.uid,
-        expected_group_id,
-    )
+    inspect_linux_systemd_socket_activator_snapshot(state_root, socket_path, peer.pid, peer.uid)
+        .and_then(|snapshot| snapshot.validate_systemd_socket_activated_endpoint(expected_group_id))
 }
 
 #[cfg(target_os = "linux")]
@@ -197,7 +214,7 @@ pub(super) fn inspect_linux_request_peer(
     };
     if result != 0
         || credentials_length as usize != std::mem::size_of::<libc::ucred>()
-        || credentials.pid <= 1
+        || credentials.pid < 1
     {
         return Err(custody_inspection_error());
     }
@@ -233,6 +250,17 @@ fn inspect_linux_authority_identity(
     service_uid: u32,
     expected_group_id: u32,
 ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+    inspect_linux_authority_identity_snapshot(state_root, socket_path, service_pid, service_uid)
+        .and_then(|snapshot| snapshot.validate(expected_group_id))
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_linux_authority_identity_snapshot(
+    state_root: &std::path::Path,
+    socket_path: &std::path::Path,
+    service_pid: u32,
+    service_uid: u32,
+) -> Result<LeaseAuthorityCustodySnapshot, LeaseAuthorityCustodyError> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
     let state_metadata =
@@ -247,7 +275,7 @@ fn inspect_linux_authority_identity(
     let mut executable_hasher = Sha256::new();
     executable_hasher.update(executable);
 
-    LeaseAuthorityCustodySnapshot {
+    Ok(LeaseAuthorityCustodySnapshot {
         service_uid,
         service_pid,
         peer_uid: service_uid,
@@ -267,13 +295,67 @@ fn inspect_linux_authority_identity(
         socket_mode: socket_metadata.mode() & 0o7777,
         socket_device: socket_metadata.dev(),
         socket_inode: socket_metadata.ino(),
-    }
-    .validate(expected_group_id)
-    .and_then(|identity| {
+    })
+    .and_then(|snapshot| {
         socket_metadata
             .file_type()
             .is_socket()
-            .then_some(identity)
+            .then_some(snapshot)
+            .ok_or(LeaseAuthorityCustodyError {
+                code: "lease_authority_custody_socket_unprotected",
+            })
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_linux_systemd_socket_activator_snapshot(
+    state_root: &std::path::Path,
+    socket_path: &std::path::Path,
+    activator_pid: u32,
+    activator_uid: u32,
+) -> Result<LeaseAuthorityCustodySnapshot, LeaseAuthorityCustodyError> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+    let state_metadata =
+        std::fs::symlink_metadata(state_root).map_err(|_| custody_inspection_error())?;
+    let socket_metadata =
+        std::fs::symlink_metadata(socket_path).map_err(|_| custody_inspection_error())?;
+    let activator_identity = format!(
+        "sha256:{:x}",
+        Sha256::digest(b"agent-browser.lease-authority-systemd-socket-activator-pid1.v1")
+    );
+
+    Ok(LeaseAuthorityCustodySnapshot {
+        service_uid: activator_uid,
+        service_pid: activator_pid,
+        peer_uid: activator_uid,
+        peer_pid: activator_pid,
+        state_root: LeaseAuthorityCustodyPath {
+            owner_uid: state_metadata.uid(),
+            mode: state_metadata.mode() & 0o7777,
+            is_directory: state_metadata.file_type().is_dir()
+                && !state_metadata.file_type().is_symlink(),
+        },
+        // PID 1 is authenticated by SO_PEERCRED. Hardened procfs commonly
+        // denies ordinary clients access to /proc/1/exe, so endpoint custody
+        // binds a domain-separated activator identity rather than pretending
+        // that the client observed PID 1's executable. The activated service
+        // independently validates its exact banked executable before reading.
+        executable_owner_uid: LEASE_AUTHORITY_ROOT_UID,
+        executable_owner_gid: LEASE_AUTHORITY_ROOT_UID,
+        executable_mode: 0o555,
+        executable_sha256: activator_identity,
+        socket_owner_uid: socket_metadata.uid(),
+        socket_owner_gid: socket_metadata.gid(),
+        socket_mode: socket_metadata.mode() & 0o7777,
+        socket_device: socket_metadata.dev(),
+        socket_inode: socket_metadata.ino(),
+    })
+    .and_then(|snapshot| {
+        socket_metadata
+            .file_type()
+            .is_socket()
+            .then_some(snapshot)
             .ok_or(LeaseAuthorityCustodyError {
                 code: "lease_authority_custody_socket_unprotected",
             })
@@ -370,6 +452,35 @@ mod tests {
         let error = snapshot.validate(991).unwrap_err();
         assert_eq!(
             error.code(),
+            "lease_authority_custody_peer_identity_mismatch"
+        );
+    }
+
+    #[test]
+    fn systemd_socket_activator_is_valid_endpoint_custody_but_not_service_custody() {
+        let mut snapshot = LeaseAuthorityCustodySnapshot::root_owned_fixture();
+        snapshot.service_pid = 1;
+        snapshot.peer_pid = 1;
+
+        let endpoint = snapshot
+            .validate_systemd_socket_activated_endpoint(991)
+            .unwrap();
+        assert!(valid_sha256_identity(&endpoint.endpoint_identity_digest));
+        assert_eq!(
+            snapshot.validate(991).unwrap_err().code(),
+            "lease_authority_custody_peer_identity_mismatch"
+        );
+    }
+
+    #[test]
+    fn socket_activated_endpoint_rejects_a_root_process_other_than_pid_one() {
+        let snapshot = LeaseAuthorityCustodySnapshot::root_owned_fixture();
+
+        assert_eq!(
+            snapshot
+                .validate_systemd_socket_activated_endpoint(991)
+                .unwrap_err()
+                .code(),
             "lease_authority_custody_peer_identity_mismatch"
         );
     }

@@ -3084,3 +3084,54 @@ Application reached the intentional interactive sudo password boundary and was
 stopped without mutation. Installed acquisition, exact-session cleanup, smoke
 validation, and production installation remain contingent on completing that
 one operator authorization.
+
+## Slice J Systemd Socket-Activator Custody | 2026-09-01
+
+The operator completed the one-sudo bootstrap. The development doctor then
+proved the fixed system socket loaded, enabled, active, root-owned,
+`agent-browser` group-owned, and mode `0660`. The first capability-bound
+acquisition still failed before sending a request with
+`lease_authority_service_identity_unproven`; no browser launched. Kernel tracing
+showed the connected Unix stream reported `SO_PEERCRED` as PID 1, UID 0, GID 0.
+That is the root systemd process that created the listening socket, not the
+socket-activated service process that accepts it later. The client closed on
+that false mismatch, after which the service correctly reported a frame write
+failure.
+
+Client endpoint custody now models the real two-party boundary. Before sending
+any capability it requires the exact root PID 1 socket activator, root-private
+authority state, the root-owned Unix socket inode, exact operator group and
+mode, and the root-owned non-writable activator executable. The activated
+service continues to perform its independent root PID, banked executable,
+socket-activation, state, and signing-key checks before reading a request
+frame. PID 1 is accepted only for client-side endpoint custody and remains
+invalid as service-process or administrator identity.
+
+Ten focused custody tests pass, including the positive PID 1 activator case,
+the negative non-PID 1 root endpoint case, continued PID 1 service rejection,
+same-user impersonation rejection, socket replacement binding, and writable
+executable rejection. Strict Clippy and the ordinary no-choreography profile
+acquisition contract also pass. The exact release build was published as
+development generation `0.28.0-902aeaa31ea8`, and development doctor remained
+green.
+
+The next exact acquisition crossed endpoint custody and reached profile
+enrollment, where it failed before launch with
+`lease_authority_protocol_profile_enrollment_path_unavailable`. The enrolled
+managed profile exists under the user-scoped development home and is registered
+in Service State, but the installed protected service unit used
+`ProtectHome=true`, which made the profile path invisible to the root service.
+This was another execution-contract defect, not an active lease or browser
+conflict. No browser launched.
+
+The protected service unit now uses `ProtectHome=read-only`. That is the narrow
+access required for the authority to stat and hash user-owned managed profile
+identity while preventing writes to profile contents. The privilege installer
+recognizes only the exact prior `ProtectHome=true` unit as a migratable legacy
+contract. It stops only the protected service, replaces only that unit, reloads
+systemd, and retains the existing root-private state, socket unit, and banked
+binary. Any other unit or artifact drift still fails closed. The clean-fixture
+smoke proves the migration crosses one explicit sudo boundary, does not repeat
+authority bootstrap, and leaves the banked binary unchanged. Installed unit
+migration, exact acquisition acceptance, exact-session cleanup, three-launch
+development smoke, and production installation remain.

@@ -171,7 +171,7 @@ MemoryDenyWriteExecute=true
 MemoryMax=256M
 PrivateDevices=true
 PrivateTmp=true
-ProtectHome=true
+ProtectHome=read-only
 ProtectControlGroups=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
@@ -186,6 +186,11 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+lease_authority_legacy_home_protection_service_unit_content() {
+  lease_authority_service_unit_content "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
+    | sed 's/^ProtectHome=read-only$/ProtectHome=true/'
 }
 
 lease_authority_socket_unit_content() {
@@ -205,7 +210,7 @@ WantedBy=sockets.target
 EOF
 }
 
-lease_authority_artifacts_ready() {
+lease_authority_artifacts_integrity_ready() {
   [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
   local installed_binary
   installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
@@ -221,7 +226,22 @@ lease_authority_artifacts_ready() {
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
+}
+
+lease_authority_artifacts_ready() {
+  lease_authority_artifacts_integrity_ready || return 1
+  local installed_binary
+  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
   lease_authority_service_unit_content "$installed_binary" | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
+  lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
+}
+
+lease_authority_legacy_home_protection_ready() {
+  lease_authority_artifacts_integrity_ready || return 1
+  local installed_binary
+  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+  lease_authority_legacy_home_protection_service_unit_content "$installed_binary" \
+    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
   lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
 }
 
@@ -617,8 +637,13 @@ sudo -n usermod -aG "$GROUP_NAME" "$OPERATOR_USER"
 if ! lease_authority_contract_ready; then
   if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
     if ! lease_authority_artifacts_ready; then
-      echo "Existing lease-authority state has untrusted installation artifacts and will not be overwritten." >&2
-      exit 1
+      if lease_authority_legacy_home_protection_ready; then
+        sudo -n systemctl stop agent-browser-lease-authority.service
+        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
+      else
+        echo "Existing lease-authority state has untrusted installation artifacts and will not be overwritten." >&2
+        exit 1
+      fi
     fi
     sudo -n systemctl daemon-reload
     sudo -n systemctl enable --now agent-browser-lease-authority.socket
