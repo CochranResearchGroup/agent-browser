@@ -12,9 +12,9 @@ use super::{
     LeaseAdministrativeIntent, LeaseAdministratorAuthority, LeaseAuthorityEvent,
     LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
     LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
-    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseRecoveryAuthorization,
-    LeaseRecoveryIntent, LeaseResourceKey, LeaseResourceKind, RecoverLeaseClaimRequest,
-    RevokeLeaseClaimRequest,
+    LeaseClaimRecoveryReceipt, LeaseClaimReleaseOutcome, LeaseClaimTerminalReceipt,
+    LeaseEffectIntent, LeaseRecoveryAuthorization, LeaseRecoveryIntent, LeaseResourceKey,
+    LeaseResourceKind, RecoverLeaseClaimRequest, ReleaseLeaseClaimRequest, RevokeLeaseClaimRequest,
 };
 use crate::native::service_principal::{
     authenticate_profile_capability, profile_capability_digest, register_profile_capability,
@@ -124,6 +124,17 @@ struct EnrollProfileLeaseAuthorityPayload {
     profile_id: String,
     profile_path: String,
     expected_resource_revision: u64,
+    idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleaseLeaseAuthorityPayload {
+    raw_capability: LeaseAuthoritySecret,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
     idempotency_key: String,
 }
 
@@ -296,7 +307,7 @@ enum LeaseAuthorityProtocolRequest {
     EnrollProfile(EnrollProfileLeaseAuthorityPayload),
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(Value),
-    Release(Value),
+    Release(ReleaseLeaseAuthorityPayload),
     RecoverPlan(RecoverLeasePlanPayload),
     Recover(RecoverLeaseApplyPayload),
     RevokePlan(RevokeLeasePlanPayload),
@@ -1585,6 +1596,125 @@ impl LeaseAuthorityProtocolKernel {
             })?;
         Ok(LeaseAuthorityProtocolResponse::Acquired(outcome))
     }
+
+    fn release(
+        &mut self,
+        request: ReleaseLeaseAuthorityPayload,
+        authority_observed_at: &str,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseClaimReleaseOutcome, LeaseAuthorityProtocolError> {
+        if request.resource.kind != LeaseResourceKind::Profile
+            || request.claim_id.trim().is_empty()
+            || request.claim_revision == 0
+            || request.fencing_token == 0
+            || request.idempotency_key.trim().is_empty()
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_release_invalid",
+            });
+        }
+        let now = self.observe_authority_time(authority_observed_at)?;
+        if let Some(receipt) = self
+            .state
+            .authority
+            .terminal_receipts
+            .get(&request.idempotency_key)
+        {
+            if receipt.operation != "release"
+                || receipt.resource != request.resource
+                || receipt.claim_id != request.claim_id
+                || receipt.claim_revision != request.claim_revision
+                || receipt.released_fencing_token != request.fencing_token
+            {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_idempotency_conflict",
+                });
+            }
+            return Ok(LeaseClaimReleaseOutcome {
+                receipt: receipt.clone(),
+                replayed: true,
+            });
+        }
+
+        let raw_capability =
+            std::str::from_utf8(request.raw_capability.expose()).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_capability_invalid",
+                }
+            })?;
+        let authenticated = authenticate_profile_capability(
+            &self.state.principals,
+            raw_capability,
+            Some(&request.resource.id),
+        )
+        .map_err(|error| LeaseAuthorityProtocolError {
+            code: error.code.as_str(),
+        })?;
+        let claim = self
+            .state
+            .authority
+            .current_claim(&request.resource, &now)
+            .filter(|claim| {
+                claim.claim_id == request.claim_id
+                    && claim.revision == request.claim_revision
+                    && claim.fencing_token == request.fencing_token
+                    && claim.principal_id == authenticated.principal_id
+                    && claim.capability_id == authenticated.capability_id
+                    && claim.capability_revision == authenticated.capability_revision
+            })
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_stale_claim",
+            })?;
+        let observed = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_state_invalid",
+            }
+        })?;
+        let claim_expires_at =
+            chrono::DateTime::parse_from_rfc3339(&claim.expires_at).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_state_invalid",
+                }
+            })?;
+        let authorization_expires_at = std::cmp::min(
+            observed + chrono::Duration::seconds(super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS),
+            claim_expires_at,
+        )
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let capability = self
+            .state
+            .principals
+            .profile_capabilities
+            .get(claim.capability_id())
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_capability_unavailable",
+            })?;
+        let authorization = claim
+            .effect_authorization(
+                capability,
+                &LeaseEffectIntent {
+                    action_class: "lease_release".to_string(),
+                    audience: "lease_authority_kernel".to_string(),
+                    operation_idempotency_key: request.idempotency_key.clone(),
+                    issued_at: now.clone(),
+                    authorization_expires_at,
+                },
+                signing_key,
+            )
+            .map_err(lease_authority_protocol_error)?;
+        self.state
+            .authority
+            .release_with_receipt(
+                ReleaseLeaseClaimRequest {
+                    authorization,
+                    idempotency_key: request.idempotency_key,
+                    now,
+                },
+                &LeaseAuthorityVerificationKeyring::from_active(signing_key),
+            )
+            .map_err(lease_authority_protocol_error)
+    }
 }
 
 mod lease_authority_operational_state_serde {
@@ -2043,7 +2173,11 @@ fn decode_lease_authority_request(
         "authorize_effect" => Ok(LeaseAuthorityProtocolRequest::AuthorizeEffect(
             envelope.payload,
         )),
-        "release" => Ok(LeaseAuthorityProtocolRequest::Release(envelope.payload)),
+        "release" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::Release)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "recover_plan" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::RecoverPlan)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -2243,6 +2377,22 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
+        LeaseAuthorityProtocolRequest::Release(request) => {
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.release(request, &observed_at, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "released",
+                "payload": {
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
         LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
             if !peer.is_root_administrator() =>
         {
@@ -2312,7 +2462,6 @@ fn dispatch_lease_authority_request(
             })
         }
         LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
-        | LeaseAuthorityProtocolRequest::Release(_)
         | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
         }),
@@ -3002,6 +3151,35 @@ mod tests {
             let injected = String::from_utf8(encoded.to_vec())
                 .unwrap()
                 .replace("\"profileId\":", &format!("{forbidden}\"profileId\":"));
+            assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
+    fn release_request_has_no_caller_owned_time_identity_or_authorization() {
+        let encoded = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"release",
+            "payload":{
+                "rawCapability":[108,97,115,116,51,48,100,97,121,115,45,115,101,99,114,101,116],
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "claimId":"claim:last30days",
+                "claimRevision":1,
+                "fencingToken":1,
+                "idempotencyKey":"release:last30days:1"
+            }
+        }"#;
+        assert!(decode_lease_authority_request(encoded).is_ok());
+
+        for forbidden in [
+            r#""principalId":"principal:invented","#,
+            r#""capabilityId":"capability:invented","#,
+            r#""now":"2099-01-01T00:00:00Z","#,
+            r#""authorization":{"proof":"invented"},"#,
+        ] {
+            let injected = String::from_utf8(encoded.to_vec())
+                .unwrap()
+                .replace("\"resource\":", &format!("{forbidden}\"resource\":"));
             assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
         }
     }

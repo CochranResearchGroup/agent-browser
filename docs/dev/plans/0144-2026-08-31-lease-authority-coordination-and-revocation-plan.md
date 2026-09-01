@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_e_strict_recovery_plan_apply_source_accepted_hierarchy_in_progress`
+Execution state: `slice_f_protected_release_complete_effect_intent_in_progress`
 
 Lane: P144
 
@@ -2318,3 +2318,32 @@ Public CLI, HTTP, MCP, generated-client, dashboard, and shared-skill enrollment
 are intentionally absent. The next step is protected effect authorization and
 exact-holder release, followed by a broker that makes enrollment and ephemeral
 acquisition internal to ordinary Agent Browser work.
+
+## Slice F Protected Exact-Holder Release Checkpoint | 2026-09-01
+
+Protected `release` dispatch now performs the complete exact-holder mutation
+inside the selected authority generation. The caller supplies only its raw
+profile capability, canonical resource, exact claim id, claim revision,
+fencing token, and operation idempotency key. The closed request schema rejects
+caller-provided time, principal, capability identity, and authorization
+envelopes. The authority owns time, authenticates the capability against its
+protected principal registry, matches every current claim axis, creates the
+narrow `lease_release` authorization internally, advances the fence, and
+persists the terminal receipt before replying.
+
+Lost-response replay is independent of the now-absent active claim and does
+not require the holder capability to remain current. The replay key must still
+match the exact resource, claim, revision, and released fence. It returns the
+same non-authoritative terminal receipt without advancing the authority
+revision or recreating authority. A colliding operation key returns a typed
+idempotency conflict. Raw capability material is absent from protected state,
+history, receipts, debug output, and framed responses.
+
+The focused service regression demonstrates the defect before the change as
+`lease_authority_protocol_operation_not_implemented`, then proves enrollment,
+acquisition, release, durable publication, exact replay, unchanged authority
+revision on replay, and no remaining active profile claim. Protected effect
+authorization remains intentionally unimplemented because returning the old
+offline bearer would preserve a revocation race. The next slice must persist a
+single-use current-state effect intent and make every selected effect sink
+consume that intent before execution.

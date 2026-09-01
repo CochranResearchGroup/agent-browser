@@ -277,6 +277,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
         decoded,
         LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::Acquire(_)
+            | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
             | LeaseAuthorityProtocolRequest::RevokePlan(_)
@@ -900,6 +901,81 @@ mod tests {
             acquisition_response["outcome"], "acquired",
             "{acquisition_response}"
         );
+        let release = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "release",
+            "payload": {
+                "rawCapability": raw_capability.as_bytes(),
+                "resource": {"kind": "profile", "id": "last30days-social"},
+                "claimId": acquisition_response["payload"]["claim"]["claimId"],
+                "claimRevision": acquisition_response["payload"]["claim"]["revision"],
+                "fencingToken": acquisition_response["payload"]["claim"]["fencingToken"],
+                "idempotencyKey": "release:last30days:service-1"
+            }
+        }))
+        .unwrap();
+        let mut framed_release = Vec::new();
+        write_lease_authority_frame(&mut framed_release, &release).unwrap();
+        let mut release_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_release),
+            &mut release_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut release_response = std::io::Cursor::new(release_response);
+        let release_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut release_response).unwrap())
+                .unwrap();
+        assert_eq!(
+            release_response["outcome"], "released",
+            "{release_response}"
+        );
+        assert_eq!(
+            release_response["payload"]["receipt"]["claimId"],
+            acquisition_response["payload"]["claim"]["claimId"]
+        );
+        assert!(!release_response.to_string().contains(raw_capability));
+
+        let authority_revision_after_release =
+            store.load(load_context).unwrap().state.authority.revision();
+        let mut framed_release_replay = Vec::new();
+        write_lease_authority_frame(&mut framed_release_replay, &release).unwrap();
+        let mut release_replay_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_release_replay),
+            &mut release_replay_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut release_replay_response = std::io::Cursor::new(release_replay_response);
+        let release_replay_response: serde_json::Value = serde_json::from_slice(
+            &read_lease_authority_frame(&mut release_replay_response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(release_replay_response["outcome"], "released");
+        assert_eq!(release_replay_response["payload"]["replayed"], true);
+        assert_eq!(
+            release_replay_response["payload"]["receipt"],
+            release_response["payload"]["receipt"]
+        );
+        assert_eq!(
+            store.load(load_context).unwrap().state.authority.revision(),
+            authority_revision_after_release
+        );
+
         let loaded = store.load(load_context).unwrap();
         assert!(loaded
             .state
@@ -908,7 +984,7 @@ mod tests {
                 &LeaseResourceKey::profile("last30days-social"),
                 &authority_observed_at(),
             )
-            .is_some());
+            .is_none());
         std::fs::remove_dir_all(parent).unwrap();
     }
 
