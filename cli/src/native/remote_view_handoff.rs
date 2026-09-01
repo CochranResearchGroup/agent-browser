@@ -16,6 +16,7 @@ use super::service_model::{
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceState,
     TabLifecycle, ViewStreamProvider,
 };
+use super::service_retained_state::reconcile_matching_inactive_terminal_route_quarantines;
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
@@ -1678,6 +1679,16 @@ pub fn begin_route_bound_handoff_acquisition(
         .map_err(|error| error.to_string())?;
     let (lease_state, lease_phase) = lifecycle.state_phase();
     repository.mutate(|state| {
+        let prior_state = state.clone();
+        reconcile_matching_inactive_terminal_route_quarantines(
+            state,
+            &prior_state,
+            input.observed_at,
+            input.browser_id,
+            input.session_id,
+            &input.acquisition_plan.selected_route_id,
+            &input.acquisition_plan.display_allocation_id,
+        );
         if let Some(quarantined) = state.remote_view_acquisition_leases.values().find(|lease| {
             lease.state == "failed"
                 && lease.phase == "rollback_incomplete"
@@ -3535,6 +3546,114 @@ mod tests {
             cleanup_on_failure: Vec::new(),
             suggested_commands: Vec::new(),
         }
+    }
+
+    #[test]
+    fn acquisition_converges_inactive_quarantine_before_reserving_new_route() {
+        let path = std::env::temp_dir().join(format!(
+            "agent-browser-handoff-quarantine-convergence-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = JsonServiceStateStore::new(path.clone());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([(
+                    "display-a".to_string(),
+                    DisplayAllocation {
+                        id: "display-a".to_string(),
+                        owner_browser_id: Some("session:research".to_string()),
+                        owner_session_id: Some("research".to_string()),
+                        state: "orphaned".to_string(),
+                        route_ids: vec!["route-a".to_string()],
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    "route-a".to_string(),
+                    RemoteViewRoute {
+                        id: "route-a".to_string(),
+                        display_allocation_id: Some("display-a".to_string()),
+                        browser_id: Some("session:research".to_string()),
+                        session_id: Some("research".to_string()),
+                        state: "orphaned".to_string(),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([
+                    (
+                        "pool-a".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-a".to_string(),
+                            route_id: "route-a".to_string(),
+                            state: "available".to_string(),
+                            current_route_allocation_id: None,
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                    (
+                        "pool-b".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-b".to_string(),
+                            route_id: "route-b".to_string(),
+                            state: "available".to_string(),
+                            current_route_allocation_id: None,
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                ]),
+                remote_view_acquisition_leases: BTreeMap::from([(
+                    "lease-a".to_string(),
+                    RemoteViewAcquisitionLease {
+                        id: "lease-a".to_string(),
+                        browser_id: "session:research".to_string(),
+                        session_id: "research".to_string(),
+                        route_id: "route-a".to_string(),
+                        display_allocation_id: "display-a".to_string(),
+                        route_pool_entry_id: Some("pool-a".to_string()),
+                        state: "failed".to_string(),
+                        phase: "rollback_incomplete".to_string(),
+                        cleanup: Some(json!({
+                            "state": "quarantined",
+                            "quarantine": { "active": true },
+                        })),
+                        ..RemoteViewAcquisitionLease::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let mut route_binding = command_test_route_binding();
+        route_binding.route_id = "route-b".to_string();
+        route_binding.route_pool_entry_id = Some("pool-b".to_string());
+        route_binding.display_allocation_id = "display-b".to_string();
+        let acquisition_plan = command_test_acquisition_plan(route_binding);
+
+        let lease = begin_route_bound_handoff_plan_acquisition(
+            &repository,
+            None,
+            &acquisition_plan,
+            "session:research",
+            "research",
+            "2026-09-01T12:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(lease.route_id, "route-b");
+        let state = store.load().unwrap();
+        assert_eq!(
+            state.remote_view_acquisition_leases["lease-a"].phase,
+            "rollback_complete"
+        );
+        assert_eq!(state.remote_view_routes["route-a"].state, "released");
+        assert_eq!(state.display_allocations["display-a"].state, "released");
+        assert_eq!(state.route_pool["pool-b"].state, "pending");
+
+        let _ = std::fs::remove_file(path);
     }
 
     fn command_test_intent() -> RemoteViewOpenIntent {

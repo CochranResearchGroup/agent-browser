@@ -1,11 +1,32 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-31
+Updated: 2026-09-01
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P150 | Automatic Terminal Quarantine Convergence
+
+State: IN PROGRESS
+Current state: the source repair is qualified. Normal reconciliation and the
+next matching route-bound acquisition now close a provably inactive quarantine
+inside a retained-state transaction, while the pre-pass snapshot fences active
+viewers, controllers, handoffs, presentation slots, checkouts, and conflicting
+ownership. Skipped explicit repair reports `repaired=false` with a typed next
+step. No browser, profile, provider, or retained production state has been
+mutated by this lane.
+
+### Plan
+
+- `docs/dev/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md`
+
+### Next Recommendation
+
+Build and publish the optimized candidate only to the isolated development
+runtime, then require development doctor and disposable launch smoke before any
+production install, reconciliation, or route-bound retry.
 
 ## P144 | Lease Authority Coordination And Revocation
 

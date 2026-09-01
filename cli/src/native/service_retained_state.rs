@@ -472,31 +472,7 @@ pub(crate) mod service_commands {
                 }
             }
             for lease_id in &rollback_incomplete_acquisitions {
-                if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
-                    let previous_cleanup = lease.cleanup.clone().unwrap_or_else(|| json!({}));
-                    let mut rollback = previous_cleanup.clone();
-                    if !rollback.is_object() {
-                        rollback = json!({ "previousCleanup": previous_cleanup });
-                    }
-                    if let Some(object) = rollback.as_object_mut() {
-                        object.insert("state".to_string(), json!("rolled_back"));
-                        object.insert("updatedAt".to_string(), json!(observed_at));
-                        object.insert(
-                            "cleanup".to_string(),
-                            json!({
-                                "state": "confirmed_inactive_retained_state",
-                                "reason": "rollback_incomplete_acquisition_repair",
-                                "previous": previous_cleanup.get("cleanup").cloned(),
-                                "observedAt": observed_at,
-                            }),
-                        );
-                        object.remove("quarantine");
-                    }
-                    lease.state = "failed".to_string();
-                    lease.phase = "rollback_complete".to_string();
-                    lease.updated_at = Some(observed_at.to_string());
-                    lease.cleanup = Some(rollback);
-                }
+                complete_inactive_terminal_acquisition(state, lease_id, observed_at);
             }
             for entry_id in &stale_checkouts {
                 if let Some(entry) = state.route_pool.get_mut(entry_id) {
@@ -559,8 +535,29 @@ pub(crate) mod service_commands {
         } else {
             0
         };
+        let candidate_total = repaired_pending_count
+            + repaired_rollback_incomplete_count
+            + repaired_count
+            + released_route_count
+            + released_display_allocation_count;
+        let repaired = repaired_total > 0;
+        let exact_lease_skipped = acquisition_lease_id.is_some()
+            && !skipped_rollback_incomplete_acquisition_reasons.is_empty();
+        let recommended_next_step = if options.apply && repaired {
+            "Run service_remote_view_route_checkout for the intended display allocations, then run service_reconcile to refresh derived remote-view incidents."
+        } else if options.apply && exact_lease_skipped {
+            "No repair was applied. Resolve the typed skipped reason before retrying the exact acquisition lease."
+        } else if options.apply {
+            "No repair was applied because no safe candidates were found. Run a fresh dry run after retained ownership changes."
+        } else if candidate_total > 0 {
+            "Review the reported candidates, then rerun with apply=true to repair only the accepted retained state."
+        } else if exact_lease_skipped {
+            "The exact acquisition lease is not currently repairable. Resolve the typed skipped reason, then run a fresh dry run."
+        } else {
+            "No safe repair candidates were found. Run a fresh dry run only after retained ownership changes."
+        };
         json!(
-            { "repaired" : options.apply, "dryRun" : ! options.apply, "observedAt" :
+            { "repaired" : repaired, "dryRun" : ! options.apply, "observedAt" :
             observed_at, "policy" : { "staleCheckouts" : options.stale_checkouts,
             "stalePendingAcquisitions" : options.stale_pending_acquisitions,
             "rollbackIncompleteAcquisitions" : options.stale_pending_acquisitions,
@@ -579,8 +576,7 @@ pub(crate) mod service_commands {
             repaired_rollback_incomplete_count,
             "staleRoutes" : released_route_count,
             "staleDisplayAllocations" : released_display_allocation_count, "total" :
-            repaired_pending_count + repaired_rollback_incomplete_count + repaired_count + released_route_count +
-            released_display_allocation_count, }, "skipped" : { "activeCheckouts" :
+            candidate_total, }, "skipped" : { "activeCheckouts" :
             skipped_active_checkouts, }, "skippedReasons" : {
             "rollbackIncompleteAcquisitions" :
             skipped_rollback_incomplete_acquisition_reasons, }, "skippedCounts" : { "activeCheckouts" :
@@ -592,11 +588,7 @@ pub(crate) mod service_commands {
             "staleDisplayAllocations" : if options.apply {
             released_display_allocation_count } else { 0 }, "total" : repaired_total, },
             "after" : { "routePoolEntryCount" : state.route_pool.len(), },
-            "recommendedNextStep" : if options.apply {
-            "Run service_remote_view_route_checkout for the intended display allocations, then run service_reconcile to refresh derived remote-view incidents."
-            } else {
-            "Review stale checkout candidates, then rerun with apply=true to return those route-pool entries to available state."
-            }, }
+            "recommendedNextStep" : recommended_next_step, }
         )
     }
     pub(crate) fn pending_acquisition_stale_reason(
@@ -635,6 +627,187 @@ pub(crate) mod service_commands {
         None
     }
 
+    /// Completes every terminal acquisition quarantine whose retained route,
+    /// display, and ownership graph is already provably inactive.
+    pub(crate) fn reconcile_inactive_terminal_route_quarantines(
+        state: &mut ServiceState,
+        prior_state: &ServiceState,
+        observed_at: &str,
+    ) -> usize {
+        reconcile_inactive_terminal_route_quarantines_matching(
+            state,
+            prior_state,
+            observed_at,
+            None,
+        )
+    }
+
+    pub(crate) fn reconcile_matching_inactive_terminal_route_quarantines(
+        state: &mut ServiceState,
+        prior_state: &ServiceState,
+        observed_at: &str,
+        browser_id: &str,
+        session_id: &str,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> usize {
+        reconcile_inactive_terminal_route_quarantines_matching(
+            state,
+            prior_state,
+            observed_at,
+            Some((browser_id, session_id, route_id, display_allocation_id)),
+        )
+    }
+
+    fn reconcile_inactive_terminal_route_quarantines_matching(
+        state: &mut ServiceState,
+        prior_state: &ServiceState,
+        observed_at: &str,
+        scope: Option<(&str, &str, &str, &str)>,
+    ) -> usize {
+        let mut lease_ids = state
+            .remote_view_acquisition_leases
+            .values()
+            .filter(|lease| lease.state == "failed" && lease.phase == "rollback_incomplete")
+            .filter(|lease| {
+                scope.is_none_or(
+                    |(browser_id, session_id, route_id, display_allocation_id)| {
+                        lease.browser_id == browser_id
+                            || lease.session_id == session_id
+                            || lease.route_id == route_id
+                            || lease.display_allocation_id == display_allocation_id
+                    },
+                )
+            })
+            .filter(|lease| {
+                rollback_incomplete_acquisition_repair_reason(state, lease).is_ok()
+                    && prior_active_acquisition_owner_reason(prior_state, lease).is_none()
+            })
+            .map(|lease| lease.id.clone())
+            .collect::<Vec<_>>();
+        lease_ids.sort();
+        for lease_id in &lease_ids {
+            complete_inactive_terminal_acquisition(state, lease_id, observed_at);
+        }
+        lease_ids.len()
+    }
+
+    fn prior_active_acquisition_owner_reason(
+        state: &ServiceState,
+        lease: &RemoteViewAcquisitionLease,
+    ) -> Option<&'static str> {
+        if state
+            .remote_view_routes
+            .get(&lease.route_id)
+            .is_some_and(|route| {
+                route.controller_lease_id.is_some() || !route.viewer_lease_ids.is_empty()
+            })
+        {
+            return Some("prior_route_viewer_or_controller_present");
+        }
+        if state.viewer_leases.values().any(|viewer| {
+            viewer_lease_is_active(viewer)
+                && (viewer.route_id.as_deref() == Some(lease.route_id.as_str())
+                    || viewer.browser_id.as_deref() == Some(lease.browser_id.as_str()))
+        }) {
+            return Some("prior_active_viewer_lease_present");
+        }
+        if state.remote_view_handoffs.values().any(|handoff| {
+            !matches!(handoff.state.as_str(), "closed" | "failed" | "released")
+                && (handoff.last_route_id.as_deref() == Some(lease.route_id.as_str())
+                    || handoff.last_display_allocation_id.as_deref()
+                        == Some(lease.display_allocation_id.as_str()))
+        }) {
+            return Some("prior_active_remote_view_handoff_present");
+        }
+        if state
+            .presentation_capacity
+            .as_ref()
+            .is_some_and(|capacity| {
+                capacity.slots.iter().any(|slot| {
+                    slot.route_id.as_deref() == Some(lease.route_id.as_str())
+                        || slot.display_allocation_id.as_deref()
+                            == Some(lease.display_allocation_id.as_str())
+                })
+            })
+        {
+            return Some("prior_presentation_slot_binding_present");
+        }
+        None
+    }
+
+    fn complete_inactive_terminal_acquisition(
+        state: &mut ServiceState,
+        lease_id: &str,
+        observed_at: &str,
+    ) {
+        let Some(lease_snapshot) = state.remote_view_acquisition_leases.get(lease_id).cloned()
+        else {
+            return;
+        };
+        if let Some(route) = state.remote_view_routes.get_mut(&lease_snapshot.route_id) {
+            if route.state == "orphaned" {
+                let previous_state = std::mem::replace(&mut route.state, "released".to_string());
+                route.readiness = Some(json!({
+                    "state": "released",
+                    "reason": "inactive_terminal_acquisition_reconciled",
+                    "previousState": previous_state,
+                    "acquisitionLeaseId": lease_id,
+                    "updatedAt": observed_at,
+                }));
+            }
+        }
+        if let Some(allocation) = state
+            .display_allocations
+            .get_mut(&lease_snapshot.display_allocation_id)
+        {
+            if allocation.state == "orphaned" {
+                let previous_state =
+                    std::mem::replace(&mut allocation.state, "released".to_string());
+                allocation.updated_at = Some(observed_at.to_string());
+                allocation.readiness = Some(json!({
+                    "state": "released",
+                    "reason": "inactive_terminal_acquisition_reconciled",
+                    "previousState": previous_state,
+                    "acquisitionLeaseId": lease_id,
+                    "updatedAt": observed_at,
+                }));
+            }
+        }
+        if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+            let previous_cleanup = lease.cleanup.clone().unwrap_or_else(|| json!({}));
+            let mut rollback = previous_cleanup.clone();
+            if !rollback.is_object() {
+                rollback = json!({ "previousCleanup": previous_cleanup });
+            }
+            if let Some(object) = rollback.as_object_mut() {
+                object.insert("state".to_string(), json!("rolled_back"));
+                object.insert("updatedAt".to_string(), json!(observed_at));
+                object.insert(
+                    "cleanup".to_string(),
+                    json!({
+                        "state": "confirmed_inactive_retained_state",
+                        "reason": "rollback_incomplete_acquisition_repair",
+                        "previous": previous_cleanup.get("cleanup").cloned(),
+                        "observedAt": observed_at,
+                    }),
+                );
+                object.remove("quarantine");
+            }
+            lease.state = "failed".to_string();
+            lease.phase = "rollback_complete".to_string();
+            lease.updated_at = Some(observed_at.to_string());
+            lease.cleanup = Some(rollback);
+        }
+    }
+
+    fn viewer_lease_is_active(lease: &ViewerLease) -> bool {
+        !matches!(
+            lease.state.as_str(),
+            "disconnected" | "expired" | "failed" | "released"
+        )
+    }
+
     /// Returns a repairable reason only when retained state proves that a
     /// terminal acquisition quarantine no longer protects a possible effect.
     fn rollback_incomplete_acquisition_repair_reason(
@@ -653,22 +826,66 @@ pub(crate) mod service_commands {
         if state.sessions.contains_key(&lease.session_id) {
             return Err("session_record_present");
         }
-        if state
-            .remote_view_routes
-            .get(&lease.route_id)
-            .is_some_and(|route| route.state != "released")
-        {
-            return Err("route_not_released");
+        if let Some(route) = state.remote_view_routes.get(&lease.route_id) {
+            if !matches!(route.state.as_str(), "released" | "orphaned") {
+                return Err("route_not_terminal");
+            }
+            if route.display_allocation_id.as_deref() != Some(lease.display_allocation_id.as_str())
+            {
+                return Err("route_display_allocation_mismatch");
+            }
+            if route
+                .browser_id
+                .as_deref()
+                .is_some_and(|browser_id| browser_id != lease.browser_id)
+            {
+                return Err("route_browser_owner_mismatch");
+            }
+            if route
+                .session_id
+                .as_deref()
+                .is_some_and(|session_id| session_id != lease.session_id)
+            {
+                return Err("route_session_owner_mismatch");
+            }
+            if !route.viewer_lease_ids.is_empty() {
+                return Err("route_viewer_lease_present");
+            }
+            if route.controller_lease_id.is_some() {
+                return Err("route_controller_lease_present");
+            }
         }
-        if state
-            .display_allocations
-            .get(&lease.display_allocation_id)
-            .is_some_and(|allocation| allocation.state != "released")
-        {
-            return Err("display_allocation_not_released");
+        if let Some(allocation) = state.display_allocations.get(&lease.display_allocation_id) {
+            if !matches!(allocation.state.as_str(), "released" | "orphaned") {
+                return Err("display_allocation_not_terminal");
+            }
+            if allocation
+                .owner_browser_id
+                .as_deref()
+                .is_some_and(|browser_id| browser_id != lease.browser_id)
+            {
+                return Err("display_browser_owner_mismatch");
+            }
+            if allocation
+                .owner_session_id
+                .as_deref()
+                .is_some_and(|session_id| session_id != lease.session_id)
+            {
+                return Err("display_session_owner_mismatch");
+            }
+            if allocation
+                .route_ids
+                .iter()
+                .any(|route_id| route_id != &lease.route_id)
+            {
+                return Err("display_has_other_route_reference");
+            }
         }
         if let Some(entry_id) = lease.route_pool_entry_id.as_ref() {
             if let Some(entry) = state.route_pool.get(entry_id) {
+                if entry.route_id != lease.route_id {
+                    return Err("route_pool_entry_route_mismatch");
+                }
                 if !matches!(entry.state.as_str(), "available" | "unavailable") {
                     return Err("route_pool_entry_not_terminal");
                 }
@@ -676,6 +893,53 @@ pub(crate) mod service_commands {
                     return Err("route_pool_entry_still_allocated");
                 }
             }
+        }
+        if state.route_pool.values().any(|entry| {
+            entry.current_route_allocation_id.as_deref() == Some(lease.route_id.as_str())
+        }) {
+            return Err("route_pool_entry_still_allocated");
+        }
+        if state.viewer_leases.values().any(|viewer| {
+            viewer_lease_is_active(viewer)
+                && (viewer.route_id.as_deref() == Some(lease.route_id.as_str())
+                    || viewer.browser_id.as_deref() == Some(lease.browser_id.as_str()))
+        }) {
+            return Err("active_viewer_lease_present");
+        }
+        if state.remote_view_handoffs.values().any(|handoff| {
+            !matches!(handoff.state.as_str(), "closed" | "failed" | "released")
+                && (handoff.last_route_id.as_deref() == Some(lease.route_id.as_str())
+                    || handoff.last_display_allocation_id.as_deref()
+                        == Some(lease.display_allocation_id.as_str()))
+        }) {
+            return Err("active_remote_view_handoff_present");
+        }
+        if state
+            .presentation_capacity
+            .as_ref()
+            .is_some_and(|capacity| {
+                capacity.slots.iter().any(|slot| {
+                    slot.route_id.as_deref() == Some(lease.route_id.as_str())
+                        || slot.display_allocation_id.as_deref()
+                            == Some(lease.display_allocation_id.as_str())
+                })
+            })
+        {
+            return Err("presentation_slot_binding_present");
+        }
+        if state
+            .remote_view_acquisition_leases
+            .values()
+            .filter(|candidate| candidate.id != lease.id)
+            .any(|candidate| {
+                (candidate.route_id == lease.route_id
+                    || candidate.display_allocation_id == lease.display_allocation_id
+                    || candidate.browser_id == lease.browser_id
+                    || candidate.session_id == lease.session_id)
+                    && !(candidate.state == "failed" && candidate.phase == "rollback_complete")
+            })
+        {
+            return Err("conflicting_acquisition_lease_present");
         }
         Ok("inactive_retained_state")
     }

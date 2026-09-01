@@ -3004,9 +3004,14 @@ crash.
 It also accepts an exact `acquisitionLeaseId` for a
 `failed/rollback_incomplete` acquisition. Dry run reports that lease only when
 its browser, process identity, and session are absent and its route, display,
-and pool are terminal. Apply records confirmed inactive retained state and
-promotes the lease to `failed/rollback_complete`; any live or ambiguous
-evidence remains quarantined with a typed skipped reason.
+and pool are terminal. Normal reconciliation and the next matching route-bound
+acquisition automatically advance safely orphaned route and display records to
+released and promote the lease to `failed/rollback_complete`. The transition
+also requires viewer, controller, handoff, presentation-slot, and conflicting
+acquisition evidence to be inactive. Apply remains the explicit recovery path
+for retained state that does not converge automatically. A skipped repair
+reports `repaired=false`, preserves quarantine, and returns the typed reason
+instead of recommending an unsafe apply.
 Use `pnpm test:rdp-guac-cold-restart-readback-live` for the Slice J cold
 restart readback gate. It uses the current Guacamole route-pool readiness
 report, launches one isolated `remote_headed` browser, checks out one
