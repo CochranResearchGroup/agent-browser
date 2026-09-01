@@ -216,7 +216,7 @@ EOF
 
 chmod +x "$FAKE_BIN/getent" "$FAKE_BIN/id" "$FAKE_BIN/stat" "$FAKE_BIN/sudo" "$FAKE_BIN/systemctl" "$FAKE_BIN/visudo"
 
-run_installer() {
+run_installer_mode() {
   PATH="$FAKE_BIN:$PATH" \
     AGENT_BROWSER_FIXTURE_LOG="$LOG" \
     AGENT_BROWSER_FIXTURE_STATE="$STATE_DIR" \
@@ -232,7 +232,11 @@ run_installer() {
     AGENT_BROWSER_PRIVILEGED_SUDOERS="$SUDOERS_PATH" \
     AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
     AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
-    bash "$ROOT/scripts/install-agent-browser-privileges.sh" --apply
+    bash "$ROOT/scripts/install-agent-browser-privileges.sh" "$@"
+}
+
+run_installer() {
+  run_installer_mode --apply
 }
 
 run_installer >/tmp/agent-browser-install-privileges-clean-fixture-first.out
@@ -350,6 +354,18 @@ fi
 # preserve state and the banked binary, stop only the protected service, and
 # replace only the service unit with read-only home visibility.
 sed -i 's/^ProtectHome=read-only$/ProtectHome=true/' "$AUTHORITY_SERVICE_UNIT"
+home_migration_dry_run="$(run_installer_mode --dry-run)"
+if ! grep -q 'migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only' \
+  <<<"$home_migration_dry_run"; then
+  echo "Lease-authority home-visibility dry run did not describe the exact migration." >&2
+  printf '%s\n' "$home_migration_dry_run" >&2
+  exit 1
+fi
+if grep -q 'initialize absent lease-authority state exactly once' <<<"$home_migration_dry_run"; then
+  echo "Lease-authority home-visibility dry run falsely described a fresh bootstrap." >&2
+  printf '%s\n' "$home_migration_dry_run" >&2
+  exit 1
+fi
 sudo_v_count_before_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
 run_installer >/tmp/agent-browser-install-privileges-clean-fixture-home-migration.out
 sudo_v_count_after_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"

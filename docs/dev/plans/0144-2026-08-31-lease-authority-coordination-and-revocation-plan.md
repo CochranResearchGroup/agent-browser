@@ -3134,4 +3134,9 @@ binary. Any other unit or artifact drift still fails closed. The clean-fixture
 smoke proves the migration crosses one explicit sudo boundary, does not repeat
 authority bootstrap, and leaves the banked binary unchanged. Installed unit
 migration, exact acquisition acceptance, exact-session cleanup, three-launch
-development smoke, and production installation remain.
+development smoke, and production installation remain. The live dry run then
+exposed a reporting defect: it described a fresh authority bootstrap even
+though apply would select the guarded legacy-unit migration. Dry-run planning
+now branches on the same exact current, legacy, recoverable, untrusted, and
+absent artifact predicates as apply, and fixture coverage rejects any legacy
+migration preview that claims it will initialize absent state.

@@ -535,11 +535,30 @@ Would run with one privileged authorization:
   sudo groupadd --force $GROUP_NAME
   sudo usermod -aG $GROUP_NAME $OPERATOR_USER
   sudo install validated sudoers policy at $SUDOERS_PATH
+EOF
+  if lease_authority_contract_ready; then
+    echo "  retain the exact ready protected lease-authority contract"
+  elif [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
+    if lease_authority_legacy_home_protection_ready; then
+      installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+      echo "  sudo systemctl stop agent-browser-lease-authority.service"
+      echo "  sudo migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only"
+      echo "  retain protected authority state and banked binary at $installed_authority_binary"
+      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
+    elif lease_authority_artifacts_ready; then
+      echo "  retain protected authority state, units, and banked binary"
+      echo "  sudo recover the exact protected lease-authority socket lifecycle"
+    else
+      echo "  refuse untrusted existing lease-authority artifacts without mutation"
+    fi
+  else
+    cat <<EOF
   sudo install immutable lease-authority binary at $LEASE_AUTHORITY_BANKED_BINARY
   sudo install fixed systemd units at $LEASE_AUTHORITY_SERVICE_UNIT and $LEASE_AUTHORITY_SOCKET_UNIT
   sudo initialize absent lease-authority state exactly once
   sudo systemctl enable --now agent-browser-lease-authority.socket
 EOF
+  fi
   if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
     echo "  sudo apt-get update"
     echo "  sudo apt-get install after a no-removal simulation:"
