@@ -6,8 +6,8 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 
 const CAPTURE_INTERVAL_MS: u64 = 100;
 const CAPTURE_FPS: u32 = 10;
@@ -336,16 +336,16 @@ pub(crate) mod action_commands {
         should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
         ProcessExitObservation, WaitUntil,
     };
-    use crate::native::cdp::client::CdpClient;
-    use crate::native::cdp::types::{
-        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
-        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
-        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
-    };
     use crate::native::cookies;
     use crate::native::recording::{self, RecordingState};
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
+    use agent_browser_cdp::client::CdpClient;
+    use agent_browser_cdp::types::{
+        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+    };
     use serde_json::{json, Map, Value};
     use std::process::{Command, Stdio};
     use std::sync::atomic::AtomicU64;

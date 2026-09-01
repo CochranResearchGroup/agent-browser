@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use super::cdp::client::CdpClient;
+use agent_browser_cdp::client::CdpClient;
 
 pub async fn set_extra_headers(
     client: &CdpClient,
@@ -685,10 +685,10 @@ pub(crate) mod action_commands {
         should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
         ProcessExitObservation, WaitUntil,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::network::{self, DomainFilter, EventTracker};
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
+    use agent_browser_cdp::client::CdpClient;
     use serde_json::{json, Map, Value};
     use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     use std::time::{Duration, Instant};

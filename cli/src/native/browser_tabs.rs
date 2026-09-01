@@ -16,13 +16,13 @@ pub(crate) mod action_commands {
     use crate::native::browser_lifecycle::{
         persist_service_owned_tab_new, tab_new_shared_acquisition_evidence,
     };
-    use crate::native::cdp::types::{
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::state;
+    use agent_browser_cdp::types::{
         AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
         DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
         TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
     };
-    use crate::native::service_diagnostics::truncate_utf8;
-    use crate::native::state;
     use serde_json::{json, Map, Value};
     pub(crate) async fn handle_tab_list(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
         let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
@@ -144,15 +144,15 @@ pub(crate) mod action_commands {
                 .to_string();
             json!({ "url" : url, "browserContextId" : context_id, "newWindow" : true })
         };
-        let create_result: super::super::cdp::types::CreateTargetResult = mgr
+        let create_result: agent_browser_cdp::types::CreateTargetResult = mgr
             .client
             .send_command_typed("Target.createTarget", &create_params, None)
             .await?;
-        let attach: super::super::cdp::types::AttachToTargetResult = mgr
+        let attach: agent_browser_cdp::types::AttachToTargetResult = mgr
             .client
             .send_command_typed(
                 "Target.attachToTarget",
-                &super::super::cdp::types::AttachToTargetParams {
+                &agent_browser_cdp::types::AttachToTargetParams {
                     target_id: create_result.target_id.clone(),
                     flatten: true,
                 },

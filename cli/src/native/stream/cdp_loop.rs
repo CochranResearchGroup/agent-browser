@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 
-use crate::native::cdp::client::CdpClient;
-use crate::native::cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 use crate::native::network;
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 
 use super::timestamp_ms;
 

@@ -34,7 +34,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, watch, Mutex, Notify, RwLock};
 
-use super::cdp::client::CdpClient;
+use agent_browser_cdp::client::CdpClient;
 
 /// Frame metadata from CDP Page.screencastFrame events.
 #[derive(Debug, Clone)]

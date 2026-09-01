@@ -12,9 +12,9 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::runtime::Handle;
 
-use super::cdp::client::CdpClient;
 use super::desktop_evidence::BrowserExternalSurface;
 use super::service_model::{BrowserHealth, ServiceState, ServiceTabHandle, TabLifecycle};
+use agent_browser_cdp::client::CdpClient;
 
 const CDP_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
 const CDP_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);

@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::EvaluateParams;
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::EvaluateParams;
 
 pub async fn storage_get(
     client: &CdpClient,
@@ -74,7 +74,7 @@ fn storage_js_name(storage_type: &str) -> &str {
 }
 
 async fn eval_simple(client: &CdpClient, session_id: &str, js: &str) -> Result<Value, String> {
-    let result: super::cdp::types::EvaluateResult = client
+    let result: agent_browser_cdp::types::EvaluateResult = client
         .send_command_typed(
             "Runtime.evaluate",
             &EvaluateParams {
@@ -103,10 +103,10 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::storage;
+    use agent_browser_cdp::client::CdpClient;
     use serde_json::{json, Map, Value};
     pub(crate) async fn handle_storage_get(
         cmd: &Value,

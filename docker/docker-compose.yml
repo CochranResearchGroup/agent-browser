@@ -10,8 +10,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.build
+    working_dir: /build/cli
     volumes:
-      - ../cli:/build
+      - ..:/build
       - ../bin:/output
     command: |
       -c '
@@ -19,10 +20,10 @@ services:
         echo "Building for Linux platforms (parallel)..."
         
         # Build both targets in parallel
-        (echo "→ Linux x64" && cargo zigbuild --release --target x86_64-unknown-linux-gnu && cp /build/target/x86_64-unknown-linux-gnu/release/agent-browser /output/agent-browser-linux-x64 && chmod +x /output/agent-browser-linux-x64 && echo "✓ Linux x64 done") &
+        (echo "→ Linux x64" && cargo zigbuild --release --target x86_64-unknown-linux-gnu && cp /build/cli/target/x86_64-unknown-linux-gnu/release/agent-browser /output/agent-browser-linux-x64 && chmod +x /output/agent-browser-linux-x64 && echo "✓ Linux x64 done") &
         PID1=$!
         
-        (echo "→ Linux ARM64" && cargo zigbuild --release --target aarch64-unknown-linux-gnu && cp /build/target/aarch64-unknown-linux-gnu/release/agent-browser /output/agent-browser-linux-arm64 && chmod +x /output/agent-browser-linux-arm64 && echo "✓ Linux ARM64 done") &
+        (echo "→ Linux ARM64" && cargo zigbuild --release --target aarch64-unknown-linux-gnu && cp /build/cli/target/aarch64-unknown-linux-gnu/release/agent-browser /output/agent-browser-linux-arm64 && chmod +x /output/agent-browser-linux-arm64 && echo "✓ Linux ARM64 done") &
         PID2=$!
         
         # Wait for both to complete
@@ -38,8 +39,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.build
+    working_dir: /build/cli
     volumes:
-      - ../cli:/build
+      - ..:/build
       - ../bin:/output
     command: |
       -c '
@@ -47,7 +49,7 @@ services:
         echo "Building for Windows x64..."
         
         cargo build --release --target x86_64-pc-windows-gnu
-        cp /build/target/x86_64-pc-windows-gnu/release/agent-browser.exe /output/agent-browser-win32-x64.exe
+        cp /build/cli/target/x86_64-pc-windows-gnu/release/agent-browser.exe /output/agent-browser-win32-x64.exe
         
         echo ""
         echo "✓ Windows build completed!"
@@ -59,8 +61,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.build
+    working_dir: /build/cli
     volumes:
-      - ../cli:/build
+      - ..:/build
       - ../bin:/output
     environment:
       - TARGET=${TARGET:-x86_64-unknown-linux-gnu}
@@ -68,7 +71,7 @@ services:
     command: |
       -c '
         cargo zigbuild --release --target $TARGET
-        cp /build/target/$TARGET/release/agent-browser* /output/$OUTPUT_NAME
+        cp /build/cli/target/$TARGET/release/agent-browser* /output/$OUTPUT_NAME
         chmod +x /output/$OUTPUT_NAME 2>/dev/null || true
         echo "✓ Built $OUTPUT_NAME"
       '

@@ -568,11 +568,11 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_WAIT_UNTIL,
     };
     use crate::native::auth;
-    use crate::native::cdp::client::CdpClient;
     use crate::native::network;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::webdriver::backend::BrowserBackend;
+    use agent_browser_cdp::client::CdpClient;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};
     use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -649,7 +649,7 @@ pub(crate) mod action_commands {
     /// This is used by `auth_login` auto-detection so SPA login forms can render
     /// after initial navigation without requiring global network-idle.
     pub(crate) async fn wait_for_any_selector(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         selectors: &[&str],
         timeout_ms: u64,
@@ -682,10 +682,10 @@ pub(crate) mod action_commands {
                 }})()"#,
                     sel = serde_json::to_string(selector).unwrap_or_default()
                 );
-                let result: super::super::cdp::types::EvaluateResult = client
+                let result: agent_browser_cdp::types::EvaluateResult = client
                     .send_command_typed(
                         "Runtime.evaluate",
-                        &super::super::cdp::types::EvaluateParams {
+                        &agent_browser_cdp::types::EvaluateParams {
                             expression,
                             return_by_value: Some(true),
                             await_promise: Some(true),

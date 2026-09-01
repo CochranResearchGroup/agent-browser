@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::cdp::client::CdpClient;
+use agent_browser_cdp::client::CdpClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,11 +109,11 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::cookies;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::webdriver::backend::BrowserBackend;
+    use agent_browser_cdp::client::CdpClient;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};
     pub(crate) async fn handle_cookies_get(

@@ -5,9 +5,9 @@ use serde_json::{json, Value};
 use std::future::Future;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-use super::cdp::types::CdpEvent;
 use super::service_model::{ServiceEvent, ServiceEventKind, TabLifecycle};
 use super::service_store::ServiceStateRepository;
+use agent_browser_cdp::types::CdpEvent;
 
 /// A renderer-crash event observed on the daemon CDP stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -3,7 +3,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use super::types::BrowserVersionInfo;
+use agent_browser_cdp::types::BrowserVersionInfo;
 
 /// Default timeout for CDP discovery HTTP requests.
 const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);

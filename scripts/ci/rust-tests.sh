@@ -4,10 +4,13 @@ set -euo pipefail
 manifest_path="${CARGO_MANIFEST_PATH:-cli/Cargo.toml}"
 profile="${CARGO_TEST_PROFILE:-}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
 
 cargo_test=("$script_dir/cargo-safe.sh" test --manifest-path "$manifest_path")
+cdp_cargo_test=("$script_dir/cargo-safe.sh" test -p agent-browser-cdp --manifest-path "$repo_root/Cargo.toml")
 if [[ -n "$profile" ]]; then
   cargo_test+=(--profile "$profile")
+  cdp_cargo_test+=(--profile "$profile")
 fi
 
 # These modules mutate process-global environment variables or user-scoped
@@ -72,6 +75,9 @@ skip_args=()
 for filter in "${serial_filters[@]}"; do
   skip_args+=(--skip "$filter")
 done
+
+echo "Running CDP transport crate tests"
+"${cdp_cargo_test[@]}"
 
 echo "Running parallel-safe Rust tests"
 "${cargo_test[@]}" -- "${skip_args[@]}"
