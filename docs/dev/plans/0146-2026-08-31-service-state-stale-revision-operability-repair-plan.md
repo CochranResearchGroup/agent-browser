@@ -14,6 +14,8 @@ Source baseline: `9fd50ec9ebbf3c15200fc2815d9f8a362d60d4b7`
 
 Implementation checkpoint: `c22a208703bf8efdc22d87b51784b25e5866f707`
 
+Integration checkpoint: `f1029320ff93641388325d38c77af8c18d997e3f`
+
 Authority: SOURCE, DOCUMENTATION, PROVIDER-FREE FIXTURES, ISOLATED DEVELOPMENT
 RUNTIME PUBLICATION, AND EXACT PRODUCTION CANDIDATE INSTALLATION ARE IN SCOPE.
 PRODUCTION BROWSER, PROFILE, ROUTE, TENANT, OR PROVIDER EFFECTS ARE OUT OF SCOPE.
@@ -105,3 +107,9 @@ both returned 1440 by 1000. See
 `docs/dev/notes/0150-2026-08-31-plan-0146-service-state-stale-revision-repair-acceptance.md`
 for the root-cause boundary, validation, installation, reconciliation, and
 residue evidence.
+
+The completed branch was integrated into `main` by fast-forward through
+`f1029320ff93641388325d38c77af8c18d997e3f`. The declared overlap with
+`plan/lease-authority-coordination` is reconciled because that coordination
+branch contains the Plan 0146 checkpoint and continues from it without
+rewriting the repair.
