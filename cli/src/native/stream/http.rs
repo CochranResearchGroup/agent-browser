@@ -2029,7 +2029,11 @@ pub(crate) fn service_request_adapter_fixture_for_session(
     }
 }
 
-fn service_request_relay_session(default_session: &str, body: &str, command: &Value) -> String {
+pub(super) fn service_request_relay_session(
+    default_session: &str,
+    body: &str,
+    command: &Value,
+) -> String {
     let request = if body.trim().is_empty() {
         Value::Null
     } else {
@@ -2141,7 +2145,11 @@ fn service_request_requires_relay_session_recovery(
                 .and_then(Value::as_str)
                 .is_some_and(|value| !value.trim().is_empty())
             && command.get("browserId").is_none();
-    action == Some("service_remote_view_handoff_resolve") || authenticated_cold_profile_acquisition
+    let unsafe_claim_any = matches!(action, Some("tab_new" | "remote_view_open"))
+        && command["profileLeaseUnsafeClaim"]["applied"].as_bool() == Some(true);
+    action == Some("service_remote_view_handoff_resolve")
+        || authenticated_cold_profile_acquisition
+        || unsafe_claim_any
 }
 
 fn service_daemon_session_recovery_args(
@@ -4034,7 +4042,7 @@ fn load_service_state_snapshot() -> Value {
     serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
-fn load_service_state() -> ServiceState {
+pub(super) fn load_service_state() -> ServiceState {
     let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     let mut service_state = parse_flags(&args).service_state;
@@ -5600,6 +5608,25 @@ mod tests {
             service_request_relay_session("AgentBrowserDashboard", body, &command),
             "odollo-carrier-ups"
         );
+    }
+
+    #[test]
+    fn unsafe_claim_any_recovers_the_explicit_relay_session_for_any_client() {
+        let command = json!({
+            "action": "tab_new",
+            "sessionName": "foreign-session",
+            "runtimeProfile": "foreign-profile",
+            "profileLeaseUnsafeClaim": {
+                "applied": true,
+                "mode": "unsafe_claim_any"
+            }
+        });
+
+        assert!(service_request_requires_relay_session_recovery(
+            "AgentBrowserDashboard",
+            "foreign-session",
+            &command,
+        ));
     }
 
     #[test]

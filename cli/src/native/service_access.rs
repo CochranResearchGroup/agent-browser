@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
 use super::service_lease_authority::{ActiveLeaseClaim, LeaseResourceKey};
+use super::service_lease_mode::{profile_lease_mode_from_env, ProfileLeaseMode};
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
@@ -1255,6 +1256,12 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
     ) {
         return Ok(());
     }
+    if profile_lease_mode_from_env()? == ProfileLeaseMode::UnsafeClaimAny
+        && service_request_has_session_hint(command)
+    {
+        apply_unsafe_claim_any_route(service_state, command)?;
+        return Ok(());
+    }
     if service_request_has_complete_route_hints(command)
         || command
             .get("allowDuplicateProfileLane")
@@ -1377,6 +1384,49 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
 
     command["browserId"] = json!(browser_id);
     command["sessionName"] = json!(session_name);
+    Ok(())
+}
+
+/// Preserve an explicitly selected daemon lane while recording that normal
+/// principal-continuity and route-ownership planning was intentionally skipped.
+/// If current state knows one browser for the lane, complete the route hint so
+/// dispatch adopts that browser instead of opening another profile process.
+fn apply_unsafe_claim_any_route(
+    service_state: &ServiceState,
+    command: &mut Value,
+) -> Result<(), String> {
+    let session_name = command
+        .get("sessionName")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "unsafe_claim_any_requires_session_name".to_string())?
+        .to_string();
+    let retained_session = service_state.sessions.get(&session_name);
+    if !service_request_has_browser_hint(command) {
+        if let Some(browser_id) = retained_session
+            .and_then(|session| (session.browser_ids.len() == 1).then(|| &session.browser_ids[0]))
+            .filter(|browser_id| service_state.browsers.contains_key(*browser_id))
+        {
+            command["browserId"] = json!(browser_id);
+        }
+    }
+    let requested_profile = command
+        .get("runtimeProfile")
+        .or_else(|| command.get("profileId"))
+        .or_else(|| command.get("profile"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    command["profileLeaseUnsafeClaim"] = json!({
+        "schemaVersion": "agent-browser.profile-lease-unsafe-claim.v1",
+        "applied": true,
+        "mode": "unsafe_claim_any",
+        "sessionName": session_name,
+        "profile": requested_profile,
+        "browserId": command.get("browserId").cloned().unwrap_or(Value::Null),
+        "retainedSessionFound": retained_session.is_some(),
+        "principalContinuityBypassed": true,
+        "warning": "UNSAFE: caller-selected session/profile route bypassed principal continuity and lease ownership planning",
+    });
     Ok(())
 }
 
@@ -5240,6 +5290,50 @@ mod tests {
             "service_access_plan_request_unavailable:explicit_session_route_invalid"
         );
         assert!(invalid_command.get("browserId").is_none());
+    }
+
+    #[test]
+    fn unsafe_claim_any_route_adopts_explicit_foreign_session_without_principal_check() {
+        let state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-foreign".to_string(),
+                BrowserProcess {
+                    id: "browser-foreign".to_string(),
+                    profile_id: Some("foreign-profile".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["foreign-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "foreign-session".to_string(),
+                BrowserSession {
+                    id: "foreign-session".to_string(),
+                    profile_id: Some("foreign-profile".to_string()),
+                    principal_id: Some("principal:foreign".to_string()),
+                    browser_ids: vec!["browser-foreign".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut command = json!({
+            "action": "tab_new",
+            "runtimeProfile": "foreign-profile",
+            "sessionName": "foreign-session"
+        });
+
+        apply_unsafe_claim_any_route(&state, &mut command).unwrap();
+
+        assert_eq!(command["browserId"], "browser-foreign");
+        assert_eq!(command["sessionName"], "foreign-session");
+        assert_eq!(command["runtimeProfile"], "foreign-profile");
+        assert_eq!(command["profileLeaseUnsafeClaim"]["applied"], true);
+        assert_eq!(
+            command["profileLeaseUnsafeClaim"]["principalContinuityBypassed"],
+            true
+        );
     }
 
     #[test]

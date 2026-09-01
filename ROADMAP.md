@@ -464,7 +464,8 @@ behavior.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER PLANNED
+State: ALL FIVE POCS SOURCE ACCEPTED | AUTHENTICATION SLICE A SOURCE ACCEPTED |
+PLAN 0131 CONTROLLED PROVIDER PLANNED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -495,6 +496,16 @@ provider-neutral evidence, service-owned ready handoff resolution, a complete
 separate aggregate planning-only entry gate. Every individual operation
 receipt remains live closed. No production desktop provider or controlled live
 recipe was authorized or exercised.
+
+Plan 0138 Authentication Run Slice A is source accepted at `d0786a5a`. A
+focused internal Rust module now binds one run to its exact principal, task,
+target account, profile, browser, session, login tab, site recipe, and policy.
+Its response-only action seam keeps credentials, OTPs, and device-verification
+URLs out of the run and every outward receipt. Synthetic SMS and email-link
+canaries prove watch-before-trigger ordering, one post-fence candidate,
+same-profile new-tab navigation, effect replay rejection, bounded transitions,
+and exact-target verification. This packet added no public action, Service
+State migration, installed runtime, or live provider effect.
 
 Plan 0131 is now planned at source baseline `e8695f82`. It freezes one
 development-first X11 provider behind the existing `desktop_interact` engine,
@@ -732,12 +743,12 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Start Plan 0131 Slice A only in its dedicated feature worktree. Freeze the
-controlled X11 provider, OS-visible route fence, effect journal, red fixtures,
-and provider-free failure contracts before selecting a library or changing
-configured dispatch. Do not start a real challenge or authentication
-integration until the separately authorized production controlled-fixture
-proof passes.
+For the authentication lane, persist the accepted `AuthenticationRun` in
+Service State and design one coherent create, inspect, resume, cancel, and
+result contract across every public ingress before connecting a live provider.
+Keep OTPs and device-verification URLs inside response-only internal adapters.
+Plan 0131 remains the independent controlled-input lane and retains its own
+production controlled-fixture gate.
 
 ### Evidence
 
@@ -745,6 +756,8 @@ proof passes.
 - `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
 - `docs/dev/notes/0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md`
+- `docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md`
+- `docs/dev/notes/0138-2026-08-29-authentication-run-provider-free-source-acceptance.md`
 - `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
 - `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
 - `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`

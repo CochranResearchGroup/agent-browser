@@ -31,6 +31,7 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
+use crate::native::service_lease_mode::{profile_lease_mode_from_env, ProfileLeaseMode};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -56,9 +57,6 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-const PROFILE_LEASE_MODE_ENV: &str = "AGENT_BROWSER_PROFILE_LEASE_MODE";
-const PROFILE_LEASE_FAIL_OPEN_EPHEMERAL: &str = "fail_open_ephemeral";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ServiceProfileLeaseBlockReason {
@@ -93,16 +91,10 @@ pub(crate) fn service_profile_lease_admission(
         return Ok(ServiceProfileLeaseGate::Ready);
     }
     let decision = service_profile_lease_gate(command, session_id, waited_ms)?;
-    let mode = match std::env::var(PROFILE_LEASE_MODE_ENV) {
-        Err(std::env::VarError::NotPresent) => return Ok(decision),
-        Err(error) => return Err(format!("Could not read {PROFILE_LEASE_MODE_ENV}: {error}")),
-        Ok(value) if value == PROFILE_LEASE_FAIL_OPEN_EPHEMERAL => value,
-        Ok(value) => {
-            return Err(format!(
-            "{PROFILE_LEASE_MODE_ENV} must be '{PROFILE_LEASE_FAIL_OPEN_EPHEMERAL}', got '{value}'"
-        ))
-        }
-    };
+    let mode = profile_lease_mode_from_env()?;
+    if mode == ProfileLeaseMode::Enforced {
+        return Ok(decision);
+    }
     let reason = match decision {
         ServiceProfileLeaseGate::Ready => return Ok(ServiceProfileLeaseGate::Ready),
         ServiceProfileLeaseGate::Reject { reason, .. } => reason,
@@ -110,6 +102,24 @@ pub(crate) fn service_profile_lease_admission(
             ServiceProfileLeaseBlockReason::ExclusiveProfileLease
         }
     };
+    if mode == ProfileLeaseMode::UnsafeClaimAny {
+        let object = command
+            .as_object_mut()
+            .ok_or_else(|| "Service command must be a JSON object".to_string())?;
+        object.insert(
+            "profileLeaseUnsafeClaim".to_string(),
+            json!({
+                "schemaVersion": "agent-browser.profile-lease-unsafe-claim.v1",
+                "applied": true,
+                "mode": mode.as_str(),
+                "reason": reason.as_str(),
+                "sessionName": session_id,
+                "authenticationPreserved": true,
+                "warning": "UNSAFE: profile lease and principal ownership conflicts were ignored for this service request",
+            }),
+        );
+        return Ok(ServiceProfileLeaseGate::Ready);
+    }
     let original_profile_id =
         service_profile_lease_metadata_for_command(command, Some(session_id))?
             .and_then(|metadata| metadata.profile_id)
@@ -138,7 +148,7 @@ pub(crate) fn service_profile_lease_admission(
         json!({
             "schemaVersion": "agent-browser.profile-lease-fail-open.v1",
             "applied": true,
-            "mode": mode,
+            "mode": mode.as_str(),
             "reason": reason.as_str(),
             "originalProfileId": original_profile_id,
             "fallbackRuntimeProfile": fallback_runtime_profile,

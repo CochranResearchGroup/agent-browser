@@ -6,6 +6,8 @@ pub mod auth;
 #[allow(dead_code)]
 pub mod auth_workflow;
 #[allow(dead_code)]
+pub(crate) mod authentication_run;
+#[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
 pub mod browser_context;
@@ -143,6 +145,8 @@ pub mod service_inventory;
 pub mod service_jobs;
 #[allow(dead_code)]
 pub(crate) mod service_lease_authority;
+#[allow(dead_code)]
+pub(crate) mod service_lease_mode;
 #[allow(dead_code)]
 pub mod service_lifecycle;
 #[allow(dead_code)]
