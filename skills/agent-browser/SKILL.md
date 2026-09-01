@@ -969,6 +969,11 @@ provider uses six development-only route identities and local port 8093. Do not
 attach it to production Guacamole. Its seeded `development-default` runtime lane
 uses fixed stream port 4951. Use `pnpm development-runtime:gc` for safe
 unselected-generation cleanup.
+The development doctor also verifies the shared root-owned protected lease
+authority socket, including its system unit state, root ownership,
+`agent-browser` group, and mode `0660`. Do not create a development authority
+daemon. When the check fails, use the reviewed one-sudo
+`pnpm install:privileges -- --apply` bootstrap before acquisition.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped

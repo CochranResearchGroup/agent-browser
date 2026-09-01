@@ -28,6 +28,28 @@ import {
 import { probeDevelopmentPresentationProvider } from './development-presentation-provider-deployment.js';
 
 export const DEVELOPMENT_RUNTIME_SCHEMA = 'agent-browser.development-runtime.v1';
+const PROTECTED_LEASE_AUTHORITY_SOCKET_UNIT = 'agent-browser-lease-authority.socket';
+const PROTECTED_LEASE_AUTHORITY_SOCKET_PATH = '/run/agent-browser/lease-authority.sock';
+const PROTECTED_LEASE_AUTHORITY_OPERATOR_GROUP = 'agent-browser';
+
+/**
+ * Evaluates the shared root-owned authority endpoint without treating retained
+ * lease records, browser history, or a per-lane process as live authority.
+ */
+export function evaluateProtectedLeaseAuthorityStatus({ unit, socket, operatorGroupId }) {
+  const reasons = [];
+  if (unit.loadState !== 'loaded') reasons.push('socket_unit_not_loaded');
+  if (unit.activeState !== 'active') reasons.push('socket_unit_not_active');
+  if (unit.unitFileState !== 'enabled') reasons.push('socket_unit_not_enabled');
+  if (!socket.exists) reasons.push('socket_path_missing');
+  else if (!socket.socket) reasons.push('socket_path_not_unix_socket');
+  if (socket.uid !== 0) reasons.push('socket_owner_not_root');
+  if (operatorGroupId === null || socket.gid !== operatorGroupId) {
+    reasons.push('socket_group_mismatch');
+  }
+  if (socket.mode !== 0o660) reasons.push('socket_mode_mismatch');
+  return { ready: reasons.length === 0, reasons };
+}
 
 export function developmentRuntimeDescriptor(env = process.env) {
   const userHome = resolve(env.AGENT_BROWSER_DEV_USER_HOME || homedir());
@@ -333,6 +355,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     probe: probeDevelopmentPresentationProvider,
   }).status;
   const developmentSkill = developmentAgentSkillStatus({ env });
+  const protectedLeaseAuthority = protectedLeaseAuthorityStatus(env);
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     descriptor,
@@ -348,6 +371,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     auth,
     presentationProvider,
     developmentSkill,
+    protectedLeaseAuthority,
     ready:
       Boolean(selectedGeneration) &&
       Boolean(executable) &&
@@ -357,6 +381,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
       laneManifest?.schemaVersion === 'agent-browser.session-supervisor.v1' &&
       laneManifest?.executablePath === executable &&
       Object.values(units).every((unit) => unit.activeState === 'active') &&
+      protectedLeaseAuthority.ready &&
       manifest?.runtimeEnvironment === 'development' &&
       manifest?.executable?.path === executable,
   };
@@ -384,6 +409,13 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     check('port:lane', status.ports.lane === status.units['agent-browser-dev-runtime-host.service'].mainPid, status.ports.lane),
     check('auth:store', status.auth.store.private, status.auth.store),
     check('auth:bootstrap', status.auth.bootstrap.private, status.auth.bootstrap),
+    check(
+      'protected-lease-authority',
+      status.protectedLeaseAuthority.ready,
+      status.protectedLeaseAuthority.ready
+        ? 'ready'
+        : status.protectedLeaseAuthority.reasons.join(','),
+    ),
     check('manifest-environment', status.manifest?.runtimeEnvironment === 'development', status.manifest?.runtimeEnvironment),
     check('manifest-executable', status.manifest?.executable?.path === status.executable, status.manifest?.executable?.path),
     check('browser-executable', executableFile(status.descriptor.browserExecutable), status.descriptor.browserExecutable),
@@ -565,6 +597,81 @@ function unitStatus(unit, env) {
     };
   } catch (error) {
     return { loadState: 'unknown', activeState: 'unknown', mainPid: null, error: String(error.message || error) };
+  }
+}
+
+function protectedLeaseAuthorityStatus(env) {
+  const unit = systemUnitStatus(PROTECTED_LEASE_AUTHORITY_SOCKET_UNIT, env);
+  const socket = unixSocketStatus(PROTECTED_LEASE_AUTHORITY_SOCKET_PATH);
+  const operatorGroupId = groupId(PROTECTED_LEASE_AUTHORITY_OPERATOR_GROUP, env);
+  return {
+    unitName: PROTECTED_LEASE_AUTHORITY_SOCKET_UNIT,
+    socketPath: PROTECTED_LEASE_AUTHORITY_SOCKET_PATH,
+    operatorGroup: PROTECTED_LEASE_AUTHORITY_OPERATOR_GROUP,
+    operatorGroupId,
+    unit,
+    socket,
+    ...evaluateProtectedLeaseAuthorityStatus({ unit, socket, operatorGroupId }),
+  };
+}
+
+function systemUnitStatus(unit, env) {
+  try {
+    const output = execFileSync(
+      'systemctl',
+      [
+        'show',
+        unit,
+        '--property=LoadState',
+        '--property=ActiveState',
+        '--property=UnitFileState',
+        '--property=FragmentPath',
+      ],
+      { env, encoding: 'utf8' },
+    );
+    const values = Object.fromEntries(output.trim().split(/\r?\n/).map((line) => {
+      const index = line.indexOf('=');
+      return [line.slice(0, index), line.slice(index + 1)];
+    }));
+    return {
+      loadState: values.LoadState || 'unknown',
+      activeState: values.ActiveState || 'unknown',
+      unitFileState: values.UnitFileState || 'unknown',
+      fragmentPath: values.FragmentPath || null,
+    };
+  } catch (error) {
+    return {
+      loadState: 'unknown',
+      activeState: 'unknown',
+      unitFileState: 'unknown',
+      fragmentPath: null,
+      error: String(error.message || error),
+    };
+  }
+}
+
+function unixSocketStatus(path) {
+  try {
+    const stats = statSync(path);
+    return {
+      exists: true,
+      socket: stats.isSocket(),
+      uid: stats.uid,
+      gid: stats.gid,
+      mode: stats.mode & 0o777,
+    };
+  } catch {
+    return { exists: false, socket: false, uid: null, gid: null, mode: null };
+  }
+}
+
+function groupId(group, env) {
+  try {
+    const record = execFileSync('getent', ['group', group], { env, encoding: 'utf8' }).trim();
+    const value = Number(record.split(':')[2]);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
   }
 }
 

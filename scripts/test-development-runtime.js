@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import {
   assertProductionUnchanged,
   developmentRuntimeDescriptor,
+  evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
   renderDevelopmentUnits,
@@ -45,6 +46,74 @@ const env = {
 };
 
 try {
+  assert.deepEqual(
+    evaluateProtectedLeaseAuthorityStatus({
+      unit: {
+        loadState: 'loaded',
+        activeState: 'active',
+        unitFileState: 'enabled',
+      },
+      socket: {
+        exists: true,
+        socket: true,
+        uid: 0,
+        gid: 1005,
+        mode: 0o660,
+      },
+      operatorGroupId: 1005,
+    }),
+    {
+      ready: true,
+      reasons: [],
+    },
+  );
+  assert.deepEqual(
+    evaluateProtectedLeaseAuthorityStatus({
+      unit: {
+        loadState: 'not-found',
+        activeState: 'inactive',
+        unitFileState: 'disabled',
+      },
+      socket: {
+        exists: false,
+        socket: false,
+        uid: null,
+        gid: null,
+        mode: null,
+      },
+      operatorGroupId: 1005,
+    }),
+    {
+      ready: false,
+      reasons: [
+        'socket_unit_not_loaded',
+        'socket_unit_not_active',
+        'socket_unit_not_enabled',
+        'socket_path_missing',
+        'socket_owner_not_root',
+        'socket_group_mismatch',
+        'socket_mode_mismatch',
+      ],
+    },
+  );
+  assert.deepEqual(
+    evaluateProtectedLeaseAuthorityStatus({
+      unit: {
+        loadState: 'loaded',
+        activeState: 'active',
+        unitFileState: 'enabled',
+      },
+      socket: {
+        exists: true,
+        socket: false,
+        uid: 0,
+        gid: 1005,
+        mode: 0o660,
+      },
+      operatorGroupId: 1005,
+    }).reasons,
+    ['socket_path_not_unix_socket'],
+  );
   const descriptor = developmentRuntimeDescriptor(env);
   assert.equal(descriptor.dashboardPort, 4948);
   assert.equal(descriptor.backendPort, 4949);

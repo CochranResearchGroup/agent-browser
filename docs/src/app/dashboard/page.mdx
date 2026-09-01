@@ -39,6 +39,12 @@ multiplicity.
 
 Use <code>pnpm development-runtime:status</code> for a readback and
 <code>pnpm development-runtime:doctor</code> for the acceptance checks. The
+doctor requires the shared root-owned
+<code>agent-browser-lease-authority.socket</code> to be loaded, enabled, active,
+owned by root, assigned to the <code>agent-browser</code> group, and mode
+<code>0660</code>. Development services never create a second authority daemon.
+Use the reviewed one-sudo <code>pnpm install:privileges -- --apply</code>
+bootstrap when this check fails. The
 development dashboard displays a persistent Development badge, and
 <code>/api/runtime/manifest</code> reports
 <code>runtimeEnvironment: "development"</code>. The separate Cooper inventory

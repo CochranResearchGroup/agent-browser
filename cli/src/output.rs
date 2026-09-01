@@ -5543,6 +5543,9 @@ profile pressure, and remote-view privilege readiness. Warning-severity
 observations remain visible but do not make doctor exit nonzero. Workstation
 runtime multiplicity is scoped to the exact production socket namespace, so
 an isolated `agent-browser-dev` host is not classified as production drift.
+Production and isolated development clients share one root-owned protected
+lease-authority socket; a development runtime must verify that endpoint rather
+than launching a second authority daemon.
 Workstation payload checks bind the installed binary and support assets to
 recorded SHA-256 provenance. Runtime-host transition checks bind each host to its PID,
 process start token, binary hash, generation, and socket identity. Real-host preflight

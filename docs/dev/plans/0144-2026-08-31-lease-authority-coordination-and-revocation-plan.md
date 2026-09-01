@@ -3055,3 +3055,29 @@ format checks. This removes expired adoption receipts as a permanent ordinary
 work blocker. Integration must still preserve the already-merged workstation
 upgrade self-admission branch, then run development publication and installed
 acquisition acceptance before main installation.
+
+## Slice I Installed Authority Readiness Gate | 2026-09-01
+
+Installed acceptance exposed a false-green boundary outside the kernel. The
+development publisher activated its three user services and the doctor
+reported ready even though the shared protected lease-authority system socket
+did not exist. The first real acquisition therefore failed with
+`lease_authority_service_unavailable`. A per-development authority process is
+not an acceptable repair because it would recreate divergent effect-capable
+authority.
+
+Development status and doctor now inspect the one fixed system socket unit and
+socket inode. Readiness requires the system unit to be loaded, enabled, and
+active, and requires `/run/agent-browser/lease-authority.sock` to be a root-owned
+Unix socket assigned to the `agent-browser` operator group with mode `0660`.
+The result includes typed reasons for every failed axis. Fixture coverage proves
+both exact-ready and exact-absent evaluations, and the live doctor now fails
+only this authority check after development skill synchronization.
+
+The reviewed one-sudo bootstrap dry run selected candidate SHA-256
+`efb07bfb29978f50fdaa901a476ab84e40f1b58660d885c36f51049178de7562` and
+reported the existing group membership and narrow helper ready, with only the
+protected authority absent. Application reached the intentional interactive
+sudo password boundary and was stopped without mutation. Installed acquisition,
+exact-session cleanup, smoke validation, main integration, and production
+installation remain contingent on completing that one operator authorization.
