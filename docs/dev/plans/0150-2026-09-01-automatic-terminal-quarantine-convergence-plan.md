@@ -4,7 +4,7 @@ Date: 2026-09-01
 
 State: OPEN
 
-Execution state: `slice_d_development_qualification`
+Execution state: `slice_e_production_installation`
 
 Lane: P150
 
@@ -178,3 +178,31 @@ the isolated development runtime.
 Next action: build the optimized development candidate, publish it only to the
 development pseudo-home, run development doctor and disposable launch smoke,
 then re-evaluate the production installation gate.
+
+## Development Qualification Checkpoint
+
+State transition: `source_qualified -> development_qualified`.
+
+Acceptance state: Slice D complete; production installation and bounded live
+reconciliation remain.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `pnpm build:development-candidate` produced binary SHA-256
+  `52fde82a55d7abba7019fb06185f8836a48176b133d2443e8cab5d85a633e6e6`;
+- development generation `0.28.0-52fde82a55d7` was installed while production
+  remained unchanged;
+- development doctor passed selected-generation, executable, runtime-host,
+  dashboard, protected-authority, browser, skill, provider-isolation, route,
+  and warm-display checks; and
+- the disposable development browser smoke passed three open, URL-read, close,
+  and residue iterations.
+
+Material blocker: production still runs the prior generation and retains the
+inactive quarantine.
+
+Next action: integrate the qualified source checkpoint, dry-run the exact
+production workstation candidate transaction, and apply only if census and
+installed-runtime gates are green.

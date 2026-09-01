@@ -10,13 +10,14 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P150 | Automatic Terminal Quarantine Convergence
 
 State: IN PROGRESS
-Current state: the source repair is qualified. Normal reconciliation and the
+Current state: the source and isolated development repair are qualified. Normal reconciliation and the
 next matching route-bound acquisition now close a provably inactive quarantine
 inside a retained-state transaction, while the pre-pass snapshot fences active
 viewers, controllers, handoffs, presentation slots, checkouts, and conflicting
 ownership. Skipped explicit repair reports `repaired=false` with a typed next
-step. No browser, profile, provider, or retained production state has been
-mutated by this lane.
+step. Development generation `0.28.0-52fde82a55d7` passed doctor and three
+disposable launch cycles. No browser, profile, provider, or retained production
+state has been mutated by this lane.
 
 ### Plan
 
@@ -24,9 +25,9 @@ mutated by this lane.
 
 ### Next Recommendation
 
-Build and publish the optimized candidate only to the isolated development
-runtime, then require development doctor and disposable launch smoke before any
-production install, reconciliation, or route-bound retry.
+Integrate the qualified checkpoint, then dry-run the exact production
+workstation transaction and apply only when census and rollback readiness are
+green before bounded reconciliation and one route-bound retry.
 
 ## P144 | Lease Authority Coordination And Revocation
 

@@ -36,9 +36,11 @@ Validation:
 
 Result:
 
-- P150 is source-qualified through Slices A through C;
-- the next gate is isolated development candidate publication, doctor, and
-  disposable browser-launch smoke.
+- P150 is development-qualified through Slice D;
+- generation `0.28.0-52fde82a55d7` passed development doctor and three
+  disposable browser-launch iterations while production remained unchanged;
+- the next gate is integration followed by an exact production workstation
+  dry run.
 
 ## Turn 187 | 2026-08-29
 
