@@ -10,6 +10,8 @@ STATE="$WORKDIR/state"
 HELPER_DIR="$WORKDIR/usr/local/libexec/agent-browser"
 HELPER_PATH="$HELPER_DIR/agent-browser-privileged-helper"
 SUDOERS_PATH="$WORKDIR/etc/sudoers.d/agent-browser"
+AUTHORITY_SOURCE="$WORKDIR/source/agent-browser"
+AUTHORITY_STATE_ROOT="$WORKDIR/var/lib/agent-browser/lease-authority"
 APPARMOR_PROFILE_PATH="$WORKDIR/etc/apparmor.d/agent-browser-managed-chrome"
 APPARMOR_ENABLED_PATH="$WORKDIR/sys/module/apparmor/parameters/enabled"
 APPARMOR_RESTRICTION_PATH="$WORKDIR/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
@@ -31,10 +33,22 @@ mkdir -p \
   "$(dirname "$APPARMOR_ENABLED_PATH")" \
   "$(dirname "$APPARMOR_RESTRICTION_PATH")" \
   "$(dirname "$APPARMOR_PROFILES_PATH")"
+mkdir -p "$(dirname "$AUTHORITY_SOURCE")"
 : >"$LOG"
 printf 'Y\n' >"$APPARMOR_ENABLED_PATH"
 printf '1\n' >"$APPARMOR_RESTRICTION_PATH"
 : >"$APPARMOR_PROFILES_PATH"
+
+cat >"$AUTHORITY_SOURCE" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP:-}" == "1" ]]
+[[ ! -e "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" ]]
+mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/store/generations"
+mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/trust/generations"
+chmod 0700 "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT"
+EOF
+chmod +x "$AUTHORITY_SOURCE"
 
 cat >"$FAKE_BIN/getent" <<'EOF'
 #!/usr/bin/env bash
@@ -98,6 +112,28 @@ if [[ "${1:-}" == "-c" \
    && "${2:-}" == "%U:%G:%a" \
    && "${3:-}" == "${AGENT_BROWSER_CHROME_APPARMOR_PROFILE:-}" \
    && -r "${3:-}" ]]; then
+  echo root:root:644
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" \
+   && -d "${3:-}" ]]; then
+  echo root:root:700
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT"/usr/local/libexec/agent-browser/lease-authority/generations/*/agent-browser \
+   && -x "${3:-}" ]]; then
+  echo root:root:755
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && ( "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.service" \
+     || "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.socket" ) \
+   && -f "${3:-}" ]]; then
   echo root:root:644
   exit 0
 fi
@@ -240,6 +276,8 @@ run_installer() {
     AGENT_BROWSER_FIXTURE_STATE="$STATE" \
     AGENT_BROWSER_FIXTURE_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_FIXTURE_OPERATOR_USER="$OPERATOR_USER" \
+    AGENT_BROWSER_FIXTURE_ROOT="$WORKDIR" \
+    AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT="$AUTHORITY_STATE_ROOT" \
     AGENT_BROWSER_PRIVILEGED_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_PRIVILEGED_USER="$OPERATOR_USER" \
     AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE="$ROOT/scripts/libexec/agent-browser-privileged-helper" \
@@ -250,6 +288,8 @@ run_installer() {
     AGENT_BROWSER_APPARMOR_ENABLED_PATH="$APPARMOR_ENABLED_PATH" \
     AGENT_BROWSER_APPARMOR_RESTRICTION_PATH="$APPARMOR_RESTRICTION_PATH" \
     AGENT_BROWSER_APPARMOR_PROFILES_PATH="$APPARMOR_PROFILES_PATH" \
+    AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
+    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" \
       --apply \
       --with-workstation-deps

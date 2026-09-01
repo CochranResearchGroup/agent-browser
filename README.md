@@ -2970,12 +2970,19 @@ redacted target identity and readiness metadata, not passwords. Pass
 command on a one-route workstation.
 Run `pnpm setup:rdp-guac-route-pool -- --dry-run` to review the first static
 host-XRDP route-pool bootstrap without changing the host. Run `pnpm
-install:privileges -- --dry-run` to review the one-time privileged helper
-install, then `pnpm install:privileges -- --apply` from an interactive
-terminal to create the `agent-browser` group, install the root-owned helper
-under `/usr/local/libexec/agent-browser`, add the operator user to the group,
-and install the narrow sudoers rule. Open a new shell or run
-`newgrp agent-browser` after applying it. Then run
+install:privileges -- --dry-run` to review the one-time privileged bootstrap,
+then `pnpm install:privileges -- --apply` from an interactive terminal. It
+creates the `agent-browser` group, installs the narrow root-owned RDP helper,
+banks the reviewed Agent Browser binary by SHA-256 under
+`/usr/local/libexec/agent-browser/lease-authority/generations`, initializes the
+absent root-private lease authority, and enables its systemd socket. A source
+checkout can set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` to the exact
+reviewed release binary. The sudoers rule remains limited to the RDP helper and
+does not expose lease signing, state mutation, bootstrap, or upgrade. A healthy
+rerun retains the installed authority generation even if another candidate is
+present. It can restart an exact stopped socket, but it refuses changed units,
+changed banked bytes, or existing invalid authority state. Open a new shell or
+run `newgrp agent-browser` after applying it. Then run
 `pnpm setup:rdp-guac-route-pool` only after the doctor or display inspector
 proves the existing route topology collapsed to one display, or when a
 reviewed operator override passes `--force`. It creates or updates every local

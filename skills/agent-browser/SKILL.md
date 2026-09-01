@@ -2439,6 +2439,18 @@ To auto-shutdown the daemon after a period of inactivity (useful for ephemeral/C
 AGENT_BROWSER_IDLE_TIMEOUT_MS=60000 agent-browser open example.com
 ```
 
+## Protected Lease Authority Bootstrap
+
+`pnpm install:privileges -- --apply` includes the protected lease-authority
+first bootstrap inside its single interactive sudo boundary. It banks the exact
+reviewed Agent Browser binary by SHA-256, creates root-private authority state,
+and installs and enables fixed systemd service and socket units. From a source
+checkout, set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` to the exact
+reviewed release binary. The passwordless helper cannot sign, mutate,
+bootstrap, or upgrade lease authority. A healthy rerun retains the selected
+installed generation. It may restart the exact stopped socket, but it refuses
+modified units, modified banked bytes, or invalid existing authority state.
+
 ## Ref Lifecycle (Important)
 
 Refs (`@e1`, `@e2`, etc.) are invalidated when the page changes. Always re-snapshot after:

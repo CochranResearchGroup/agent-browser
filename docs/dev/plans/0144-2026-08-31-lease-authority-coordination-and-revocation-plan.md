@@ -1843,3 +1843,34 @@ reviewed binary, install fixed systemd socket and service units, invoke the
 one-shot bootstrap only inside the explicit interactive sudo boundary, and
 verify custody without adding any generic passwordless signer, state mutation,
 bootstrap, or upgrade operation.
+
+## Slice G Privileged Installer Bootstrap Checkpoint | 2026-08-31
+
+The existing one-time privilege installer now owns first installation of the
+protected authority. It selects an explicit reviewed executable, computes its
+SHA-256 identity, installs it under the matching immutable generation path,
+installs fixed hardened systemd service and socket units, invokes the one-shot
+bootstrap after the operator group exists, and enables the socket. These actions
+all occur after the installer's one interactive `sudo -v` authorization and use
+only noninteractive continuations within that explicit boundary.
+
+The installed contract validates the full service and socket unit content,
+root ownership and mode, the banked path shape, and the banked file digest. A
+healthy existing generation becomes the source of truth on rerun, so a newly
+available candidate cannot cause self-admission. An exact inactive socket has
+a bounded daemon-reload and enable recovery. Existing authority state paired
+with changed units, changed banked content, or otherwise invalid artifacts is
+rejected without replacing state or invoking bootstrap again.
+
+The sudoers policy is unchanged and still names only the bounded RDP helper.
+There is no passwordless authority bootstrap, signing, state-mutation, or
+upgrade command. Clean-root fixtures prove exactly one interactive first-install
+authorization, idempotent rerun without another authorization, one bootstrap,
+socket recovery without rebootstrap or binary replacement, tamper refusal,
+and compatibility with the full workstation dependency installer.
+
+This is installer source acceptance, not installed-runtime acceptance. The
+authority still exposes only its signed identity challenge. Peer workload
+authentication, concurrency budgets, online mutation dispatch, public
+administration, independent external epoch recovery, doctor coverage, and the
+final exact binary installation remain open.

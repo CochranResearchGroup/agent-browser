@@ -10,6 +10,8 @@ STATE_DIR="$WORKDIR/state"
 HELPER_DIR="$WORKDIR/usr/local/libexec/agent-browser"
 HELPER_PATH="$HELPER_DIR/agent-browser-privileged-helper"
 SUDOERS_PATH="$WORKDIR/etc/sudoers.d/agent-browser"
+AUTHORITY_SOURCE="$WORKDIR/source/agent-browser"
+AUTHORITY_STATE_ROOT="$WORKDIR/var/lib/agent-browser/lease-authority"
 LOG="$WORKDIR/sudo.log"
 GROUP_NAME="agent-browser-fixture-$$"
 OPERATOR_USER="${USER:-}"
@@ -19,8 +21,25 @@ if [[ -z "$OPERATOR_USER" || "$OPERATOR_USER" == "root" ]]; then
   exit 2
 fi
 
-mkdir -p "$FAKE_BIN" "$STATE_DIR" "$(dirname "$SUDOERS_PATH")"
+mkdir -p "$FAKE_BIN" "$STATE_DIR" "$(dirname "$SUDOERS_PATH")" "$(dirname "$AUTHORITY_SOURCE")"
 : >"$LOG"
+
+cat >"$AUTHORITY_SOURCE" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP:-}" != "1" ]]; then
+  echo "fixture authority binary accepts bootstrap only" >&2
+  exit 2
+fi
+if [[ -e "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" ]]; then
+  echo "lease_authority_bootstrap_state_exists" >&2
+  exit 1
+fi
+mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/store/generations"
+mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/trust/generations"
+chmod 0700 "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT"
+EOF
+chmod +x "$AUTHORITY_SOURCE"
 
 cat >"$FAKE_BIN/getent" <<'EOF'
 #!/usr/bin/env bash
@@ -81,7 +100,52 @@ if [[ "${1:-}" == "-c" \
   echo root:root:755
   exit 0
 fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" \
+   && -d "${3:-}" ]]; then
+  echo root:root:700
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT"/usr/local/libexec/agent-browser/lease-authority/generations/*/agent-browser \
+   && -x "${3:-}" ]]; then
+  echo root:root:755
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
+   && ( "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.service" \
+     || "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.socket" ) \
+   && -f "${3:-}" ]]; then
+  echo root:root:644
+  exit 0
+fi
 exec /usr/bin/stat "$@"
+EOF
+
+cat >"$FAKE_BIN/systemctl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  daemon-reload)
+    exit 0
+    ;;
+  enable)
+    if [[ "${2:-}" == "--now" && "${3:-}" == "agent-browser-lease-authority.socket" ]]; then
+      touch "$AGENT_BROWSER_FIXTURE_STATE/lease-authority-socket-enabled"
+      exit 0
+    fi
+    ;;
+  is-enabled|is-active)
+    if [[ "${2:-}" == "--quiet" && "${3:-}" == "agent-browser-lease-authority.socket" \
+       && -f "$AGENT_BROWSER_FIXTURE_STATE/lease-authority-socket-enabled" ]]; then
+      exit 0
+    fi
+    ;;
+esac
+exit 1
 EOF
 
 cat >"$FAKE_BIN/sudo" <<'EOF'
@@ -145,7 +209,7 @@ case "$cmd" in
 esac
 EOF
 
-chmod +x "$FAKE_BIN/getent" "$FAKE_BIN/id" "$FAKE_BIN/stat" "$FAKE_BIN/sudo" "$FAKE_BIN/visudo"
+chmod +x "$FAKE_BIN/getent" "$FAKE_BIN/id" "$FAKE_BIN/stat" "$FAKE_BIN/sudo" "$FAKE_BIN/systemctl" "$FAKE_BIN/visudo"
 
 run_installer() {
   PATH="$FAKE_BIN:$PATH" \
@@ -153,12 +217,16 @@ run_installer() {
     AGENT_BROWSER_FIXTURE_STATE="$STATE_DIR" \
     AGENT_BROWSER_FIXTURE_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_FIXTURE_OPERATOR_USER="$OPERATOR_USER" \
+    AGENT_BROWSER_FIXTURE_ROOT="$WORKDIR" \
+    AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT="$AUTHORITY_STATE_ROOT" \
     AGENT_BROWSER_PRIVILEGED_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_PRIVILEGED_USER="$OPERATOR_USER" \
     AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE="$ROOT/scripts/libexec/agent-browser-privileged-helper" \
     AGENT_BROWSER_PRIVILEGED_HELPER_DIR="$HELPER_DIR" \
     AGENT_BROWSER_PRIVILEGED_HELPER="$HELPER_PATH" \
     AGENT_BROWSER_PRIVILEGED_SUDOERS="$SUDOERS_PATH" \
+    AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
+    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" --apply
 }
 
@@ -176,13 +244,13 @@ if [[ "$sudo_v_count" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$sudo_n_count" != "9" ]]; then
-  echo "Expected nine noninteractive privileged commands after authorization, found $sudo_n_count" >&2
+if [[ "$sudo_n_count" != "18" ]]; then
+  echo "Expected eighteen noninteractive privileged commands after authorization, found $sudo_n_count" >&2
   cat "$LOG" >&2
   exit 1
 fi
 
-if [[ "$sudo_install_count" != "3" || "$sudo_groupadd_count" != "1" || "$sudo_usermod_count" != "1" ]]; then
+if [[ "$sudo_install_count" != "9" || "$sudo_groupadd_count" != "1" || "$sudo_usermod_count" != "1" ]]; then
   echo "Unexpected first-apply privileged command shape." >&2
   cat "$LOG" >&2
   exit 1
@@ -190,6 +258,18 @@ fi
 
 if [[ ! -x "$HELPER_PATH" || ! -f "$SUDOERS_PATH" ]]; then
   echo "Fixture install did not create helper and sudoers artifacts." >&2
+  exit 1
+fi
+
+if [[ ! -d "$AUTHORITY_STATE_ROOT" \
+   || ! -f "$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service" \
+   || ! -f "$WORKDIR/etc/systemd/system/agent-browser-lease-authority.socket" ]]; then
+  echo "Fixture install did not create the protected lease-authority artifacts." >&2
+  exit 1
+fi
+
+if grep -Eq 'lease-authority|bootstrap|sign|upgrade' "$SUDOERS_PATH"; then
+  echo "Lease-authority mutation unexpectedly entered the passwordless sudoers surface." >&2
   exit 1
 fi
 
@@ -212,7 +292,7 @@ if [[ "$sudo_v_count_after" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$sudo_n_count_after" != "11" ]]; then
+if [[ "$sudo_n_count_after" != "20" ]]; then
   echo "Second apply should add exactly two non-interactive helper capability checks." >&2
   cat "$LOG" >&2
   exit 1
@@ -235,6 +315,58 @@ if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; 
   echo "Second apply unexpectedly replaced the compatible installed helper." >&2
   exit 1
 fi
+
+# A stopped or disabled socket is a bounded service-lifecycle repair. Existing
+# authority state and its banked executable must be retained, and bootstrap
+# must never run a second time.
+AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
+AUTHORITY_BANKED_BINARY="$(sed -n 's/^ExecStart=//p' "$AUTHORITY_SERVICE_UNIT")"
+authority_sha_before_recovery="$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')"
+rm -f "$STATE_DIR/lease-authority-socket-enabled"
+sudo_v_count_before_socket_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-socket-recovery.out
+sudo_v_count_after_socket_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_socket_recovery" != "$((sudo_v_count_before_socket_recovery + 1))" ]]; then
+  echo "Socket recovery must cross exactly one explicit sudo boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Socket recovery unexpectedly repeated authority bootstrap." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
+  echo "Socket recovery unexpectedly replaced the banked authority binary." >&2
+  exit 1
+fi
+
+# Modified authority units are not a service-lifecycle repair. With protected
+# state present, the installer must fail without overwriting state, units, or
+# the banked binary and without invoking bootstrap again.
+cp "$AUTHORITY_SERVICE_UNIT" "$AUTHORITY_SERVICE_UNIT.fixture-backup"
+printf '\nProtectKernelTunables=false\n' >>"$AUTHORITY_SERVICE_UNIT"
+sudo_v_count_before_tamper="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if run_installer >/tmp/agent-browser-install-privileges-clean-fixture-tamper.out 2>&1; then
+  echo "Tampered authority unit unexpectedly passed installer readiness." >&2
+  exit 1
+fi
+sudo_v_count_after_tamper="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_tamper" != "$((sudo_v_count_before_tamper + 1))" ]]; then
+  echo "Tampered authority handling must cross exactly one explicit sudo boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Tampered authority handling unexpectedly repeated bootstrap." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
+  echo "Tampered authority handling unexpectedly replaced the banked binary." >&2
+  exit 1
+fi
+mv "$AUTHORITY_SERVICE_UNIT.fixture-backup" "$AUTHORITY_SERVICE_UNIT"
 
 # An installed helper without exact, idempotent route-session termination is
 # not compatible with elastic presentation lifecycle. It must be replaced
