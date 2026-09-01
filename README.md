@@ -92,8 +92,9 @@ visibility so it can prove an enrolled user-owned managed profile without being
 able to modify that profile. A healthy rerun automatically migrates only the
 exact prior `ProtectHome=true` unit to this read-only contract. Any other unit
 drift still fails closed. If that exact migration was interrupted by the prior
-candidate-path rendering defect, a rerun recovers only when the absent
-candidate unit and one valid retained banked generation are uniquely proven.
+candidate-path rendering defect, a rerun recovers only when the unit names an
+absent, well-formed banked generation and one valid retained generation is
+uniquely proven. The retry candidate may differ from the interrupted candidate.
 
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns

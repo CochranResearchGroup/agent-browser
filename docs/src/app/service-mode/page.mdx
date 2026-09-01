@@ -1205,9 +1205,10 @@ uses <code>ProtectHome=read-only</code> so it can prove an enrolled user-owned
 managed profile without modifying that profile. A healthy rerun has one
 guarded migration for the exact prior <code>ProtectHome=true</code> unit. Any
 other unit drift remains an error. A rerun can also recover the exact
-interrupted form of that migration only when the unit points to the reviewed
-but absent candidate and exactly one valid retained banked generation is
-proven. It does not install the candidate or repeat bootstrap.
+interrupted form of that migration when the unit points to any absent,
+well-formed banked generation and exactly one valid retained generation is
+proven, even when the retry uses a different candidate. It does not install
+either candidate or repeat bootstrap.
 
 ## Operator request model
 

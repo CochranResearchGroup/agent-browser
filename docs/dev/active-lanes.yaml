@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P144 Cross-Candidate Interrupted Authority Migration Recovery
+    objective: Recover an exact interrupted protected authority unit even when the retry candidate changed
+    plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
+    plan_ref: refs/heads/fix/interrupted-lease-authority-cross-candidate-recovery
+    branch: fix/interrupted-lease-authority-cross-candidate-recovery
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: eb0cc5cce49f1686d9dd2c4d5c9c6f1c174e3e27
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: []
+    updated_at: 2026-09-01
   - id: P147 Runtime Host Ingress Supervisor Restart Repair
     objective: Adopt an exact same-generation supervised replacement after the selected runtime host exits
     plan: docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md
