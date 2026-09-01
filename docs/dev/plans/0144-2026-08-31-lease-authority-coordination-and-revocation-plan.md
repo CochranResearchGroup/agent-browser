@@ -654,6 +654,27 @@ Every active claim contains at least:
     timeout, and process boundaries. A typed conflict, queued result,
     uncertainty receipt, or recovery offer cannot be collapsed into a generic
     timeout or automatically retried as though no effect occurred.
+114. Authority and projection transactions have one enforced lock order and
+    never hold an authority-store, Service State, resource-registry, or process
+    mutation lock while waiting on an external effect, subprocess, browser,
+    route provider, or another independently scheduled authority domain. Every
+    lock wait has an authority-owned deadline and a typed zero-effect or
+    effect-uncertain outcome. Cancellation and panic release in-process guards,
+    and crash recovery relies on transactional or kernel-released custody
+    rather than a retained logical holder row. A lock convoy, inversion, or
+    abandoned lock waiter cannot masquerade as lease contention or make the
+    whole workstation say no.
+115. Every Agent Browser process tree is launched inside a supervisor-owned,
+    generation-bound operating-system containment boundary with hard PID,
+    memory, CPU, file-descriptor, and restart-rate limits appropriate to its
+    role. The durable single-flight spawn saga and kernel claim prevent logical
+    duplication; the operating-system boundary limits damage if a browser,
+    daemon, helper, or buggy executor forks outside the expected child count or
+    ignores cooperative shutdown. Containment exhaustion produces one typed
+    exact-resource capacity or physical-safety outcome, fences further spawn,
+    and preserves administrator and lease-recovery capacity. It cannot create
+    an unbounded daemon tree or consume the reserves needed to revoke, inspect,
+    reconcile, or roll back.
 
 ## Claim Modes
 
@@ -1167,6 +1188,21 @@ typed outcome fidelity through every public adapter and consumer broker. These
 contracts are not implemented. Structural acceptance now requires a deadline
 matrix and fault tests proving that waits, caller disappearance, cancellation,
 and response loss cannot erase recourse or trigger blind duplicate execution.
+
+A thirteenth recurrence pass checked the older resource-exhaustion and Service
+State lock hotfixes rather than treating them as consequences already covered
+by canonical lease state. It found two independent failure boundaries. First,
+a correct claim and single-flight intent can still deadlock or create a global
+timeout convoy if code holds an authority or projection lock while waiting for
+Chrome, a subprocess, a provider, or another store. Second, software admission
+cannot by itself bound a child that forks unexpectedly or a supervisor that
+restarts a crashing generation faster than durable reconciliation converges.
+Invariants 114 and 115 therefore add an enforced cross-store lock graph, forbid
+locks across external-effect waits, and require generation-bound
+operating-system process containment with a protected recovery reserve. These
+are separate from lease truth: the kernel prevents duplicate authority, while
+the operating system bounds damage from defective effect code. Neither is fully
+implemented, so structural acceptance now has eight proof gates.
 
 ## Validation Contract
 
@@ -2068,8 +2104,10 @@ The historical incident families map to the following mandatory invariants:
 | Dashboard or read reconciliation creates fictitious browsers or ready-looking owners | 6, 17, 32, 41, 63, 80, 94, 97, and 103 | Modelled; projections remain to be made receipt-only |
 | Candidate upgrade blocks itself or old and new generations disagree | 20, 35, 46, 52, 60, 83, 87, 90, 93, 98, and 103 | Protected supervisor foundation exists; installer ownership and mixed-version migration remain |
 | Retried requests create duplicate daemons, browsers, routes, or external effects | 18, 19, 28, 39, 44, 54, 55, 76, 77, 78, and 79 | Authority receipts exist in part; single-flight spawn and every effect sink remain |
+| A browser, daemon, helper, or restart loop multiplies until workstation resources are exhausted | 76, 78, 106, and 115 | Modelled; generation-bound operating-system containment, reserve protection, and installed pressure acceptance remain |
 | Logical lease records are mistaken for live process, lock, route, display, or socket evidence | 11, 17, 37, 43, 56, 63, 71, 72, 96, 105, and 107 | Modelled; fresh physical-evidence permits and bounded resolution remain |
 | Concurrent or stale Service State writers lose a mutation or manufacture a blocker | 35, 44, 51, 52, 79, 94, 98, 99, and 103 | Protected generation compare-and-swap exists; all production writers remain to converge |
+| Lock convoy, inversion, cancellation, or crash turns internal serialization into a generic timeout or global denial | 39, 79, 103, 106, 111, 113, and 114 | Historical lock ordering repair exists in the legacy store; the protected authority, projections, and effect sinks still need one enforced lock graph and crash tests |
 | A broker wait is hidden by an equal or shorter client timeout, erasing typed recourse | 39, 78, 89, 106, 109, 111, and 113 | Historical failure identified; unified deadline budget, waiter abandonment, and adapter outcome fidelity remain |
 | An observational access plan is presented as an executable promise and then reinterpreted by a second gate | 12, 13, 35, 38, 41, 47, 73, 95, 110, and 112 | Snapshot semantics exist in the model; reserved offers and public wording or schema separation remain |
 
@@ -2109,9 +2147,14 @@ tests for the examples above:
 7. public-adapter and consumer tests prove one end-to-end deadline budget,
    mandatory response reserve, abandoned-waiter expiry, observational-plan
    labeling, reserved-offer execution, and lossless structured recourse across
-   CLI, HTTP, MCP, generated-client, skill, and subprocess boundaries.
+   CLI, HTTP, MCP, generated-client, skill, and subprocess boundaries; and
+8. lock-graph and operating-system containment tests prove no authority or
+   projection lock crosses an external-effect wait, cancellation or panic
+   cannot strand in-process custody, every managed process is in the selected
+   generation's bounded process tree, fork and restart storms preserve the
+   recovery reserve, and pressure produces one typed bounded outcome.
 
-Until all seven gates pass against one exact installed candidate, the correct
+Until all eight gates pass against one exact installed candidate, the correct
 claim is that the design closes the known failure taxonomy and the kernel is
 being built toward structural prevention. It is not yet correct to claim that
 the bugs cannot recur.
