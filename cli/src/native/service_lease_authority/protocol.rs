@@ -246,6 +246,17 @@ struct BrowserProcessIdentityEvidence {
     process_instance_digest: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EffectExecutorIdentityEvidence {
+    uid: u32,
+    gid: u32,
+    pid: u32,
+    start_token: String,
+    executable_path: String,
+    executable_sha256: String,
+    identity_digest: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityEffectReceipt {
@@ -549,6 +560,13 @@ struct LeaseAuthorityOwnerBinding {
     process_start_token: String,
     process_executable_path: String,
     process_executable_sha256: String,
+    executor_uid: u32,
+    executor_gid: u32,
+    executor_pid: u32,
+    executor_start_token: String,
+    executor_executable_path: String,
+    executor_executable_sha256: String,
+    executor_identity_digest: String,
     claim_id: String,
     claim_revision: u64,
     fencing_token: u64,
@@ -2188,8 +2206,7 @@ impl LeaseAuthorityProtocolKernel {
     fn complete_browser_launch(
         &mut self,
         request: CompleteBrowserLaunchPayload,
-        executor_uid: u32,
-        executor_identity_digest: &str,
+        executor: &EffectExecutorIdentityEvidence,
         process: &BrowserProcessIdentityEvidence,
         authority_observed_at: &str,
     ) -> Result<
@@ -2199,11 +2216,16 @@ impl LeaseAuthorityProtocolKernel {
         ),
         LeaseAuthorityProtocolError,
     > {
-        if executor_uid == 0
+        if executor.uid == 0
+            || executor.pid <= 1
+            || executor.start_token.trim().is_empty()
+            || executor.executable_path.trim().is_empty()
+            || !valid_sha256_digest(&executor.executable_sha256)
+            || !valid_sha256_digest(&executor.identity_digest)
+            || effect_executor_identity_digest(executor) != executor.identity_digest
             || request.receipt_id.trim().is_empty()
             || request.browser_pid <= 1
             || request.completion_idempotency_key.trim().is_empty()
-            || !valid_sha256_digest(executor_identity_digest)
         {
             return Err(LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_browser_launch_completion_invalid",
@@ -2289,6 +2311,9 @@ impl LeaseAuthorityProtocolKernel {
                         && binding.daemon_session_route == daemon_session_route
                         && binding.principal_id == record.receipt.principal_id
                         && binding.capability_id == record.receipt.capability_id
+                        && binding.executor_uid == record.receipt.executor_uid
+                        && binding.executor_identity_digest
+                            == record.receipt.executor_identity_digest
                 })
                 .cloned()
                 .ok_or(LeaseAuthorityProtocolError {
@@ -2302,8 +2327,8 @@ impl LeaseAuthorityProtocolKernel {
                 binding,
             ));
         }
-        if record.receipt.executor_uid != executor_uid
-            || record.receipt.executor_identity_digest != executor_identity_digest
+        if record.receipt.executor_uid != executor.uid
+            || record.receipt.executor_identity_digest != executor.identity_digest
         {
             return Err(LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_effect_executor_mismatch",
@@ -2384,6 +2409,13 @@ impl LeaseAuthorityProtocolKernel {
             process_start_token: process.start_token.clone(),
             process_executable_path: process.executable_path.clone(),
             process_executable_sha256: process.executable_sha256.clone(),
+            executor_uid: executor.uid,
+            executor_gid: executor.gid,
+            executor_pid: executor.pid,
+            executor_start_token: executor.start_token.clone(),
+            executor_executable_path: executor.executable_path.clone(),
+            executor_executable_sha256: executor.executable_sha256.clone(),
+            executor_identity_digest: executor.identity_digest.clone(),
             claim_id: record.receipt.claim_id.clone(),
             claim_revision: record.receipt.claim_revision,
             fencing_token: record.receipt.fencing_token,
@@ -3080,6 +3112,8 @@ fn validate_protected_state(
                 && receipt.principal_id == binding.principal_id
                 && receipt.capability_id == binding.capability_id
                 && receipt.action_class == "browser_launch"
+                && receipt.executor_uid == binding.executor_uid
+                && receipt.executor_identity_digest == binding.executor_identity_digest
                 && receipt.completion_evidence_digest.as_deref()
                     == Some(binding.process_instance_digest.as_str())
                 && daemon_session_route == Some(binding.daemon_session_route.as_str())
@@ -3101,6 +3135,21 @@ fn validate_protected_state(
             || binding.process_start_token.trim().is_empty()
             || binding.process_executable_path.trim().is_empty()
             || !valid_sha256_digest(&binding.process_executable_sha256)
+            || binding.executor_uid == 0
+            || binding.executor_pid <= 1
+            || binding.executor_start_token.trim().is_empty()
+            || binding.executor_executable_path.trim().is_empty()
+            || !valid_sha256_digest(&binding.executor_executable_sha256)
+            || !valid_sha256_digest(&binding.executor_identity_digest)
+            || effect_executor_identity_digest(&EffectExecutorIdentityEvidence {
+                uid: binding.executor_uid,
+                gid: binding.executor_gid,
+                pid: binding.executor_pid,
+                start_token: binding.executor_start_token.clone(),
+                executable_path: binding.executor_executable_path.clone(),
+                executable_sha256: binding.executor_executable_sha256.clone(),
+                identity_digest: binding.executor_identity_digest.clone(),
+            }) != binding.executor_identity_digest
             || binding.claim_id.trim().is_empty()
             || binding.claim_revision == 0
             || binding.fencing_token == 0
@@ -3660,7 +3709,7 @@ fn derive_profile_enrollment_identity(
 #[cfg(target_os = "linux")]
 fn derive_effect_executor_identity(
     peer: custody::LeaseAuthorityRequestPeerIdentity,
-) -> Result<String, LeaseAuthorityProtocolError> {
+) -> Result<EffectExecutorIdentityEvidence, LeaseAuthorityProtocolError> {
     if peer.uid == 0 || peer.pid <= 1 {
         return Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_effect_executor_invalid",
@@ -3692,15 +3741,31 @@ fn derive_effect_executor_identity(
     let executable = fs::read(&executable_path).map_err(|_| LeaseAuthorityProtocolError {
         code: "lease_authority_protocol_effect_executor_unavailable",
     })?;
-    let executable_digest = format!("sha256:{:x}", Sha256::digest(executable));
+    let executable_sha256 = format!("sha256:{:x}", Sha256::digest(executable));
+    let mut evidence = EffectExecutorIdentityEvidence {
+        uid: peer.uid,
+        gid: peer.gid,
+        pid: peer.pid,
+        start_token: start_time.to_string(),
+        executable_path: executable_path.display().to_string(),
+        executable_sha256,
+        identity_digest: String::new(),
+    };
+    evidence.identity_digest = effect_executor_identity_digest(&evidence);
+    Ok(evidence)
+}
+
+fn effect_executor_identity_digest(executor: &EffectExecutorIdentityEvidence) -> String {
     let payload = format!(
-        "agent-browser.lease-authority-effect-executor.v1\n{}\n{}\n{}\n{start_time}\n{}\n{executable_digest}",
-        peer.uid,
-        peer.gid,
-        peer.pid,
-        executable_path.display()
+        "agent-browser.lease-authority-effect-executor.v1\n{}\n{}\n{}\n{}\n{}\n{}",
+        executor.uid,
+        executor.gid,
+        executor.pid,
+        executor.start_token,
+        executor.executable_path,
+        executor.executable_sha256
     );
-    Ok(format!("sha256:{:x}", Sha256::digest(payload.as_bytes())))
+    format!("sha256:{:x}", Sha256::digest(payload.as_bytes()))
 }
 
 #[cfg(target_os = "linux")]
@@ -3952,7 +4017,7 @@ fn derive_browser_owner_process_observation(
 #[cfg(not(target_os = "linux"))]
 fn derive_effect_executor_identity(
     _peer: custody::LeaseAuthorityRequestPeerIdentity,
-) -> Result<String, LeaseAuthorityProtocolError> {
+) -> Result<EffectExecutorIdentityEvidence, LeaseAuthorityProtocolError> {
     Err(LeaseAuthorityProtocolError {
         code: "lease_authority_protocol_effect_executor_platform_unsupported",
     })
@@ -4051,13 +4116,13 @@ fn dispatch_lease_authority_request(
             })
         }
         LeaseAuthorityProtocolRequest::AuthorizeEffect(request) => {
-            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let executor = derive_effect_executor_identity(peer)?;
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
             let outcome = kernel.authorize_effect(
                 request,
-                peer.uid,
-                &executor_identity_digest,
+                executor.uid,
+                &executor.identity_digest,
                 &observed_at,
                 signing_key,
             )?;
@@ -4075,13 +4140,13 @@ fn dispatch_lease_authority_request(
             })
         }
         LeaseAuthorityProtocolRequest::CompleteEffect(request) => {
-            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let executor = derive_effect_executor_identity(peer)?;
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
             let outcome = kernel.complete_effect(
                 request,
-                peer.uid,
-                &executor_identity_digest,
+                executor.uid,
+                &executor.identity_digest,
                 &observed_at,
             )?;
             let response_outcome = match outcome.receipt.state {
@@ -4106,23 +4171,26 @@ fn dispatch_lease_authority_request(
             })
         }
         LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(request) => {
-            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let executor = derive_effect_executor_identity(peer)?;
             let process = derive_browser_process_identity(peer, request.browser_pid)?;
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
-            let (outcome, owner) = kernel.complete_browser_launch(
-                request,
-                peer.uid,
-                &executor_identity_digest,
-                &process,
-                &observed_at,
-            )?;
+            let (outcome, owner) =
+                kernel.complete_browser_launch(request, &executor, &process, &observed_at)?;
             serde_json::to_vec(&serde_json::json!({
                 "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
                 "outcome": "browser_launch_completed",
                 "payload": {
                     "receipt": outcome.receipt,
-                    "owner": owner,
+                    "owner": {
+                        "ownerId": owner.owner_id,
+                        "ownerGeneration": owner.owner_generation,
+                        "logicalBrowserId": owner.logical_browser_id,
+                        "daemonSessionRoute": owner.daemon_session_route,
+                        "processInstanceDigest": owner.process_instance_digest,
+                        "processPid": owner.process_pid,
+                        "revision": owner.revision,
+                    },
                     "replayed": outcome.replayed,
                 },
             }))
@@ -5202,8 +5270,19 @@ mod tests {
         );
 
         let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x6b; 32]);
-        let executor_identity_digest =
-            "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+        let mut executor = EffectExecutorIdentityEvidence {
+            uid: 1000,
+            gid: 1000,
+            pid: 4100,
+            start_token: "executor-start-1".to_string(),
+            executable_path: "/opt/agent-browser/agent-browser".to_string(),
+            executable_sha256:
+                "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                    .to_string(),
+            identity_digest: String::new(),
+        };
+        executor.identity_digest = effect_executor_identity_digest(&executor);
+        let executor_identity_digest = executor.identity_digest.as_str();
         let effect_request = || AuthorizeLeaseEffectPayload {
             raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
             resource: LeaseResourceKey::profile("last30days-social"),
@@ -5376,8 +5455,7 @@ mod tests {
         let (browser_completion, owner) = restarted
             .complete_browser_launch(
                 browser_completion_request(),
-                1000,
-                executor_identity_digest,
+                &executor,
                 &browser_process,
                 "2026-09-01T12:01:58Z",
             )
@@ -5393,12 +5471,18 @@ mod tests {
             browser_process.process_instance_digest
         );
         assert_eq!(owner.daemon_session_route, "last30days");
+        assert_eq!(owner.executor_uid, executor.uid);
+        assert_eq!(owner.executor_gid, executor.gid);
+        assert_eq!(owner.executor_pid, executor.pid);
+        assert_eq!(owner.executor_start_token, executor.start_token);
+        assert_eq!(owner.executor_executable_path, executor.executable_path);
+        assert_eq!(owner.executor_executable_sha256, executor.executable_sha256);
+        assert_eq!(owner.executor_identity_digest, executor.identity_digest);
         assert!(owner.logical_browser_id.starts_with("browser:"));
         let (browser_replay, replayed_owner) = restarted
             .complete_browser_launch(
                 browser_completion_request(),
-                1000,
-                executor_identity_digest,
+                &executor,
                 &browser_process,
                 "2026-09-01T12:01:59Z",
             )
@@ -5410,6 +5494,21 @@ mod tests {
             owner.process_instance_digest
         );
         let encoded_after_owner_commit = restarted.encode_protected_state().unwrap();
+        let mut tampered_executor: serde_json::Value =
+            serde_json::from_slice(&encoded_after_owner_commit).unwrap();
+        tampered_executor["owners"]["bindings"]["profile:last30days-social"]["executorPid"] =
+            serde_json::json!(executor.pid + 1);
+        let tampered_error = match LeaseAuthorityProtocolKernel::from_protected_state(
+            &serde_json::to_vec(&tampered_executor).unwrap(),
+            test_load_context(),
+        ) {
+            Ok(_) => panic!("executor custody tampering must invalidate protected state"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            tampered_error.code(),
+            "lease_authority_protocol_state_invalid"
+        );
         let mut live_owner_rejected = LeaseAuthorityProtocolKernel::from_protected_state(
             &encoded_after_owner_commit,
             test_load_context(),
@@ -5595,8 +5694,7 @@ mod tests {
                     browser_pid: replacement_process.pid,
                     completion_idempotency_key: "complete:last30days:replacement".to_string(),
                 },
-                1000,
-                executor_identity_digest,
+                &executor,
                 &replacement_process,
                 "2026-09-01T12:02:05Z",
             )
@@ -5640,6 +5738,8 @@ mod tests {
         };
         let evidence = derive_browser_process_identity(peer, child.id())
             .expect("direct child identity must be derivable");
+        let executor = derive_effect_executor_identity(peer)
+            .expect("current executor identity must be derivable");
         assert_eq!(evidence.pid, child.id());
         assert!(!evidence.start_token.is_empty());
         assert!(Path::new(&evidence.executable_path).is_absolute());
@@ -5665,6 +5765,13 @@ mod tests {
             process_start_token: evidence.start_token.clone(),
             process_executable_path: evidence.executable_path.clone(),
             process_executable_sha256: evidence.executable_sha256.clone(),
+            executor_uid: executor.uid,
+            executor_gid: executor.gid,
+            executor_pid: executor.pid,
+            executor_start_token: executor.start_token,
+            executor_executable_path: executor.executable_path,
+            executor_executable_sha256: executor.executable_sha256,
+            executor_identity_digest: executor.identity_digest,
             claim_id: "claim:process-fixture".to_string(),
             claim_revision: 1,
             fencing_token: 1,

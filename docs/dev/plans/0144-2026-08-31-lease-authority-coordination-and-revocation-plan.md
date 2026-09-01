@@ -2839,3 +2839,22 @@ while non-Linux acquisition and legacy runtime-owner transfer retain competing
 authority paths. Platform ports may fail with an explicit unsupported protected
 authority outcome during migration, but they cannot silently preserve a second
 effect-capable lease implementation in an accepted candidate.
+
+## Slice F Protected Executor Custody Binding | 2026-09-01
+
+Every newly committed protected browser owner now binds the launching
+executor's root-observed UID, GID, PID, process start token, canonical
+executable path and digest, and their content-bound executor identity digest.
+The binding remains traceable to the completed launch receipt, whose executor
+UID and digest must match. Protected-state loading recomputes the executor
+digest and rejects a changed PID, start token, path, executable digest, receipt
+identity, or malformed field before serving authority.
+
+The root service retains these axes for later liveness observation but does not
+return them to the candidate daemon. Browser-launch completion now emits a
+redacted owner projection containing only the owner id and generation, logical
+browser id, daemon route, browser process digest and PID, and owner revision.
+Focused tests prove exact executor persistence, restart validation, response
+compatibility, and rejection after executor-PID tampering. This is the custody
+prerequisite for orphan adoption; it does not itself transfer a live browser or
+make Service State an adoption authority.
