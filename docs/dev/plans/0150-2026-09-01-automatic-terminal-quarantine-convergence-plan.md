@@ -10,6 +10,8 @@ Lane: P150
 
 Source baseline: `09e1d6f69eecd0a5e2590a44f2ecba903e36214d`
 
+Source checkpoint: `8673204661340d92dfbf4eeb847588a16df59e78`
+
 Branch: `fix/automatic-terminal-quarantine-convergence`
 
 Target: `main`
