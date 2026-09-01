@@ -790,6 +790,10 @@ effect, the broker inspects reservation, holder, physical occupancy, and
 effect-channel custody as separate facts. A stale browser is reconciled before
 cold launch, a current foreign executor returns an exact conflict, and a live
 orphan is adopted only after old effect custody is proven absent. The response
+derives that custody from established connections to the exact CDP listener
+and the user-owned processes holding their socket inodes. Inherited,
+additional, or unresolved holders remain uncertain, and adoption completion
+requires the selected candidate to be the sole holder. The response
 never returns an executable authorization. Launch or adoption and owner
 registration finish through the protected authority before the response is
 emitted. Completion uncertainty never triggers a blind retry. A confirmed

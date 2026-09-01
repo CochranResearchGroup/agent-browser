@@ -3002,3 +3002,29 @@ checkpoint yet. Prepared-deadline and uncertain-receipt reconciliation,
 effect-channel mediation or isolation, current-holder reconstruction, docs and
 contract propagation for the receipt field, full protected service restart
 tests, legacy-path deletion, and installed development acceptance remain.
+
+## Slice G Root-Derived Effect-Channel Custody | 2026-09-01
+
+The Linux protected root no longer maps a stale executor directly to uncertain
+effect custody. It observes the exact CDP listener, enumerates established
+loopback client sockets for that port, and joins every socket inode to its
+user-owned process holder through procfs. No connected socket is reported as
+absent. An established socket whose holder cannot be resolved, a surviving
+holder other than the recorded executor, or more than one holder is uncertain.
+The recorded exact executor is current only when it is the sole holder.
+
+Prepare now consumes and persists a valid root-derived absent-custody digest.
+It refuses current or uncertain custody before issuing an adoption receipt.
+Completion independently enumerates the listener again and commits only when
+the selected candidate is the sole process holding an established connection.
+This closes the inspection-to-commit race for cooperating Agent Browser
+executors and detects inherited descriptors rather than inferring their absence
+from parent death. It does not claim protection from arbitrary same-user code
+that bypasses Agent Browser and connects after the commit.
+
+Focused validation passes eleven adoption tests, including the real Linux
+listener, profile-lock, and candidate-socket fixture plus a regression proving
+that surviving effect custody cannot prepare an adoption. Deadline-driven
+prepared and uncertain receipt reconciliation is the next and only remaining
+implementation packet before the broader recurrence and installed acceptance
+gates.

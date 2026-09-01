@@ -280,6 +280,13 @@ enum BrowserAdoptionAttachmentObservation {
     Uncertain { evidence_digest: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BrowserEffectChannelObservation {
+    Absent { evidence_digest: String },
+    Current { evidence_digest: String },
+    Uncertain { evidence_digest: String },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum LeaseAuthorityBrowserAdoptionState {
@@ -318,6 +325,7 @@ struct LeaseAuthorityBrowserAdoptionReceipt {
     physical_evidence_digest: String,
     cdp_endpoint_identity_digest: String,
     profile_lock_identity_digest: String,
+    effect_channel_absent_evidence_digest: String,
     state: LeaseAuthorityBrowserAdoptionState,
     prepared_at: String,
     transition_deadline: String,
@@ -2888,6 +2896,7 @@ impl LeaseAuthorityProtocolKernel {
         candidate: &EffectExecutorIdentityEvidence,
         executor_observation: &BrowserOwnerExecutorObservation,
         physical_observation: &BrowserAdoptionPhysicalObservation,
+        effect_channel_observation: &BrowserEffectChannelObservation,
         authority_observed_at: &str,
     ) -> Result<LeaseAuthorityBrowserAdoptionOutcome, LeaseAuthorityProtocolError> {
         let admission = self.browser_adoption_admission(&request, candidate)?;
@@ -2971,6 +2980,24 @@ impl LeaseAuthorityProtocolKernel {
             BrowserOwnerExecutorObservation::Stale { .. } => {
                 return Err(LeaseAuthorityProtocolError {
                     code: "lease_authority_protocol_browser_adoption_executor_unproven",
+                });
+            }
+        };
+        let effect_channel_absent_evidence_digest = match effect_channel_observation {
+            BrowserEffectChannelObservation::Absent { evidence_digest }
+                if valid_sha256_digest(evidence_digest) =>
+            {
+                evidence_digest.clone()
+            }
+            BrowserEffectChannelObservation::Current { .. } => {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_browser_adoption_effect_channel_current",
+                });
+            }
+            BrowserEffectChannelObservation::Uncertain { .. }
+            | BrowserEffectChannelObservation::Absent { .. } => {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_browser_adoption_effect_channel_unproven",
                 });
             }
         };
@@ -3069,6 +3096,7 @@ impl LeaseAuthorityProtocolKernel {
             physical_evidence_digest,
             cdp_endpoint_identity_digest,
             profile_lock_identity_digest,
+            effect_channel_absent_evidence_digest,
             state: LeaseAuthorityBrowserAdoptionState::Prepared,
             prepared_at: now.clone(),
             transition_deadline,
@@ -4477,6 +4505,7 @@ fn validate_protected_state(
             || !valid_sha256_digest(&receipt.physical_evidence_digest)
             || !valid_sha256_digest(&receipt.cdp_endpoint_identity_digest)
             || !valid_sha256_digest(&receipt.profile_lock_identity_digest)
+            || !valid_sha256_digest(&receipt.effect_channel_absent_evidence_digest)
             || !super::timestamp_precedes(&receipt.prepared_at, &receipt.transition_deadline)
             || !super::timestamp_span_within(
                 &receipt.prepared_at,
@@ -5587,14 +5616,19 @@ fn derive_browser_adoption_attachment_observation(
             });
         }
     };
+    let connected_inodes = linux_tcp_socket_observations()?
+        .into_iter()
+        .filter(|socket| {
+            socket.state == 0x01 && socket.remote_port == cdp_port && socket.remote_is_loopback
+        })
+        .map(|socket| socket.inode)
+        .collect::<BTreeSet<_>>();
     let candidate_socket_inodes = linux_process_socket_inodes(candidate.pid)?;
-    let connected_socket = linux_tcp_socket_observations()?.into_iter().find(|socket| {
-        socket.state == 0x01
-            && socket.remote_port == cdp_port
-            && socket.remote_is_loopback
-            && candidate_socket_inodes.contains(&socket.inode)
-    });
-    let Some(connected_socket) = connected_socket else {
+    let candidate_connected_inode = candidate_socket_inodes
+        .intersection(&connected_inodes)
+        .next()
+        .copied();
+    let Some(candidate_connected_inode) = candidate_connected_inode else {
         return Ok(BrowserAdoptionAttachmentObservation::Absent {
             evidence_digest: format!(
                 "sha256:{:x}",
@@ -5608,17 +5642,128 @@ fn derive_browser_adoption_attachment_observation(
             ),
         });
     };
+    let holder_pids = match linux_effect_channel_holder_pids(candidate.uid, &connected_inodes)? {
+        Some(holder_pids) => holder_pids,
+        None => {
+            return Ok(BrowserAdoptionAttachmentObservation::Uncertain {
+                evidence_digest: format!(
+                    "sha256:{:x}",
+                    Sha256::digest(
+                        format!(
+                            "agent-browser.browser-adoption-attachment-unresolved.v1\n{}\n{}",
+                            candidate.identity_digest, cdp_endpoint_identity_digest
+                        )
+                        .as_bytes()
+                    )
+                ),
+            });
+        }
+    };
+    if holder_pids.len() != 1 || !holder_pids.contains(&candidate.pid) {
+        return Ok(BrowserAdoptionAttachmentObservation::Uncertain {
+            evidence_digest: format!(
+                "sha256:{:x}",
+                Sha256::digest(
+                    format!(
+                        "agent-browser.browser-adoption-attachment-contended.v1\n{}\n{}\n{:?}",
+                        candidate.identity_digest, cdp_endpoint_identity_digest, holder_pids
+                    )
+                    .as_bytes()
+                )
+            ),
+        });
+    }
     Ok(BrowserAdoptionAttachmentObservation::ExactAttached {
         evidence_digest: format!(
             "sha256:{:x}",
             Sha256::digest(
                 format!(
                     "agent-browser.browser-adoption-attachment.v1\n{}\n{}\n{}",
-                    candidate.identity_digest, cdp_endpoint_identity_digest, connected_socket.inode
+                    candidate.identity_digest,
+                    cdp_endpoint_identity_digest,
+                    candidate_connected_inode
                 )
                 .as_bytes()
             )
         ),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn derive_browser_effect_channel_observation(
+    binding: &LeaseAuthorityOwnerBinding,
+    executor: &BrowserOwnerExecutorObservation,
+    physical: &BrowserAdoptionPhysicalObservation,
+) -> Result<BrowserEffectChannelObservation, LeaseAuthorityProtocolError> {
+    let (cdp_port, cdp_endpoint_identity_digest) = match physical {
+        BrowserAdoptionPhysicalObservation::ExactCurrent {
+            cdp_port,
+            cdp_endpoint_identity_digest,
+            ..
+        } => (*cdp_port, cdp_endpoint_identity_digest),
+        BrowserAdoptionPhysicalObservation::Stale { evidence_digest } => {
+            return Ok(BrowserEffectChannelObservation::Absent {
+                evidence_digest: evidence_digest.clone(),
+            });
+        }
+        BrowserAdoptionPhysicalObservation::Uncertain { evidence_digest } => {
+            return Ok(BrowserEffectChannelObservation::Uncertain {
+                evidence_digest: evidence_digest.clone(),
+            });
+        }
+    };
+    let connected_inodes = linux_tcp_socket_observations()?
+        .into_iter()
+        .filter(|socket| {
+            socket.state == 0x01 && socket.remote_port == cdp_port && socket.remote_is_loopback
+        })
+        .map(|socket| socket.inode)
+        .collect::<BTreeSet<_>>();
+    let evidence = |state: &str, holders: &BTreeSet<u32>| {
+        format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                format!(
+                    "agent-browser.browser-effect-channel-observation.v1\n{}\n{}\n{}\n{:?}",
+                    binding.owner_id, cdp_endpoint_identity_digest, state, holders
+                )
+                .as_bytes()
+            )
+        )
+    };
+    if connected_inodes.is_empty() {
+        return Ok(BrowserEffectChannelObservation::Absent {
+            evidence_digest: evidence("absent", &BTreeSet::new()),
+        });
+    }
+
+    let holder_pids =
+        match linux_effect_channel_holder_pids(binding.executor_uid, &connected_inodes)? {
+            Some(holder_pids) => holder_pids,
+            None => {
+                return Ok(BrowserEffectChannelObservation::Uncertain {
+                    evidence_digest: evidence(
+                        "socket-holder-observation-unavailable",
+                        &BTreeSet::new(),
+                    ),
+                });
+            }
+        };
+    if holder_pids.is_empty() {
+        return Ok(BrowserEffectChannelObservation::Uncertain {
+            evidence_digest: evidence("socket-holder-unresolved", &holder_pids),
+        });
+    }
+    if matches!(executor, BrowserOwnerExecutorObservation::ExactCurrent)
+        && holder_pids.len() == 1
+        && holder_pids.contains(&binding.executor_pid)
+    {
+        return Ok(BrowserEffectChannelObservation::Current {
+            evidence_digest: evidence("recorded-executor-current", &holder_pids),
+        });
+    }
+    Ok(BrowserEffectChannelObservation::Uncertain {
+        evidence_digest: evidence("foreign-or-inherited-holder", &holder_pids),
     })
 }
 
@@ -5677,6 +5822,52 @@ fn linux_process_socket_inodes(pid: u32) -> Result<BTreeSet<u64>, LeaseAuthority
         }
     }
     Ok(inodes)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_effect_channel_holder_pids(
+    operator_uid: u32,
+    connected_inodes: &BTreeSet<u64>,
+) -> Result<Option<BTreeSet<u32>>, LeaseAuthorityProtocolError> {
+    let mut holder_pids = BTreeSet::new();
+    let mut resolved_inodes = BTreeSet::new();
+    let entries = fs::read_dir("/proc").map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_adoption_socket_unavailable",
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_adoption_socket_unavailable",
+        })?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let metadata = match fs::metadata(entry.path()) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => continue,
+        };
+        if metadata.uid() != operator_uid {
+            continue;
+        }
+        let sockets = match linux_process_socket_inodes(pid) {
+            Ok(sockets) => sockets,
+            Err(_) if fs::metadata(entry.path()).is_err() => continue,
+            Err(_) => continue,
+        };
+        let held_inodes = sockets
+            .intersection(connected_inodes)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if !held_inodes.is_empty() {
+            holder_pids.insert(pid);
+            resolved_inodes.extend(held_inodes);
+        }
+    }
+    Ok((resolved_inodes == *connected_inodes).then_some(holder_pids))
 }
 
 #[cfg(target_os = "linux")]
@@ -6064,6 +6255,11 @@ fn dispatch_lease_authority_request(
                 .binding;
             let executor_observation = derive_browser_owner_executor_observation(&binding)?;
             let physical_observation = derive_browser_adoption_physical_observation(&binding)?;
+            let effect_channel_observation = derive_browser_effect_channel_observation(
+                &binding,
+                &executor_observation,
+                &physical_observation,
+            )?;
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
             let outcome = kernel.prepare_browser_adoption(
@@ -6071,6 +6267,7 @@ fn dispatch_lease_authority_request(
                 &candidate,
                 &executor_observation,
                 &physical_observation,
+                &effect_channel_observation,
                 &observed_at,
             )?;
             serde_json::to_vec(&serde_json::json!({
@@ -6193,31 +6390,13 @@ fn dispatch_lease_authority_request(
                         BrowserAdoptionPhysicalObservation::Stale { .. } => "stale",
                         BrowserAdoptionPhysicalObservation::Uncertain { .. } => "uncertain",
                     };
-                    let effect_channel_observation = match holder {
-                        BrowserOwnerExecutorObservation::ExactCurrent => {
-                            let executor = EffectExecutorIdentityEvidence {
-                                uid: owner.executor_uid,
-                                gid: owner.executor_gid,
-                                pid: owner.executor_pid,
-                                start_token: owner.executor_start_token.clone(),
-                                executable_path: owner.executor_executable_path.clone(),
-                                executable_sha256: owner.executor_executable_sha256.clone(),
-                                identity_digest: owner.executor_identity_digest.clone(),
-                            };
-                            match derive_browser_adoption_attachment_observation(
-                                &executor, &physical,
-                            )? {
-                                BrowserAdoptionAttachmentObservation::ExactAttached { .. } => {
-                                    "current"
-                                }
-                                BrowserAdoptionAttachmentObservation::Absent { .. } => "absent",
-                                BrowserAdoptionAttachmentObservation::Uncertain { .. } => {
-                                    "uncertain"
-                                }
-                            }
-                        }
-                        BrowserOwnerExecutorObservation::Stale { .. } => "uncertain",
-                    };
+                    let effect_channel_observation =
+                        match derive_browser_effect_channel_observation(&owner, &holder, &physical)?
+                        {
+                            BrowserEffectChannelObservation::Current { .. } => "current",
+                            BrowserEffectChannelObservation::Absent { .. } => "absent",
+                            BrowserEffectChannelObservation::Uncertain { .. } => "uncertain",
+                        };
                     let projection = serde_json::json!({
                         "authorityReceiptId": inspection.owner_authority_receipt_id,
                         "ownerId": owner.owner_id,
@@ -6530,6 +6709,14 @@ mod tests {
         (kernel, raw_capability, owner, executor)
     }
 
+    fn absent_effect_channel_observation() -> BrowserEffectChannelObservation {
+        BrowserEffectChannelObservation::Absent {
+            evidence_digest:
+                "sha256:1212121212121212121212121212121212121212121212121212121212121212"
+                    .to_string(),
+        }
+    }
+
     #[test]
     fn browser_adoption_refuses_while_original_executor_is_current() {
         let (mut kernel, raw_capability, owner, _) = protected_kernel_with_current_browser_owner();
@@ -6575,6 +6762,7 @@ mod tests {
                         "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                             .to_string(),
                 },
+                &absent_effect_channel_observation(),
                 "2026-09-01T13:00:04Z",
             )
             .unwrap_err();
@@ -6637,6 +6825,7 @@ mod tests {
                             .to_string(),
                     evidence_digest: physical_evidence_digest.to_string(),
                 },
+                &absent_effect_channel_observation(),
                 "2026-09-01T13:00:04Z",
             )
             .unwrap();
@@ -6664,6 +6853,69 @@ mod tests {
             kernel.state.owners.bindings["profile:adoption-profile"].owner_id,
             owner.owner_id
         );
+    }
+
+    #[test]
+    fn browser_adoption_refuses_a_surviving_effect_channel() {
+        let (mut kernel, raw_capability, owner, _) = protected_kernel_with_current_browser_owner();
+        let mut candidate = EffectExecutorIdentityEvidence {
+            uid: 1000,
+            gid: 1000,
+            pid: 5100,
+            start_token: "candidate-start-1".to_string(),
+            executable_path: "/opt/agent-browser/agent-browser".to_string(),
+            executable_sha256:
+                "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                    .to_string(),
+            identity_digest: String::new(),
+        };
+        candidate.identity_digest = effect_executor_identity_digest(&candidate);
+
+        let error = kernel
+            .prepare_browser_adoption(
+                PrepareBrowserAdoptionPayload {
+                    raw_capability: LeaseAuthoritySecret(raw_capability.into_bytes()),
+                    resource: LeaseResourceKey::profile("adoption-profile"),
+                    expected_owner_id: owner.owner_id.clone(),
+                    expected_owner_generation: owner.owner_generation,
+                    candidate_daemon_session_route: "adoption-candidate".to_string(),
+                    idempotency_key: "adopt:adoption-profile:effect-current".to_string(),
+                },
+                &candidate,
+                &BrowserOwnerExecutorObservation::Stale {
+                    evidence_digest:
+                        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            .to_string(),
+                },
+                &BrowserAdoptionPhysicalObservation::ExactCurrent {
+                    process_instance_digest: owner.process_instance_digest,
+                    profile_identity_digest: owner.physical_identity_digest,
+                    cdp_port: 9222,
+                    cdp_listener_socket_inode: 88,
+                    cdp_endpoint_identity_digest:
+                        "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                            .to_string(),
+                    profile_lock_identity_digest:
+                        "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+                            .to_string(),
+                    evidence_digest:
+                        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string(),
+                },
+                &BrowserEffectChannelObservation::Current {
+                    evidence_digest:
+                        "sha256:3434343434343434343434343434343434343434343434343434343434343434"
+                            .to_string(),
+                },
+                "2026-09-01T13:00:04Z",
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_browser_adoption_effect_channel_current"
+        );
+        assert!(kernel.state.browser_adoption_receipts.is_empty());
     }
 
     fn protected_kernel_with_prepared_browser_adoption() -> (
@@ -6720,6 +6972,7 @@ mod tests {
                 &candidate,
                 &executor_observation,
                 &physical_observation,
+                &absent_effect_channel_observation(),
                 "2026-09-01T13:00:04Z",
             )
             .unwrap();
@@ -6904,6 +7157,7 @@ mod tests {
                         "sha256:abababababababababababababababababababababababababababababababab"
                             .to_string(),
                 },
+                &absent_effect_channel_observation(),
                 "2026-09-01T13:00:06Z",
             )
             .unwrap_err();
@@ -6943,6 +7197,7 @@ mod tests {
                         "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                             .to_string(),
                 },
+                &absent_effect_channel_observation(),
                 "2026-09-01T13:00:05Z",
             )
             .unwrap();

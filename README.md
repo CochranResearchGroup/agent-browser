@@ -3188,6 +3188,8 @@ An acquired Linux response contains `leaseAuthority.kind=protected` with the cur
 
 The JSON response from `service browsers` includes `protectedBrowserOwnerObservations` keyed by browser ID for protected launches and adoptions. Each entry is linked through `authorityReceiptId`, carries exact owner and process axes, has a bounded freshness interval, and always reports `operationalAuthority: false`. It is a candidate locator for inspection only. Adoption, cleanup, transfer, or denial must revalidate reservation, holder, physical occupancy, and effect-channel custody through the protected root authority.
 
+On Linux, effect-channel custody is derived from the established loopback TCP connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. A vanished executor with no remaining holder is absent, while inherited, additional, or unresolved holders remain uncertain. Adoption rechecks that the selected candidate is the sole holder before committing the new owner generation.
+
 Trust material is stored as immutable generations under
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json` and public

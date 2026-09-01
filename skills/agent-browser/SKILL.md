@@ -1572,6 +1572,8 @@ An acquired Linux response contains `leaseAuthority.kind=protected` with the cur
 
 `agent-browser --json service browsers` returns `protectedBrowserOwnerObservations` keyed by browser ID when protected launch or adoption receipts have been projected. `authorityReceiptId` identifies the protected receipt without implying that it was a launch. Treat every entry as a freshness-bounded candidate locator with `operationalAuthority: false`. Never use it to authorize, deny, adopt, transfer, or clean up a browser without a fresh protected-root decision that keeps reservation, holder, physical occupancy, and effect-channel custody separate.
 
+On Linux, the protected root derives effect custody from established connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. It may report `absent` only when no holder remains. Inherited, additional, or unresolved holders remain `uncertain`. Adoption completion requires the selected candidate to be the sole observed holder.
+
 Trust material lives in immutable generations below
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json`, public
