@@ -275,7 +275,8 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
     let decoded = decode_lease_authority_request(&encoded)?;
     let mutation = matches!(
         decoded,
-        LeaseAuthorityProtocolRequest::RecoverPlan(_)
+        LeaseAuthorityProtocolRequest::Acquire(_)
+            | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
             | LeaseAuthorityProtocolRequest::RevokePlan(_)
             | LeaseAuthorityProtocolRequest::Revoke(_)

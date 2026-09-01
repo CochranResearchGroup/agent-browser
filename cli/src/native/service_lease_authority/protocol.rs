@@ -111,12 +111,7 @@ struct AcquireLeaseAuthorityPayload {
     mode: LeaseClaimMode,
     expected_authority_revision: u64,
     idempotency_key: String,
-    now: String,
-    expires_at: String,
-    transition_deadline: Option<String>,
     recovery_controller_id: Option<String>,
-    boot_epoch: Option<String>,
-    owner_generation: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -1291,9 +1286,12 @@ impl LeaseAuthorityProtocolKernel {
     fn execute(
         &mut self,
         request: LeaseAuthorityProtocolRequest,
+        authority_observed_at: &str,
     ) -> Result<LeaseAuthorityProtocolResponse, LeaseAuthorityProtocolError> {
         match request {
-            LeaseAuthorityProtocolRequest::Acquire(request) => self.acquire(*request),
+            LeaseAuthorityProtocolRequest::Acquire(request) => {
+                self.acquire(*request, authority_observed_at)
+            }
             LeaseAuthorityProtocolRequest::ServiceChallenge(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
@@ -1310,6 +1308,7 @@ impl LeaseAuthorityProtocolKernel {
     fn acquire(
         &mut self,
         request: AcquireLeaseAuthorityPayload,
+        authority_observed_at: &str,
     ) -> Result<LeaseAuthorityProtocolResponse, LeaseAuthorityProtocolError> {
         if request.resource.kind != LeaseResourceKind::Profile {
             return Err(LeaseAuthorityProtocolError {
@@ -1340,6 +1339,25 @@ impl LeaseAuthorityProtocolKernel {
         .map_err(|error| LeaseAuthorityProtocolError {
             code: error.code.as_str(),
         })?;
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let observed = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_state_invalid",
+            }
+        })?;
+        let expires_at = (observed
+            + chrono::Duration::seconds(super::MAX_LEASE_CLAIM_TENURE_SECONDS))
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let transition_deadline = (request.mode == LeaseClaimMode::Strict).then(|| {
+            (observed + chrono::Duration::seconds(60))
+                .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
+        });
+        let owner_generation = self
+            .state
+            .owners
+            .bindings
+            .get(&request.resource.storage_key())
+            .map(|owner| owner.owner_generation);
         let outcome = self
             .state
             .authority
@@ -1352,12 +1370,12 @@ impl LeaseAuthorityProtocolKernel {
                 mode: request.mode,
                 expected_authority_revision: request.expected_authority_revision,
                 idempotency_key: request.idempotency_key,
-                now: request.now,
-                expires_at: request.expires_at,
-                transition_deadline: request.transition_deadline,
+                now,
+                expires_at,
+                transition_deadline,
                 recovery_controller_id: request.recovery_controller_id,
-                boot_epoch: request.boot_epoch,
-                owner_generation: request.owner_generation,
+                boot_epoch: Some(self.state.domain.boot_epoch.clone()),
+                owner_generation,
             })
             .map_err(|error| LeaseAuthorityProtocolError {
                 code: error.as_str(),
@@ -1887,6 +1905,29 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
+        LeaseAuthorityProtocolRequest::Acquire(request) => {
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let LeaseAuthorityProtocolResponse::Acquired(outcome) =
+                kernel.acquire(*request, &observed_at)?;
+            let LeaseClaimAcquisitionOutcome {
+                claim,
+                receipt,
+                replayed,
+            } = outcome;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "acquired",
+                "payload": {
+                    "claim": claim,
+                    "receipt": receipt,
+                    "replayed": replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
         LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
             if !peer.is_root_administrator() =>
         {
@@ -1955,8 +1996,7 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
-        LeaseAuthorityProtocolRequest::Acquire(_)
-        | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+        LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
         | LeaseAuthorityProtocolRequest::Release(_)
         | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
@@ -2604,12 +2644,7 @@ mod tests {
                 "mode":"ephemeral",
                 "expectedAuthorityRevision":0,
                 "idempotencyKey":"acquire:last30days:tick-1",
-                "now":"2026-08-31T12:00:00Z",
-                "expiresAt":"2026-08-31T12:05:00Z",
-                "transitionDeadline":null,
-                "recoveryControllerId":null,
-                "bootEpoch":"boot-1",
-                "ownerGeneration":null
+                "recoveryControllerId":null
             }
         }"#;
         let request = match decode_lease_authority_request(encoded) {
@@ -2626,6 +2661,32 @@ mod tests {
         assert_eq!(acquire.mode, super::super::LeaseClaimMode::Ephemeral);
         assert_eq!(acquire.raw_capability.expose(), b"last30days-secret");
         assert!(!format!("{acquire:?}").contains("last30days-secret"));
+    }
+
+    #[test]
+    fn acquire_request_rejects_caller_owned_time_and_owner_evidence() {
+        let encoded = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"acquire",
+            "payload":{
+                "rawCapability":[108,97,115,116,51,48,100,97,121,115,45,115,101,99,114,101,116],
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "parentClaimId":null,
+                "mode":"ephemeral",
+                "expectedAuthorityRevision":0,
+                "idempotencyKey":"acquire:last30days:caller-authority",
+                "recoveryControllerId":null,
+                "now":"2099-01-01T00:00:00Z",
+                "expiresAt":"2199-01-01T00:00:00Z",
+                "bootEpoch":"invented-boot",
+                "ownerGeneration":999
+            }
+        }"#;
+        let error = match decode_lease_authority_request(encoded) {
+            Ok(_) => panic!("caller-owned acquisition authority must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_request_invalid");
     }
 
     #[test]
@@ -2815,12 +2876,7 @@ mod tests {
                 "mode": "ephemeral",
                 "expectedAuthorityRevision": 0,
                 "idempotencyKey": "acquire:last30days:tick-1",
-                "now": "2026-08-31T12:00:00Z",
-                "expiresAt": "2026-08-31T12:05:00Z",
-                "transitionDeadline": null,
-                "recoveryControllerId": null,
-                "bootEpoch": "boot-1",
-                "ownerGeneration": null
+                "recoveryControllerId": null
             }
         }))
         .unwrap();
@@ -2836,7 +2892,7 @@ mod tests {
             )
             .unwrap();
 
-        let response = match kernel.execute(request) {
+        let response = match kernel.execute(request, "2026-08-31T12:00:00Z") {
             Ok(response) => response,
             Err(error) => panic!("authenticated acquire must succeed: {}", error.code()),
         };
@@ -2844,6 +2900,33 @@ mod tests {
         let claim = outcome.claim.expect("fresh acquisition returns a claim");
         assert_eq!(claim.principal_id(), registered.principal.principal_id);
         assert_eq!(claim.capability_id(), registered.capability.capability_id);
+        assert_eq!(claim.acquired_at, "2026-08-31T12:00:00Z");
+        assert_eq!(claim.expires_at, "2026-08-31T12:05:00.000000000Z");
+        assert_eq!(claim.boot_epoch.as_deref(), Some("boot-1"));
+        assert_eq!(claim.owner_generation, None);
+
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let encoded_response = dispatch_lease_authority_request(
+            &mut kernel,
+            &encoded,
+            &custody,
+            test_peer(1000),
+            &LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]),
+            None,
+        )
+        .unwrap();
+        let response: Value = serde_json::from_slice(&encoded_response).unwrap();
+        assert_eq!(response["outcome"], "acquired");
+        assert_eq!(response["payload"]["replayed"], true);
+        assert_eq!(
+            response["payload"]["receipt"]["idempotencyKey"],
+            "acquire:last30days:tick-1"
+        );
+        assert!(!String::from_utf8(encoded_response)
+            .unwrap()
+            .contains(raw_capability));
     }
 
     #[test]
@@ -2873,12 +2956,7 @@ mod tests {
                     "mode": "ephemeral",
                     "expectedAuthorityRevision": 0,
                     "idempotencyKey": "acquire:last30days:tick-1",
-                    "now": "2026-08-31T12:00:00Z",
-                    "expiresAt": "2026-08-31T12:05:00Z",
-                    "transitionDeadline": null,
-                    "recoveryControllerId": null,
-                    "bootEpoch": "boot-1",
-                    "ownerGeneration": null
+                    "recoveryControllerId": null
                 }
             }))
             .unwrap()
@@ -2893,7 +2971,7 @@ mod tests {
             )
             .unwrap();
         let first = kernel
-            .execute(request)
+            .execute(request, "2026-08-31T12:00:00Z")
             .unwrap_or_else(|error| panic!("fresh acquire must succeed: {}", error.code()));
         let LeaseAuthorityProtocolResponse::Acquired(first) = first;
         assert!(!first.replayed);
@@ -2918,7 +2996,7 @@ mod tests {
         let replay_request = decode_lease_authority_request(&encode_request())
             .unwrap_or_else(|error| panic!("replay acquire request must decode: {}", error.code()));
         let replay = restarted
-            .execute(replay_request)
+            .execute(replay_request, "2026-08-31T12:00:30Z")
             .unwrap_or_else(|error| panic!("replay must succeed: {}", error.code()));
         let LeaseAuthorityProtocolResponse::Acquired(replay) = replay;
         assert!(replay.replayed);
@@ -3034,12 +3112,7 @@ mod tests {
                 "mode": "ephemeral",
                 "expectedAuthorityRevision": 0,
                 "idempotencyKey": "acquire:unregistered:tick-1",
-                "now": "2026-08-31T12:00:00Z",
-                "expiresAt": "2026-08-31T12:05:00Z",
-                "transitionDeadline": null,
-                "recoveryControllerId": null,
-                "bootEpoch": "boot-1",
-                "ownerGeneration": null
+                "recoveryControllerId": null
             }
         }))
         .unwrap();
@@ -3047,7 +3120,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("request must decode: {}", error.code()));
         let mut kernel = test_kernel(super::super::LeaseAuthorityState::default(), principals);
 
-        let error = match kernel.execute(request) {
+        let error = match kernel.execute(request, "2026-08-31T12:00:00Z") {
             Ok(_) => panic!("unregistered profile must not become authority"),
             Err(error) => error,
         };

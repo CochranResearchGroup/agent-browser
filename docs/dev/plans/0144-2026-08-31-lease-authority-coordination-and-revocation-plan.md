@@ -608,6 +608,30 @@ Every active claim contains at least:
     physical profile during partition. When exclusive registration cannot be
     proven current, the outcome is a physical-resource quarantine or explicit
     isolated profile, never two local authorities or an invented remote owner.
+108. Authority failure is contained to the narrowest provable scope. A corrupt
+    or invalid claim, registration, owner binding, completed-operation entry,
+    or counter quarantines its exact canonical resource while unrelated valid
+    resources remain inspectable and usable. Only damage to shared custody,
+    trust selection, authority-domain identity, or an unprovable global
+    high-water mark may create a domain-wide outage. Resource quarantine
+    preserves the suspect bytes and fencing evidence and has first-class
+    inspect and recovery operations; it never normalizes the resource to an
+    apparently free state.
+109. Ordinary Agent Browser operations use broker-managed ephemeral authority.
+    Their public contract does not require a caller to supply or understand a
+    lease id, session identity, daemon route, owner generation, heartbeat,
+    renewal loop, or recovery controller. The broker derives the narrow child
+    resource and action, acquires or rejoins a server-bounded ephemeral claim,
+    consumes the effect intent, and performs best-effort release. Explicit
+    strict lease APIs remain available only for lease-aware software with a
+    durable enrolled recovery controller.
+110. Every authority readback is revision-bound and freshness-explicit. It
+    reports the authority domain and epoch, snapshot revision, authority-owned
+    observation time, and a bounded validity or refresh requirement. A cached
+    CLI, dashboard, HTTP, MCP, generated-client, or compatibility projection
+    may describe what was observed, but cannot label itself current after its
+    bound, authorize an effect, or feed a denial without a fresh kernel
+    decision. Historical and stale projections remain visibly observational.
 
 ## Claim Modes
 
@@ -863,6 +887,9 @@ runtime receipts all satisfy the acceptance matrix.
 | logical claim expires while the exact Chrome process still owns the profile lock | logical authority no longer blocks; fresh physical evidence selects bounded adoption, close, wait, cleanup, or quarantine recourse |
 | authenticated group member floods or malforms authority IPC | bounded parsing and admission preserve expiry, revocation, reconciliation, and administrator capacity |
 | two root authority services on partitioned hosts address one shared profile | the external coordinator admits one domain or quarantines the resource; local root custody alone cannot authorize it |
+| one profile claim or resource registration is corrupt while other profiles are valid | only the exact resource is quarantined; unrelated profiles remain usable and no suspect resource is treated as free |
+| an ordinary client opens its own authenticated profile and then crashes | broker-managed ephemeral authority requires no lease choreography from the client, expires without release, and permits bounded reuse |
+| a dashboard or client retains an authority response past its freshness bound | it displays a stale observation and refreshes before action; it cannot emit a current holder or denial from the cached projection |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -1086,6 +1113,24 @@ That merge closes the known shared-Service-State writer race but does not
 implement the authority-to-projection receipt contract in invariant 103. The
 candidate therefore remains noninstallable and cannot yet claim structural
 recurrence resistance.
+
+An eleventh recurrence pass focused on usability blast radius rather than only
+authority integrity. It found three remaining ways a correct kernel could
+still recreate the reported experience. A malformed record in one monolithic
+snapshot could turn one profile incident into a workstation-wide authority
+outage. A stale but well-formed read projection could continue telling an
+operator that an expired holder is current. Finally, exposing the canonical
+lease protocol directly to every ordinary caller could replace false denials
+with mandatory lease bookkeeping and make ephemeral agents responsible for
+cleanup they cannot reliably perform.
+
+Invariants 108 through 110 require resource-scoped quarantine, freshness-bound
+observations, and broker-managed ephemeral authority for ordinary work. These
+are design corrections, not presentation polish. They are not implemented,
+and the current protected store remains a single validation and availability
+unit. Structural source acceptance now also requires fault injection proving
+that one corrupt resource cannot deny another, public readbacks proving stale
+status is observational, and a zero-lease-choreography client acceptance case.
 
 ## Validation Contract
 
@@ -2197,10 +2242,35 @@ unexecutable bearer.
 This fail-closed checkpoint is not the final recovery surface. Protected
 recovery cannot be enabled by forwarding only the plan call: the protected
 authority domain must first own profile principal registration, physical
-resource registration, and claim acquisition. Its kernel already implements
-typed authenticated acquisition, but protected dispatch still rejects
-`acquire`, and bootstrap currently begins with empty principal and resource
-registries. The next integration order is therefore registration, resource
-binding, acquisition/effect authorization/release, then public recovery
-plan/apply. Skipping that order would recreate split authority with matching
-method names.
+resource registration, and claim acquisition. Bootstrap currently begins with
+empty principal and resource registries. The next integration order is
+therefore registration, resource binding, acquisition/effect
+authorization/release, then public recovery plan/apply. Skipping that order
+would recreate split authority with matching method names.
+
+## Slice F Protected Acquisition Authority Checkpoint | 2026-08-31
+
+Protected `acquire` dispatch is now implemented. The wire request contains the
+raw profile capability, canonical resource, optional parent, requested mode,
+expected resource revision, idempotency key, and optional recovery controller.
+Its closed schema rejects caller-provided current time, expiry, transition
+deadline, boot epoch, and owner generation. The protected kernel authenticates
+the capability against its own principal registry, requires an explicitly
+registered physical resource, advances its durable authority-time floor,
+chooses the bounded claim and transition deadlines, and derives boot and owner
+generation evidence from protected state.
+
+The production service classifies acquisition as a mutation, so its selected
+generation compare-and-swap and durability barrier complete before the framed
+response is returned. The response carries only the acquired claim, durable
+receipt, and replay marker. It never echoes the raw capability. Focused tests
+prove rejection of caller-owned authority evidence, authenticated identity
+derivation, unregistered-resource rejection, durable replay, framed response
+encoding, capability redaction, and the complete 34-test protocol partition.
+
+This is a prerequisite, not a public acquisition path. No ordinary client can
+yet acquire through protected IPC because protected principal and physical
+resource registration are not implemented. Effect authorization, exact-holder
+release, inspection, resource-scoped fault containment, freshness-bound public
+readbacks, and broker-managed zero-choreography ephemeral acquisition also
+remain. Production installation is still withheld.
