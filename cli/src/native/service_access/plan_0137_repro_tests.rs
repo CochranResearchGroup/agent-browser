@@ -193,10 +193,12 @@ fn p137_generation_55_transferred_terminal_owner_plans_without_mutating_state() 
         plan["decision"]["lifecycleReplacement"]["replacementSessionName"],
         fixture.daemon_session_route
     );
-    assert_eq!(
-        plan["decision"]["serviceRequest"]["request"]["sessionName"],
-        fixture.daemon_session_route
-    );
+    let launch_session = plan["decision"]["serviceRequest"]["request"]["sessionName"]
+        .as_str()
+        .expect("terminal replacement must provide an executable launch session");
+    assert_ne!(launch_session, fixture.daemon_session_route);
+    assert!(launch_session.starts_with("terminal-profile-"));
+    assert!(crate::validation::is_valid_session_name(launch_session));
     assert_eq!(fixture.principal_id, "principal:last30days");
 }
 

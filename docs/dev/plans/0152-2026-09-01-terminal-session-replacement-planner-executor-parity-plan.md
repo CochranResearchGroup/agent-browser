@@ -143,3 +143,44 @@ three-attempt contract.
 
 Next action: add the single Agent Browser red regression at the public
 access-plan-to-executor seam.
+
+## Agent Browser Source Checkpoint
+
+State transition: `active -> source_repair_validated` for slices A and B.
+
+Acceptance state: the planner now derives a deterministic fresh
+`terminal-profile-*` launch lane from the selected profile, logical browser,
+and terminal owner generation. The retired daemon lane remains lifecycle
+evidence. Request normalization admits only the exact fresh lane projected by
+the current plan and attaches authenticated-cold route authority; arbitrary
+missing sessions still fail closed. The daemon revalidates the current owner
+ID, generation, registry revision, profile digest, principal capability, and
+fresh session before launch.
+
+Red/green evidence:
+
+- the Plan 0137 reproduction initially showed that planning reused the retired
+  daemon session;
+- the copied unauthenticated-plan request initially failed authenticated
+  normalization with `explicit_session_route_invalid`;
+- the executor fixture with terminal owner generation 57 and retained
+  principal binding generation 56 initially returned `false` at authenticated
+  profile selection; and
+- all three pass after the repair, together with the missing-explicit-session
+  negative fence.
+
+Validation evidence:
+
+- `cargo fmt --check`: pass;
+- production binary `cargo clippy --bin agent-browser -- -D warnings`: pass;
+- complete Rust suite: 2,827 pass, 15 fail, 57 ignored under parallel
+  execution; every failure used the same shared temporary HOME and the failed
+  control-plane cluster (43 tests) plus both independent failed tests pass when
+  rerun serially;
+- all-target clippy remains blocked by three pre-existing
+  `clippy::octal_escapes` warnings in `desktop_capture.rs`, outside P152.
+
+Progress classification: `blocker_reduction`.
+
+Next action: implement the Last30days retry-ordinal schema migration with a
+red migration regression, then qualify both repositories before installation.
