@@ -871,7 +871,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         browser_capability_evidence,
     );
     let lifecycle_replacement = lifecycle_replacement_decision(selected_profile, service_state);
-    let mut profile_reuse = profile_reuse_decision(
+    let profile_reuse = profile_reuse_decision(
         request,
         selected_profile,
         service_state,
@@ -882,28 +882,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
             .and_then(Value::as_str),
         input.authenticated_principal,
     );
-    let lifecycle_blocks_replacement = lifecycle_replacement["available"].as_bool() == Some(true)
-        && lifecycle_replacement["replacementEligible"].as_bool() == Some(false);
     let acquisition_blocked_by_explicit_session =
         profile_reuse["recommendedAction"].as_str() == Some("blocked_by_explicit_session_route");
-    let acquisition_blocked_by_lifecycle_owner = lifecycle_blocks_replacement
-        && profile_reuse["recommendedAction"].as_str() == Some("launch_new_browser");
-    if acquisition_blocked_by_lifecycle_owner {
-        profile_reuse["recommendedAction"] = json!("blocked_by_lifecycle_owner");
-        profile_reuse["defaultAcquisition"] = Value::Null;
-        profile_reuse["sharedAcquisition"]["mode"] = Value::Null;
-        profile_reuse["sharedAcquisition"]["requiresRouteHints"] = json!(false);
-        profile_reuse["sharedAcquisition"]["routeHintFields"] = json!([]);
-        if let Some(reasons) = profile_reuse["reasons"].as_array_mut() {
-            reasons.push(json!("lifecycle_owner_blocks_replacement"));
-            reasons.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
-            reasons.dedup();
-        }
-    }
     let acquisition_blocker = if acquisition_blocked_by_explicit_session {
         Some("explicit_session_route_invalid")
-    } else if acquisition_blocked_by_lifecycle_owner {
-        Some("lifecycle_owner_blocks_replacement")
     } else if profile_reuse["recommendedAction"].as_str() == Some("wait_for_foreign_principal") {
         Some("foreign_principal_profile_lease")
     } else if profile_reuse["recommendedAction"].as_str() == Some("authenticate_for_profile_reuse")
@@ -1005,8 +987,6 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "register_managed_profile_or_request_throwaway_browser"
     } else if acquisition_blocked_by_explicit_session {
         "resolve_explicit_session_route"
-    } else if acquisition_blocked_by_lifecycle_owner {
-        "reconcile_lifecycle_owner_for_tab_acquisition"
     } else if profile_readiness_monitor_attention
         && readiness_profile_needs_probe(readiness, target_service_ids)
     {
@@ -1195,7 +1175,7 @@ fn lifecycle_replacement_decision(
         {
             "closing_lifecycle_requires_reconciliation"
         }
-        Some(_) => "lifecycle_owner_blocks_replacement",
+        Some(_) => "lifecycle_observation_not_replacement_eligible",
     };
     let required_action = match reason {
         "no_lifecycle_owner" => "launch_new_browser",
@@ -5080,7 +5060,7 @@ mod tests {
     }
 
     #[test]
-    fn service_access_plan_blocks_replacement_when_ready_owner_is_not_reusable() {
+    fn stale_transferring_owner_without_live_authority_does_not_block_cold_launch() {
         use crate::runtime_owner_transfer::{
             CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
             RuntimeLifecycleRecord, RuntimeOwnerRegistry,
@@ -5138,8 +5118,8 @@ mod tests {
                         logical_browser_id: browser_id.to_string(),
                         profile_identity_digest,
                         owner_generation: 3,
-                        lifecycle_state: RuntimeLaneLifecycleState::Ready,
-                        cleanup_obligation_state: CleanupObligationState::Owned,
+                        lifecycle_state: RuntimeLaneLifecycleState::Transferring,
+                        cleanup_obligation_state: CleanupObligationState::Transferring,
                         ..RuntimeLifecycleRecord::default()
                     },
                 )]),
@@ -5147,30 +5127,47 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let plan = service_access_plan_for_state(
-            &state,
-            ServiceAccessPlanRequest {
-                target_service_ids: vec!["acs".to_string()],
-                browser_host: Some(BrowserHost::RemoteHeaded),
-                ..ServiceAccessPlanRequest::default()
-            },
-        );
+        let request = ServiceAccessPlanRequest {
+            target_service_ids: vec!["acs".to_string()],
+            browser_host: Some(BrowserHost::RemoteHeaded),
+            ..ServiceAccessPlanRequest::default()
+        };
+        let plan = service_access_plan_for_state(&state, request.clone());
+        let mut without_history = state.clone();
+        without_history.runtime_owner_registry = RuntimeOwnerRegistry::default();
+        let clean_plan = service_access_plan_for_state(&without_history, request);
 
         assert_eq!(
             plan["decision"]["recommendedAction"],
-            "reconcile_lifecycle_owner_for_tab_acquisition"
+            "use_selected_profile"
         );
         assert_eq!(
             plan["decision"]["profileReuse"]["recommendedAction"],
-            "blocked_by_lifecycle_owner"
+            "launch_new_browser"
         );
         assert_eq!(
             plan["decision"]["lifecycleReplacement"]["replacementEligible"],
             false
         );
-        assert_eq!(plan["decision"]["attention"]["required"], true);
-        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
-        assert_eq!(plan["decision"]["serviceRequest"]["request"], Value::Null);
+        assert_eq!(plan["decision"]["attention"]["required"], false);
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+        assert!(plan["decision"]["serviceRequest"]["request"].is_object());
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            Value::Null
+        );
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            clean_plan["decision"]["recommendedAction"]
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"],
+            clean_plan["decision"]["profileReuse"]
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"],
+            clean_plan["decision"]["serviceRequest"]
+        );
     }
 
     #[test]

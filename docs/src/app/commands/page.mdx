@@ -1353,6 +1353,9 @@ evidence, `replacementEligible`, `requiredAction`, and the exact
 `replacementBrowserId` and `replacementSessionName` for a cleanup-satisfied
 terminal owner. The copied request carries that session automatically, making
 the advertised supersession path executable without a default-lane collision.
+Nonterminal lifecycle and owner rows remain diagnostic evidence and cannot
+block cold launch or provide a route identity without a canonical current
+claim or fresh exact physical collision.
 Reviewed `service prune-retained --process-exited-browsers` includes a
 `degraded` browser only when it has no PID, CDP endpoint, or live tab. The
 response preserves its health evidence and profile-correlated lifecycle aliases

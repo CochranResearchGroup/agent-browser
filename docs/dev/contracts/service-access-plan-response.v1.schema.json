@@ -996,7 +996,6 @@
                 "authenticate_for_profile_reuse",
                 "lifecycle_profile_identity_inconsistent",
                 "launch_new_browser",
-                "blocked_by_lifecycle_owner",
                 "blocked_by_explicit_session_route"
               ]
             },

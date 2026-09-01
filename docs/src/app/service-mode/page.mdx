@@ -789,10 +789,11 @@ Service State.
 A capability bound to one profile cannot cold-launch or reuse a different
 profile, including when the requested profile has no retained session or lease.
 An explicit <code>sessionName</code> must map uniquely to one compatible retained
-browser. Missing or ambiguous mappings, and live lifecycle owners that cannot
-accept the planned operation, set <code>serviceRequest.available</code> to false,
-return typed attention, and omit the copyable request so clients cannot launch
-a forbidden replacement.
+browser. Missing or ambiguous mappings set <code>serviceRequest.available</code>
+to false, return typed attention, and omit the copyable request. Nonterminal
+lifecycle and owner rows remain diagnostic evidence. They cannot block cold
+launch or provide a route identity without a canonical current claim or fresh
+exact physical collision.
 
 Use <code>agent-browser service resources</code> when the host looks noisy and
 you need a no-launch process inventory correlated with retained service state.

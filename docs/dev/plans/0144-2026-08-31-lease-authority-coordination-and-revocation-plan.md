@@ -1979,11 +1979,11 @@ The historical incident families map to the following mandatory invariants:
 
 | Reported failure | Structural prevention contract | Current disposition |
 | --- | --- | --- |
-| Retained sessions, terminal owners, or lease warnings block ordinary work | 1, 2, 24, 37, 42, 49, 63, 65, 80, 97, and 99 | Modelled; production gates and projections not yet exhaustively sealed |
+| Retained sessions, terminal owners, or lease warnings block ordinary work | 1, 2, 24, 37, 42, 49, 63, 65, 80, 97, and 99 | Authenticated cold access planning, profile selection, legacy lease admission, prelaunch lifecycle admission, and postlaunch registration now treat retained rows as observations; remaining entrypoints and projections are not yet exhaustively sealed |
 | An absent client or crashed worker leaves a permanent lease | 7, 25, 45, 61, 63, 65, 66, 84, and 89 | Modelled; authority clock and stable deadline reconciler remain |
 | An abandoned strict lease requires a hotfix or raw state edit | 9, 10, 23, 40, 57, 64, 69, 88, and 102 | Protected recover and revoke exist; administrator replacement, public parity, and disaster recovery remain |
-| Access plan says launch is executable, then execution rejects an invented session or owner identity | 12, 13, 35, 37, 38, 41, 42, 47, 60, 73, 80, and 95 | Modelled; shared planner, acquire, admission, and denial dispatcher remains |
-| `closing`, `prepared`, or `transferring` survives its owner indefinitely | 8, 16, 29, 39, 54, 61, 71, 76, and 89 | Modelled; transfer saga and supervisor reconciliation remain |
+| Access plan says launch is executable, then execution rejects an invented session or owner identity | 12, 13, 35, 37, 38, 41, 42, 47, 60, 73, 80, and 95 | The authenticated cold route now carries its exact observed registry generation through selection and legacy lease admission; a shared planner, acquire, admission, and denial dispatcher remains |
+| `closing`, `prepared`, or `transferring` survives its owner indefinitely | 8, 16, 29, 39, 54, 61, 71, 76, and 89 | Stale transfer rows no longer block authenticated cold planning or launch, and successful registration supersedes the exact observed generation; canonical transfer saga and supervisor reconciliation remain |
 | Dashboard or read reconciliation creates fictitious browsers or ready-looking owners | 6, 17, 32, 41, 63, 80, 94, 97, and 103 | Modelled; projections remain to be made receipt-only |
 | Candidate upgrade blocks itself or old and new generations disagree | 20, 35, 46, 52, 60, 83, 87, 90, 93, 98, and 103 | Protected supervisor foundation exists; installer ownership and mixed-version migration remain |
 | Retried requests create duplicate daemons, browsers, routes, or external effects | 18, 19, 28, 39, 44, 54, 55, 76, 77, 78, and 79 | Authority receipts exist in part; single-flight spawn and every effect sink remain |
@@ -2108,3 +2108,80 @@ single-flight process spawn, receipt-only Service State projection, exhaustive
 denial and effect manifests, model and crash testing, mixed-version migration,
 and exact installed acceptance remain mandatory. Production installation is
 still withheld.
+
+## Slice F Nonblocking Runtime-Owner History Checkpoint | 2026-08-31
+
+The access planner no longer converts a nonterminal runtime-owner or lifecycle
+row into `lifecycle_owner_blocks_replacement`. A `ready`, `closing`,
+`prepared`, or `transferring` observation that cannot be joined to reusable
+current authority remains visible under `decision.lifecycleReplacement`, but
+it cannot erase the cold-launch request, invent a required session route, set
+an acquisition blocker, or demand reconciliation before ordinary work.
+
+The regression reproduces the reported failure with a generation-bound
+`transferring` lifecycle row, no live PID, and no active session. It proves
+that the planner's recommended action, profile-reuse decision, and copyable
+service request are identical with and without that retained owner history.
+The public schema and generated client no longer advertise
+`blocked_by_lifecycle_owner` as a planner recommendation. The retained
+`blockedByLifecycleOwner` boolean is compatibility-shaped and is false for
+current plans.
+
+This change deliberately does not weaken the physical safety boundary. An
+exact current process, profile lock, socket, route, display, or canonical
+active claim may still produce its own typed denial at the responsible gate.
+A runtime-owner row or browser projection does not prove any of those facts.
+
+The legacy owner registry still coordinates transfer effects and therefore
+remains a competing authority implementation below the planner. The next
+Slice F work must move prepare, commit, abort, reverse, owner-generation
+fencing, and cleanup accountability into the protected kernel and leave the
+Service State registry as receipt-driven projection only.
+
+## Slice F Planner And Executor Coherence Checkpoint | 2026-08-31
+
+The authenticated cold execution route now consumes the same exact
+runtime-owner registry revision, owner id, and owner generation that the
+access planner observed. A retained nonterminal owner is no longer interpreted
+as proof of a live holder during profile selection. Historical session and
+browser rows also cannot reintroduce a legacy profile-lease veto after the
+authenticated plan has been copied by the service adapter.
+
+The prelaunch lifecycle check now treats the runtime-owner registry as an
+observation surface. It does not deny Chrome startup from a retained owner row.
+The browser's process-level profile lock remains the physical collision gate.
+If startup succeeds, managed-lane registration compare-and-swaps against the
+exact observed owner generation, advances the generation, publishes the fresh
+process identity, and removes the superseded lifecycle projection. A concurrent
+owner change makes that compare-and-swap fail, so a stale daemon cannot acquire
+effect authority from the supersession.
+
+Provider-free regressions reproduce generation 57 with a transferring
+lifecycle, no process identity, and a retained exclusive session row. They
+prove authenticated profile selection and legacy lease admission stay ready,
+prelaunch history cannot veto, successful registration advances to generation
+58, and the old lifecycle projection is no longer current.
+
+This closes the concrete planner/executor disagreement behind the reported
+`existing_session_profile_identity_unproven` and
+`runtime_lifecycle_existing_owner_requires_explicit_transition` sequence for
+the authenticated cold route. It does not establish global structural
+closure. Unauthenticated and legacy entrypoints still reach compatibility
+gates, the runtime-owner registry still authorizes effects and transfer, and
+the exhaustive denial manifest, kernel-owned spawn, physical permits,
+receipt-only projections, reference-model faults, migration matrix, and exact
+installed acceptance remain open.
+
+The broader regression run exposed an additional public-surface defect. The
+legacy `service_profile_lease_recover_plan` wrapper signs and returns a strict
+recovery authorization from Service State, but recovery authorizations are
+intentionally excluded from Service State serialization. Its paired apply
+therefore rejects the freshly returned plan as
+`lease_authority_invalid_recovery_proof`. Persisting that bearer in Service
+State would violate the protected-state and bearer-free-history invariants.
+The correct repair is to route public CLI, HTTP, MCP, generated-client, and
+dashboard recovery plan/apply through the protected authority service's
+already durable `recover_plan` and `recover` protocol, returning only its
+proof-redacted plan id to untrusted projections. Until that parity is wired,
+the legacy public wrapper is not an accepted strict-recovery surface and the
+full `service_profile_lease` filter remains red on its public recovery test.

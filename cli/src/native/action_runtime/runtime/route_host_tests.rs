@@ -3766,6 +3766,7 @@ fn test_service_profile_lease_gate_allows_duplicate_lane_route_hints() {
     )
     .expect("lane gate should evaluate");
     assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+
     let _ = fs::remove_dir_all(&home);
 }
 #[test]
@@ -3848,7 +3849,7 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
         .save(&state)
         .expect("service state should be persisted");
 
-    let command = json!({
+    let mut command = json!({
         "action": "tab_new",
         "serviceName": "Last30days",
         "runtimeProfile": profile_id,
@@ -3885,6 +3886,76 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
         .expect("the authenticated access-plan route should be executable");
 
     assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let retained_owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "owner-stale-transfer-generation-57".to_string(),
+        profile_identity_digest: profile_identity_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 57,
+        browser_id: "session:last30days-social-direct-20260830-c13".to_string(),
+        daemon_session_route: "last30days-social-direct-20260830-c13".to_string(),
+        process_instance_digest: "a".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "b".repeat(64),
+        target_set_digest: "c".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    state.runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(retained_owner.clone());
+    state.runtime_owner_registry.lifecycle_records.insert(
+        retained_owner.browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: retained_owner.browser_id.clone(),
+            boot_epoch: None,
+            profile_identity_digest,
+            owner_generation: retained_owner.owner_generation,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Transferring,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Transferring,
+            process_group_id: None,
+            package_launch_identity_digest: None,
+            terminal_evidence: Vec::new(),
+        },
+    );
+    state.sessions.insert(
+        "historical-exclusive-session".to_string(),
+        BrowserSession {
+            id: "historical-exclusive-session".to_string(),
+            profile_id: Some(profile_id.to_string()),
+            lease: LeaseState::Exclusive,
+            ..BrowserSession::default()
+        },
+    );
+    command["serviceProfileRouteAuthorization"]["runtimeOwnerRegistryRevision"] =
+        json!(state.runtime_owner_registry.revision);
+    command["serviceProfileRouteAuthorization"]["ownerId"] = json!(retained_owner.owner_id);
+    command["serviceProfileRouteAuthorization"]["ownerGeneration"] =
+        json!(retained_owner.owner_generation);
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .expect("stale projection fixture should be persisted");
+
+    let mut stale_projection_options = LaunchOptions::default();
+    assert!(apply_authenticated_access_plan_profile_selection(
+        &mut stale_projection_options,
+        &command,
+        &session_id,
+        &state,
+    )
+    .expect("exact stale projection route should be evaluated"));
+    assert!(matches!(
+        service_profile_lease_gate(&command, &session_id, Some(0)).unwrap(),
+        ServiceProfileLeaseGate::Ready
+    ));
+    let mut tampered_command = command.clone();
+    tampered_command["serviceProfileRouteAuthorization"]["ownerGeneration"] = json!(58);
+    assert!(matches!(
+        service_profile_lease_gate(&tampered_command, &session_id, Some(0)).unwrap(),
+        ServiceProfileLeaseGate::Wait { .. }
+    ));
     let _ = fs::remove_dir_all(&home);
 }
 

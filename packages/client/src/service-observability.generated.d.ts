@@ -2222,7 +2222,7 @@ export interface ServiceAccessPlanServiceRequest {
   blockedByPolicy: boolean;
   /** True when lifecycle or explicit-route admission blocks this acquisition. */
   blockedByAcquisition: boolean;
-  /** True when a retained lifecycle owner prevents replacement launch. */
+  /** Compatibility field. Current planners keep this false because lifecycle observations are not acquisition authority. */
   blockedByLifecycleOwner: boolean;
   /** Typed acquisition blocker when no request is available. */
   acquisitionBlocker: string | null;
@@ -2532,7 +2532,6 @@ export interface ServiceAccessPlanProfileReuse {
     | 'authenticate_for_profile_reuse'
     | 'lifecycle_profile_identity_inconsistent'
     | 'launch_new_browser'
-    | 'blocked_by_lifecycle_owner'
     | 'blocked_by_explicit_session_route'
     | string;
   selectedProfileId: string | null;

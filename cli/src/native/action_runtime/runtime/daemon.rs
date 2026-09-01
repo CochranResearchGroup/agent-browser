@@ -977,21 +977,34 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
         resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), &profile_id)?;
     let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
     let owner = state.runtime_owner_registry.owner(&profile_digest);
-    let route_authorized = match route_kind {
-        "authenticated_cold" => {
-            owner.is_none()
-        }
-        "terminal_replacement" => owner.is_some_and(|owner| {
-            route_authorization
-                .get("runtimeOwnerRegistryRevision")
+    let exact_observed_owner = |owner: &crate::runtime_owner_transfer::ProfileOwner| {
+        route_authorization
+            .get("runtimeOwnerRegistryRevision")
+            .and_then(Value::as_u64)
+            == Some(state.runtime_owner_registry.revision)
+            && route_authorization.get("ownerId").and_then(Value::as_str)
+                == Some(owner.owner_id.as_str())
+            && route_authorization
+                .get("ownerGeneration")
                 .and_then(Value::as_u64)
-                == Some(state.runtime_owner_registry.revision)
-                && route_authorization.get("ownerId").and_then(Value::as_str)
-                    == Some(owner.owner_id.as_str())
-                && route_authorization
-                    .get("ownerGeneration")
+                == Some(owner.owner_generation)
+    };
+    let route_authorized = match route_kind {
+        "authenticated_cold" => match owner {
+            Some(owner) => exact_observed_owner(owner),
+            None => {
+                route_authorization
+                    .get("runtimeOwnerRegistryRevision")
                     .and_then(Value::as_u64)
-                    == Some(owner.owner_generation)
+                    == Some(state.runtime_owner_registry.revision)
+                    && route_authorization.get("ownerId").is_some_and(Value::is_null)
+                    && route_authorization
+                        .get("ownerGeneration")
+                        .is_some_and(Value::is_null)
+            }
+        },
+        "terminal_replacement" => owner.is_some_and(|owner| {
+            exact_observed_owner(owner)
                 && owner.daemon_session_route == session_id
                 && state
                     .runtime_owner_registry
@@ -1017,24 +1030,6 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
         _ => false,
     };
     if !route_authorized {
-        return Ok(false);
-    }
-    let competing_session = state.sessions.values().any(|candidate| {
-        candidate.id != session_id
-            && candidate.profile_id.as_deref() == Some(profile_id.as_str())
-            && matches!(
-                candidate.lease,
-                LeaseState::Exclusive | LeaseState::HumanTakeover
-            )
-    });
-    let competing_live_browser = state.browsers.values().any(|browser| {
-        browser.profile_id.as_deref() == Some(profile_id.as_str())
-            && (browser.pid.is_some()
-                || browser.cdp_endpoint.is_some()
-                || !browser.active_session_ids.is_empty()
-                || browser.tab_handles.iter().any(|handle| handle.valid))
-    });
-    if competing_session || competing_live_browser {
         return Ok(false);
     }
     if options

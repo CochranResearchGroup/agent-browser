@@ -6350,6 +6350,8 @@ Access plans expose decision.lifecycleReplacement with owner generation, lifecyc
 and cleanup states, terminal evidence, replacementEligible, requiredAction, and
 the exact replacementBrowserId and replacementSessionName for an eligible
 terminal owner. The copied launch request carries that session automatically.
+Nonterminal lifecycle and owner rows remain diagnostic evidence and never block
+a cold launch without a canonical current claim or fresh physical collision.
 Reviewed --process-exited-browsers includes degraded browser placeholders only
 without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReasons.
   agent-browser service tabs

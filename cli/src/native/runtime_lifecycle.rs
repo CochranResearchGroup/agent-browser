@@ -36,6 +36,12 @@ pub(crate) enum RuntimeLifecycleIntent {
         process_group_id: Option<u32>,
         package_launch_identity_digest: String,
     },
+    SupersedeObservedOwner {
+        expected_owner: OwnerAuthorityClaim,
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+    },
     RefreshCurrentOwnerEvidence {
         claim: OwnerAuthorityClaim,
         cdp_endpoint_identity_digest: String,
@@ -78,6 +84,7 @@ pub(crate) enum RuntimeLifecycleIntent {
 pub(crate) enum RuntimeLifecycleTransition {
     OwnerRegistered(ProfileOwner),
     TerminalReplacementActivated(ProfileOwner),
+    ObservedOwnerSuperseded(ProfileOwner),
     OwnerEvidenceRefreshed(ProfileOwner),
     TransferPrepared(OwnerTransferProposal),
     CandidateCommitted(OwnerTransferReceipt),
@@ -509,9 +516,30 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                 && current.browser_family == owner.browser_family
                 && current.pending_transfer.is_none();
             if !stable_identity_matches {
-                return Err(
-                    "runtime_lifecycle_existing_owner_requires_explicit_transition".to_string(),
-                );
+                let expected_owner = OwnerAuthorityClaim::from_owner(&current);
+                let mut replacement = owner;
+                replacement.owner_generation = current
+                    .owner_generation
+                    .checked_add(1)
+                    .ok_or_else(|| "runtime_lifecycle_generation_exhausted".to_string())?;
+                let package_launch_identity_digest =
+                    package_launch_identity_digest(&replacement, registration.process_group_id)?;
+                let activated =
+                    match self.transition(RuntimeLifecycleIntent::SupersedeObservedOwner {
+                        expected_owner,
+                        owner: replacement,
+                        process_group_id: registration.process_group_id,
+                        package_launch_identity_digest,
+                    })? {
+                        RuntimeLifecycleTransition::ObservedOwnerSuperseded(owner) => owner,
+                        _ => {
+                            return Err("runtime_lifecycle_observed_supersession_outcome_mismatch"
+                                .to_string())
+                        }
+                    };
+                return Ok(RuntimeOwnerBinding::effect_capable(
+                    OwnerAuthorityClaim::from_owner(&activated),
+                ));
             }
             let refreshed =
                 match self.transition(RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
@@ -541,32 +569,23 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         ))
     }
 
-    /// Reject a new managed browser process before launch when the profile is
-    /// still owned by a non-terminal lane. Registration repeats this check
-    /// after launch so a concurrent owner transition still fails closed.
+    /// Observe retained owner history without promoting it into launch
+    /// authority. A live profile collision is enforced by the browser's
+    /// process lock. After a successful launch, registration atomically
+    /// supersedes the exact observed generation so stale daemons remain fenced.
     pub(crate) fn ensure_managed_lane_launch_allowed(
         &self,
         profile_root: &std::path::Path,
     ) -> Result<(), String> {
         let profile_identity_digest =
             crate::runtime_profile::canonical_profile_identity_digest(profile_root)?;
-        let registry = self.repository.load_snapshot()?.runtime_owner_registry;
-        let Some(owner) = registry.owner(&profile_identity_digest) else {
-            return Ok(());
-        };
-        let terminal_and_satisfied = registry
-            .lifecycle_records
-            .get(&owner.browser_id)
-            .is_some_and(|lifecycle| {
-                lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-                    && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-                    && lifecycle.owner_generation == owner.owner_generation
-            });
-        if terminal_and_satisfied {
-            Ok(())
-        } else {
-            Err("runtime_lifecycle_existing_owner_requires_explicit_transition".to_string())
-        }
+        let _observed_owner = self
+            .repository
+            .load_snapshot()?
+            .runtime_owner_registry
+            .owner(&profile_identity_digest)
+            .cloned();
+        Ok(())
     }
 }
 
@@ -689,6 +708,42 @@ fn apply_transition(
             Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
                 owner,
             ))
+        }
+        RuntimeLifecycleIntent::SupersedeObservedOwner {
+            expected_owner,
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+        } => {
+            crate::runtime_owner_transfer::validate_profile_owner(&owner).map_err(owner_error)?;
+            if !is_digest(&package_launch_identity_digest)
+                || !registry.authorizes(&expected_owner)
+                || owner.profile_identity_digest != expected_owner.profile_identity_digest
+                || owner.owner_generation != expected_owner.owner_generation.saturating_add(1)
+            {
+                return Err("runtime_lifecycle_observed_supersession_rejected".to_string());
+            }
+            registry.lifecycle_records.retain(|logical_id, record| {
+                logical_id == &owner.browser_id
+                    || record.profile_identity_digest != owner.profile_identity_digest
+            });
+            registry
+                .owners
+                .insert(owner.profile_identity_digest.clone(), owner.clone());
+            registry.revision = registry.revision.saturating_add(1);
+            let lifecycle = RuntimeLifecycleRecord {
+                logical_browser_id: owner.browser_id.clone(),
+                boot_epoch: crate::process_identity::current_boot_epoch(),
+                profile_identity_digest: owner.profile_identity_digest.clone(),
+                owner_generation: owner.owner_generation,
+                lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                cleanup_obligation_state: CleanupObligationState::Owned,
+                process_group_id,
+                package_launch_identity_digest: Some(package_launch_identity_digest),
+                terminal_evidence: Vec::new(),
+            };
+            store_lifecycle(registry, lifecycle)?;
+            Ok(RuntimeLifecycleTransition::ObservedOwnerSuperseded(owner))
         }
         RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
             claim,
@@ -1362,7 +1417,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_lane_launch_admission_rejects_live_owner_before_process_start() {
+    fn retained_owner_history_cannot_veto_managed_lane_launch() {
         let repository = MemoryRepository::default();
         let authority = RuntimeLifecycleAuthority::new(&repository);
         let profile_root = std::env::temp_dir().join("agent-browser-lifecycle-prelaunch-admission");
@@ -1392,12 +1447,9 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(
-            authority
-                .ensure_managed_lane_launch_allowed(&profile_root)
-                .unwrap_err(),
-            "runtime_lifecycle_existing_owner_requires_explicit_transition"
-        );
+        authority
+            .ensure_managed_lane_launch_allowed(&profile_root)
+            .unwrap();
 
         repository
             .mutate(|state| {
@@ -1414,6 +1466,74 @@ mod tests {
         authority
             .ensure_managed_lane_launch_allowed(&profile_root)
             .unwrap();
+    }
+
+    #[test]
+    fn successful_launch_supersedes_exact_nonterminal_observation_generation() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let profile_root =
+            std::env::temp_dir().join("agent-browser-lifecycle-observed-supersession");
+        let profile_identity_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+        let mut current = owner();
+        current.profile_identity_digest = profile_identity_digest.clone();
+        current.browser_id = "session:stale-transferring".to_string();
+        current.daemon_session_route = "stale-transferring".to_string();
+        current.state = crate::runtime_owner_transfer::ProfileOwnerState::Ready;
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
+                state.runtime_owner_registry.lifecycle_records.insert(
+                    current.browser_id.clone(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: current.browser_id.clone(),
+                        boot_epoch: None,
+                        profile_identity_digest: profile_identity_digest.clone(),
+                        owner_generation: current.owner_generation,
+                        lifecycle_state: RuntimeLaneLifecycleState::Transferring,
+                        cleanup_obligation_state: CleanupObligationState::Transferring,
+                        process_group_id: Some(4100),
+                        package_launch_identity_digest: Some(digest("stale-launch")),
+                        terminal_evidence: Vec::new(),
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+
+        let replacement = authority
+            .register_managed_lane(ManagedLaneRegistration {
+                logical_browser_id: "session:fresh".to_string(),
+                profile_root,
+                daemon_session_route: "fresh".to_string(),
+                process_group_id: Some(4200),
+                process_identity: crate::process_identity::RecordedProcessIdentity {
+                    pid: 4200,
+                    start_token: "linux:boot:4200".to_string(),
+                    executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                    browser_family: Some("chrome".to_string()),
+                },
+                browser_family: "chrome".to_string(),
+                cdp_endpoint: "ws://127.0.0.1:9555/devtools/browser/fresh".to_string(),
+                target_ids: vec!["target-fresh".to_string()],
+            })
+            .unwrap();
+
+        assert_eq!(
+            replacement.claim.owner_generation,
+            current.owner_generation + 1
+        );
+        assert_eq!(replacement.claim.logical_browser_id, "session:fresh");
+        let state = repository.load_snapshot().unwrap();
+        assert!(!state
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key("session:stale-transferring"));
+        assert_eq!(
+            state.runtime_owner_registry.lifecycle_records["session:fresh"].lifecycle_state,
+            RuntimeLaneLifecycleState::Ready
+        );
     }
 
     #[test]

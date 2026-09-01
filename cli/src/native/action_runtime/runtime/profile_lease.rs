@@ -5,11 +5,11 @@ use super::cdp_free_plan::{
     RetainedRemoteHeadedLaunchHint,
 };
 use super::daemon::{
-    apply_service_browser_capability_selection, apply_service_profile_selection,
-    launch_command_with_effective_service_defaults, launch_profile_from_sources,
-    runtime_profile_from_sources, use_real_keychain_from_env, BrowserCapabilityLaunchResolution,
-    ProfileLeasePolicy, ServiceProfileLeaseGate, DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS,
-    PROFILE_LEASE_WAIT_POLL_MS,
+    apply_authenticated_access_plan_profile_selection, apply_service_browser_capability_selection,
+    apply_service_profile_selection, launch_command_with_effective_service_defaults,
+    launch_profile_from_sources, runtime_profile_from_sources, use_real_keychain_from_env,
+    BrowserCapabilityLaunchResolution, ProfileLeasePolicy, ServiceProfileLeaseGate,
+    DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS, PROFILE_LEASE_WAIT_POLL_MS,
 };
 use super::recovery::DaemonState;
 use crate::native::browser::{
@@ -154,6 +154,23 @@ pub(crate) fn service_profile_lease_gate(
     session_id: &str,
     waited_ms: Option<u64>,
 ) -> Result<ServiceProfileLeaseGate, String> {
+    // The service adapter attaches this field only after authenticating and
+    // copying an exact current access plan. The daemon revalidates it before
+    // profile selection. Legacy session and browser projections are therefore
+    // diagnostic observations, not a second lease authority for this route.
+    if command.get("serviceProfileRouteAuthorization").is_some() {
+        let repository = LockedServiceStateRepository::default_json()?;
+        let state = repository.load_snapshot()?;
+        let mut options = LaunchOptions::default();
+        if apply_authenticated_access_plan_profile_selection(
+            &mut options,
+            command,
+            session_id,
+            &state,
+        )? {
+            return Ok(ServiceProfileLeaseGate::Ready);
+        }
+    }
     // A broker-provided exact browser and session route reuses an existing
     // lane. It is not a request to acquire a duplicate profile lane. Keep this
     // compatibility branch read-only and require the current browser record to
