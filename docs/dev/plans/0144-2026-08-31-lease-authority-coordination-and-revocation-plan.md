@@ -2587,3 +2587,75 @@ State, while the protected service recognizes only protected claims. The next
 slice must migrate enrollment and acquisition or provide one kernel-owned
 broker operation before invoking this adapter; passing a legacy claim into it
 would recreate split authority.
+
+## Slice F Atomic Browser Owner Commit Checkpoint | 2026-09-01
+
+A successful protected browser launch can no longer be terminalized as a
+generic completed effect. The executor must submit the launched PID through
+`complete_browser_launch`. On Linux, the authority derives the process owner,
+direct parent, start token, canonical executable path and digest, and canonical
+profile identity from `/proc`. It rejects a process owned by another UID, a
+process not parented by the connected executor, a missing profile argument, an
+unregistered profile identity, or a conflicting current owner.
+
+The kernel commits the completed effect receipt and the exact runtime-owner
+binding in one selected authority generation before replying. The owner binds
+the logical browser id, daemon route, process instance digest, PID, start token,
+executable path and digest, principal, capability, and owner revision. Exact
+lost-response replay returns the same completed receipt and owner without
+advancing authority. Generic `complete_effect` may still report uncertainty,
+but it cannot report successful `browser_launch` completion without registering
+the owner.
+
+A current protected owner now prevents another launch authorization for the
+same profile. A distinct operation also cannot bypass a consumed launch intent
+that still requires reconciliation. Exact authorization replay remains
+evidence-only and never returns a second executable bearer. An unchanged
+durable mutation publication is an idempotent no-op, so persisting the
+authority time floor after a rejected request cannot manufacture a generation
+whose predecessor is itself or mask the original typed denial.
+
+The protected-authority partition passes 82 tests. This checkpoint closes the
+kernel transaction between one selected launch effect and its first owner
+record. It does not yet prove that the production Chrome spawn is the selected
+sink, that an exited owner is reconciled, that transfer and cleanup ownership
+are kernel-coordinated, or that every owner projection is receipt-only.
+
+## Fifth Hotfix Recurrence Gap Audit | 2026-09-01
+
+The earlier recurrence matrix covers the reported symptoms, but five
+cross-cutting mechanisms need explicit acceptance contracts before the design
+can claim structural prevention rather than strong regression resistance:
+
+1. **Process-proof lifetime and replacement.** A PID, command line, path digest,
+   and start token are a point-in-time observation. The selected sink must hold
+   a stable process handle where the platform supports one, validate an allowed
+   browser executable generation, and make exit reconciliation incapable of
+   reviving or transferring the prior owner.
+2. **Bounded operational-state compaction.** Receipt and intent capacity must
+   not become a permanent self-denial after enough successful work. Compaction
+   needs a kernel-owned watermark, replay-retention contract, crash-safe
+   publication, and a typed bounded recovery path that preserves audit history
+   outside the active index.
+3. **Atomic multi-resource admission or compensation.** Profile, process,
+   session, route, display, stream, and input claims form one operation. The
+   kernel must either reserve the required set in a globally ordered bundle or
+   durably compensate partial acquisition. A client crash between independent
+   claims must not strand a usable profile behind unrelated infrastructure.
+4. **Authority outage and disaster recovery.** Ordinary work may fail closed
+   while current authority is unavailable, but the product must provide bounded
+   service self-recovery and an out-of-band administrative path. Restoring a
+   backup or replacing administrator credentials must advance a trusted epoch
+   and must not reactivate claims or owners from the restored history.
+5. **Upgrade, rollback, and schema coexistence.** A candidate must prove it can
+   read the selected authority schema before any mutation or drain. An older
+   rollback binary must not reinterpret newer state, and mixed generations must
+   have exactly one effect-capable authority while candidate observation and
+   cancellation remain bounded.
+
+These mechanisms extend, rather than replace, the eight structural proof gates
+in the hotfix recurrence audit. The truthful current disposition remains that
+the design has no known incident family requiring another authority model, but
+the product does not yet make recurrence structurally impossible. That claim
+requires production cutover, exhaustive denial and sink manifests, the five
+contracts above, fault and migration suites, and exact installed acceptance.

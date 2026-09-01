@@ -5,6 +5,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use super::{
@@ -180,6 +182,24 @@ struct CompleteLeaseEffectPayload {
     result: CompleteLeaseEffectResult,
     completion_evidence_digest: String,
     completion_idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompleteBrowserLaunchPayload {
+    receipt_id: String,
+    browser_pid: u32,
+    completion_idempotency_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserProcessIdentityEvidence {
+    pid: u32,
+    start_token: String,
+    executable_path: String,
+    executable_sha256: String,
+    profile_identity_digest: String,
+    process_instance_digest: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,6 +420,7 @@ enum LeaseAuthorityProtocolRequest {
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(AuthorizeLeaseEffectPayload),
     CompleteEffect(CompleteLeaseEffectPayload),
+    CompleteBrowserLaunch(CompleteBrowserLaunchPayload),
     Release(ReleaseLeaseAuthorityPayload),
     RecoverPlan(RecoverLeasePlanPayload),
     Recover(RecoverLeaseApplyPayload),
@@ -467,7 +488,7 @@ struct LeaseAuthorityResourceRegistry {
     registrations: BTreeMap<String, LeaseAuthorityResourceRegistration>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityOwnerBinding {
     resource: LeaseResourceKey,
@@ -477,6 +498,10 @@ struct LeaseAuthorityOwnerBinding {
     logical_browser_id: String,
     daemon_session_route: String,
     process_instance_digest: String,
+    process_pid: u32,
+    process_start_token: String,
+    process_executable_path: String,
+    process_executable_sha256: String,
     principal_id: String,
     capability_id: String,
     revision: u64,
@@ -604,6 +629,9 @@ impl LeaseAuthorityDurableStore {
             authority_revision,
             &protected_state_sha256,
         )?;
+        if selected_generation_id.as_deref() == Some(generation_id.as_str()) {
+            return Ok(());
+        }
         let generations = self.root.join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY);
         let final_path = generations.join(&generation_id);
         let manifest = LeaseAuthorityStoreGenerationManifest {
@@ -927,23 +955,42 @@ impl LeaseAuthorityDurableStore {
         generation_path: &Path,
         manifest: &LeaseAuthorityStoreHistoryManifest,
     ) -> Result<(), LeaseAuthorityProtocolError> {
-        if (manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION
-            && manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1)
-            || (manifest.schema_version == LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1
-                && manifest.previous_generation_id.is_some())
-            || generation_path.file_name().and_then(|name| name.to_str())
-                != Some(manifest.generation_id.as_str())
-            || manifest
-                .previous_generation_id
-                .as_deref()
-                .is_some_and(|previous| {
-                    !authority_store_generation_component_is_safe(previous)
-                        || previous == manifest.generation_id
-                })
-            || !valid_bare_sha256(&manifest.history_sha256)
+        if manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION
+            && manifest.schema_version != LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1
         {
             return Err(LeaseAuthorityProtocolError {
-                code: "lease_authority_protocol_store_history_generation_invalid",
+                code: "lease_authority_protocol_store_history_schema_invalid",
+            });
+        }
+        if manifest.schema_version == LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_SCHEMA_VERSION_V1
+            && manifest.previous_generation_id.is_some()
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_store_history_v1_chain_invalid",
+            });
+        }
+        if generation_path.file_name().and_then(|name| name.to_str())
+            != Some(manifest.generation_id.as_str())
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_store_history_generation_mismatch",
+            });
+        }
+        if manifest
+            .previous_generation_id
+            .as_deref()
+            .is_some_and(|previous| {
+                !authority_store_generation_component_is_safe(previous)
+                    || previous == manifest.generation_id
+            })
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_store_history_predecessor_invalid",
+            });
+        }
+        if !valid_bare_sha256(&manifest.history_sha256) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_store_history_digest_invalid",
             });
         }
         super::verify_file_sha256(
@@ -1605,6 +1652,7 @@ impl LeaseAuthorityProtocolKernel {
             | LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -1799,6 +1847,25 @@ impl LeaseAuthorityProtocolKernel {
                 replayed: true,
             });
         }
+        if self
+            .state
+            .owners
+            .bindings
+            .contains_key(&request.resource.storage_key())
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_current_owner_conflict",
+            });
+        }
+        if self.state.effect_receipts.values().any(|record| {
+            record.receipt.resource == request.resource
+                && record.receipt.action_class == "browser_launch"
+                && record.receipt.state == LeaseAuthorityEffectState::Consumed
+        }) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_pending_effect_reconciliation",
+            });
+        }
         if self.state.effect_receipts.len() >= MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS {
             return Err(LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_effect_capacity_exhausted",
@@ -1951,6 +2018,13 @@ impl LeaseAuthorityProtocolKernel {
             CompleteLeaseEffectResult::Completed => LeaseAuthorityEffectState::Completed,
             CompleteLeaseEffectResult::Uncertain => LeaseAuthorityEffectState::Uncertain,
         };
+        if record.receipt.action_class == "browser_launch"
+            && terminal_state == LeaseAuthorityEffectState::Completed
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_launch_owner_commit_required",
+            });
+        }
         if record.receipt.state != LeaseAuthorityEffectState::Consumed {
             if record.receipt.state == terminal_state
                 && record.receipt.completion_idempotency_key.as_deref()
@@ -2002,6 +2076,242 @@ impl LeaseAuthorityProtocolKernel {
             receipt,
             replayed: false,
         })
+    }
+
+    fn complete_browser_launch(
+        &mut self,
+        request: CompleteBrowserLaunchPayload,
+        executor_uid: u32,
+        executor_identity_digest: &str,
+        process: &BrowserProcessIdentityEvidence,
+        authority_observed_at: &str,
+    ) -> Result<
+        (
+            LeaseAuthorityEffectCompletionOutcome,
+            LeaseAuthorityOwnerBinding,
+        ),
+        LeaseAuthorityProtocolError,
+    > {
+        if executor_uid == 0
+            || request.receipt_id.trim().is_empty()
+            || request.browser_pid <= 1
+            || request.completion_idempotency_key.trim().is_empty()
+            || !valid_sha256_digest(executor_identity_digest)
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_launch_completion_invalid",
+            });
+        }
+        if request.browser_pid != process.pid {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_launch_process_mismatch",
+            });
+        }
+        if process.start_token.trim().is_empty() {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_start_invalid",
+            });
+        }
+        if process.executable_path.trim().is_empty() {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_executable_path_invalid",
+            });
+        }
+        if !valid_sha256_digest(&process.executable_sha256) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_executable_digest_invalid",
+            });
+        }
+        if !valid_sha256_digest(&process.profile_identity_digest) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_profile_digest_invalid",
+            });
+        }
+        if !valid_sha256_digest(&process.process_instance_digest) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_identity_digest_invalid",
+            });
+        }
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let storage_key = self
+            .state
+            .effect_receipts
+            .iter()
+            .find_map(|(storage_key, record)| {
+                (record.receipt.receipt_id == request.receipt_id).then(|| storage_key.clone())
+            })
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_receipt_unavailable",
+            })?;
+        let record = self
+            .state
+            .effect_receipts
+            .get(&storage_key)
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_receipt_unavailable",
+            })?;
+        let daemon_session_route = record
+            .receipt
+            .audience
+            .strip_prefix("daemon-session:")
+            .filter(|route| !route.is_empty())
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_launch_receipt_invalid",
+            })?;
+        if record.receipt.action_class != "browser_launch" {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_launch_receipt_invalid",
+            });
+        }
+        let resource_key = record.receipt.resource.storage_key();
+        if record.receipt.state != LeaseAuthorityEffectState::Consumed {
+            let binding = self
+                .state
+                .owners
+                .bindings
+                .get(&resource_key)
+                .filter(|binding| {
+                    record.receipt.state == LeaseAuthorityEffectState::Completed
+                        && record.receipt.completion_idempotency_key.as_deref()
+                            == Some(request.completion_idempotency_key.as_str())
+                        && record.receipt.completion_evidence_digest.as_deref()
+                            == Some(process.process_instance_digest.as_str())
+                        && binding.process_instance_digest == process.process_instance_digest
+                        && binding.process_pid == process.pid
+                        && binding.daemon_session_route == daemon_session_route
+                        && binding.principal_id == record.receipt.principal_id
+                        && binding.capability_id == record.receipt.capability_id
+                })
+                .cloned()
+                .ok_or(LeaseAuthorityProtocolError {
+                    code: "lease_authority_idempotency_conflict",
+                })?;
+            return Ok((
+                LeaseAuthorityEffectCompletionOutcome {
+                    receipt: record.receipt,
+                    replayed: true,
+                },
+                binding,
+            ));
+        }
+        if record.receipt.executor_uid != executor_uid
+            || record.receipt.executor_identity_digest != executor_identity_digest
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_executor_mismatch",
+            });
+        }
+        let registration = self
+            .state
+            .resources
+            .registrations
+            .get(&resource_key)
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_resource_unregistered",
+            })?;
+        if registration.physical_identity_digest != process.profile_identity_digest {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_profile_mismatch",
+            });
+        }
+        if self.state.owners.bindings.contains_key(&resource_key) {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_current_owner_conflict",
+            });
+        }
+        let next_authority_revision = self
+            .state
+            .authority
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_counter_exhausted",
+            })?;
+        let next_owner_revision = self
+            .state
+            .owners
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_revision_exhausted",
+            })?;
+        let logical_browser_id = stable_protocol_id(
+            "browser",
+            &format!(
+                "{}\0{}\0{}",
+                record.receipt.resource.id, record.receipt.idempotency_key, record.receipt.claim_id
+            ),
+        );
+        let binding = LeaseAuthorityOwnerBinding {
+            resource: record.receipt.resource.clone(),
+            physical_identity_digest: registration.physical_identity_digest,
+            owner_id: stable_protocol_id(
+                "owner",
+                &format!(
+                    "{}\0{}\0{}",
+                    record.receipt.receipt_id,
+                    process.process_instance_digest,
+                    daemon_session_route
+                ),
+            ),
+            owner_generation: 1,
+            logical_browser_id,
+            daemon_session_route: daemon_session_route.to_string(),
+            process_instance_digest: process.process_instance_digest.clone(),
+            process_pid: process.pid,
+            process_start_token: process.start_token.clone(),
+            process_executable_path: process.executable_path.clone(),
+            process_executable_sha256: process.executable_sha256.clone(),
+            principal_id: record.receipt.principal_id.clone(),
+            capability_id: record.receipt.capability_id.clone(),
+            revision: next_owner_revision,
+        };
+        let mut receipt = record.receipt;
+        receipt.state = LeaseAuthorityEffectState::Completed;
+        receipt.completion_idempotency_key = Some(request.completion_idempotency_key);
+        receipt.completion_evidence_digest = Some(process.process_instance_digest.clone());
+        receipt.completed_at = Some(now);
+        receipt.terminal_authority_revision = Some(next_authority_revision);
+        self.state.authority.revision = next_authority_revision;
+        self.state.authority.events.push(LeaseAuthorityEvent {
+            event_id: stable_protocol_id(
+                "lease-event-owner-commit",
+                &format!(
+                    "{}\0{}\0{}",
+                    receipt.receipt_id, binding.owner_id, next_authority_revision
+                ),
+            ),
+            resource: binding.resource.clone(),
+            claim_id: receipt.claim_id.clone(),
+            principal_id: receipt.principal_id.clone(),
+            fencing_token: receipt.fencing_token,
+            kind: super::LeaseEventKind::OwnerCommitted,
+            occurred_at: receipt.completed_at.clone().unwrap_or_default(),
+        });
+        self.state.owners.revision = next_owner_revision;
+        self.state
+            .owners
+            .bindings
+            .insert(resource_key, binding.clone());
+        self.state.effect_receipts.insert(
+            storage_key,
+            LeaseAuthorityEffectRecord {
+                receipt: receipt.clone(),
+                authorization: None,
+            },
+        );
+        validate_protected_state(&self.state)?;
+        Ok((
+            LeaseAuthorityEffectCompletionOutcome {
+                receipt,
+                replayed: false,
+            },
+            binding,
+        ))
     }
 
     fn release(
@@ -2478,6 +2788,10 @@ fn validate_protected_state(
             || binding.resource.kind != LeaseResourceKind::Profile
             || !valid_sha256_digest(&binding.physical_identity_digest)
             || !valid_sha256_digest(&binding.process_instance_digest)
+            || binding.process_pid <= 1
+            || binding.process_start_token.trim().is_empty()
+            || binding.process_executable_path.trim().is_empty()
+            || !valid_sha256_digest(&binding.process_executable_sha256)
             || binding.owner_id.trim().is_empty()
             || binding.owner_generation == 0
             || binding.logical_browser_id.trim().is_empty()
@@ -2512,6 +2826,11 @@ fn valid_sha256_digest(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
+}
+
+fn stable_protocol_id(prefix: &str, payload: &str) -> String {
+    let digest = format!("{:x}", Sha256::digest(payload.as_bytes()));
+    format!("{prefix}:{}", &digest[..32])
 }
 
 fn profile_enrollment_request_digest(
@@ -2760,6 +3079,11 @@ fn decode_lease_authority_request(
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_request_invalid",
             }),
+        "complete_browser_launch" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::CompleteBrowserLaunch)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "release" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::Release)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -2929,6 +3253,125 @@ fn derive_effect_executor_identity(
     Ok(format!("sha256:{:x}", Sha256::digest(payload.as_bytes())))
 }
 
+#[cfg(target_os = "linux")]
+fn derive_browser_process_identity(
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    browser_pid: u32,
+) -> Result<BrowserProcessIdentityEvidence, LeaseAuthorityProtocolError> {
+    if peer.uid == 0 || peer.pid <= 1 || browser_pid <= 1 || browser_pid == peer.pid {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        });
+    }
+    let process_root = PathBuf::from(format!("/proc/{browser_pid}"));
+    let metadata = fs::metadata(&process_root).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_unavailable",
+    })?;
+    #[cfg(unix)]
+    if metadata.uid() != peer.uid {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_owner_mismatch",
+        });
+    }
+    let stat =
+        fs::read_to_string(process_root.join("stat")).map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_unavailable",
+        })?;
+    let after_comm = stat
+        .rfind(')')
+        .and_then(|index| stat.get(index + 2..))
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        })?;
+    let fields = after_comm.split_whitespace().collect::<Vec<_>>();
+    let parent_pid = fields
+        .get(1)
+        .and_then(|value| value.parse::<u32>().ok())
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        })?;
+    let start_token = fields
+        .get(19)
+        .filter(|value| value.bytes().all(|byte| byte.is_ascii_digit()))
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        })?
+        .to_string();
+    if parent_pid != peer.pid {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_parent_mismatch",
+        });
+    }
+    let executable_path =
+        fs::canonicalize(process_root.join("exe")).map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_unavailable",
+        })?;
+    let executable = fs::read(&executable_path).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_unavailable",
+    })?;
+    let executable_sha256 = format!("sha256:{:x}", Sha256::digest(executable));
+    let executable_path = executable_path.to_string_lossy().into_owned();
+    let command_line =
+        fs::read(process_root.join("cmdline")).map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_unavailable",
+        })?;
+    let arguments = command_line
+        .split(|byte| *byte == 0)
+        .filter(|argument| !argument.is_empty())
+        .map(|argument| String::from_utf8(argument.to_vec()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        })?;
+    let profile_path = arguments
+        .iter()
+        .find_map(|argument| argument.strip_prefix("--user-data-dir="))
+        .or_else(|| {
+            arguments.windows(2).find_map(|arguments| {
+                (arguments[0] == "--user-data-dir").then_some(arguments[1].as_str())
+            })
+        })
+        .filter(|path| !path.trim().is_empty())
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_profile_unavailable",
+        })?;
+    let profile_identity_digest = format!(
+        "sha256:{}",
+        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_profile_unavailable",
+            })?
+    );
+    let process_instance_digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "agent-browser.browser-process.v1\n{}\n{browser_pid}\n{start_token}\n{executable_path}\n{executable_sha256}\n{profile_identity_digest}",
+                peer.uid
+            )
+            .as_bytes()
+        )
+    );
+    Ok(BrowserProcessIdentityEvidence {
+        pid: browser_pid,
+        start_token,
+        executable_path,
+        executable_sha256,
+        profile_identity_digest,
+        process_instance_digest,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_browser_process_identity(
+    _peer: custody::LeaseAuthorityRequestPeerIdentity,
+    _browser_pid: u32,
+) -> Result<BrowserProcessIdentityEvidence, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
 #[cfg(not(target_os = "linux"))]
 fn derive_effect_executor_identity(
     _peer: custody::LeaseAuthorityRequestPeerIdentity,
@@ -3067,6 +3510,31 @@ fn dispatch_lease_authority_request(
                 "outcome": response_outcome,
                 "payload": {
                     "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(request) => {
+            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let process = derive_browser_process_identity(peer, request.browser_pid)?;
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let (outcome, owner) = kernel.complete_browser_launch(
+                request,
+                peer.uid,
+                &executor_identity_digest,
+                &process,
+                &observed_at,
+            )?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "browser_launch_completed",
+                "payload": {
+                    "receipt": outcome.receipt,
+                    "owner": owner,
                     "replayed": outcome.replayed,
                 },
             }))
@@ -4204,7 +4672,41 @@ mod tests {
             Err(super::super::LeaseAuthorityError::InvalidEffectProof)
         );
 
-        let completion = restarted
+        let mut owner_effect_request = effect_request();
+        owner_effect_request.idempotency_key = "launch:last30days:owner-commit".to_string();
+        let generic_completion_error = restarted
+            .complete_effect(
+                CompleteLeaseEffectPayload {
+                    receipt_id: authorized.receipt.receipt_id.clone(),
+                    result: CompleteLeaseEffectResult::Completed,
+                    completion_evidence_digest:
+                        "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+                            .to_string(),
+                    completion_idempotency_key: "complete-without-owner:last30days".to_string(),
+                },
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:54Z",
+            )
+            .unwrap_err();
+        assert_eq!(
+            generic_completion_error.code(),
+            "lease_authority_protocol_browser_launch_owner_commit_required"
+        );
+        let pending_error = restarted
+            .authorize_effect(
+                owner_effect_request,
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:55Z",
+                &signing_key,
+            )
+            .unwrap_err();
+        assert_eq!(
+            pending_error.code(),
+            "lease_authority_protocol_pending_effect_reconciliation"
+        );
+        let uncertainty = restarted
             .complete_effect(
                 CompleteLeaseEffectPayload {
                     receipt_id: authorized.receipt.receipt_id.clone(),
@@ -4216,13 +4718,91 @@ mod tests {
                 },
                 1000,
                 executor_identity_digest,
-                "2026-09-01T12:02:00Z",
+                "2026-09-01T12:01:56Z",
             )
             .unwrap();
-        assert!(!completion.replayed);
         assert_eq!(
-            completion.receipt.state,
+            uncertainty.receipt.state,
             LeaseAuthorityEffectState::Uncertain
+        );
+        let mut owner_effect_request = effect_request();
+        owner_effect_request.idempotency_key = "launch:last30days:owner-commit".to_string();
+        let owner_authorized = restarted
+            .authorize_effect(
+                owner_effect_request,
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:55Z",
+                &signing_key,
+            )
+            .unwrap();
+        let browser_process = BrowserProcessIdentityEvidence {
+            pid: 4242,
+            start_token: "987654".to_string(),
+            executable_path: "/opt/agent-browser/chrome".to_string(),
+            executable_sha256:
+                "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+                    .to_string(),
+            profile_identity_digest: physical_identity_digest.to_string(),
+            process_instance_digest:
+                "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                    .to_string(),
+        };
+        let browser_completion_request = || CompleteBrowserLaunchPayload {
+            receipt_id: owner_authorized.receipt.receipt_id.clone(),
+            browser_pid: browser_process.pid,
+            completion_idempotency_key: "complete:last30days:owner-commit".to_string(),
+        };
+        let (browser_completion, owner) = restarted
+            .complete_browser_launch(
+                browser_completion_request(),
+                1000,
+                executor_identity_digest,
+                &browser_process,
+                "2026-09-01T12:01:58Z",
+            )
+            .unwrap();
+        assert!(!browser_completion.replayed);
+        assert_eq!(
+            browser_completion.receipt.state,
+            LeaseAuthorityEffectState::Completed
+        );
+        assert_eq!(owner.process_pid, browser_process.pid);
+        assert_eq!(
+            owner.process_instance_digest,
+            browser_process.process_instance_digest
+        );
+        assert_eq!(owner.daemon_session_route, "last30days");
+        assert!(owner.logical_browser_id.starts_with("browser:"));
+        let (browser_replay, replayed_owner) = restarted
+            .complete_browser_launch(
+                browser_completion_request(),
+                1000,
+                executor_identity_digest,
+                &browser_process,
+                "2026-09-01T12:01:59Z",
+            )
+            .unwrap();
+        assert!(browser_replay.replayed);
+        assert_eq!(replayed_owner.owner_id, owner.owner_id);
+        assert_eq!(
+            replayed_owner.process_instance_digest,
+            owner.process_instance_digest
+        );
+        let mut duplicate_launch = effect_request();
+        duplicate_launch.idempotency_key = "launch:last30days:duplicate".to_string();
+        let duplicate_error = restarted
+            .authorize_effect(
+                duplicate_launch,
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:02:00Z",
+                &signing_key,
+            )
+            .unwrap_err();
+        assert_eq!(
+            duplicate_error.code(),
+            "lease_authority_protocol_current_owner_conflict"
         );
         assert!(
             restarted
@@ -4237,6 +4817,56 @@ mod tests {
             test_load_context(),
         )
         .expect("uncertain terminal receipt must remain restart-valid");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn browser_launch_completion_derives_an_exact_direct_child_process_identity() {
+        let profile = std::env::temp_dir().join(format!(
+            "agent-browser-process-profile-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&profile).unwrap();
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 30 & wait")
+            .arg("agent-browser-process-fixture")
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .spawn()
+            .expect("spawn bounded process identity fixture");
+        let peer = custody::LeaseAuthorityRequestPeerIdentity {
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+            pid: std::process::id(),
+        };
+        let evidence = derive_browser_process_identity(peer, child.id())
+            .expect("direct child identity must be derivable");
+        assert_eq!(evidence.pid, child.id());
+        assert!(!evidence.start_token.is_empty());
+        assert!(Path::new(&evidence.executable_path).is_absolute());
+        assert!(valid_sha256_digest(&evidence.executable_sha256));
+        assert_eq!(
+            evidence.profile_identity_digest,
+            format!(
+                "sha256:{}",
+                crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+            )
+        );
+        assert!(valid_sha256_digest(&evidence.process_instance_digest));
+
+        let wrong_parent = custody::LeaseAuthorityRequestPeerIdentity {
+            pid: peer.pid.saturating_add(1),
+            ..peer
+        };
+        assert_eq!(
+            derive_browser_process_identity(wrong_parent, child.id())
+                .unwrap_err()
+                .code(),
+            "lease_authority_protocol_browser_process_parent_mismatch"
+        );
+        child.kill().expect("stop bounded process identity fixture");
+        child.wait().expect("reap bounded process identity fixture");
+        fs::remove_dir_all(profile).unwrap();
     }
 
     #[cfg(unix)]
@@ -5047,6 +5677,20 @@ mod tests {
         assert_eq!(
             error.code(),
             "lease_authority_protocol_store_mutation_load_required"
+        );
+
+        let unchanged_mutation = store.load_for_mutation(test_load_context()).unwrap();
+        let generation_count_before =
+            std::fs::read_dir(root.join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY))
+                .unwrap()
+                .count();
+        store.publish(&unchanged_mutation, None).unwrap();
+        assert_eq!(
+            std::fs::read_dir(root.join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY))
+                .unwrap()
+                .count(),
+            generation_count_before,
+            "an unchanged mutation publish must be an exact durable no-op"
         );
 
         let mut mutation = store.load_for_mutation(test_load_context()).unwrap();

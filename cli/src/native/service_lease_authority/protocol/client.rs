@@ -99,19 +99,15 @@ pub(crate) struct ProtectedBrowserLaunchPermit {
     pub(crate) receipt_id: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProtectedEffectCompletion {
-    Completed,
-    Uncertain,
-}
-
-impl ProtectedEffectCompletion {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::Uncertain => "uncertain",
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserOwner {
+    pub(crate) owner_id: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) logical_browser_id: String,
+    pub(crate) daemon_session_route: String,
+    pub(crate) process_instance_digest: String,
+    pub(crate) process_pid: u32,
+    pub(crate) revision: u64,
 }
 
 pub(crate) fn enroll_protected_profile(
@@ -138,9 +134,8 @@ pub(crate) fn authorize_protected_browser_launch(
     decode_protected_browser_launch_response(&response, request)
 }
 
-pub(crate) fn complete_protected_browser_launch(
+pub(crate) fn mark_protected_browser_launch_uncertain(
     permit: &ProtectedBrowserLaunchPermit,
-    completion: ProtectedEffectCompletion,
     completion_evidence_digest: &str,
     completion_idempotency_key: &str,
 ) -> Result<(), String> {
@@ -155,20 +150,44 @@ pub(crate) fn complete_protected_browser_launch(
         "operation": "complete_effect",
         "payload": {
             "receiptId": permit.receipt_id,
-            "result": completion.as_str(),
+            "result": "uncertain",
             "completionEvidenceDigest": completion_evidence_digest,
             "completionIdempotencyKey": completion_idempotency_key,
         }
     }))
     .map_err(|_| "lease_authority_effect_completion_encode_failed".to_string())?;
     let response = exchange_with_protected_lease_authority(&encoded)?;
-    decode_protected_browser_launch_completion(
+    decode_protected_browser_launch_uncertainty(
         &response,
         permit,
-        completion,
         completion_evidence_digest,
         completion_idempotency_key,
     )
+}
+
+pub(crate) fn complete_protected_browser_launch_success(
+    permit: &ProtectedBrowserLaunchPermit,
+    browser_pid: u32,
+    completion_idempotency_key: &str,
+) -> Result<ProtectedBrowserOwner, String> {
+    if permit.receipt_id.trim().is_empty()
+        || browser_pid <= 1
+        || completion_idempotency_key.trim().is_empty()
+    {
+        return Err("lease_authority_browser_launch_completion_invalid".to_string());
+    }
+    let encoded = serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "complete_browser_launch",
+        "payload": {
+            "receiptId": permit.receipt_id,
+            "browserPid": browser_pid,
+            "completionIdempotencyKey": completion_idempotency_key,
+        }
+    }))
+    .map_err(|_| "lease_authority_browser_launch_completion_encode_failed".to_string())?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_browser_launch_success(&response, permit, browser_pid)
 }
 
 fn exchange_with_protected_lease_authority(encoded: &[u8]) -> Result<Vec<u8>, String> {
@@ -451,10 +470,9 @@ fn decode_protected_browser_launch_response(
     })
 }
 
-fn decode_protected_browser_launch_completion(
+fn decode_protected_browser_launch_uncertainty(
     encoded: &[u8],
     permit: &ProtectedBrowserLaunchPermit,
-    completion: ProtectedEffectCompletion,
     _completion_evidence_digest: &str,
     _completion_idempotency_key: &str,
 ) -> Result<(), String> {
@@ -472,11 +490,7 @@ fn decode_protected_browser_launch_completion(
             .unwrap_or("lease_authority_effect_completion_failed")
             .to_string());
     }
-    let expected_outcome = match completion {
-        ProtectedEffectCompletion::Completed => "effect_completed",
-        ProtectedEffectCompletion::Uncertain => "effect_uncertain",
-    };
-    if response.get("outcome").and_then(Value::as_str) != Some(expected_outcome)
+    if response.get("outcome").and_then(Value::as_str) != Some("effect_uncertain")
         || response
             .pointer("/payload/receipt/receiptId")
             .and_then(Value::as_str)
@@ -484,11 +498,80 @@ fn decode_protected_browser_launch_completion(
         || response
             .pointer("/payload/receipt/state")
             .and_then(Value::as_str)
-            != Some(completion.as_str())
+            != Some("uncertain")
     {
         return Err("lease_authority_effect_completion_response_mismatch".to_string());
     }
     Ok(())
+}
+
+fn decode_protected_browser_launch_success(
+    encoded: &[u8],
+    permit: &ProtectedBrowserLaunchPermit,
+    browser_pid: u32,
+) -> Result<ProtectedBrowserOwner, String> {
+    let response = decode_success_response(
+        encoded,
+        "browser_launch_completed",
+        "lease_authority_browser_launch_completion",
+    )?;
+    if response
+        .pointer("/payload/receipt/receiptId")
+        .and_then(Value::as_str)
+        != Some(permit.receipt_id.as_str())
+        || response
+            .pointer("/payload/receipt/state")
+            .and_then(Value::as_str)
+            != Some("completed")
+    {
+        return Err("lease_authority_browser_launch_completion_response_mismatch".to_string());
+    }
+    let owner = response
+        .pointer("/payload/owner")
+        .ok_or_else(|| "lease_authority_browser_launch_owner_invalid".to_string())?;
+    let process_pid = owner
+        .get("processPid")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 1)
+        .ok_or_else(|| "lease_authority_browser_launch_owner_invalid".to_string())?;
+    let process_instance_digest = required_response_string(
+        owner,
+        "processInstanceDigest",
+        "lease_authority_browser_launch_owner_invalid",
+    )?;
+    if process_pid != browser_pid || !super::valid_sha256_digest(&process_instance_digest) {
+        return Err("lease_authority_browser_launch_owner_mismatch".to_string());
+    }
+    Ok(ProtectedBrowserOwner {
+        owner_id: required_response_string(
+            owner,
+            "ownerId",
+            "lease_authority_browser_launch_owner_invalid",
+        )?,
+        owner_generation: required_response_u64(
+            owner,
+            "ownerGeneration",
+            "lease_authority_browser_launch_owner_invalid",
+        )?,
+        logical_browser_id: required_response_string(
+            owner,
+            "logicalBrowserId",
+            "lease_authority_browser_launch_owner_invalid",
+        )?,
+        daemon_session_route: required_response_string(
+            owner,
+            "daemonSessionRoute",
+            "lease_authority_browser_launch_owner_invalid",
+        )?,
+        process_instance_digest,
+        process_pid,
+        revision: required_response_u64(
+            owner,
+            "revision",
+            "lease_authority_browser_launch_owner_invalid",
+        )?,
+    })
 }
 
 #[cfg(test)]
@@ -705,13 +788,41 @@ mod tests {
                 "replayed": false
             }
         });
-        decode_protected_browser_launch_completion(
+        decode_protected_browser_launch_uncertainty(
             &serde_json::to_vec(&completion).unwrap(),
             &permit,
-            ProtectedEffectCompletion::Uncertain,
             "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "complete:launch:last30days:tick-1",
         )
         .unwrap();
+
+        let completed = serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-response.v1",
+            "outcome": "browser_launch_completed",
+            "payload": {
+                "receipt": {
+                    "receiptId": "effect-receipt:abc",
+                    "state": "completed"
+                },
+                "owner": {
+                    "ownerId": "owner:abc",
+                    "ownerGeneration": 1,
+                    "logicalBrowserId": "browser:abc",
+                    "daemonSessionRoute": "last30days",
+                    "processInstanceDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "processPid": 4242,
+                    "revision": 1
+                },
+                "replayed": false
+            }
+        });
+        let owner = decode_protected_browser_launch_success(
+            &serde_json::to_vec(&completed).unwrap(),
+            &permit,
+            4242,
+        )
+        .unwrap();
+        assert_eq!(owner.owner_id, "owner:abc");
+        assert_eq!(owner.logical_browser_id, "browser:abc");
     }
 }

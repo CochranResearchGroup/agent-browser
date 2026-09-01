@@ -279,6 +279,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
             | LeaseAuthorityProtocolRequest::Acquire(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -988,13 +989,25 @@ mod tests {
             effect_authority_revision
         );
 
+        use std::os::unix::process::CommandExt;
+        let mut browser_command = std::process::Command::new("sh");
+        browser_command
+            .arg("-c")
+            .arg("sleep 30 & wait")
+            .arg("agent-browser-service-browser-fixture")
+            .arg(format!("--user-data-dir={}", profile_path.display()));
+        if unsafe { libc::geteuid() } == 0 {
+            browser_command.uid(operator_uid);
+        }
+        let mut browser_process = browser_command
+            .spawn()
+            .expect("spawn bounded browser process fixture");
         let completion = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",
-            "operation": "complete_effect",
+            "operation": "complete_browser_launch",
             "payload": {
                 "receiptId": effect_response["payload"]["receipt"]["receiptId"],
-                "result": "completed",
-                "completionEvidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                "browserPid": browser_process.id(),
                 "completionIdempotencyKey": "complete:last30days:service-1"
             }
         }))
@@ -1019,14 +1032,28 @@ mod tests {
             serde_json::from_slice(&read_lease_authority_frame(&mut completion_response).unwrap())
                 .unwrap();
         assert_eq!(
-            completion_response["outcome"], "effect_completed",
+            completion_response["outcome"], "browser_launch_completed",
             "{completion_response}"
         );
         assert_eq!(
             completion_response["payload"]["receipt"]["state"],
             "completed"
         );
-        assert!(completion_response["payload"]["authorization"].is_null());
+        assert_eq!(
+            completion_response["payload"]["owner"]["processPid"],
+            browser_process.id()
+        );
+        assert_eq!(
+            store
+                .load(load_context)
+                .unwrap()
+                .state
+                .owners
+                .bindings
+                .len(),
+            1,
+            "owner registration must be durable before the reply"
+        );
         let completion_authority_revision =
             store.load(load_context).unwrap().state.authority.revision();
         let mut framed_completion_replay = Vec::new();
@@ -1049,7 +1076,10 @@ mod tests {
             &read_lease_authority_frame(&mut completion_replay_response).unwrap(),
         )
         .unwrap();
-        assert_eq!(completion_replay_response["outcome"], "effect_completed");
+        assert_eq!(
+            completion_replay_response["outcome"],
+            "browser_launch_completed"
+        );
         assert_eq!(completion_replay_response["payload"]["replayed"], true);
         assert_eq!(
             completion_replay_response["payload"]["receipt"],
@@ -1094,6 +1124,12 @@ mod tests {
             "completed"
         );
         assert!(completed_effect_replay_response["payload"]["authorization"].is_null());
+        browser_process
+            .kill()
+            .expect("stop bounded browser process fixture");
+        browser_process
+            .wait()
+            .expect("reap bounded browser process fixture");
 
         let release = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",

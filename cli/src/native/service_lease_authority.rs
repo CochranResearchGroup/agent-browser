@@ -1153,6 +1153,7 @@ pub(crate) enum LeaseEventKind {
     RecoveryPlanned,
     RevocationPlanned,
     Superseded,
+    OwnerCommitted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
