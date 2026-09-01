@@ -22,12 +22,6 @@ use crate::native::browser_navigation::{
 };
 use crate::native::cancellation::CancellationToken;
 use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
-use crate::native::cdp::client::CdpClient;
-use crate::native::cdp::types::{
-    AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
-    DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
-    TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
-};
 use crate::native::element::RefMap;
 use crate::native::inspect_server::InspectServer;
 use crate::native::network::resolve_fetch_paused;
@@ -82,6 +76,12 @@ use crate::native::webdriver::safari;
 use crate::runtime_profile::{
     clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
+};
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::{
+    AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+    DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+    TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
 };
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

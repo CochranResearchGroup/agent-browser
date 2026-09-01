@@ -78,9 +78,14 @@ function selectRecommendations(files, base) {
     add('pnpm version:sync', 'version metadata changed');
   }
 
-  if (files.some((file) => file.startsWith('cli/src/') || file === 'cli/Cargo.toml' || file === 'cli/Cargo.lock')) {
-    add('scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check', 'Rust source or manifest changed');
-    add('scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D warnings', 'Rust Quality CI gate');
+  if (files.some(isRustWorkspaceSurface)) {
+    add('scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check', 'Rust source or workspace manifest changed');
+    add('scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings', 'Rust Quality CI gate');
+  }
+
+  if (files.some(isCdpCrateSurface)) {
+    add('node scripts/test-cdp-crate-architecture.js', 'CDP crate ownership and CI coverage changed');
+    add('scripts/ci/cargo-safe.sh test -p agent-browser-cdp --manifest-path Cargo.toml', 'CDP transport behavior changed');
   }
 
   if (files.some(isCdpTabStreamingSurface)) {
@@ -272,6 +277,30 @@ function selectRecommendations(files, base) {
   }
 
   return mapChecks(checks);
+}
+
+function isRustWorkspaceSurface(file) {
+  return (
+    file === 'Cargo.toml' ||
+    file === 'Cargo.lock' ||
+    file === 'cli/Cargo.toml' ||
+    file === 'cli/build.rs' ||
+    file.startsWith('cli/src/') ||
+    file.startsWith('crates/agent-browser-cdp/')
+  );
+}
+
+function isCdpCrateSurface(file) {
+  return (
+    file === 'Cargo.toml' ||
+    file === 'Cargo.lock' ||
+    file === 'cli/Cargo.toml' ||
+    file === 'cli/build.rs' ||
+    file === 'cli/src/native/cdp/mod.rs' ||
+    file.startsWith('crates/agent-browser-cdp/') ||
+    file === 'scripts/ci/rust-tests.sh' ||
+    file === 'scripts/test-cdp-crate-architecture.js'
+  );
 }
 
 function dependencyMetadataFields() {

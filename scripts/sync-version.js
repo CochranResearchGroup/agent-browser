@@ -56,22 +56,22 @@ if (dashboardPkg.version !== version) {
   console.log(`  packages/dashboard/package.json already up to date`);
 }
 
-// Update Cargo.lock to match Cargo.toml
+// Update the workspace Cargo.lock to match Cargo.toml
 if (cargoTomlUpdated) {
   try {
     execSync("cargo update -p agent-browser --offline", {
-      cwd: cliDir,
+      cwd: rootDir,
       stdio: "pipe",
     });
-    console.log(`  Updated cli/Cargo.lock`);
+    console.log(`  Updated Cargo.lock`);
   } catch {
     // --offline may fail if package not in cache, try without it
     try {
       execSync("cargo update -p agent-browser", {
-        cwd: cliDir,
+        cwd: rootDir,
         stdio: "pipe",
       });
-      console.log(`  Updated cli/Cargo.lock`);
+      console.log(`  Updated Cargo.lock`);
     } catch (e) {
       console.error(`  Warning: Could not update Cargo.lock: ${e.message}`);
     }

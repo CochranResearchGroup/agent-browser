@@ -13,12 +13,12 @@ use tokio::signal;
 use tokio::sync::{mpsc, Mutex, Notify, RwLock};
 
 use super::action_runtime::DaemonState;
-use super::cdp::client::CdpClient;
 use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
 use super::state;
 use super::stream::StreamServer;
 use crate::connection::write_daemon_process_identity;
 use crate::process_identity::capture_process_identity;
+use agent_browser_cdp::client::CdpClient;
 
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";

@@ -49,7 +49,7 @@ To prepare a release:
 
 1. Create a branch (e.g. `prepare-v0.24.0`)
 2. Bump `version` in `package.json`
-3. Run `pnpm version:sync` to update `cli/Cargo.toml`, `cli/Cargo.lock`, and `packages/dashboard/package.json`
+3. Run `pnpm version:sync` to update `cli/Cargo.toml`, `Cargo.lock`, and `packages/dashboard/package.json`
 4. Write the changelog entry in `CHANGELOG.md` at the top, under a new `## <version>` heading, wrapped in `<!-- release:start -->` and `<!-- release:end -->` markers. Remove the `<!-- release:start -->` and `<!-- release:end -->` markers from the previous release entry so only the new release has markers.
 5. Add a matching entry to `docs/src/app/changelog/page.mdx` at the top (below the `# Changelog` heading)
 6. Validate the user-scoped install/update surface with `agent-browser install doctor` after installing or replacing the release candidate binary
@@ -108,7 +108,13 @@ Match the existing style in that file.
 
 ## Architecture
 
-This is a Rust codebase. The browser automation daemon lives in `cli/src/native/` (daemon, actions, browser, CDP client, snapshot, state). The `--engine` flag selects Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for Testing directly.
+This is a Rust workspace. The `agent-browser` binary package lives in `cli/`,
+and the focused `agent-browser-cdp` library package owns the CDP websocket
+transport, command lifecycle, and protocol types under
+`crates/agent-browser-cdp/`. Browser process launch, Chrome and Lightpanda
+selection, `BrowserManager`, the automation daemon, snapshots, and state remain
+in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
+`install` command downloads Chrome from Chrome for Testing directly.
 
 ## Isolated Development Runtime
 
@@ -179,10 +185,11 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 ### Unit Tests
 
 ```bash
-scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml
+scripts/ci/rust-tests.sh
 ```
 
-Runs all unit tests (~320 tests). These are fast and don't require Chrome.
+Runs the CDP library tests plus the CLI unit tests. These are provider-free and
+do not require Chrome.
 
 On WSL, every Cargo command that can compile code must run through
 `scripts/ci/cargo-safe.sh`. The wrapper admits up to two concurrent repository
@@ -229,9 +236,9 @@ Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashbo
 
 Before pushing, match local validation to every touched surface since the last
 green CI, not only the files in the final commit. If any Rust source under
-`cli/src/` changed in the current slice, run
-`cargo fmt --manifest-path cli/Cargo.toml -- --check` and
-`cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`. If a service
+`cli/src/` or `crates/` changed in the current slice, run
+`scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check` and
+`scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings`. If a service
 schema, service model, output formatter, service contracts metadata, or
 generated client changed, also run the focused Rust or client contract tests
 for that surface. Recent CI failures were caused by skipping these gates after
@@ -254,8 +261,8 @@ leave the run URL and move on unless the user asked for active monitoring.
 ### Linting and Formatting
 
 ```bash
-scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check
-scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml
+scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check
+scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml
 ```
 
 ## Graphiti Memory Discovery

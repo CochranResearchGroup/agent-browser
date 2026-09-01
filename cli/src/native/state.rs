@@ -7,12 +7,12 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::{
+use super::cookies::{self, Cookie};
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::{
     AttachToTargetParams, AttachToTargetResult, CloseTargetParams, CreateTargetParams,
     CreateTargetResult, EvaluateParams,
 };
-use super::cookies::{self, Cookie};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,7 +91,7 @@ async fn eval_origin_storage(
     origin_js: &str,
 ) -> Option<OriginStorage> {
     let result = client
-        .send_command_typed::<_, super::cdp::types::EvaluateResult>(
+        .send_command_typed::<_, agent_browser_cdp::types::EvaluateResult>(
             "Runtime.evaluate",
             &EvaluateParams {
                 expression: origin_js.to_string(),
@@ -493,7 +493,7 @@ pub async fn load_state(client: &CdpClient, session_id: &str, path: &str) -> Res
                 serde_json::to_string(&entry.value).unwrap_or_default(),
             );
             let _ = client
-                .send_command_typed::<_, super::cdp::types::EvaluateResult>(
+                .send_command_typed::<_, agent_browser_cdp::types::EvaluateResult>(
                     "Runtime.evaluate",
                     &EvaluateParams {
                         expression: js,
@@ -512,7 +512,7 @@ pub async fn load_state(client: &CdpClient, session_id: &str, path: &str) -> Res
                 serde_json::to_string(&entry.value).unwrap_or_default(),
             );
             let _ = client
-                .send_command_typed::<_, super::cdp::types::EvaluateResult>(
+                .send_command_typed::<_, agent_browser_cdp::types::EvaluateResult>(
                     "Runtime.evaluate",
                     &EvaluateParams {
                         expression: js,
@@ -987,16 +987,16 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
-    use crate::native::cdp::types::{
-        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
-        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
-        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
-    };
     use crate::native::cookies;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::storage;
+    use agent_browser_cdp::client::CdpClient;
+    use agent_browser_cdp::types::{
+        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+    };
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};
     use sha2::{Digest, Sha256};

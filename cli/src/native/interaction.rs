@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::*;
 use super::element::{resolve_element_center, resolve_element_object_id, RefMap};
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::*;
 
 pub async fn click(
     client: &CdpClient,
@@ -1308,17 +1308,17 @@ pub(crate) mod action_commands {
     use crate::native::browser_wait::{
         wait_for_function, wait_for_selector, wait_for_text, wait_for_url,
     };
-    use crate::native::cdp::client::CdpClient;
-    use crate::native::cdp::types::{
-        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
-        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
-        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
-    };
     use crate::native::element::RefMap;
     use crate::native::interaction;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::webdriver::backend::BrowserBackend;
+    use agent_browser_cdp::client::CdpClient;
+    use agent_browser_cdp::types::{
+        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+    };
     use serde_json::{json, Map, Value};
     use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     use std::time::{Duration, Instant};
@@ -1438,7 +1438,7 @@ pub(crate) mod action_commands {
                         let link_lookup: Value = client
                             .send_command_typed(
                                 "Runtime.evaluate",
-                                &super::super::cdp::types::EvaluateParams {
+                                &agent_browser_cdp::types::EvaluateParams {
                                     expression: format!(
                                         r#"(function() {{
                                         const targetName = {name};
@@ -1465,7 +1465,7 @@ pub(crate) mod action_commands {
                             )
                             .await
                             .ok()
-                            .and_then(|r: super::super::cdp::types::EvaluateResult| {
+                            .and_then(|r: agent_browser_cdp::types::EvaluateResult| {
                                 r.result.value
                             })
                             .unwrap_or(Value::Null);
@@ -1474,9 +1474,9 @@ pub(crate) mod action_commands {
                                 mgr.set_active_page_url(href);
                             }
                             let _ = client
-                                .send_command_typed::<_, super::super::cdp::types::EvaluateResult>(
+                                .send_command_typed::<_, agent_browser_cdp::types::EvaluateResult>(
                                     "Runtime.evaluate",
-                                    &super::super::cdp::types::EvaluateParams {
+                                    &agent_browser_cdp::types::EvaluateParams {
                                         expression: format!(
                                             "window.location.assign({});",
                                             serde_json::to_string(href)

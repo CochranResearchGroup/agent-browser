@@ -62,11 +62,11 @@ pub(crate) mod action_commands {
             .ok_or("Missing 'expression' parameter")?;
         let timeout_ms = state.timeout_ms(cmd);
         wait_for_function(&mgr.client, &session_id, expression, timeout_ms).await?;
-        let result: super::super::cdp::types::EvaluateResult = mgr
+        let result: agent_browser_cdp::types::EvaluateResult = mgr
             .client
             .send_command_typed(
                 "Runtime.evaluate",
-                &super::super::cdp::types::EvaluateParams {
+                &agent_browser_cdp::types::EvaluateParams {
                     expression: format!("({})", expression),
                     return_by_value: Some(true),
                     await_promise: Some(true),

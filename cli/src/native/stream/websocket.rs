@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{broadcast, watch, Mutex, Notify, RwLock};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::native::cdp::client::CdpClient;
+use agent_browser_cdp::client::CdpClient;
 
 use super::http::handle_http_request;
 use super::{dashboard_auth, is_allowed_origin, timestamp_ms};

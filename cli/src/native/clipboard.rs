@@ -4,8 +4,8 @@ use std::{future::Future, result::Result as StdResult};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::cdp::client::{CdpClient, CdpCommandError};
-use super::cdp::types::EvaluateResult;
+use agent_browser_cdp::client::{CdpClient, CdpCommandError};
+use agent_browser_cdp::types::EvaluateResult;
 
 const CDP_RESPONSE_GRACE: Duration = Duration::from_millis(250);
 pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(3);
@@ -182,7 +182,7 @@ async fn evaluate_capture_script(
     let response: EvaluateResult = client
         .send_command_typed(
             "Runtime.evaluate",
-            &super::cdp::types::EvaluateParams {
+            &agent_browser_cdp::types::EvaluateParams {
                 expression,
                 return_by_value: Some(true),
                 await_promise: Some(false),
@@ -486,7 +486,7 @@ mod tests {
         capture_write_during, read_text, ClipboardFailureCode, ClipboardRecovery,
         ClipboardWriteCapture, DEFAULT_WRITE_CAPTURE_LIMIT,
     };
-    use crate::native::cdp::client::CdpClient;
+    use agent_browser_cdp::client::CdpClient;
 
     #[tokio::test]
     async fn empty_clipboard_text_is_a_successful_read() {
@@ -985,10 +985,10 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::interaction;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
+    use agent_browser_cdp::client::CdpClient;
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};
     use std::future::Future;

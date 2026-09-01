@@ -32,3 +32,19 @@ lanes:
     overlaps: [plan/lease-authority-coordination]
     reconciled_overlaps: []
     updated_at: 2026-09-01
+  - id: P151
+    objective: Extract CDP protocol and websocket transport into a focused Rust library crate
+    plan: docs/dev/plans/0151-2026-09-01-cdp-transport-crate-extraction-plan.md
+    plan_ref: refs/heads/architecture/cdp-transport-crate
+    branch: architecture/cdp-transport-crate
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 09e1d6f69eecd0a5e2590a44f2ecba903e36214d
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P149]
+    overlaps: []
+    reconciled_overlaps: []
+    updated_at: 2026-09-01

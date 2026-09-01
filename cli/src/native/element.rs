@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::*;
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::*;
 
 #[derive(Debug, Clone)]
 pub struct RefEntry {
@@ -1268,10 +1268,10 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::element::RefMap;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
+    use agent_browser_cdp::client::CdpClient;
     use serde_json::{json, Map, Value};
     use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     pub(crate) async fn handle_boundingbox(

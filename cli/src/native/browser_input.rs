@@ -9,14 +9,14 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::types::{
+    use crate::native::interaction;
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::state;
+    use agent_browser_cdp::types::{
         AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
         DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
         TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
     };
-    use crate::native::interaction;
-    use crate::native::service_diagnostics::truncate_utf8;
-    use crate::native::state;
     use serde_json::{json, Map, Value};
     pub(crate) async fn handle_mouse(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
         let mgr = state.browser.as_ref().ok_or("Browser not launched")?;

@@ -48,6 +48,7 @@ name = "agent-browser"
 version = "0.28.0"
 dependencies = [
  "aes-gcm",
+ "agent-browser-cdp",
  "async-trait",
  "base64",
  "chrono",
@@ -74,6 +75,18 @@ dependencies = [
  "uuid",
  "windows-sys 0.52.0",
  "zip",
+]
+
+[[package]]
+name = "agent-browser-cdp"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "socket2",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

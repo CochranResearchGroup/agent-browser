@@ -258,11 +258,11 @@ pub(crate) mod action_commands {
                 )
             }
         };
-        let result: super::super::cdp::types::EvaluateResult = mgr
+        let result: agent_browser_cdp::types::EvaluateResult = mgr
             .client
             .send_command_typed(
                 "Runtime.evaluate",
-                &super::super::cdp::types::EvaluateParams {
+                &agent_browser_cdp::types::EvaluateParams {
                     expression: query,
                     return_by_value: Some(true),
                     await_promise: Some(false),
@@ -349,11 +349,11 @@ pub(crate) mod action_commands {
             sel = serde_json::to_string(selector).unwrap_or_default(),
             idx = index,
         );
-        let result: super::super::cdp::types::EvaluateResult = mgr
+        let result: agent_browser_cdp::types::EvaluateResult = mgr
             .client
             .send_command_typed(
                 "Runtime.evaluate",
-                &super::super::cdp::types::EvaluateParams {
+                &agent_browser_cdp::types::EvaluateParams {
                     expression: js,
                     return_by_value: Some(true),
                     await_promise: Some(false),
@@ -416,11 +416,11 @@ pub(crate) mod action_commands {
             .get("script")
             .and_then(|v| v.as_str())
             .ok_or("Missing 'script' parameter")?;
-        let result: super::super::cdp::types::EvaluateResult = mgr
+        let result: agent_browser_cdp::types::EvaluateResult = mgr
             .client
             .send_command_typed(
                 "Runtime.evaluate",
-                &super::super::cdp::types::EvaluateParams {
+                &agent_browser_cdp::types::EvaluateParams {
                     expression: script.to_string(),
                     return_by_value: Some(false),
                     await_promise: Some(true),
