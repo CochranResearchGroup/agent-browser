@@ -7,13 +7,16 @@ lanes:
     branch: fix/service-state-stale-revision-recovery-20260831
     target: main
     plan_state: COMPLETE
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: c22a208703bf8efdc22d87b51784b25e5866f707
+    custody_state: INTEGRATED
+    checkpoint: f1029320ff93641388325d38c77af8c18d997e3f
     remote_ref: refs/remotes/origin/fix/service-state-stale-revision-recovery-20260831
+    integration_receipt: f1029320ff93641388325d38c77af8c18d997e3f
     integration: merge
     dependencies:
       - P142 Service State Concurrency And Client Recourse Reliability
     overlaps:
+      - plan/lease-authority-coordination
+    reconciled_overlaps:
       - plan/lease-authority-coordination
     updated_at: 2026-08-31
   - id: P145 Emergency Profile Lease Fail-Open
