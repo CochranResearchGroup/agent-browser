@@ -39,8 +39,18 @@ loopback stream port and does not launch a browser.
 ```bash
 agent-browser session supervisor install messages-v4 --stream-port 39716
 agent-browser session supervisor status messages-v4 --json
+agent-browser session supervisor recover-host --dry-run --json
 agent-browser session supervisor remove messages-v4
 ```
+
+The host-scoped `recover-host` command can transfer an already selected,
+browserless runtime host into the installed user supervisor. First run
+`--dry-run`, then pass its exact `planDigest` with `--apply` and
+`--expected-plan-digest`. It fails closed on live browsers, identity or port
+ambiguity, manifest drift, or another active transaction. An uncertain
+post-retirement failure must be resumed with the reported transaction ID and
+revision, not retried as a new apply. Recovery never launches or closes a
+browser.
 
 Status reports shared-host executable drift, fixed-port conflicts, restart
 exhaustion, systemd state, and lane stream reachability. Removing a supervisor

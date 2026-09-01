@@ -56,6 +56,7 @@
     "test:cross-seam-interlocks": "node --no-warnings --experimental-strip-types scripts/test-cross-seam-interlocks.js",
     "test:runtime-host-no-launch": "node scripts/smoke-runtime-host-no-launch.js",
     "test:runtime-host-supervisor-no-launch": "node scripts/smoke-runtime-host-supervisor-no-launch.js",
+    "test:runtime-host-supervisor-takeover-no-launch": "node scripts/smoke-runtime-host-supervisor-takeover-no-launch.js",
     "test:runtime-host-multi-lane": "node scripts/smoke-runtime-host-multi-lane.js",
     "test:runtime-host-convergence-no-launch": "node scripts/smoke-runtime-host-convergence-no-launch.js",
     "test:runtime-host-hot-handoff": "node scripts/smoke-runtime-host-hot-handoff.js",

@@ -18,6 +18,7 @@ mod remote_view_helper_contract;
 mod runtime_adoption;
 mod runtime_host;
 mod runtime_host_ingress;
+mod runtime_host_supervisor_takeover;
 mod runtime_multiplicity;
 #[allow(dead_code)]
 mod runtime_owner_transfer;

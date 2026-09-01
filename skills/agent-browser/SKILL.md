@@ -2177,8 +2177,15 @@ one user-scoped runtime host without launching a browser:
 ```bash
 agent-browser session supervisor install messages-v4 --stream-port 39716
 agent-browser session supervisor status messages-v4 --json
+agent-browser session supervisor recover-host --dry-run --json
 agent-browser session supervisor remove messages-v4
 ```
+
+Use `recover-host` only to transfer the exact selected browserless shared host
+into the installed user supervisor. Apply the returned plan digest once. If an
+uncertain post-retirement failure leaves an operator-recovery transaction,
+resume that transaction with its exact ID and revision; never blind-retry
+`--apply`. The command does not launch or close browsers.
 
 Use `status` to detect shared-host executable drift, port conflicts, restart
 exhaustion, and missing lane stream readiness. `remove` closes only the named

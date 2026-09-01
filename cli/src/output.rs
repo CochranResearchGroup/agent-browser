@@ -5513,6 +5513,7 @@ Examples:
   agent-browser session list
   agent-browser session supervisor install messages-v4 --stream-port 39716
   agent-browser session supervisor status messages-v4 --json
+  agent-browser session supervisor recover-host --dry-run --json
   agent-browser session supervisor remove messages-v4
   agent-browser --session test open example.com
 "##
@@ -7148,6 +7149,8 @@ Sessions:
   session list               List active sessions
   session supervisor install Install one named lane under the Linux runtime host
   session supervisor status  Report shared host and lane-port readiness
+  session supervisor recover-host
+                             Transfer a proven browserless host into supervisor custody
   session supervisor remove  Close and remove only one named runtime lane
 
 Chat (AI):
