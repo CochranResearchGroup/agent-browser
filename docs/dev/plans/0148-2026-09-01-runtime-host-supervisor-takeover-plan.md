@@ -410,9 +410,12 @@ legacy daemons, converged dashboard ingress, and
 `dashboard-service-backend` is ready and reachable on fixed port `39717`.
 A fresh takeover dry-run returns `already_supervised` with zero blockers.
 
-The separately root-owned protected lease authority remains healthy, enabled,
-and active on its prior reviewed SHA
-`f8fdb05e80fef05f210e1d5f3fab17c8f647f87e568c6c200b4dedf30ff0e4a0`.
-The exact parity upgrade to the P148 production SHA was planned but not applied
-because sudo requires an interactive password. That external privilege step is
-not part of runtime-host supervisor custody and does not reopen P148.
+The separately root-owned protected lease authority was initially left healthy
+on its prior reviewed SHA because sudo required an interactive password. The
+operator subsequently completed the exact explicit upgrade. Its unit now names
+the banked generation for SHA
+`895c9e20171089e8cf1780e72cb01254a23443b3bab485b1cbb2d80489072b42`,
+matching source, installed user runtime, and selected runtime host exactly. The
+protected socket is enabled and active. The service is inactive between
+requests as expected for socket activation. Final install doctor remains
+`success=true` with no blocking issues.
