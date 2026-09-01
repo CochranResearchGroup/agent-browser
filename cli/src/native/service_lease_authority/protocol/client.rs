@@ -110,6 +110,38 @@ pub(crate) struct ProtectedBrowserOwner {
     pub(crate) revision: u64,
 }
 
+pub(crate) struct ProtectedBrowserOwnerReconciliationRequest {
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) expected_owner_id: String,
+    pub(crate) expected_owner_generation: u64,
+    pub(crate) idempotency_key: String,
+}
+
+impl std::fmt::Debug for ProtectedBrowserOwnerReconciliationRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedBrowserOwnerReconciliationRequest")
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field("expected_owner_id", &self.expected_owner_id)
+            .field("expected_owner_generation", &self.expected_owner_generation)
+            .field("idempotency_key", &self.idempotency_key)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserOwnerReconciliation {
+    pub(crate) receipt_id: String,
+    pub(crate) owner_id: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) evidence_digest: String,
+    pub(crate) authority_revision: u64,
+    pub(crate) owner_revision: u64,
+    pub(crate) replayed: bool,
+}
+
 pub(crate) fn enroll_protected_profile(
     request: &ProtectedProfileEnrollmentRequest,
 ) -> Result<ProtectedProfileEnrollment, String> {
@@ -188,6 +220,14 @@ pub(crate) fn complete_protected_browser_launch_success(
     .map_err(|_| "lease_authority_browser_launch_completion_encode_failed".to_string())?;
     let response = exchange_with_protected_lease_authority(&encoded)?;
     decode_protected_browser_launch_success(&response, permit, browser_pid)
+}
+
+pub(crate) fn reconcile_protected_browser_owner(
+    request: &ProtectedBrowserOwnerReconciliationRequest,
+) -> Result<ProtectedBrowserOwnerReconciliation, String> {
+    let encoded = encode_protected_browser_owner_reconciliation_request(request)?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_browser_owner_reconciliation_response(&response, request)
 }
 
 fn exchange_with_protected_lease_authority(encoded: &[u8]) -> Result<Vec<u8>, String> {
@@ -574,6 +614,98 @@ fn decode_protected_browser_launch_success(
     })
 }
 
+fn encode_protected_browser_owner_reconciliation_request(
+    request: &ProtectedBrowserOwnerReconciliationRequest,
+) -> Result<Vec<u8>, String> {
+    if request.raw_capability.trim().is_empty()
+        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || request.expected_owner_id.trim().is_empty()
+        || request.expected_owner_generation == 0
+        || request.idempotency_key.trim().is_empty()
+    {
+        return Err("lease_authority_owner_reconciliation_request_invalid".to_string());
+    }
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "reconcile_browser_owner",
+        "payload": {
+            "rawCapability": request.raw_capability.as_bytes(),
+            "resource": LeaseResourceKey::profile(&request.profile_id),
+            "expectedOwnerId": request.expected_owner_id,
+            "expectedOwnerGeneration": request.expected_owner_generation,
+            "idempotencyKey": request.idempotency_key,
+        }
+    }))
+    .map_err(|_| "lease_authority_owner_reconciliation_request_encode_failed".to_string())
+}
+
+fn decode_protected_browser_owner_reconciliation_response(
+    encoded: &[u8],
+    request: &ProtectedBrowserOwnerReconciliationRequest,
+) -> Result<ProtectedBrowserOwnerReconciliation, String> {
+    let response = decode_success_response(
+        encoded,
+        "browser_owner_reconciled",
+        "lease_authority_owner_reconciliation",
+    )?;
+    let receipt = response
+        .pointer("/payload/receipt")
+        .ok_or_else(|| "lease_authority_owner_reconciliation_receipt_invalid".to_string())?;
+    let resource: LeaseResourceKey = serde_json::from_value(
+        receipt
+            .get("resource")
+            .cloned()
+            .ok_or_else(|| "lease_authority_owner_reconciliation_receipt_invalid".to_string())?,
+    )
+    .map_err(|_| "lease_authority_owner_reconciliation_receipt_invalid".to_string())?;
+    let owner_id = required_response_string(
+        receipt,
+        "ownerId",
+        "lease_authority_owner_reconciliation_receipt_invalid",
+    )?;
+    let owner_generation = required_response_u64(
+        receipt,
+        "ownerGeneration",
+        "lease_authority_owner_reconciliation_receipt_invalid",
+    )?;
+    let evidence_digest = required_response_string(
+        receipt,
+        "evidenceDigest",
+        "lease_authority_owner_reconciliation_receipt_invalid",
+    )?;
+    if resource != LeaseResourceKey::profile(&request.profile_id)
+        || owner_id != request.expected_owner_id
+        || owner_generation != request.expected_owner_generation
+        || !super::valid_sha256_digest(&evidence_digest)
+    {
+        return Err("lease_authority_owner_reconciliation_receipt_mismatch".to_string());
+    }
+    Ok(ProtectedBrowserOwnerReconciliation {
+        receipt_id: required_response_string(
+            receipt,
+            "receiptId",
+            "lease_authority_owner_reconciliation_receipt_invalid",
+        )?,
+        owner_id,
+        owner_generation,
+        evidence_digest,
+        authority_revision: required_response_u64(
+            receipt,
+            "authorityRevision",
+            "lease_authority_owner_reconciliation_receipt_invalid",
+        )?,
+        owner_revision: required_response_u64(
+            receipt,
+            "ownerRevision",
+            "lease_authority_owner_reconciliation_receipt_invalid",
+        )?,
+        replayed: response
+            .pointer("/payload/replayed")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| "lease_authority_owner_reconciliation_receipt_invalid".to_string())?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -734,6 +866,49 @@ mod tests {
         let debug = format!("{:?}", request());
         assert!(debug.contains("[REDACTED]"));
         assert!(!debug.contains("capability-secret"));
+    }
+
+    #[test]
+    fn owner_reconciliation_request_contains_no_caller_process_assertion() {
+        let request = ProtectedBrowserOwnerReconciliationRequest {
+            raw_capability: "capability-secret".to_string(),
+            profile_id: "last30days-social".to_string(),
+            expected_owner_id: "owner:abc".to_string(),
+            expected_owner_generation: 7,
+            idempotency_key: "reconcile:last30days:owner-7".to_string(),
+        };
+        let encoded = encode_protected_browser_owner_reconciliation_request(&request).unwrap();
+        let encoded: Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(encoded["operation"], "reconcile_browser_owner");
+        assert!(encoded["payload"].get("processPid").is_none());
+        assert!(encoded["payload"].get("processInstanceDigest").is_none());
+        assert!(encoded["payload"].get("evidenceDigest").is_none());
+        assert!(encoded["payload"].get("observedAt").is_none());
+        assert!(!format!("{request:?}").contains("capability-secret"));
+
+        let response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "browser_owner_reconciled",
+            "payload": {
+                "receipt": {
+                    "receiptId": "owner-reconciliation:abc",
+                    "resource": {"kind": "profile", "id": "last30days-social"},
+                    "ownerId": "owner:abc",
+                    "ownerGeneration": 7,
+                    "evidenceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "authorityRevision": 9,
+                    "ownerRevision": 8
+                },
+                "replayed": false
+            }
+        });
+        let outcome = decode_protected_browser_owner_reconciliation_response(
+            &serde_json::to_vec(&response).unwrap(),
+            &request,
+        )
+        .unwrap();
+        assert!(!outcome.replayed);
+        assert_eq!(outcome.owner_generation, 7);
     }
 
     #[test]

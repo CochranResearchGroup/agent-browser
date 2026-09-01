@@ -1154,6 +1154,7 @@ pub(crate) enum LeaseEventKind {
     RevocationPlanned,
     Superseded,
     OwnerCommitted,
+    OwnerReconciled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

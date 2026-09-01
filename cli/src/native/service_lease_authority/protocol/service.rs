@@ -280,6 +280,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
+            | LeaseAuthorityProtocolRequest::ReconcileBrowserOwner(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -993,7 +994,7 @@ mod tests {
         let mut browser_command = std::process::Command::new("sh");
         browser_command
             .arg("-c")
-            .arg("sleep 30 & wait")
+            .arg("sleep 120 & wait")
             .arg("agent-browser-service-browser-fixture")
             .arg(format!("--user-data-dir={}", profile_path.display()));
         if unsafe { libc::geteuid() } == 0 {
@@ -1124,12 +1125,73 @@ mod tests {
             "completed"
         );
         assert!(completed_effect_replay_response["payload"]["authorization"].is_null());
+        let reconciliation = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "reconcile_browser_owner",
+            "payload": {
+                "rawCapability": raw_capability.as_bytes(),
+                "resource": {"kind": "profile", "id": "last30days-social"},
+                "expectedOwnerId": completion_response["payload"]["owner"]["ownerId"],
+                "expectedOwnerGeneration": completion_response["payload"]["owner"]["ownerGeneration"],
+                "idempotencyKey": "reconcile:last30days:service-1"
+            }
+        }))
+        .unwrap();
+        let reconcile = |encoded: &[u8]| {
+            let mut framed = Vec::new();
+            write_lease_authority_frame(&mut framed, encoded).unwrap();
+            let mut response = Vec::new();
+            serve_protected_lease_authority_connection(
+                &store,
+                load_context,
+                &state_root,
+                &config,
+                &mut std::io::Cursor::new(framed),
+                &mut response,
+                &custody,
+                peer,
+                &signing_key,
+            )
+            .unwrap();
+            let mut response = std::io::Cursor::new(response);
+            serde_json::from_slice::<serde_json::Value>(
+                &read_lease_authority_frame(&mut response).unwrap(),
+            )
+            .unwrap()
+        };
+        let live_reconciliation = reconcile(&reconciliation);
+        assert_eq!(live_reconciliation["outcome"], "error");
+        assert_eq!(
+            live_reconciliation["error"]["code"],
+            "lease_authority_protocol_owner_process_still_current"
+        );
         browser_process
             .kill()
             .expect("stop bounded browser process fixture");
         browser_process
             .wait()
             .expect("reap bounded browser process fixture");
+        let reconciled = reconcile(&reconciliation);
+        assert_eq!(reconciled["outcome"], "browser_owner_reconciled");
+        assert_eq!(reconciled["payload"]["replayed"], false);
+        assert_eq!(
+            reconciled["payload"]["receipt"]["ownerId"],
+            completion_response["payload"]["owner"]["ownerId"]
+        );
+        assert!(store
+            .load(load_context)
+            .unwrap()
+            .state
+            .owners
+            .bindings
+            .is_empty());
+        let reconciled_replay = reconcile(&reconciliation);
+        assert_eq!(reconciled_replay["outcome"], "browser_owner_reconciled");
+        assert_eq!(reconciled_replay["payload"]["replayed"], true);
+        assert_eq!(
+            reconciled_replay["payload"]["receipt"],
+            reconciled["payload"]["receipt"]
+        );
 
         let release = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",

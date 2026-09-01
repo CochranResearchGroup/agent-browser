@@ -2623,7 +2623,7 @@ are kernel-coordinated, or that every owner projection is receipt-only.
 
 ## Fifth Hotfix Recurrence Gap Audit | 2026-09-01
 
-The earlier recurrence matrix covers the reported symptoms, but five
+The earlier recurrence matrix covers the reported symptoms, but six
 cross-cutting mechanisms need explicit acceptance contracts before the design
 can claim structural prevention rather than strong regression resistance:
 
@@ -2652,6 +2652,16 @@ can claim structural prevention rather than strong regression resistance:
    rollback binary must not reinterpret newer state, and mixed generations must
    have exactly one effect-capable authority while candidate observation and
    cancellation remain bounded.
+6. **External-effect commit gap and orphan adoption.** Every selected sink must
+   handle crashes before the effect begins, after the effect begins but before
+   terminal publication, and after publication but before the caller receives
+   the receipt. A generation-bound process handle, operation journal, provider
+   idempotency key, or effect-specific probe must let the reconciler prove one
+   of absent, exactly adopted, compensated, or durably uncertain before another
+   authorization can exist. Effect history and replay of a consumed bearer are
+   never sufficient proof. For effects that cannot be probed or made
+   idempotent, uncertainty must remain terminal and must not trigger an
+   automatic retry.
 
 These mechanisms extend, rather than replace, the eight structural proof gates
 in the hotfix recurrence audit. The truthful current disposition remains that
@@ -2659,3 +2669,40 @@ the design has no known incident family requiring another authority model, but
 the product does not yet make recurrence structurally impossible. That claim
 requires production cutover, exhaustive denial and sink manifests, the five
 contracts above, fault and migration suites, and exact installed acceptance.
+
+## Slice F Protected Owner Reconciliation Checkpoint | 2026-09-01
+
+The protected authority now owns the transition from a process-backed browser
+owner to historical reconciliation evidence. A profile-capability holder may
+submit only the exact resource, expected owner id and generation, and an
+idempotency key. The caller cannot assert a PID, process digest, liveness
+result, observation time, or reconciliation evidence.
+
+On Linux, the root authority reads the recorded PID from protected owner state
+and compares its current UID, start token, canonical executable path and
+digest, canonical profile identity, and process-instance digest with the
+committed owner. The request is rejected while that exact process remains
+current. An absent, reaped, zombie, or PID-reused process produces
+authority-derived stale evidence. Permission or observation failures remain
+typed failures and cannot be reinterpreted as process absence.
+
+Successful reconciliation removes the active owner and commits its immutable
+receipt, evidence digest, authority revision, owner revision, and
+`owner_reconciled` history event in one selected generation before reply.
+Exact replay is independent of the now-absent owner and cannot recreate
+authority. Owner bindings now retain their source claim id, claim revision,
+and fence, and protected-state validation requires every active or reconciled
+owner to trace to one completed browser-launch effect receipt.
+
+Owner generations are monotonic across reconciliation. The first replacement
+after generation 1 is generation 2 rather than another generation 1, so a
+historical transfer or effect receipt cannot become current after the active
+map is emptied. Focused kernel, physical-process, client-closure, and durable
+service tests pass for live refusal, process replacement, durable removal,
+lost-response replay, and next-generation launch.
+
+This checkpoint supplies the crash-recovery primitive required by the selected
+sink cutover. It is not yet supervisor-driven reconciliation, public
+`service_profile_acquire` migration, runtime-owner transfer migration, receipt
+compaction, or receipt-only Service State projection. Production installation
+remains withheld.

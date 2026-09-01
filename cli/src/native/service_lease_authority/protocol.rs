@@ -82,7 +82,10 @@ const LEASE_AUTHORITY_PROFILE_ENROLLMENT_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-profile-enrollment-receipt.v1";
 const LEASE_AUTHORITY_EFFECT_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-effect-receipt.v1";
+const LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPT_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-owner-reconciliation-receipt.v1";
 const MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS: usize = 4096;
+const MAX_LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPTS: usize = 4096;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -190,6 +193,47 @@ struct CompleteBrowserLaunchPayload {
     receipt_id: String,
     browser_pid: u32,
     completion_idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReconcileBrowserOwnerPayload {
+    raw_capability: LeaseAuthoritySecret,
+    resource: LeaseResourceKey,
+    expected_owner_id: String,
+    expected_owner_generation: u64,
+    idempotency_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BrowserOwnerProcessObservation {
+    ExactCurrent,
+    Stale { evidence_digest: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityOwnerReconciliationReceipt {
+    schema_version: String,
+    receipt_id: String,
+    request_digest: String,
+    idempotency_key: String,
+    resource: LeaseResourceKey,
+    owner_id: String,
+    owner_generation: u64,
+    principal_id: String,
+    capability_id: String,
+    capability_revision: u64,
+    evidence_digest: String,
+    occurred_at: String,
+    authority_revision: u64,
+    owner_revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LeaseAuthorityOwnerReconciliationOutcome {
+    receipt: LeaseAuthorityOwnerReconciliationReceipt,
+    replayed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -421,6 +465,7 @@ enum LeaseAuthorityProtocolRequest {
     AuthorizeEffect(AuthorizeLeaseEffectPayload),
     CompleteEffect(CompleteLeaseEffectPayload),
     CompleteBrowserLaunch(CompleteBrowserLaunchPayload),
+    ReconcileBrowserOwner(ReconcileBrowserOwnerPayload),
     Release(ReleaseLeaseAuthorityPayload),
     RecoverPlan(RecoverLeasePlanPayload),
     Recover(RecoverLeaseApplyPayload),
@@ -469,6 +514,8 @@ struct LeaseAuthorityProtectedState {
     profile_enrollment_receipts: BTreeMap<String, LeaseAuthorityProfileEnrollmentReceipt>,
     #[serde(default)]
     effect_receipts: BTreeMap<String, LeaseAuthorityEffectRecord>,
+    #[serde(default)]
+    owner_reconciliation_receipts: BTreeMap<String, LeaseAuthorityOwnerReconciliationReceipt>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -502,6 +549,9 @@ struct LeaseAuthorityOwnerBinding {
     process_start_token: String,
     process_executable_path: String,
     process_executable_sha256: String,
+    claim_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
     principal_id: String,
     capability_id: String,
     revision: u64,
@@ -1042,6 +1092,7 @@ impl LeaseAuthorityProtocolKernel {
                 },
                 profile_enrollment_receipts: BTreeMap::new(),
                 effect_receipts: BTreeMap::new(),
+                owner_reconciliation_receipts: BTreeMap::new(),
             },
             selected_generation_id: None,
             publication_authorized: true,
@@ -1653,6 +1704,7 @@ impl LeaseAuthorityProtocolKernel {
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteEffect(_)
             | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
+            | LeaseAuthorityProtocolRequest::ReconcileBrowserOwner(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -2258,7 +2310,18 @@ impl LeaseAuthorityProtocolKernel {
                     daemon_session_route
                 ),
             ),
-            owner_generation: 1,
+            owner_generation: self
+                .state
+                .owner_reconciliation_receipts
+                .values()
+                .filter(|receipt| receipt.resource == record.receipt.resource)
+                .map(|receipt| receipt.owner_generation)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_owner_generation_exhausted",
+                })?,
             logical_browser_id,
             daemon_session_route: daemon_session_route.to_string(),
             process_instance_digest: process.process_instance_digest.clone(),
@@ -2266,6 +2329,9 @@ impl LeaseAuthorityProtocolKernel {
             process_start_token: process.start_token.clone(),
             process_executable_path: process.executable_path.clone(),
             process_executable_sha256: process.executable_sha256.clone(),
+            claim_id: record.receipt.claim_id.clone(),
+            claim_revision: record.receipt.claim_revision,
+            fencing_token: record.receipt.fencing_token,
             principal_id: record.receipt.principal_id.clone(),
             capability_id: record.receipt.capability_id.clone(),
             revision: next_owner_revision,
@@ -2312,6 +2378,166 @@ impl LeaseAuthorityProtocolKernel {
             },
             binding,
         ))
+    }
+
+    fn reconcile_browser_owner(
+        &mut self,
+        request: ReconcileBrowserOwnerPayload,
+        observation: &BrowserOwnerProcessObservation,
+        authority_observed_at: &str,
+    ) -> Result<LeaseAuthorityOwnerReconciliationOutcome, LeaseAuthorityProtocolError> {
+        if request.resource.kind != LeaseResourceKind::Profile
+            || request.expected_owner_id.trim().is_empty()
+            || request.expected_owner_generation == 0
+            || request.idempotency_key.trim().is_empty()
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_reconciliation_invalid",
+            });
+        }
+        let raw_capability =
+            std::str::from_utf8(request.raw_capability.expose()).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_owner_reconciliation_capability_invalid",
+                }
+            })?;
+        let authenticated = authenticate_profile_capability(
+            &self.state.principals,
+            raw_capability,
+            Some(&request.resource.id),
+        )
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_owner_reconciliation_capability_invalid",
+        })?;
+        let request_digest = owner_reconciliation_request_digest(
+            &self.state.domain.authority_domain_id,
+            &authenticated.principal_id,
+            &authenticated.capability_id,
+            authenticated.capability_revision,
+            &request.resource,
+            &request.expected_owner_id,
+            request.expected_owner_generation,
+            &request.idempotency_key,
+        );
+        let receipt_key = owner_reconciliation_receipt_storage_key(
+            &self.state.domain.authority_domain_id,
+            &authenticated.principal_id,
+            &request.resource,
+            &request.idempotency_key,
+        );
+        if let Some(receipt) = self.state.owner_reconciliation_receipts.get(&receipt_key) {
+            if receipt.request_digest != request_digest {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_idempotency_conflict",
+                });
+            }
+            return Ok(LeaseAuthorityOwnerReconciliationOutcome {
+                receipt: receipt.clone(),
+                replayed: true,
+            });
+        }
+        let evidence_digest = match observation {
+            BrowserOwnerProcessObservation::ExactCurrent => {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_owner_process_still_current",
+                });
+            }
+            BrowserOwnerProcessObservation::Stale { evidence_digest }
+                if valid_sha256_digest(evidence_digest) =>
+            {
+                evidence_digest.clone()
+            }
+            BrowserOwnerProcessObservation::Stale { .. } => {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_owner_process_observation_invalid",
+                });
+            }
+        };
+        let resource_key = request.resource.storage_key();
+        let binding = self
+            .state
+            .owners
+            .bindings
+            .get(&resource_key)
+            .cloned()
+            .filter(|binding| {
+                binding.resource == request.resource
+                    && binding.owner_id == request.expected_owner_id
+                    && binding.owner_generation == request.expected_owner_generation
+                    && binding.principal_id == authenticated.principal_id
+                    && binding.capability_id == authenticated.capability_id
+            })
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_reconciliation_stale_owner",
+            })?;
+        if self.state.owner_reconciliation_receipts.len()
+            >= MAX_LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPTS
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_reconciliation_capacity_exhausted",
+            });
+        }
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let next_authority_revision = self
+            .state
+            .authority
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_counter_exhausted",
+            })?;
+        let next_owner_revision = self
+            .state
+            .owners
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_revision_exhausted",
+            })?;
+        let receipt = LeaseAuthorityOwnerReconciliationReceipt {
+            schema_version: LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: stable_protocol_id("owner-reconciliation", &request_digest),
+            request_digest,
+            idempotency_key: request.idempotency_key,
+            resource: request.resource,
+            owner_id: binding.owner_id,
+            owner_generation: binding.owner_generation,
+            principal_id: binding.principal_id.clone(),
+            capability_id: binding.capability_id,
+            capability_revision: authenticated.capability_revision,
+            evidence_digest,
+            occurred_at: now.clone(),
+            authority_revision: next_authority_revision,
+            owner_revision: next_owner_revision,
+        };
+        self.state.authority.revision = next_authority_revision;
+        self.state.authority.events.push(LeaseAuthorityEvent {
+            event_id: stable_protocol_id(
+                "lease-event-owner-reconcile",
+                &format!(
+                    "{}\0{}\0{}",
+                    receipt.receipt_id, receipt.evidence_digest, next_authority_revision
+                ),
+            ),
+            resource: receipt.resource.clone(),
+            claim_id: binding.claim_id,
+            principal_id: binding.principal_id,
+            fencing_token: binding.fencing_token,
+            kind: super::LeaseEventKind::OwnerReconciled,
+            occurred_at: now,
+        });
+        self.state.owners.revision = next_owner_revision;
+        self.state.owners.bindings.remove(&resource_key);
+        self.state
+            .owner_reconciliation_receipts
+            .insert(receipt_key, receipt.clone());
+        validate_protected_state(&self.state)?;
+        Ok(LeaseAuthorityOwnerReconciliationOutcome {
+            receipt,
+            replayed: false,
+        })
     }
 
     fn release(
@@ -2671,6 +2897,10 @@ fn validate_protected_state(
     if state.effect_receipts.len() > MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS {
         return Err(invalid());
     }
+    if state.owner_reconciliation_receipts.len() > MAX_LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPTS
+    {
+        return Err(invalid());
+    }
     let mut effect_receipt_ids = BTreeSet::new();
     for (storage_key, record) in &state.effect_receipts {
         let receipt = &record.receipt;
@@ -2784,6 +3014,30 @@ fn validate_protected_state(
             .principals
             .profile_capabilities
             .get(&binding.capability_id);
+        let completed_effect_matches = state.effect_receipts.values().any(|record| {
+            let receipt = &record.receipt;
+            let daemon_session_route = receipt.audience.strip_prefix("daemon-session:");
+            receipt.state == LeaseAuthorityEffectState::Completed
+                && receipt.resource == binding.resource
+                && receipt.claim_id == binding.claim_id
+                && receipt.claim_revision == binding.claim_revision
+                && receipt.fencing_token == binding.fencing_token
+                && receipt.principal_id == binding.principal_id
+                && receipt.capability_id == binding.capability_id
+                && receipt.action_class == "browser_launch"
+                && receipt.completion_evidence_digest.as_deref()
+                    == Some(binding.process_instance_digest.as_str())
+                && daemon_session_route == Some(binding.daemon_session_route.as_str())
+                && stable_protocol_id(
+                    "owner",
+                    &format!(
+                        "{}\0{}\0{}",
+                        receipt.receipt_id,
+                        binding.process_instance_digest,
+                        binding.daemon_session_route
+                    ),
+                ) == binding.owner_id
+        });
         if storage_key != &binding.resource.storage_key()
             || binding.resource.kind != LeaseResourceKind::Profile
             || !valid_sha256_digest(&binding.physical_identity_digest)
@@ -2792,6 +3046,9 @@ fn validate_protected_state(
             || binding.process_start_token.trim().is_empty()
             || binding.process_executable_path.trim().is_empty()
             || !valid_sha256_digest(&binding.process_executable_sha256)
+            || binding.claim_id.trim().is_empty()
+            || binding.claim_revision == 0
+            || binding.fencing_token == 0
             || binding.owner_id.trim().is_empty()
             || binding.owner_generation == 0
             || binding.logical_browser_id.trim().is_empty()
@@ -2808,10 +3065,109 @@ fn validate_protected_state(
                     || capability.principal_id != binding.principal_id
                     || capability.profile_id != binding.resource.id
             })
+            || !completed_effect_matches
         {
             return Err(invalid());
         }
         highest_owner_revision = highest_owner_revision.max(binding.revision);
+    }
+    let mut reconciliation_ids = BTreeSet::new();
+    let mut reconciled_generations = BTreeSet::new();
+    for (storage_key, receipt) in &state.owner_reconciliation_receipts {
+        let expected_storage_key = owner_reconciliation_receipt_storage_key(
+            &state.domain.authority_domain_id,
+            &receipt.principal_id,
+            &receipt.resource,
+            &receipt.idempotency_key,
+        );
+        let expected_request_digest = owner_reconciliation_request_digest(
+            &state.domain.authority_domain_id,
+            &receipt.principal_id,
+            &receipt.capability_id,
+            receipt.capability_revision,
+            &receipt.resource,
+            &receipt.owner_id,
+            receipt.owner_generation,
+            &receipt.idempotency_key,
+        );
+        let completed_effect_matches = state.effect_receipts.values().any(|record| {
+            let effect = &record.receipt;
+            let Some(process_instance_digest) = effect.completion_evidence_digest.as_deref() else {
+                return false;
+            };
+            let Some(daemon_session_route) = effect.audience.strip_prefix("daemon-session:") else {
+                return false;
+            };
+            effect.state == LeaseAuthorityEffectState::Completed
+                && effect.resource == receipt.resource
+                && effect.principal_id == receipt.principal_id
+                && effect.capability_id == receipt.capability_id
+                && effect.capability_revision == receipt.capability_revision
+                && effect.action_class == "browser_launch"
+                && stable_protocol_id(
+                    "owner",
+                    &format!(
+                        "{}\0{}\0{}",
+                        effect.receipt_id, process_instance_digest, daemon_session_route
+                    ),
+                ) == receipt.owner_id
+        });
+        if storage_key != &expected_storage_key
+            || receipt.schema_version != LEASE_AUTHORITY_OWNER_RECONCILIATION_RECEIPT_SCHEMA_VERSION
+            || receipt.request_digest != expected_request_digest
+            || receipt.receipt_id
+                != stable_protocol_id("owner-reconciliation", &receipt.request_digest)
+            || !reconciliation_ids.insert(&receipt.receipt_id)
+            || receipt.idempotency_key.trim().is_empty()
+            || receipt.resource.kind != LeaseResourceKind::Profile
+            || receipt.owner_id.trim().is_empty()
+            || receipt.owner_generation == 0
+            || !reconciled_generations
+                .insert((receipt.resource.storage_key(), receipt.owner_generation))
+            || receipt.principal_id.trim().is_empty()
+            || receipt.capability_id.trim().is_empty()
+            || receipt.capability_revision == 0
+            || !valid_sha256_digest(&receipt.evidence_digest)
+            || chrono::DateTime::parse_from_rfc3339(&receipt.occurred_at).is_err()
+            || receipt.authority_revision == 0
+            || receipt.authority_revision > state.authority.revision
+            || receipt.owner_revision == 0
+            || receipt.owner_revision > state.owners.revision
+            || !completed_effect_matches
+        {
+            return Err(invalid());
+        }
+        highest_owner_revision = highest_owner_revision.max(receipt.owner_revision);
+    }
+    for resource_key in state
+        .owner_reconciliation_receipts
+        .values()
+        .map(|receipt| receipt.resource.storage_key())
+        .collect::<BTreeSet<_>>()
+    {
+        let generations = reconciled_generations
+            .iter()
+            .filter_map(|(key, generation)| (key == &resource_key).then_some(*generation))
+            .collect::<Vec<_>>();
+        if generations
+            .iter()
+            .enumerate()
+            .any(|(index, generation)| *generation != (index as u64) + 1)
+        {
+            return Err(invalid());
+        }
+    }
+    for binding in state.owners.bindings.values() {
+        let latest_reconciled_generation = reconciled_generations
+            .iter()
+            .filter_map(|(key, generation)| {
+                (key == &binding.resource.storage_key()).then_some(*generation)
+            })
+            .max()
+            .unwrap_or(0);
+        if binding.owner_generation != latest_reconciled_generation.saturating_add(1) {
+            return Err(invalid());
+        }
     }
     if highest_owner_revision != state.owners.revision {
         return Err(invalid());
@@ -2859,6 +3215,40 @@ fn effect_receipt_storage_key(
         resource.storage_key()
     );
     format!("effect:{:x}", Sha256::digest(payload.as_bytes()))
+}
+
+fn owner_reconciliation_receipt_storage_key(
+    authority_domain_id: &str,
+    principal_id: &str,
+    resource: &LeaseResourceKey,
+    idempotency_key: &str,
+) -> String {
+    let payload = format!(
+        "agent-browser.lease-authority-owner-reconciliation-key.v1\n{authority_domain_id}\n{principal_id}\n{}\n{idempotency_key}",
+        resource.storage_key()
+    );
+    format!(
+        "owner-reconciliation:{:x}",
+        Sha256::digest(payload.as_bytes())
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn owner_reconciliation_request_digest(
+    authority_domain_id: &str,
+    principal_id: &str,
+    capability_id: &str,
+    capability_revision: u64,
+    resource: &LeaseResourceKey,
+    expected_owner_id: &str,
+    expected_owner_generation: u64,
+    idempotency_key: &str,
+) -> String {
+    let payload = format!(
+        "agent-browser.lease-authority-owner-reconciliation-request.v1\n{authority_domain_id}\n{principal_id}\n{capability_id}\n{capability_revision}\n{}\n{expected_owner_id}\n{expected_owner_generation}\n{idempotency_key}",
+        resource.storage_key()
+    );
+    format!("sha256:{:x}", Sha256::digest(payload.as_bytes()))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3084,6 +3474,11 @@ fn decode_lease_authority_request(
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_request_invalid",
             }),
+        "reconcile_browser_owner" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::ReconcileBrowserOwner)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "release" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::Release)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -3263,16 +3658,34 @@ fn derive_browser_process_identity(
             code: "lease_authority_protocol_browser_process_invalid",
         });
     }
-    let process_root = PathBuf::from(format!("/proc/{browser_pid}"));
-    let metadata = fs::metadata(&process_root).map_err(|_| LeaseAuthorityProtocolError {
-        code: "lease_authority_protocol_browser_process_unavailable",
-    })?;
-    #[cfg(unix)]
-    if metadata.uid() != peer.uid {
+    let (process_uid, parent_pid, evidence) = observe_linux_browser_process(browser_pid)?;
+    if process_uid != peer.uid {
         return Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_owner_mismatch",
         });
     }
+    if parent_pid != peer.pid {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_parent_mismatch",
+        });
+    }
+    Ok(evidence)
+}
+
+#[cfg(target_os = "linux")]
+fn observe_linux_browser_process(
+    browser_pid: u32,
+) -> Result<(u32, u32, BrowserProcessIdentityEvidence), LeaseAuthorityProtocolError> {
+    if browser_pid <= 1 {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        });
+    }
+    let process_root = PathBuf::from(format!("/proc/{browser_pid}"));
+    let metadata = fs::metadata(&process_root).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_unavailable",
+    })?;
+    let process_uid = metadata.uid();
     let stat =
         fs::read_to_string(process_root.join("stat")).map_err(|_| LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_unavailable",
@@ -3297,11 +3710,6 @@ fn derive_browser_process_identity(
             code: "lease_authority_protocol_browser_process_invalid",
         })?
         .to_string();
-    if parent_pid != peer.pid {
-        return Err(LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_process_parent_mismatch",
-        });
-    }
     let executable_path =
         fs::canonicalize(process_root.join("exe")).map_err(|_| LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_unavailable",
@@ -3347,19 +3755,124 @@ fn derive_browser_process_identity(
         Sha256::digest(
             format!(
                 "agent-browser.browser-process.v1\n{}\n{browser_pid}\n{start_token}\n{executable_path}\n{executable_sha256}\n{profile_identity_digest}",
-                peer.uid
+                process_uid
             )
             .as_bytes()
         )
     );
-    Ok(BrowserProcessIdentityEvidence {
-        pid: browser_pid,
-        start_token,
-        executable_path,
-        executable_sha256,
-        profile_identity_digest,
-        process_instance_digest,
+    Ok((
+        process_uid,
+        parent_pid,
+        BrowserProcessIdentityEvidence {
+            pid: browser_pid,
+            start_token,
+            executable_path,
+            executable_sha256,
+            profile_identity_digest,
+            process_instance_digest,
+        },
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn derive_browser_owner_process_observation(
+    binding: &LeaseAuthorityOwnerBinding,
+) -> Result<BrowserOwnerProcessObservation, LeaseAuthorityProtocolError> {
+    let process_root = PathBuf::from(format!("/proc/{}", binding.process_pid));
+    match fs::metadata(&process_root) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(stale_browser_owner_observation(binding, "process_absent"));
+        }
+        Err(_) => {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_unavailable",
+            });
+        }
+    }
+    let stat = match fs::read_to_string(process_root.join("stat")) {
+        Ok(stat) => stat,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(stale_browser_owner_observation(
+                binding,
+                "process_disappeared",
+            ));
+        }
+        Err(_) => {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_browser_process_unavailable",
+            });
+        }
+    };
+    if linux_process_stat_is_zombie(&stat)? {
+        return Ok(stale_browser_owner_observation(binding, "process_zombie"));
+    }
+    let observed = match observe_linux_browser_process(binding.process_pid) {
+        Ok((_, _, observed)) => observed,
+        Err(_error)
+            if fs::metadata(&process_root)
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            return Ok(stale_browser_owner_observation(
+                binding,
+                "process_disappeared",
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    if observed.start_token == binding.process_start_token
+        && observed.executable_path == binding.process_executable_path
+        && observed.executable_sha256 == binding.process_executable_sha256
+        && observed.profile_identity_digest == binding.physical_identity_digest
+        && observed.process_instance_digest == binding.process_instance_digest
+    {
+        return Ok(BrowserOwnerProcessObservation::ExactCurrent);
+    }
+    Ok(BrowserOwnerProcessObservation::Stale {
+        evidence_digest: format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                format!(
+                    "agent-browser.browser-owner-stale-observation.v1\n{}\n{}\n{}",
+                    binding.owner_id,
+                    binding.process_instance_digest,
+                    observed.process_instance_digest
+                )
+                .as_bytes()
+            )
+        ),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process_stat_is_zombie(stat: &str) -> Result<bool, LeaseAuthorityProtocolError> {
+    let state = stat
+        .rfind(')')
+        .and_then(|index| stat.get(index + 2..))
+        .and_then(|fields| fields.split_whitespace().next())
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        })?;
+    Ok(state == "Z")
+}
+
+#[cfg(target_os = "linux")]
+fn stale_browser_owner_observation(
+    binding: &LeaseAuthorityOwnerBinding,
+    reason: &str,
+) -> BrowserOwnerProcessObservation {
+    BrowserOwnerProcessObservation::Stale {
+        evidence_digest: format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                format!(
+                    "agent-browser.browser-owner-stale-observation.v1\n{}\n{}\n{reason}",
+                    binding.owner_id, binding.process_instance_digest
+                )
+                .as_bytes()
+            )
+        ),
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -3367,6 +3880,15 @@ fn derive_browser_process_identity(
     _peer: custody::LeaseAuthorityRequestPeerIdentity,
     _browser_pid: u32,
 ) -> Result<BrowserProcessIdentityEvidence, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_platform_unsupported",
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_browser_owner_process_observation(
+    _binding: &LeaseAuthorityOwnerBinding,
+) -> Result<BrowserOwnerProcessObservation, LeaseAuthorityProtocolError> {
     Err(LeaseAuthorityProtocolError {
         code: "lease_authority_protocol_browser_process_platform_unsupported",
     })
@@ -3535,6 +4057,38 @@ fn dispatch_lease_authority_request(
                 "payload": {
                     "receipt": outcome.receipt,
                     "owner": owner,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::ReconcileBrowserOwner(request) => {
+            let resource_key = request.resource.storage_key();
+            let observation = match kernel.state.owners.bindings.get(&resource_key) {
+                Some(binding) => derive_browser_owner_process_observation(binding)?,
+                None => BrowserOwnerProcessObservation::Stale {
+                    evidence_digest: format!(
+                        "sha256:{:x}",
+                        Sha256::digest(
+                            format!(
+                                "agent-browser.browser-owner-stale-observation.v1\n{}\n{}\nowner_binding_absent",
+                                request.expected_owner_id, request.expected_owner_generation
+                            )
+                            .as_bytes()
+                        )
+                    ),
+                },
+            };
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.reconcile_browser_owner(request, &observation, &observed_at)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "browser_owner_reconciled",
+                "payload": {
+                    "receipt": outcome.receipt,
                     "replayed": outcome.replayed,
                 },
             }))
@@ -4804,6 +5358,98 @@ mod tests {
             duplicate_error.code(),
             "lease_authority_protocol_current_owner_conflict"
         );
+        let reconciliation_request = || ReconcileBrowserOwnerPayload {
+            raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+            resource: LeaseResourceKey::profile("last30days-social"),
+            expected_owner_id: owner.owner_id.clone(),
+            expected_owner_generation: owner.owner_generation,
+            idempotency_key: "reconcile:last30days:owner-commit".to_string(),
+        };
+        let live_error = restarted
+            .reconcile_browser_owner(
+                reconciliation_request(),
+                &BrowserOwnerProcessObservation::ExactCurrent,
+                "2026-09-01T12:02:01Z",
+            )
+            .unwrap_err();
+        assert_eq!(
+            live_error.code(),
+            "lease_authority_protocol_owner_process_still_current"
+        );
+        assert!(restarted
+            .state
+            .owners
+            .bindings
+            .contains_key("profile:last30days-social"));
+        let stale_evidence =
+            "sha256:8888888888888888888888888888888888888888888888888888888888888888";
+        let reconciled = restarted
+            .reconcile_browser_owner(
+                reconciliation_request(),
+                &BrowserOwnerProcessObservation::Stale {
+                    evidence_digest: stale_evidence.to_string(),
+                },
+                "2026-09-01T12:02:02Z",
+            )
+            .unwrap();
+        assert!(!reconciled.replayed);
+        assert_eq!(reconciled.receipt.owner_id, owner.owner_id);
+        assert_eq!(reconciled.receipt.evidence_digest, stale_evidence);
+        assert!(!restarted
+            .state
+            .owners
+            .bindings
+            .contains_key("profile:last30days-social"));
+        let revision_after_reconciliation = restarted.state.authority.revision();
+        let replayed_reconciliation = restarted
+            .reconcile_browser_owner(
+                reconciliation_request(),
+                &BrowserOwnerProcessObservation::Stale {
+                    evidence_digest: stale_evidence.to_string(),
+                },
+                "2026-09-01T12:02:03Z",
+            )
+            .unwrap();
+        assert!(replayed_reconciliation.replayed);
+        assert_eq!(replayed_reconciliation.receipt, reconciled.receipt);
+        assert_eq!(
+            restarted.state.authority.revision(),
+            revision_after_reconciliation
+        );
+        let mut replacement_launch = effect_request();
+        replacement_launch.idempotency_key = "launch:last30days:replacement".to_string();
+        let replacement_authorized = restarted
+            .authorize_effect(
+                replacement_launch,
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:02:04Z",
+                &signing_key,
+            )
+            .unwrap();
+        let replacement_process = BrowserProcessIdentityEvidence {
+            pid: 4243,
+            start_token: "987655".to_string(),
+            process_instance_digest:
+                "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+                    .to_string(),
+            ..browser_process.clone()
+        };
+        let (_, replacement_owner) = restarted
+            .complete_browser_launch(
+                CompleteBrowserLaunchPayload {
+                    receipt_id: replacement_authorized.receipt.receipt_id,
+                    browser_pid: replacement_process.pid,
+                    completion_idempotency_key: "complete:last30days:replacement".to_string(),
+                },
+                1000,
+                executor_identity_digest,
+                &replacement_process,
+                "2026-09-01T12:02:05Z",
+            )
+            .unwrap();
+        assert_eq!(replacement_owner.owner_generation, 2);
+        assert_ne!(replacement_owner.owner_id, owner.owner_id);
         assert!(
             restarted
                 .state
@@ -4853,6 +5499,35 @@ mod tests {
             )
         );
         assert!(valid_sha256_digest(&evidence.process_instance_digest));
+
+        let mut binding = LeaseAuthorityOwnerBinding {
+            resource: LeaseResourceKey::profile("process-fixture"),
+            physical_identity_digest: evidence.profile_identity_digest.clone(),
+            owner_id: "owner:process-fixture".to_string(),
+            owner_generation: 1,
+            logical_browser_id: "browser:process-fixture".to_string(),
+            daemon_session_route: "process-fixture".to_string(),
+            process_instance_digest: evidence.process_instance_digest.clone(),
+            process_pid: evidence.pid,
+            process_start_token: evidence.start_token.clone(),
+            process_executable_path: evidence.executable_path.clone(),
+            process_executable_sha256: evidence.executable_sha256.clone(),
+            claim_id: "claim:process-fixture".to_string(),
+            claim_revision: 1,
+            fencing_token: 1,
+            principal_id: "principal:process-fixture".to_string(),
+            capability_id: "capability:process-fixture".to_string(),
+            revision: 1,
+        };
+        assert_eq!(
+            derive_browser_owner_process_observation(&binding).unwrap(),
+            BrowserOwnerProcessObservation::ExactCurrent
+        );
+        binding.process_start_token = "different-process-start".to_string();
+        assert!(matches!(
+            derive_browser_owner_process_observation(&binding).unwrap(),
+            BrowserOwnerProcessObservation::Stale { .. }
+        ));
 
         let wrong_parent = custody::LeaseAuthorityRequestPeerIdentity {
             pid: peer.pid.saturating_add(1),
