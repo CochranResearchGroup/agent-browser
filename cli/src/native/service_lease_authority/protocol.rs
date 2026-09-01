@@ -22,6 +22,8 @@ use crate::native::service_principal::{
     ServicePrincipalRegistrationRequest, ServicePrincipalRegistry,
 };
 
+#[cfg(target_os = "linux")]
+pub(super) mod client;
 mod custody;
 #[cfg(target_os = "linux")]
 mod service;

@@ -2481,3 +2481,33 @@ failed by observing the repeated bearer, then passed after the correction.
 Selected sink integration must treat a consumed replay as
 `effect_uncertain`/inspect-before-retry, not as an authorization outage and not
 as permission to request a new operation key automatically.
+
+## Slice F Protected Effect Client Adapter Checkpoint | 2026-09-01
+
+The Linux daemon now has one internal client adapter for the protected
+browser-launch consume and terminal-completion protocol. It connects only to
+the fixed lease-authority Unix socket, applies a two-second read and write
+budget, derives the socket group from the connected root-owned inode, and
+validates the exact peer through `SO_PEERCRED` plus root-owned state root,
+socket mode, socket device and inode, executable ownership, executable mode,
+and executable digest. A same-user candidate socket or daemon cannot satisfy
+that custody check.
+
+The adapter constructs the closed `authorize_effect` request without caller
+time or executor identity, validates that the first response matches the exact
+resource, claim, fence, action, audience, and operation, then retains only the
+non-authoritative receipt id. The signed executable bearer is discarded at the
+adapter seam and cannot enter a command, log, job, or Service State projection.
+Receipt-only replay returns
+`lease_authority_effect_uncertain_inspect_before_retry`. Exact completed or
+uncertain terminal responses must match the original receipt and requested
+state.
+
+Two focused client tests cover request closure, secret-safe debug output,
+first-delivery matching, replay uncertainty, and exact terminal response
+matching. The adapter is deliberately not exported to legacy profile
+acquisition yet: that path still acquires its claim from user-scoped Service
+State, while the protected service recognizes only protected claims. The next
+slice must migrate enrollment and acquisition or provide one kernel-owned
+broker operation before invoking this adapter; passing a legacy claim into it
+would recreate split authority.
