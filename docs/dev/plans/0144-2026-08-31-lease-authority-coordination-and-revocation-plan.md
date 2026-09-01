@@ -1928,3 +1928,35 @@ reaches only the typed placeholder rather than a generic mutation surface.
 This gate is necessary but not a public revoke surface. The next packet remains
 the authority-timed, root-capability-authenticated revoke plan, followed by
 revision-bound apply and crash-durable publication.
+
+## Slice E Durable Administrative Intent Kernel Checkpoint | 2026-08-31
+
+Administrative revoke planning is now a canonical authority mutation rather
+than an offline signature operation. The kernel authenticates the current
+administrator id, revision, lifecycle state, and raw root capability; binds the
+plan to the exact resource, claim id, principal, claim revision, fencing token,
+reason, issue time, expiry, and idempotency key; signs that envelope; increments
+the authority revision; retains the authorization only in protected state; and
+adds a bearer-free `revocation_planned` audit event.
+
+An exact plan retry returns the original signed authorization without changing
+authority revision or minting a proof under a newer signer. Reusing the
+idempotency key for any changed target, fence, reason, administrator, or time is
+an idempotency conflict. Revoke apply now requires the signed authorization to
+equal the exact retained protected intent. A valid signature created outside
+that current-state planning transaction is rejected before it can fence a
+claim. Terminal apply replay remains available from its durable receipt even
+after intent compaction or administrator rotation.
+
+The ordinary user-scoped Service State serializer skips retained administrative
+authorizations entirely. The protected serializer persists them for online
+consume, while the separate history segment receives only the redacted audit
+event. Protected load validates every retained intent's key, schema, signer
+identity shape, administrator revision, claim axes, bounds, and expiry span.
+
+Focused tests prove offline-signature rejection, exact plan replay, unchanged
+revision on replay, holder-capability independence, terminal apply replay,
+protected restart persistence, projection redaction, bearer-free history, and
+malformed retained-intent rejection. Authority-owned clock observation and the
+root-service plan/apply dispatcher remain required before this becomes a public
+operation.

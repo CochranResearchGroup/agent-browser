@@ -1150,6 +1150,7 @@ pub(crate) enum LeaseEventKind {
     Expired,
     Revoked,
     Recovered,
+    RevocationPlanned,
     Superseded,
 }
 
@@ -1476,6 +1477,21 @@ impl std::fmt::Debug for LeaseAdministrativeAuthorization {
     }
 }
 
+impl LeaseAdministrativeAuthorization {
+    pub(crate) fn plan_id(&self) -> String {
+        stable_id(
+            "lease-administrative-revoke-plan-v1",
+            &administrative_authorization_payload(self),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseAdministrativePlanOutcome {
+    pub(crate) authorization: LeaseAdministrativeAuthorization,
+    pub(crate) replayed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LeaseClaimRevocationOutcome {
     pub(crate) receipt: LeaseClaimTerminalReceipt,
@@ -1678,6 +1694,8 @@ pub(crate) struct LeaseAuthorityState {
     terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
     recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
     administrators: BTreeMap<String, LeaseAdministratorAuthority>,
+    #[serde(skip)]
+    administrative_authorizations: BTreeMap<String, LeaseAdministrativeAuthorization>,
 }
 
 impl LeaseAuthorityState {
@@ -1724,6 +1742,78 @@ impl LeaseAuthorityState {
         Ok(administrator)
     }
 
+    fn plan_administrative_revocation(
+        &mut self,
+        claim: &ActiveLeaseClaim,
+        intent: &LeaseAdministrativeIntent,
+        raw_administrator_capability: &[u8],
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseAdministrativePlanOutcome, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        self.authenticate_administrator(
+            &intent.administrator_id,
+            intent.administrator_revision,
+            raw_administrator_capability,
+        )?;
+        if let Some(existing) = self
+            .administrative_authorizations
+            .get(&intent.idempotency_key)
+        {
+            if existing.administrator_id != intent.administrator_id
+                || existing.administrator_revision != intent.administrator_revision
+                || existing.resource != claim.resource
+                || existing.claim_id != claim.claim_id
+                || existing.principal_id != claim.principal_id
+                || existing.claim_revision != claim.revision
+                || existing.fencing_token != claim.fencing_token
+                || existing.reason_code != intent.reason_code
+                || existing.issued_at != intent.issued_at
+                || existing.authorization_expires_at != intent.authorization_expires_at
+            {
+                return Err(LeaseAuthorityError::IdempotencyConflict);
+            }
+            return Ok(LeaseAdministrativePlanOutcome {
+                authorization: existing.clone(),
+                replayed: true,
+            });
+        }
+        let authorization = issue_lease_administrative_authorization_with_signing_key(
+            self,
+            claim,
+            intent,
+            signing_key,
+        )
+        .map_err(|_| LeaseAuthorityError::InvalidRequest)?;
+        let next_revision = self
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        self.revision = next_revision;
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.administrative_authorizations
+            .insert(intent.idempotency_key.clone(), authorization.clone());
+        self.events.push(LeaseAuthorityEvent {
+            event_id: stable_id(
+                "lease-event-v1",
+                &format!(
+                    "{}\0revocation_planned\0{}\0{}",
+                    claim.claim_id, intent.idempotency_key, next_revision
+                ),
+            ),
+            resource: claim.resource.clone(),
+            claim_id: claim.claim_id.clone(),
+            principal_id: claim.principal_id.clone(),
+            fencing_token: claim.fencing_token,
+            kind: LeaseEventKind::RevocationPlanned,
+            occurred_at: intent.issued_at.clone(),
+        });
+        Ok(LeaseAdministrativePlanOutcome {
+            authorization,
+            replayed: false,
+        })
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.active_claims.is_empty()
             && self.next_fencing_tokens.is_empty()
@@ -1732,6 +1822,7 @@ impl LeaseAuthorityState {
             && self.terminal_receipts.is_empty()
             && self.recovery_receipts.is_empty()
             && self.administrators.is_empty()
+            && self.administrative_authorizations.is_empty()
     }
 
     pub(crate) fn revision(&self) -> u64 {
@@ -2063,6 +2154,13 @@ impl LeaseAuthorityState {
         }
         verify_administrative_authorization(&request.authorization, verification_key)?;
         let authorization = &request.authorization;
+        if self
+            .administrative_authorizations
+            .get(&authorization.idempotency_key)
+            != Some(authorization)
+        {
+            return Err(LeaseAuthorityError::InvalidAdministrativeProof);
+        }
         if authorization.idempotency_key.trim().is_empty()
             || authorization.reason_code.trim().is_empty()
             || authorization.administrator_id.trim().is_empty()
@@ -3101,6 +3199,20 @@ fn issue_lease_administrative_authorization_for_state_with_signing_key(
     intent: &LeaseAdministrativeIntent,
     signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<LeaseAdministrativeAuthorization, String> {
+    issue_lease_administrative_authorization_with_signing_key(
+        state.lease_authority(),
+        claim,
+        intent,
+        signing_key,
+    )
+}
+
+fn issue_lease_administrative_authorization_with_signing_key(
+    authority: &LeaseAuthorityState,
+    claim: &ActiveLeaseClaim,
+    intent: &LeaseAdministrativeIntent,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseAdministrativeAuthorization, String> {
     if intent.administrator_id.trim().is_empty()
         || intent.administrator_revision == 0
         || intent.idempotency_key.trim().is_empty()
@@ -3114,8 +3226,7 @@ fn issue_lease_administrative_authorization_for_state_with_signing_key(
     {
         return Err("lease_authority_invalid_request".to_string());
     }
-    let current = state
-        .lease_authority()
+    let current = authority
         .current_claim(&claim.resource, &intent.issued_at)
         .filter(|current| {
             current.claim_id == claim.claim_id
@@ -4722,13 +4833,56 @@ mod tests {
             ),
             Err("lease_authority_administrative_authority_mismatch".to_string())
         );
-        let authorization = issue_lease_administrative_authorization_for_state_with_signing_key(
-            &state,
-            &claim,
-            &administrative_intent,
-            &signing_key,
-        )
-        .unwrap();
+        let offline_authorization =
+            issue_lease_administrative_authorization_for_state_with_signing_key(
+                &state,
+                &claim,
+                &administrative_intent,
+                &signing_key,
+            )
+            .unwrap();
+        let unplanned_request = RevokeLeaseClaimRequest {
+            authorization: offline_authorization,
+            now: "2026-08-31T12:01:00Z".to_string(),
+        };
+        let unplanned_repository = MemoryRepository {
+            state: Arc::new(Mutex::new(state.clone())),
+        };
+        assert_eq!(
+            revoke_lease_claim_in_repository_with_signing_key(
+                &unplanned_repository,
+                unplanned_request,
+                &signing_key,
+            ),
+            Err("lease_authority_invalid_administrative_proof".to_string())
+        );
+
+        let planned = state
+            .lease_authority
+            .plan_administrative_revocation(
+                &claim,
+                &administrative_intent,
+                b"local-supervisor-private-administrator-capability",
+                &signing_key,
+            )
+            .unwrap();
+        assert!(!planned.replayed);
+        assert!(!planned.authorization.plan_id().is_empty());
+        let revision_after_plan = state.lease_authority.revision();
+        let replayed_plan = state
+            .lease_authority
+            .plan_administrative_revocation(
+                &claim,
+                &administrative_intent,
+                b"local-supervisor-private-administrator-capability",
+                &LeaseAuthoritySigningKey::from_private_bytes([0x7c; 32]),
+            )
+            .unwrap();
+        assert!(replayed_plan.replayed);
+        assert_eq!(replayed_plan.authorization, planned.authorization);
+        assert_eq!(state.lease_authority.revision(), revision_after_plan);
+
+        let authorization = planned.authorization;
         let proof = authorization.proof.clone();
         assert!(!format!("{authorization:?}").contains(&proof));
         let request = RevokeLeaseClaimRequest {

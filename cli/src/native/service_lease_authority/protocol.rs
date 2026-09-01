@@ -8,10 +8,11 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use super::{
-    AcquireLeaseClaimRequest, ActiveLeaseClaim, LeaseAdministratorAuthority, LeaseAuthorityEvent,
-    LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
-    LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
-    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
+    AcquireLeaseClaimRequest, ActiveLeaseClaim, LeaseAdministrativeAuthorization,
+    LeaseAdministratorAuthority, LeaseAuthorityEvent, LeaseAuthoritySigningKey,
+    LeaseAuthorityState, LeaseAuthorityVerificationKeyring, LeaseClaimAcquisitionOutcome,
+    LeaseClaimAcquisitionReceipt, LeaseClaimMode, LeaseClaimRecoveryReceipt,
+    LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
 };
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
 
@@ -981,6 +982,7 @@ mod lease_authority_operational_state_serde {
         terminal_receipts: &'a BTreeMap<String, LeaseClaimTerminalReceipt>,
         recovery_receipts: &'a BTreeMap<String, LeaseClaimRecoveryReceipt>,
         administrators: &'a BTreeMap<String, LeaseAdministratorAuthority>,
+        administrative_authorizations: &'a BTreeMap<String, LeaseAdministrativeAuthorization>,
     }
 
     #[derive(Default, Deserialize)]
@@ -994,6 +996,7 @@ mod lease_authority_operational_state_serde {
         terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
         recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
         administrators: BTreeMap<String, LeaseAdministratorAuthority>,
+        administrative_authorizations: BTreeMap<String, LeaseAdministrativeAuthorization>,
     }
 
     pub(super) fn serialize<S>(
@@ -1012,6 +1015,7 @@ mod lease_authority_operational_state_serde {
             terminal_receipts: &state.terminal_receipts,
             recovery_receipts: &state.recovery_receipts,
             administrators: &state.administrators,
+            administrative_authorizations: &state.administrative_authorizations,
         }
         .serialize(serializer)
     }
@@ -1031,6 +1035,7 @@ mod lease_authority_operational_state_serde {
             terminal_receipts: state.terminal_receipts,
             recovery_receipts: state.recovery_receipts,
             administrators: state.administrators,
+            administrative_authorizations: state.administrative_authorizations,
         })
     }
 }
@@ -1062,6 +1067,41 @@ fn validate_protected_state(
             || !valid_sha256_digest(&administrator.capability_digest)
             || administrator.revision == 0
             || administrator.revision > state.authority.revision
+        {
+            return Err(invalid());
+        }
+    }
+    for (idempotency_key, authorization) in &state.authority.administrative_authorizations {
+        let administrator = state
+            .authority
+            .administrators
+            .get(&authorization.administrator_id);
+        if idempotency_key != &authorization.idempotency_key
+            || idempotency_key.trim().is_empty()
+            || authorization.schema_version
+                != super::LEASE_ADMINISTRATIVE_AUTHORIZATION_SCHEMA_VERSION
+            || authorization.signing_key_id.trim().is_empty()
+            || authorization.signing_key_epoch == 0
+            || authorization.resource.id.trim().is_empty()
+            || authorization.claim_id.trim().is_empty()
+            || authorization.principal_id.trim().is_empty()
+            || authorization.claim_revision == 0
+            || authorization.fencing_token == 0
+            || authorization.reason_code.trim().is_empty()
+            || authorization.proof.trim().is_empty()
+            || !super::timestamp_precedes(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+            )
+            || !super::timestamp_span_within(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+                super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+            )
+            || administrator.is_none_or(|administrator| {
+                administrator.administrator_id != authorization.administrator_id
+                    || administrator.revision != authorization.administrator_revision
+            })
         {
             return Err(invalid());
         }
@@ -1862,6 +1902,89 @@ mod tests {
         let LeaseAuthorityProtocolResponse::Acquired(replay) = replay;
         assert!(replay.replayed);
         assert_eq!(replay.claim, first.claim);
+    }
+
+    #[test]
+    fn protected_state_persists_exact_administrative_intent_but_projection_does_not() {
+        let administrator_capability = b"root-administrator-capability-material-v1";
+        let mut authority = super::super::LeaseAuthorityState::default();
+        authority
+            .bootstrap_administrator("administrator:local-root", administrator_capability)
+            .unwrap();
+        let claim = authority
+            .acquire(super::super::AcquireLeaseClaimRequest {
+                resource: super::super::LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days-social".to_string(),
+                capability_revision: 1,
+                mode: super::super::LeaseClaimMode::Strict,
+                expected_authority_revision: 1,
+                idempotency_key: "acquire:last30days:strict-1".to_string(),
+                now: "2026-08-31T12:00:00Z".to_string(),
+                expires_at: "2026-08-31T12:05:00Z".to_string(),
+                transition_deadline: Some("2026-08-31T12:01:00Z".to_string()),
+                recovery_controller_id: Some("capability:last30days-social".to_string()),
+                boot_epoch: Some("boot-1".to_string()),
+                owner_generation: Some(57),
+            })
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let planned = authority
+            .plan_administrative_revocation(
+                &claim,
+                &super::super::LeaseAdministrativeIntent {
+                    administrator_id: "administrator:local-root".to_string(),
+                    administrator_revision: 1,
+                    idempotency_key: "revoke:last30days:strict-1".to_string(),
+                    reason_code: "abandoned_strict_holder".to_string(),
+                    issued_at: "2026-08-31T12:00:30Z".to_string(),
+                    authorization_expires_at: "2026-08-31T12:01:30Z".to_string(),
+                },
+                administrator_capability,
+                &signing_key,
+            )
+            .unwrap();
+        let projection = serde_json::to_string(&authority).unwrap();
+        assert!(!projection.contains("administrativeAuthorizations"));
+        assert!(!projection.contains(&planned.authorization.proof));
+
+        let kernel = test_kernel(
+            authority,
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let protected = kernel.encode_protected_state().unwrap();
+        let protected_text = String::from_utf8(protected.clone()).unwrap();
+        assert!(protected_text.contains("administrativeAuthorizations"));
+        assert!(protected_text.contains(&planned.authorization.proof));
+        assert!(!protected_text.contains(std::str::from_utf8(administrator_capability).unwrap()));
+        let history: serde_json::Value =
+            serde_json::from_slice(&kernel.encode_history_state().unwrap()).unwrap();
+        assert_eq!(history["events"][1]["kind"], "revocation_planned");
+
+        let restarted =
+            LeaseAuthorityProtocolKernel::from_protected_state(&protected, test_load_context())
+                .unwrap();
+        assert_eq!(
+            restarted
+                .state
+                .authority
+                .administrative_authorizations
+                .get("revoke:last30days:strict-1"),
+            Some(&planned.authorization)
+        );
+
+        let mut tampered: serde_json::Value = serde_json::from_slice(&protected).unwrap();
+        tampered["authority"]["administrativeAuthorizations"]["revoke:last30days:strict-1"]
+            ["claimRevision"] = serde_json::Value::from(0);
+        let error = match LeaseAuthorityProtocolKernel::from_protected_state(
+            &serde_json::to_vec(&tampered).unwrap(),
+            test_load_context(),
+        ) {
+            Ok(_) => panic!("a malformed retained administrative intent must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_state_invalid");
     }
 
     #[test]
