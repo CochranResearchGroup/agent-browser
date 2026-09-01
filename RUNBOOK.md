@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 188 | 2026-09-01
+
+Scope: make a provably inactive route-bound acquisition quarantine converge
+automatically without weakening live-owner safety.
+
+Actions:
+
+- opened P150 after proving the older P114 repair required route and display
+  records to be released even though normal reconciliation leaves dead resources
+  orphaned;
+- added automatic dependency-ordered convergence to normal service reconcile;
+- added one matching convergence attempt inside route-bound acquisition before
+  its historical quarantine scan;
+- preserved the pre-pass ownership snapshot so reconcile cannot erase active
+  viewer, controller, handoff, presentation-slot, or route-checkout evidence and
+  then treat the same pass as safe;
+- made explicit repair return `repaired=false` and typed next-step guidance when
+  no candidate was actually changed; and
+- updated CLI help, README, the Agent Browser skill, and service-mode docs.
+
+Validation:
+
+- the orphaned-state and matching-acquisition fixtures failed before the repair
+  and pass afterward;
+- seventeen quarantine tests and eighty-six service-health tests pass;
+- strict Clippy, Rust formatting, documentation build, remote-view handoff docs,
+  and the selected source-free workstation checks pass; and
+- no development or production candidate has been installed yet, and no browser,
+  profile, provider, authentication, or retained production state was mutated.
+
+Result:
+
+- P150 is development-qualified through Slice D;
+- generation `0.28.0-52fde82a55d7` passed development doctor and three
+  disposable browser-launch iterations while production remained unchanged;
+- the next gate is integration followed by an exact production workstation
+  dry run.
+
 ## Turn 187 | 2026-08-29
 
 Scope: implement and source-accept the provider-free Authentication Run

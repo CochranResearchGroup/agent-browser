@@ -322,13 +322,13 @@ fn test_repair_route_pool_service_state_apply_rolls_back_stale_pending_acquisiti
 }
 
 #[test]
-fn test_repair_route_pool_service_state_confirms_inactive_terminal_quarantine() {
+fn test_repair_route_pool_service_state_confirms_inactive_orphaned_quarantine() {
     let mut service_state = ServiceState {
         display_allocations: BTreeMap::from([(
             "display-terminal".to_string(),
             DisplayAllocation {
                 id: "display-terminal".to_string(),
-                state: "released".to_string(),
+                state: "orphaned".to_string(),
                 ..DisplayAllocation::default()
             },
         )]),
@@ -336,7 +336,7 @@ fn test_repair_route_pool_service_state_confirms_inactive_terminal_quarantine() 
             "route-terminal".to_string(),
             RemoteViewRoute {
                 id: "route-terminal".to_string(),
-                state: "released".to_string(),
+                state: "orphaned".to_string(),
                 display_allocation_id: Some("display-terminal".to_string()),
                 ..RemoteViewRoute::default()
             },
@@ -454,9 +454,66 @@ fn test_repair_route_pool_service_state_rejects_terminal_quarantine_with_live_br
         result["candidateCounts"]["rollbackIncompleteAcquisitions"],
         0
     );
+    assert_eq!(result["repaired"], false);
     assert_eq!(
         result["skippedReasons"]["rollbackIncompleteAcquisitions"]["lease-terminal"],
         "browser_record_present"
+    );
+    assert_eq!(
+        result["recommendedNextStep"],
+        "No repair was applied. Resolve the typed skipped reason before retrying the exact acquisition lease."
+    );
+    assert_eq!(
+        service_state.remote_view_acquisition_leases["lease-terminal"].phase,
+        "rollback_incomplete"
+    );
+}
+
+#[test]
+fn test_repair_route_pool_service_state_rejects_mismatched_pool_route() {
+    let mut service_state = ServiceState {
+        route_pool: BTreeMap::from([(
+            "pool-terminal".to_string(),
+            RoutePoolEntry {
+                id: "pool-terminal".to_string(),
+                route_id: "route-foreign".to_string(),
+                state: "available".to_string(),
+                current_route_allocation_id: None,
+                ..RoutePoolEntry::default()
+            },
+        )]),
+        remote_view_acquisition_leases: BTreeMap::from([(
+            "lease-terminal".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "lease-terminal".to_string(),
+                browser_id: "session:terminal".to_string(),
+                session_id: "terminal".to_string(),
+                route_id: "route-terminal".to_string(),
+                display_allocation_id: "display-terminal".to_string(),
+                route_pool_entry_id: Some("pool-terminal".to_string()),
+                state: "failed".to_string(),
+                phase: "rollback_incomplete".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+
+    let result = repair_route_pool_service_state_for_lease(
+        &mut service_state,
+        ServiceRoutePoolRepairOptions {
+            apply: true,
+            stale_checkouts: true,
+            stale_pending_acquisitions: true,
+        },
+        Some("lease-terminal"),
+        "2026-09-01T12:00:00Z",
+    );
+
+    assert_eq!(result["repaired"], false);
+    assert_eq!(
+        result["skippedReasons"]["rollbackIncompleteAcquisitions"]["lease-terminal"],
+        "route_pool_entry_route_mismatch"
     );
     assert_eq!(
         service_state.remote_view_acquisition_leases["lease-terminal"].phase,
