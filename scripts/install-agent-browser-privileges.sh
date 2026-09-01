@@ -163,7 +163,8 @@ Environment=AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_SERVICE=1
 User=root
 Group=root
 NoNewPrivileges=true
-CapabilityBoundingSet=
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_DAC_READ_SEARCH
 DevicePolicy=closed
 IPAddressDeny=any
 LockPersonality=true
@@ -189,8 +190,15 @@ EOF
 }
 
 lease_authority_legacy_home_protection_service_unit_content() {
-  lease_authority_service_unit_content "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
+  lease_authority_legacy_no_profile_traversal_service_unit_content \
+    "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
     | sed 's/^ProtectHome=read-only$/ProtectHome=true/'
+}
+
+lease_authority_legacy_no_profile_traversal_service_unit_content() {
+  lease_authority_service_unit_content "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
+    | sed 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' \
+    | sed '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d'
 }
 
 lease_authority_socket_unit_content() {
@@ -246,6 +254,15 @@ lease_authority_legacy_home_protection_ready() {
   local installed_binary
   installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
   lease_authority_legacy_home_protection_service_unit_content "$installed_binary" \
+    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
+  lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
+}
+
+lease_authority_legacy_no_profile_traversal_ready() {
+  lease_authority_artifacts_integrity_ready || return 1
+  local installed_binary
+  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+  lease_authority_legacy_no_profile_traversal_service_unit_content "$installed_binary" \
     | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
   lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
 }
@@ -578,6 +595,12 @@ EOF
       echo "  sudo migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only"
       echo "  retain protected authority state and banked binary at $installed_authority_binary"
       echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
+    elif lease_authority_legacy_no_profile_traversal_ready; then
+      installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+      echo "  sudo systemctl stop agent-browser-lease-authority.service"
+      echo "  sudo migrate only the exact legacy no-profile-traversal service unit"
+      echo "  retain protected authority state and banked binary at $installed_authority_binary"
+      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
     elif retained_authority_binary="$(lease_authority_interrupted_home_migration_recovery_binary)"; then
       echo "  sudo repair the exact interrupted lease-authority home-visibility migration"
       echo "  retain protected authority state and banked binary at $retained_authority_binary"
@@ -694,6 +717,11 @@ if ! lease_authority_contract_ready; then
   if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
     if ! lease_authority_artifacts_ready; then
       if lease_authority_legacy_home_protection_ready; then
+        installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+        lease_authority_service_unit_content "$installed_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
+        sudo -n systemctl stop agent-browser-lease-authority.service
+        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
+      elif lease_authority_legacy_no_profile_traversal_ready; then
         installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
         lease_authority_service_unit_content "$installed_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
         sudo -n systemctl stop agent-browser-lease-authority.service

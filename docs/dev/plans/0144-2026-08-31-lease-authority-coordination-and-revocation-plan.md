@@ -3182,3 +3182,34 @@ untrusted. The fixture now reproduces that cross-candidate sequence. Recovery
 validates the missing unit path as its own banked-generation identity and then
 restores the one uniquely proven retained generation. It never installs either
 candidate and preserves all ambiguity and tamper fences.
+
+## Slice M Profile Traversal Capability | 2026-09-01
+
+The interrupted migration recovery succeeded. The installed unit returned to
+retained generation `806c9069...ce747`, `ProtectHome=read-only`, exact
+root/socket custody, and installer readiness. Development doctor passed after
+the current `9fd9c1e8df5f` generation's isolated skill copy was synchronized.
+The attributed access plan again selected no catalog profile, so the acceptance
+used the explicit already-registered internal profile and private capability.
+One acquisition retry failed before launch with
+`lease_authority_protocol_profile_enrollment_path_unavailable`.
+
+Code-path inspection showed enrollment canonicalizes the requested path,
+stats the canonical directory, proves it is owned by the authenticated peer UID
+and is not group- or world-writable, then derives the canonical profile identity
+digest. It does not read profile contents. The unit's `ProtectHome=read-only`
+made the home mount visible, but `CapabilityBoundingSet=` removed
+`CAP_DAC_READ_SEARCH`. The root service therefore could not traverse
+operator-owned mode-`0700` parent directories and failed at canonicalization.
+
+The protected service now retains only `CAP_DAC_READ_SEARCH` in its bounding
+and ambient sets. Home remains read-only, the service has no write capability,
+network access remains denied, address families remain restricted to Unix
+sockets, and the protocol has no file-content read operation. This is the
+narrow capability required for direct canonical path, owner, and mode proof.
+The installer recognizes only the exact prior read-only no-capability unit for
+in-place migration and retains the installed banked binary and authority state.
+The older `ProtectHome=true` migration fixture now also models its historical
+empty capability set. Red-green fixture coverage proves both exact migrations
+and continues to refuse all other unit drift. Installed migration and one live
+acquisition acceptance remain.

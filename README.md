@@ -89,9 +89,12 @@ root, group-accessible through the `agent-browser` operator group, and mode
 check fails, run the reviewed one-sudo `pnpm install:privileges -- --apply`
 bootstrap before browser acquisition. The protected service has read-only home
 visibility so it can prove an enrolled user-owned managed profile without being
-able to modify that profile. A healthy rerun automatically migrates only the
-exact prior `ProtectHome=true` unit to this read-only contract. Any other unit
-drift still fails closed. If that exact migration was interrupted by the prior
+able to modify that profile. Its only filesystem capability is
+`CAP_DAC_READ_SEARCH`, which permits canonical identity and ownership checks
+through mode-`0700` operator directories without granting writes. A healthy
+rerun automatically migrates only the exact prior no-capability unit or
+`ProtectHome=true` unit to this contract. Any other unit drift still fails
+closed. If the home-visibility migration was interrupted by the prior
 candidate-path rendering defect, a rerun recovers only when the unit names an
 absent, well-formed banked generation and one valid retained generation is
 uniquely proven. The retry candidate may differ from the interrupted candidate.

@@ -277,6 +277,13 @@ if [[ ! -d "$AUTHORITY_STATE_ROOT" \
   exit 1
 fi
 
+AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
+if ! grep -q '^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT" \
+  || ! grep -q '^AmbientCapabilities=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT"; then
+  echo "Protected authority cannot traverse an operator-owned mode-0700 profile path." >&2
+  exit 1
+fi
+
 if grep -Eq 'lease-authority|bootstrap|sign|upgrade' "$SUDOERS_PATH"; then
   echo "Lease-authority mutation unexpectedly entered the passwordless sudoers surface." >&2
   exit 1
@@ -325,10 +332,44 @@ if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; 
   exit 1
 fi
 
+# The exact read-only unit shipped without profile-traversal capability has one
+# guarded migration. It must retain the banked binary and authority state.
+AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
+sed -i 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' "$AUTHORITY_SERVICE_UNIT"
+sed -i '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d' "$AUTHORITY_SERVICE_UNIT"
+profile_traversal_dry_run="$(run_installer_mode --dry-run)"
+if ! grep -q 'migrate only the exact legacy no-profile-traversal service unit' \
+  <<<"$profile_traversal_dry_run"; then
+  echo "Profile-traversal migration dry run did not describe the exact migration." >&2
+  printf '%s\n' "$profile_traversal_dry_run" >&2
+  exit 1
+fi
+authority_binary_before_profile_traversal="$(sed -n 's/^ExecStart=//p' "$AUTHORITY_SERVICE_UNIT")"
+authority_sha_before_profile_traversal="$(sha256sum "$authority_binary_before_profile_traversal" | awk '{print $1}')"
+sudo_v_count_before_profile_traversal="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-profile-traversal.out
+sudo_v_count_after_profile_traversal="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_profile_traversal" != "$((sudo_v_count_before_profile_traversal + 1))" ]]; then
+  echo "Profile-traversal migration must cross one explicit sudo boundary." >&2
+  exit 1
+fi
+if ! grep -q '^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT" \
+  || ! grep -q '^AmbientCapabilities=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT"; then
+  echo "Profile-traversal migration did not publish the exact bounded capability contract." >&2
+  exit 1
+fi
+if [[ "$(sha256sum "$authority_binary_before_profile_traversal" | awk '{print $1}')" != "$authority_sha_before_profile_traversal" ]]; then
+  echo "Profile-traversal migration unexpectedly replaced the banked binary." >&2
+  exit 1
+fi
+if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Profile-traversal migration unexpectedly repeated authority bootstrap." >&2
+  exit 1
+fi
+
 # A stopped or disabled socket is a bounded service-lifecycle repair. Existing
 # authority state and its banked executable must be retained, and bootstrap
 # must never run a second time.
-AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
 AUTHORITY_BANKED_BINARY="$(sed -n 's/^ExecStart=//p' "$AUTHORITY_SERVICE_UNIT")"
 authority_sha_before_recovery="$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')"
 rm -f "$STATE_DIR/lease-authority-socket-enabled"
@@ -354,6 +395,8 @@ fi
 # preserve state and the banked binary, stop only the protected service, and
 # replace only the service unit with read-only home visibility.
 sed -i 's/^ProtectHome=read-only$/ProtectHome=true/' "$AUTHORITY_SERVICE_UNIT"
+sed -i 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' "$AUTHORITY_SERVICE_UNIT"
+sed -i '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d' "$AUTHORITY_SERVICE_UNIT"
 AUTHORITY_CANDIDATE="$WORKDIR/source/agent-browser-candidate"
 cp "$AUTHORITY_SOURCE" "$AUTHORITY_CANDIDATE"
 printf '\n# different reviewed candidate generation\n' >>"$AUTHORITY_CANDIDATE"

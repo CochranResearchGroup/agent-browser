@@ -975,9 +975,12 @@ authority socket, including its system unit state, root ownership,
 daemon. When the check fails, use the reviewed one-sudo
 `pnpm install:privileges -- --apply` bootstrap before acquisition. The
 protected service has read-only home visibility so it can prove an enrolled
-user-owned managed profile without modifying it. A healthy rerun automatically
-migrates only the exact prior `ProtectHome=true` unit to this read-only
-contract. If that exact migration was interrupted by the prior candidate-path
+user-owned managed profile without modifying it. Its only filesystem
+capability is `CAP_DAC_READ_SEARCH`, which permits canonical identity and
+ownership checks through mode-`0700` operator directories without granting
+writes. A healthy rerun automatically migrates only the exact prior
+no-capability unit or `ProtectHome=true` unit to this contract. If the
+home-visibility migration was interrupted by the prior candidate-path
 rendering defect, a rerun recovers only when the unit names an absent,
 well-formed banked generation and one valid retained generation is uniquely
 proven. The retry candidate may differ from the interrupted candidate. Any
