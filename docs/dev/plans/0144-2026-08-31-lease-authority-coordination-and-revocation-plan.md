@@ -3213,3 +3213,28 @@ The older `ProtectHome=true` migration fixture now also models its historical
 empty capability set. Red-green fixture coverage proves both exact migrations
 and continues to refuse all other unit drift. Installed migration and one live
 acquisition acceptance remain.
+
+## Slice N Active-Service Endpoint Custody | 2026-09-01
+
+The profile-traversal migration completed and every maintenance axis passed:
+retained authority generation `806c9069...ce747`, bounded
+`CAP_DAC_READ_SEARCH`, read-only home, root-private state, active protected
+socket, exact installer readiness, development generation
+`a17127ab8cd1`, and development doctor. The attributed access plan activated
+the protected service before the explicit capability-bound acquisition. That
+single acquisition then failed before launch with
+`lease_authority_service_identity_unproven`; the service logged
+`lease_authority_protocol_frame_write_failed` after the client closed.
+
+The client endpoint inspector handled only the pre-activation state where
+`SO_PEERCRED` reports root PID 1. Once the service was already active, the peer
+was the root service PID and the client rejected it despite retaining the older
+exact-service executable, state, and socket validator. Endpoint custody now
+models both kernel-proven states: PID 1 uses the domain-separated systemd
+activator snapshot, while a PID greater than 1 uses the exact active-service
+snapshot including its root-owned non-writable executable. A unified endpoint
+validator accepts those two shapes and rejects mixed, same-user, replaced
+socket, writable executable, and malformed identities. The focused test was
+red before the unified validator existed; all eleven custody tests pass after
+the repair. Exact release publication and one installed acquisition acceptance
+remain.

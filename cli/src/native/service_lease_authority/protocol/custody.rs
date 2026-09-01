@@ -72,6 +72,17 @@ impl LeaseAuthorityCustodySnapshot {
         self.validate_for_peer(expected_group_id, true)
     }
 
+    pub(super) fn validate_endpoint(
+        &self,
+        expected_group_id: u32,
+    ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+        if self.service_pid == 1 && self.peer_pid == 1 {
+            self.validate_systemd_socket_activated_endpoint(expected_group_id)
+        } else {
+            self.validate(expected_group_id)
+        }
+    }
+
     fn validate_for_peer(
         &self,
         expected_group_id: u32,
@@ -191,8 +202,12 @@ pub(super) fn inspect_linux_authority_endpoint(
     // reads any request frame.
     let peer = inspect_linux_request_peer(stream)?;
 
-    inspect_linux_systemd_socket_activator_snapshot(state_root, socket_path, peer.pid, peer.uid)
-        .and_then(|snapshot| snapshot.validate_systemd_socket_activated_endpoint(expected_group_id))
+    let snapshot = if peer.pid == 1 {
+        inspect_linux_systemd_socket_activator_snapshot(state_root, socket_path, peer.pid, peer.uid)
+    } else {
+        inspect_linux_authority_identity_snapshot(state_root, socket_path, peer.pid, peer.uid)
+    }?;
+    snapshot.validate_endpoint(expected_group_id)
 }
 
 #[cfg(target_os = "linux")]
@@ -470,6 +485,17 @@ mod tests {
             snapshot.validate(991).unwrap_err().code(),
             "lease_authority_custody_peer_identity_mismatch"
         );
+    }
+
+    #[test]
+    fn endpoint_custody_accepts_both_socket_activator_and_active_service_states() {
+        let active_service = LeaseAuthorityCustodySnapshot::root_owned_fixture();
+        active_service.validate_endpoint(991).unwrap();
+
+        let mut socket_activator = LeaseAuthorityCustodySnapshot::root_owned_fixture();
+        socket_activator.service_pid = 1;
+        socket_activator.peer_pid = 1;
+        socket_activator.validate_endpoint(991).unwrap();
     }
 
     #[test]

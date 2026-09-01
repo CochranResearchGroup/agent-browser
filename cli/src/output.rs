@@ -5714,6 +5714,9 @@ recover the home-visibility migration's prior interrupted form when the unit
 names any absent, well-formed banked generation and one valid retained banked
 generation is uniquely proven, even when a later retry uses a different
 candidate. Any other unit drift still fails closed.
+Clients prove either the root PID 1 socket activator before service startup or
+the exact active root service process after startup; both states bind the same
+protected socket and authority custody before any capability is sent.
 Routine workstation reconciliation preserves live XRDP desktops and applies
 route-user credential changes at the next login without restarting sesman.
 Host preparation includes display inspection, visual-proof tools, and a

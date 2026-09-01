@@ -98,6 +98,9 @@ closed. If the home-visibility migration was interrupted by the prior
 candidate-path rendering defect, a rerun recovers only when the unit names an
 absent, well-formed banked generation and one valid retained generation is
 uniquely proven. The retry candidate may differ from the interrupted candidate.
+Clients prove either the root PID 1 socket activator before service startup or
+the exact active root service process after startup; both states bind the same
+protected socket and authority custody.
 
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns

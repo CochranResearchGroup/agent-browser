@@ -985,6 +985,9 @@ rendering defect, a rerun recovers only when the unit names an absent,
 well-formed banked generation and one valid retained generation is uniquely
 proven. The retry candidate may differ from the interrupted candidate. Any
 other unit drift still fails closed.
+Clients prove either the root PID 1 socket activator before service startup or
+the exact active root service process after startup; both states bind the same
+protected socket and authority custody.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped
