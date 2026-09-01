@@ -22,10 +22,8 @@ use std::path::{Path, PathBuf};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 use super::service_lease_authority::{
-    issue_lease_recovery_authorization_for_state, recover_lease_claim_in_repository,
     release_lease_claim_for_authenticated_state, ActiveLeaseClaim, LeaseClaimMode,
-    LeaseClaimTerminalReceipt, LeaseRecoveryAuthorization, LeaseRecoveryIntent,
-    RecoverLeaseClaimRequest,
+    LeaseClaimTerminalReceipt,
 };
 use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
@@ -322,117 +320,13 @@ pub(crate) async fn handle_service_profile_lease_command(
         "service_profile_lease_rejoin"
         | "service_profile_lease_renew"
         | "service_profile_lease_release" => mutate_profile_lease(command),
-        "service_profile_lease_recover_plan" => plan_strict_profile_lease_recovery(command),
-        "service_profile_lease_recover_apply" => apply_strict_profile_lease_recovery(command),
+        "service_profile_lease_recover_plan" | "service_profile_lease_recover_apply" => {
+            Err("lease_authority_protected_recovery_surface_required".to_string())
+        }
         "service_profile_lease_reconcile_plan" => plan_profile_lease_command(command),
         "service_profile_lease_reconcile_apply" => apply_profile_lease_command(command),
         _ => Err(format!("Unsupported profile lease command: {action}")),
     }
-}
-
-fn plan_strict_profile_lease_recovery(
-    command: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let state = load_service_state_for_maintenance(command)?;
-    let lease_id = required_command_string(command, "leaseId")?;
-    let expected_revision = required_command_string(command, "leaseRevision")?;
-    let raw_capability = profile_capability_from_command(command)?;
-    let authority =
-        authenticate_profile_capability(&state.service_principals, raw_capability.as_str(), None)
-            .map_err(principal_error_string)?;
-    let now = service_now_timestamp();
-    let lease = inspect_profile_lease(&state, lease_id, &now).map_err(lease_error_string)?;
-    if lease.lease_revision != expected_revision {
-        return Err(lease_error_string(lease_error(
-            ProfileLeaseFailureCode::RevisionMismatch,
-            lease_id,
-        )));
-    }
-    require_action(&lease, "recover_plan").map_err(lease_error_string)?;
-    let claim = state
-        .lease_authority()
-        .current_claim_by_id(lease_id, &now)
-        .cloned()
-        .ok_or_else(|| "lease_authority_claim_unavailable".to_string())?;
-    if claim.mode() != LeaseClaimMode::Strict {
-        return Err("lease_authority_strict_claim_required".to_string());
-    }
-    let controller = state
-        .service_principals
-        .profile_capabilities
-        .get(&authority.capability_id)
-        .ok_or_else(|| "lease_authority_capability_unavailable".to_string())?;
-    let now_instant = chrono::DateTime::parse_from_rfc3339(&now)
-        .map_err(|_| "lease_authority_invalid_request".to_string())?;
-    let intent = LeaseRecoveryIntent {
-        idempotency_key: optional_command_string(command, "idempotencyKey")
-            .unwrap_or_else(|| format!("recover:{lease_id}:{expected_revision}")),
-        issued_at: now.clone(),
-        authorization_expires_at: (now_instant + chrono::Duration::minutes(2)).to_rfc3339(),
-        claim_expires_at: (now_instant + chrono::Duration::minutes(5)).to_rfc3339(),
-        transition_deadline: (now_instant + chrono::Duration::minutes(2)).to_rfc3339(),
-        owner_generation: claim.owner_generation(),
-    };
-    let plan = issue_lease_recovery_authorization_for_state(
-        &state,
-        &claim,
-        controller,
-        &intent,
-        raw_capability.as_bytes(),
-    )?;
-    Ok(json!({
-        "schemaVersion": "agent-browser.lease-recovery-plan-response.v1",
-        "planId": plan.plan_id(),
-        "leaseId": lease_id,
-        "leaseRevision": expected_revision,
-        "effectState": "no_effect",
-        "plan": plan,
-        "createdAt": now,
-        "expiresAt": intent.authorization_expires_at,
-    }))
-}
-
-fn apply_strict_profile_lease_recovery(
-    command: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let plan_value = if let Some(plan) = command.get("plan").filter(|value| value.is_object()) {
-        plan.clone()
-    } else {
-        let path = absolute_command_path(command, "planFile")?;
-        let raw = fs::read_to_string(&path).map_err(|error| {
-            format!("lease_recovery_plan_unreadable:{}:{error}", path.display())
-        })?;
-        serde_json::from_str(&raw)
-            .map_err(|error| format!("lease_recovery_plan_invalid:{error}"))?
-    };
-    let plan: LeaseRecoveryAuthorization = serde_json::from_value(plan_value)
-        .map_err(|error| format!("lease_recovery_plan_invalid:{error}"))?;
-    let raw_capability = profile_capability_from_command(command)?;
-    let repository = LockedServiceStateRepository::default_json()?;
-    let snapshot = repository.load_snapshot()?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        raw_capability.as_str(),
-        None,
-    )
-    .map_err(principal_error_string)?;
-    if authority.capability_id != plan.recovery_controller_id() {
-        return Err("lease_authority_recovery_controller_mismatch".to_string());
-    }
-    let applied = recover_lease_claim_in_repository(
-        &repository,
-        RecoverLeaseClaimRequest {
-            authorization: plan,
-            now: service_now_timestamp(),
-        },
-    )?;
-    Ok(json!({
-        "schemaVersion": "agent-browser.lease-recovery-apply-response.v1",
-        "claimId": applied.receipt.claim_id(),
-        "claim": applied.claim,
-        "receipt": applied.receipt,
-        "replayed": applied.replayed,
-    }))
 }
 
 fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -2717,7 +2611,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn public_strict_recovery_plan_and_apply_advance_the_fence() {
+    async fn public_strict_recovery_refuses_unretained_service_state_plan() {
         let home = temp_service_home("canonical-strict-recovery");
         let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
         guard.set("HOME", home.to_str().unwrap());
@@ -2757,7 +2651,11 @@ mod tests {
         let capability_path = home.join("strict-controller.cap");
         write_private_capability_file(&capability_path, CAPABILITY).unwrap();
 
-        let planned = handle_service_profile_lease_command(&json!({
+        let before = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        let error = handle_service_profile_lease_command(&json!({
             "action": "service_profile_lease_recover_plan",
             "leaseId": lease.id,
             "leaseRevision": lease.lease_revision,
@@ -2765,29 +2663,15 @@ mod tests {
             "idempotencyKey": "recover:public-strict-1",
         }))
         .await
-        .unwrap();
-        assert_eq!(planned["effectState"], "no_effect");
-
-        let applied = handle_service_profile_lease_command(&json!({
-            "action": "service_profile_lease_recover_apply",
-            "plan": planned["plan"],
-            "profileCapabilityFile": capability_path,
-        }))
-        .await
-        .unwrap();
-        assert_eq!(applied["receipt"]["terminalResult"], "recovered");
-        assert_eq!(applied["replayed"], false);
-        assert_eq!(applied["claim"]["fencingToken"], claim.fencing_token() + 1);
-
-        let replay = handle_service_profile_lease_command(&json!({
-            "action": "service_profile_lease_recover_apply",
-            "plan": planned["plan"],
-            "profileCapabilityFile": capability_path,
-        }))
-        .await
-        .unwrap();
-        assert_eq!(replay["receipt"], applied["receipt"]);
-        assert_eq!(replay["replayed"], true);
+        .unwrap_err();
+        assert_eq!(error, "lease_authority_protected_recovery_surface_required");
+        assert_eq!(
+            LockedServiceStateRepository::default_json()
+                .unwrap()
+                .load_snapshot()
+                .unwrap(),
+            before
+        );
 
         drop(guard);
         fs::remove_dir_all(home).unwrap();

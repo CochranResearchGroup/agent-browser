@@ -2185,3 +2185,22 @@ already durable `recover_plan` and `recover` protocol, returning only its
 proof-redacted plan id to untrusted projections. Until that parity is wired,
 the legacy public wrapper is not an accepted strict-recovery surface and the
 full `service_profile_lease` filter remains red on its public recovery test.
+
+The false wrapper has now been removed. Until protected parity exists, every
+legacy CLI, HTTP, MCP, generated-client, and dashboard recovery plan/apply
+request fails before mutation with
+`lease_authority_protected_recovery_surface_required`. The regression proves
+the exact strict claim and all Service State bytes remain unchanged. The full
+41-test profile-lease filter is green again without persisting or returning an
+unexecutable bearer.
+
+This fail-closed checkpoint is not the final recovery surface. Protected
+recovery cannot be enabled by forwarding only the plan call: the protected
+authority domain must first own profile principal registration, physical
+resource registration, and claim acquisition. Its kernel already implements
+typed authenticated acquisition, but protected dispatch still rejects
+`acquire`, and bootstrap currently begins with empty principal and resource
+registries. The next integration order is therefore registration, resource
+binding, acquisition/effect authorization/release, then public recovery
+plan/apply. Skipping that order would recreate split authority with matching
+method names.
