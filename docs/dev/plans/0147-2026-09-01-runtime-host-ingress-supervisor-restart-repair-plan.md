@@ -12,6 +12,10 @@ Target: `main`
 
 Source baseline: `c661e64c11245360d52ab8bb07ae8007ff4c0d94`
 
+Implementation checkpoint: `0d00a8505ea05aa156732ad33db76caf57c63aeb`
+
+Plan 0144 reconciliation checkpoint: `45ca9556c08813ac9181ebf695668262698681dd`
+
 Authority: SOURCE, DOCUMENTATION, PROVIDER-FREE FIXTURES, DEVELOPMENT
 QUALIFICATION, EXACT PRODUCTION INSTALLATION, AND BOUNDED PRODUCTION RUNTIME
 INGRESS RECONCILIATION ARE IN SCOPE. BROWSER, PROFILE, ROUTE, TENANT, AND
@@ -76,4 +80,3 @@ upgrade transaction, a binary mismatch, or failed process observation.
 - Preserve the other agent's uncommitted Plan 0144 custody and plan changes.
 - Stop production installation if source validation or development
   qualification fails.
-

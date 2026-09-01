@@ -8,8 +8,8 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: c661e64c11245360d52ab8bb07ae8007ff4c0d94
-    remote_ref: null
+    checkpoint: 45ca9556c08813ac9181ebf695668262698681dd
+    remote_ref: refs/remotes/origin/fix/runtime-ingress-same-generation-adoption
     integration_receipt: null
     integration: merge
     dependencies: []
