@@ -824,7 +824,7 @@ fn valid_stable_id(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || "-_.:".contains(character))
 }
 
-fn profile_capability_digest(raw_capability: &str) -> String {
+pub(crate) fn profile_capability_digest(raw_capability: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"agent-browser.profile-capability.v1\0");
     hasher.update(raw_capability.as_bytes());

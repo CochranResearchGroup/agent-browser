@@ -16,7 +16,9 @@ use super::{
     LeaseRecoveryIntent, LeaseResourceKey, LeaseResourceKind, RecoverLeaseClaimRequest,
     RevokeLeaseClaimRequest,
 };
-use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
+use crate::native::service_principal::{
+    authenticate_profile_capability, profile_capability_digest, ServicePrincipalRegistry,
+};
 
 mod custody;
 #[cfg(target_os = "linux")]
@@ -1070,6 +1072,31 @@ impl LeaseAuthorityProtocolKernel {
             })
     }
 
+    fn authenticate_recovery_replay(
+        &self,
+        raw_capability: &[u8],
+        authorization: &LeaseRecoveryAuthorization,
+    ) -> Result<(), LeaseAuthorityProtocolError> {
+        let raw_capability =
+            std::str::from_utf8(raw_capability).map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_recovery_controller_invalid",
+            })?;
+        self.state
+            .principals
+            .profile_capabilities
+            .get(&authorization.recovery_controller_id)
+            .filter(|controller| {
+                controller.capability_digest == profile_capability_digest(raw_capability)
+                    && controller.principal_id == authorization.principal_id
+                    && controller.profile_id == authorization.resource.id
+                    && controller.revision == authorization.recovery_controller_revision
+            })
+            .map(|_| ())
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_recovery_controller_invalid",
+            })
+    }
+
     fn plan_recovery(
         &mut self,
         request: RecoverLeasePlanPayload,
@@ -1133,6 +1160,25 @@ impl LeaseAuthorityProtocolKernel {
             .recovery_authorization_by_plan_id(&request.plan_id)
             .map_err(lease_authority_protocol_error)?
             .clone();
+        if self
+            .state
+            .authority
+            .recovery_receipts
+            .contains_key(&authorization.idempotency_key)
+        {
+            self.authenticate_recovery_replay(
+                request.raw_controller_capability.expose(),
+                &authorization,
+            )?;
+            return self
+                .state
+                .authority
+                .recover_with_receipt(
+                    RecoverLeaseClaimRequest { authorization, now },
+                    &LeaseAuthorityVerificationKeyring::from_active(signing_key),
+                )
+                .map_err(lease_authority_protocol_error);
+        }
         let controller = self.authenticate_recovery_controller(
             request.raw_controller_capability.expose(),
             &authorization.resource.id,
@@ -1430,10 +1476,6 @@ fn validate_protected_state(
     }
     let mut recovery_plan_ids = BTreeSet::new();
     for (idempotency_key, authorization) in &state.authority.recovery_authorizations {
-        let controller = state
-            .principals
-            .profile_capabilities
-            .get(&authorization.recovery_controller_id);
         if idempotency_key != &authorization.idempotency_key
             || idempotency_key.trim().is_empty()
             || authorization.schema_version != super::LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION
@@ -1469,12 +1511,6 @@ fn validate_protected_state(
                 &authorization.claim_expires_at,
                 super::MAX_STRICT_RECOVERY_TENURE_SECONDS,
             )
-            || controller.is_none_or(|controller| {
-                controller.capability_id != authorization.recovery_controller_id
-                    || controller.principal_id != authorization.principal_id
-                    || controller.profile_id != authorization.resource.id
-                    || controller.revision != authorization.recovery_controller_revision
-            })
         {
             return Err(invalid());
         }
@@ -2700,6 +2736,13 @@ mod tests {
         assert!(!recovered.replayed);
         assert_eq!(recovered.claim.as_ref().unwrap().owner_generation, Some(58));
 
+        restarted
+            .state
+            .principals
+            .profile_capabilities
+            .get_mut(&registered.capability.capability_id)
+            .unwrap()
+            .state = crate::native::service_principal::ServiceProfileCapabilityState::Revoked;
         let encoded_recovered = restarted.encode_protected_state().unwrap();
         let mut replay_kernel = LeaseAuthorityProtocolKernel::from_protected_state(
             &encoded_recovered,
