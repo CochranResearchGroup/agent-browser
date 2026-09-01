@@ -40,7 +40,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 360fbd6daccdef6ff43ceaac20e64b8b119738d0
+    checkpoint: aad5ce20
     remote_ref: refs/remotes/origin/plan/runtime-host-supervisor-takeover
     integration_receipt: null
     integration: merge
