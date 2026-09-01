@@ -4,6 +4,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use super::{
@@ -18,6 +19,9 @@ mod custody;
 
 const LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-request.v1";
+const LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-response.v1";
+const LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES: usize = 64 * 1024;
 const LEASE_AUTHORITY_PROTECTED_STATE_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-protected-state.v1";
 const LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION: &str =
@@ -115,6 +119,7 @@ struct LeaseAuthorityServiceIdentityProof {
 
 #[derive(PartialEq, Eq)]
 enum LeaseAuthorityProtocolRequest {
+    ServiceChallenge(LeaseAuthorityServiceChallengeRequest),
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(Value),
     Release(Value),
@@ -846,7 +851,8 @@ impl LeaseAuthorityProtocolKernel {
     ) -> Result<LeaseAuthorityProtocolResponse, LeaseAuthorityProtocolError> {
         match request {
             LeaseAuthorityProtocolRequest::Acquire(request) => self.acquire(*request),
-            LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+            LeaseAuthorityProtocolRequest::ServiceChallenge(_)
+            | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
             | LeaseAuthorityProtocolRequest::Revoke(_)
@@ -1199,6 +1205,11 @@ fn decode_lease_authority_request(
         });
     }
     match envelope.operation.as_str() {
+        "service_challenge" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::ServiceChallenge)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "acquire" => serde_json::from_value(envelope.payload)
             .map(Box::new)
             .map(LeaseAuthorityProtocolRequest::Acquire)
@@ -1216,6 +1227,121 @@ fn decode_lease_authority_request(
             code: "lease_authority_protocol_operation_unsupported",
         }),
     }
+}
+
+fn read_lease_authority_frame<R: Read>(
+    reader: &mut R,
+) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+    let mut header = [0u8; 4];
+    reader
+        .read_exact(&mut header)
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_read_failed",
+        })?;
+    let length =
+        usize::try_from(u32::from_be_bytes(header)).map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_invalid",
+        })?;
+    if length == 0 {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_invalid",
+        });
+    }
+    if length > LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_too_large",
+        });
+    }
+    let mut encoded = vec![0u8; length];
+    reader
+        .read_exact(&mut encoded)
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_read_failed",
+        })?;
+    Ok(encoded)
+}
+
+fn write_lease_authority_frame<W: Write>(
+    writer: &mut W,
+    encoded: &[u8],
+) -> Result<(), LeaseAuthorityProtocolError> {
+    if encoded.is_empty() {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_invalid",
+        });
+    }
+    if encoded.len() > LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_too_large",
+        });
+    }
+    let length = u32::try_from(encoded.len()).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_frame_too_large",
+    })?;
+    writer
+        .write_all(&length.to_be_bytes())
+        .and_then(|_| writer.write_all(encoded))
+        .and_then(|_| writer.flush())
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_write_failed",
+        })
+}
+
+fn dispatch_lease_authority_request(
+    kernel: &mut LeaseAuthorityProtocolKernel,
+    encoded: &[u8],
+    custody: &custody::LeaseAuthorityCustodyIdentity,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+    if encoded.len() > LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_frame_too_large",
+        });
+    }
+    match decode_lease_authority_request(encoded)? {
+        LeaseAuthorityProtocolRequest::ServiceChallenge(request) => {
+            let proof = kernel.issue_service_identity_challenge(&request, custody, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "service_identity",
+                "payload": proof,
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::Acquire(_)
+        | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+        | LeaseAuthorityProtocolRequest::Release(_)
+        | LeaseAuthorityProtocolRequest::Recover(_)
+        | LeaseAuthorityProtocolRequest::Revoke(_)
+        | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_operation_not_implemented",
+        }),
+    }
+}
+
+fn serve_lease_authority_connection<R: Read, W: Write>(
+    kernel: &mut LeaseAuthorityProtocolKernel,
+    reader: &mut R,
+    writer: &mut W,
+    custody: &custody::LeaseAuthorityCustodyIdentity,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<(), LeaseAuthorityProtocolError> {
+    let response = match read_lease_authority_frame(reader).and_then(|request| {
+        dispatch_lease_authority_request(kernel, &request, custody, signing_key)
+    }) {
+        Ok(response) => response,
+        Err(error) => serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "error",
+            "error": {"code": error.code()},
+        }))
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_response_encode_failed",
+        })?,
+    };
+    write_lease_authority_frame(writer, &response)
 }
 
 #[cfg(test)]
@@ -1258,6 +1384,100 @@ mod tests {
             };
             assert_eq!(error.code(), "lease_authority_protocol_operation_unsupported");
         }
+    }
+
+    #[test]
+    fn framed_transport_rejects_an_oversized_request_before_reading_its_payload() {
+        let mut encoded = std::io::Cursor::new(
+            u32::try_from(LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES + 1)
+                .unwrap()
+                .to_be_bytes(),
+        );
+        let error = read_lease_authority_frame(&mut encoded).unwrap_err();
+        assert_eq!(error.code(), "lease_authority_protocol_frame_too_large");
+        assert_eq!(encoded.position(), 4);
+    }
+
+    #[test]
+    fn typed_dispatcher_returns_only_a_nonce_bound_service_challenge() {
+        let mut kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let request = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"service_challenge",
+            "payload":{
+                "nonce":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "expectedAuthorityDomainId":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "minimumAuthorityEpoch":7
+            }
+        }"#;
+
+        let encoded =
+            dispatch_lease_authority_request(&mut kernel, request, &custody, &signing_key).unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(
+            response["schemaVersion"],
+            "agent-browser.lease-authority-response.v1"
+        );
+        assert_eq!(response["outcome"], "service_identity");
+        let proof: LeaseAuthorityServiceIdentityProof =
+            serde_json::from_value(response["payload"].clone()).unwrap();
+        let challenge = LeaseAuthorityServiceChallengeRequest {
+            nonce: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .to_string(),
+            expected_authority_domain_id: TEST_AUTHORITY_DOMAIN_ID.to_string(),
+            minimum_authority_epoch: 7,
+        };
+        verify_service_identity_challenge(
+            &proof,
+            &challenge,
+            &custody,
+            &LeaseAuthorityVerificationKeyring::from_active(&signing_key),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn framed_service_returns_a_typed_error_for_a_generic_signing_oracle() {
+        let mut kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let request =
+            br#"{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"sign","payload":{}}"#;
+        let mut framed_request = Vec::new();
+        write_lease_authority_frame(&mut framed_request, request).unwrap();
+        let mut reader = std::io::Cursor::new(framed_request);
+        let mut framed_response = Vec::new();
+
+        serve_lease_authority_connection(
+            &mut kernel,
+            &mut reader,
+            &mut framed_response,
+            &custody,
+            &signing_key,
+        )
+        .unwrap();
+
+        let mut response_reader = std::io::Cursor::new(framed_response);
+        let response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut response_reader).unwrap())
+                .unwrap();
+        assert_eq!(response["outcome"], "error");
+        assert_eq!(
+            response["error"]["code"],
+            "lease_authority_protocol_operation_unsupported"
+        );
     }
 
     #[test]

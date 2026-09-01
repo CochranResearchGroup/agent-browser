@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_history_decoupling_source_accepted_custody_install_in_progress`
+Execution state: `slice_g_bounded_service_dispatch_source_accepted_root_service_in_progress`
 
 Lane: P144
 
@@ -1723,3 +1723,41 @@ This is still private source acceptance. Segment retention and compaction,
 root-service custody, framed authenticated IPC, current-state intent consume,
 client capability custody, public administration, full effect-sink migration,
 and installed acceptance remain open. No production install is authorized.
+
+## Slice G Bounded Service Dispatch Checkpoint | 2026-08-31
+
+State transition: `slice_g_history_decoupling_source_accepted_custody_install_in_progress`
+to `slice_g_bounded_service_dispatch_source_accepted_root_service_in_progress`.
+
+The private protocol now has a length-prefixed transport boundary capped at 64
+KiB before payload allocation. Zero-length, truncated, oversized, unreadable,
+and unwritable frames return typed protocol failures. One connection handler
+reads exactly one request, dispatches it through the typed allowlist, and emits
+one bounded response frame. Invalid and unsupported operations receive a typed
+error response rather than invoking a fallback parser or generic signer.
+
+The first implemented dispatch operation is `service_challenge`. It returns
+only the nonce-bound signed service identity already tied to authority domain,
+authority epoch, boot epoch, executable digest, and locally observed endpoint
+custody. Generic `sign` and `mutate_state` operations remain unrepresentable.
+Acquire, effect-intent consume, release, recovery, revoke, and inspect remain
+explicitly typed but unavailable through the transport until each operation
+has its complete authentication and durable-mutation contract.
+
+Evidence:
+
+- Red: the bounded frame constant, reader, and typed dispatcher did not exist.
+- Green: an oversized length prefix is rejected after exactly four header
+  bytes without reading or allocating the declared payload.
+- A framed generic signing request returns
+  `lease_authority_protocol_operation_unsupported` as a bounded error frame.
+- A framed service challenge verifies against the exact nonce, local custody
+  identity, authority domain, epoch, and enrolled Ed25519 verifier.
+- All 29 focused protocol and custody tests pass. Wrapper Rust formatting and
+  strict Clippy pass.
+
+This checkpoint is a transport core, not a running authority service. Root-only
+process entry, fixed protected paths, system socket lifecycle, peer request
+authentication, per-peer rate and concurrency budgets, store and trust reload,
+external epoch selection, administrator bootstrap, and installer integration
+remain open. No production install is authorized.
