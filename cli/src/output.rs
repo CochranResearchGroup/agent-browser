@@ -5715,8 +5715,11 @@ names any absent, well-formed banked generation and one valid retained banked
 generation is uniquely proven, even when a later retry uses a different
 candidate. Any other unit drift still fails closed.
 Clients prove either the root PID 1 socket activator before service startup or
-the exact active root service process after startup; both states bind the same
-protected socket and authority custody before any capability is sent.
+a root peer PID in the exact /system.slice/agent-browser-lease-authority.service
+cgroup after startup. Both states bind the same protected socket before any
+capability is sent. The active service independently validates its banked
+executable before reading the request; ordinary clients do not need access to
+the root process's /proc/<pid>/exe link.
 Routine workstation reconciliation preserves live XRDP desktops and applies
 route-user credential changes at the next login without restarting sesman.
 Host preparation includes display inspection, visual-proof tools, and a

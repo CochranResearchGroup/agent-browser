@@ -986,8 +986,12 @@ well-formed banked generation and one valid retained generation is uniquely
 proven. The retry candidate may differ from the interrupted candidate. Any
 other unit drift still fails closed.
 Clients prove either the root PID 1 socket activator before service startup or
-the exact active root service process after startup; both states bind the same
-protected socket and authority custody.
+a root peer PID in the exact
+`/system.slice/agent-browser-lease-authority.service` cgroup after startup.
+Both states bind the same protected socket before any capability is sent. The
+active service independently validates its banked executable before reading
+the request; ordinary clients do not need access to the root process's
+`/proc/<pid>/exe` link.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped

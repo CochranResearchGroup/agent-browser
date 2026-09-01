@@ -1,6 +1,8 @@
 use sha2::{Digest, Sha256};
 
 const LEASE_AUTHORITY_ROOT_UID: u32 = 0;
+const LEASE_AUTHORITY_SYSTEMD_SERVICE_CGROUP: &str =
+    "/system.slice/agent-browser-lease-authority.service";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LeaseAuthorityCustodySnapshot {
@@ -201,13 +203,95 @@ pub(super) fn inspect_linux_authority_endpoint(
     // separately proves its own root process and banked executable before it
     // reads any request frame.
     let peer = inspect_linux_request_peer(stream)?;
+    if peer.uid != LEASE_AUTHORITY_ROOT_UID {
+        return Err(LeaseAuthorityCustodyError {
+            code: "lease_authority_custody_service_identity_unprotected",
+        });
+    }
 
     let snapshot = if peer.pid == 1 {
         inspect_linux_systemd_socket_activator_snapshot(state_root, socket_path, peer.pid, peer.uid)
     } else {
-        inspect_linux_authority_identity_snapshot(state_root, socket_path, peer.pid, peer.uid)
+        inspect_linux_systemd_service_snapshot(state_root, socket_path, peer.pid, peer.uid)
     }?;
     snapshot.validate_endpoint(expected_group_id)
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_linux_systemd_service_snapshot(
+    state_root: &std::path::Path,
+    socket_path: &std::path::Path,
+    service_pid: u32,
+    service_uid: u32,
+) -> Result<LeaseAuthorityCustodySnapshot, LeaseAuthorityCustodyError> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+    let cgroup = std::fs::read_to_string(format!("/proc/{service_pid}/cgroup"))
+        .map_err(|_| custody_inspection_error())?;
+    if !is_protected_lease_authority_service_cgroup(&cgroup) {
+        return Err(LeaseAuthorityCustodyError {
+            code: "lease_authority_custody_service_cgroup_unprotected",
+        });
+    }
+    let state_metadata =
+        std::fs::symlink_metadata(state_root).map_err(|_| custody_inspection_error())?;
+    let socket_metadata =
+        std::fs::symlink_metadata(socket_path).map_err(|_| custody_inspection_error())?;
+    let service_identity = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "agent-browser.lease-authority-systemd-service-cgroup.v1\n{service_pid}\n{LEASE_AUTHORITY_SYSTEMD_SERVICE_CGROUP}"
+            )
+            .as_bytes()
+        )
+    );
+
+    Ok(LeaseAuthorityCustodySnapshot {
+        service_uid,
+        service_pid,
+        peer_uid: service_uid,
+        peer_pid: service_pid,
+        state_root: LeaseAuthorityCustodyPath {
+            owner_uid: state_metadata.uid(),
+            mode: state_metadata.mode() & 0o7777,
+            is_directory: state_metadata.file_type().is_dir()
+                && !state_metadata.file_type().is_symlink(),
+        },
+        // Hardened procfs denies ordinary clients access to a root service's
+        // /proc/<pid>/exe. SO_PEERCRED and exact system-service cgroup custody
+        // authenticate the connected endpoint before a request is written.
+        // The service independently validates its banked executable before it
+        // reads that request.
+        executable_owner_uid: LEASE_AUTHORITY_ROOT_UID,
+        executable_owner_gid: LEASE_AUTHORITY_ROOT_UID,
+        executable_mode: 0o555,
+        executable_sha256: service_identity,
+        socket_owner_uid: socket_metadata.uid(),
+        socket_owner_gid: socket_metadata.gid(),
+        socket_mode: socket_metadata.mode() & 0o7777,
+        socket_device: socket_metadata.dev(),
+        socket_inode: socket_metadata.ino(),
+    })
+    .and_then(|snapshot| {
+        socket_metadata
+            .file_type()
+            .is_socket()
+            .then_some(snapshot)
+            .ok_or(LeaseAuthorityCustodyError {
+                code: "lease_authority_custody_socket_unprotected",
+            })
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn is_protected_lease_authority_service_cgroup(cgroup: &str) -> bool {
+    cgroup.lines().any(|line| {
+        let mut fields = line.splitn(3, ':');
+        fields.next().is_some()
+            && fields.next().is_some()
+            && fields.next() == Some(LEASE_AUTHORITY_SYSTEMD_SERVICE_CGROUP)
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -496,6 +580,26 @@ mod tests {
         socket_activator.service_pid = 1;
         socket_activator.peer_pid = 1;
         socket_activator.validate_endpoint(991).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn active_service_cgroup_requires_the_exact_protected_system_unit() {
+        assert!(is_protected_lease_authority_service_cgroup(
+            "0::/system.slice/agent-browser-lease-authority.service\n"
+        ));
+        assert!(is_protected_lease_authority_service_cgroup(
+            "11:memory:/system.slice/agent-browser-lease-authority.service\n"
+        ));
+        assert!(!is_protected_lease_authority_service_cgroup(
+            "0::/user.slice/user-1000.slice/agent-browser-lease-authority.service\n"
+        ));
+        assert!(!is_protected_lease_authority_service_cgroup(
+            "0::/system.slice/agent-browser-lease-authority.service-impostor\n"
+        ));
+        assert!(!is_protected_lease_authority_service_cgroup(
+            "0::/system.slice/agent-browser-lease-authority.socket\n"
+        ));
     }
 
     #[test]

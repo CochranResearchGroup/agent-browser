@@ -3238,3 +3238,26 @@ socket, writable executable, and malformed identities. The focused test was
 red before the unified validator existed; all eleven custody tests pass after
 the repair. Exact release publication and one installed acquisition acceptance
 remain.
+
+## Slice O Active-Service Cgroup Custody | 2026-09-01
+
+Slice N's active-service branch remained non-executable under the installed
+hardened procfs policy. The unprivileged client attempted to canonicalize and
+read `/proc/<root-service-pid>/exe`, so it closed the connected socket with
+`lease_authority_service_identity_unproven` before sending a request. The
+service consequently logged `lease_authority_protocol_frame_write_failed` when
+it tried to return a response. No browser launched.
+
+The corrected boundary does not pretend that an ordinary client can inspect a
+root process's executable. Before writing any capability-bearing frame, the
+client now requires root `SO_PEERCRED`, the exact root-owned state directory
+and protected socket inode, and exact membership of the connected peer PID in
+`/system.slice/agent-browser-lease-authority.service`. The service retains the
+independent banked-executable, root-process, activation, state, and signing-key
+checks it performs before reading a frame. A root peer in a user slice, a
+lookalike unit name, the socket unit, a same-user process, altered custody, and
+mixed PID identities all fail closed.
+
+The focused custody suite is green with twelve tests, including exact unified
+and legacy cgroup forms plus negative user-slice and suffix-lookalike cases.
+Exact release publication and one installed acquisition acceptance remain.

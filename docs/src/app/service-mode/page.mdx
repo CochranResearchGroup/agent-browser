@@ -1214,9 +1214,12 @@ proven, even when the retry uses a different candidate. It does not install
 either candidate or repeat bootstrap.
 
 Clients prove either the root PID 1 socket activator before service startup or
-the exact active root service process after startup. Both endpoint states bind
-the same protected socket inode and authority custody before any capability is
-sent.
+a root peer PID in the exact
+<code>/system.slice/agent-browser-lease-authority.service</code> cgroup after
+startup. Both endpoint states bind the same protected socket inode before any
+capability is sent. The active service independently validates its banked
+executable before reading the request; ordinary clients do not need access to
+the root process's <code>/proc/&lt;pid&gt;/exe</code> link.
 
 ## Operator request model
 
