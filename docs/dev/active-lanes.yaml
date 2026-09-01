@@ -38,11 +38,11 @@ lanes:
     plan_ref: refs/heads/architecture/cdp-transport-crate
     branch: architecture/cdp-transport-crate
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 09e1d6f69eecd0a5e2590a44f2ecba903e36214d
-    remote_ref: null
-    integration_receipt: null
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 88e2468f8d8ad76bb66e4c341f35d5913949d399
+    remote_ref: refs/remotes/origin/architecture/cdp-transport-crate
+    integration_receipt: 6d5b3377c9438d3a6b86a20da9c5c97f3da9ab59
     integration: merge
     dependencies: [P149]
     overlaps: []

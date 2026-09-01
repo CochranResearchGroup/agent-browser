@@ -2,7 +2,7 @@
 
 Date: 2026-09-01
 
-Status: INTEGRATION_READY
+Status: COMPLETE
 
 Lane: P151
 
@@ -136,10 +136,9 @@ slice does not preserve two apparent owners.
 
 ## Checkpoint
 
-State transition: `active -> integration_ready`
+State transition: `integration_ready -> complete`
 
-Acceptance state: criteria 1 through 9 are complete. Criterion 10 remains open
-until the pushed branch is merged and the integrated `main` commit is verified.
+Acceptance state: all ten criteria are complete.
 
 Progress classification: `outcome_progress`
 
@@ -166,8 +165,12 @@ Evidence:
 - No runtime candidate was installed and no browser, profile, lease, provider,
   or production state was touched. The separate P150 worktree remains
   untouched.
+- Implementation commit `88e2468f8d8ad76bb66e4c341f35d5913949d399`
+  was pushed to `origin/architecture/cdp-transport-crate` and merged to `main`
+  by `6d5b3377c9438d3a6b86a20da9c5c97f3da9ab59`.
 
 Material blockers: none inside the owned scope.
 
-Next action: commit and push the coherent branch, merge it to `main`, close the
-lane, and verify the pushed integration commit.
+Next action: retain the crate boundary as the reference pattern for later
+bounded extractions. Any further split requires its own dependency and build
+feedback evidence.
