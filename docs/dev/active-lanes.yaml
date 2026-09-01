@@ -16,34 +16,3 @@ lanes:
     overlaps: [plan/lease-authority-coordination]
     reconciled_overlaps: [plan/lease-authority-coordination]
     updated_at: 2026-08-31
-  - id: P145 Emergency Profile Lease Fail-Open
-    objective: Keep browser acquisition available through isolated fallback and an explicit unsafe claim-any escape hatch
-    plan: docs/dev/plans/0145-2026-08-31-emergency-profile-lease-fail-open-plan.md
-    plan_ref: refs/heads/fix/emergency-profile-lease-fail-open-20260831
-    branch: fix/emergency-profile-lease-fail-open-20260831
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 926528f85cdbe5b3f077cfd7a68a2ac2586a7034
-    remote_ref: null
-    integration_receipt: 926528f85cdbe5b3f077cfd7a68a2ac2586a7034
-    integration: merge
-    dependencies: []
-    overlaps: [plan/lease-authority-coordination]
-    reconciled_overlaps: [plan/lease-authority-coordination]
-    updated_at: 2026-08-31
-  - id: P110 Authentication Run Slice A
-    objective: Authentication Run provider-free foundation
-    plan: docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md
-    plan_ref: refs/heads/plan/authentication-run-foundation
-    branch: plan/authentication-run-foundation
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 18fe5995e061c16fe97d83119040ea0a37c721c2
-    remote_ref: refs/remotes/origin/plan/authentication-run-foundation
-    integration_receipt: 18fe5995e061c16fe97d83119040ea0a37c721c2
-    integration: merge
-    dependencies: []
-    overlaps: []
-    updated_at: 2026-09-01
