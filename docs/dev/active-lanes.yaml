@@ -38,11 +38,12 @@ lanes:
     plan_ref: refs/heads/plan/authentication-run-foundation
     branch: plan/authentication-run-foundation
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: e74dda166f2cd57f1c9c458777812798ceba2735
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 18fe5995e061c16fe97d83119040ea0a37c721c2
     remote_ref: refs/remotes/origin/plan/authentication-run-foundation
+    integration_receipt: 18fe5995e061c16fe97d83119040ea0a37c721c2
     integration: merge
     dependencies: []
     overlaps: []
-    updated_at: 2026-08-29
+    updated_at: 2026-09-01

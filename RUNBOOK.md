@@ -4,6 +4,46 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 187 | 2026-08-29
+
+Scope: implement and source-accept the provider-free Authentication Run
+foundation for unattended BILL authentication without accessing a browser,
+tenant profile, message service, or mailbox.
+
+Actions:
+
+- opened Plan 0138 on isolated branch `plan/authentication-run-foundation`;
+- added an internal `AuthenticationRun` model bound to one principal, task,
+  target account, profile, browser, session, login tab, site recipe, and policy;
+- separated sensitive challenge custody behind a response-only action trait
+  whose outward contract contains only redacted receipts;
+- retained delivery-fence, unique-candidate, native-credential-store,
+  same-profile new-tab, replay, transition-budget, and exact-target verifier
+  evidence;
+- rebased the source checkpoint onto concurrent main commit `1c96ac67` without
+  touching that lifecycle repair; and
+- kept public API, Service State persistence, installed runtime, and live
+  provider integration out of this packet.
+
+Validation:
+
+- nine focused Rust tests passed after the rebase;
+- synthetic SMS OTP and email verification URL canaries are absent from
+  serialized runs, receipts, errors, and debug projections;
+- formatting and diff hygiene passed;
+- the selector's strict production-target Clippy gate passed; a broader
+  optional test-target lint run reached only pre-existing warnings outside the
+  branch; and
+- no browser, profile, message, mailbox, provider, installation, or tenant
+  effect occurred.
+
+Result:
+
+- P138 Slice A is `source_accepted_public_contract_not_started`;
+- source checkpoint is `d0786a5a`; and
+- the next bounded packet is durable Service State persistence plus complete
+  public contract parity, still provider-free.
+
 ## Turn 186 | 2026-08-24
 
 Scope: open and execute P129 for request delivery, lifecycle projection, and
