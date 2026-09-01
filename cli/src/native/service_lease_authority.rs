@@ -3024,6 +3024,12 @@ pub(crate) fn authorize_lease_effect_in_repository<R: ServiceStateRepository>(
     now: &str,
     context: &LeaseEffectContext<'_>,
 ) -> Result<ActiveLeaseClaim, String> {
+    if authorization.schema_version != LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION {
+        return Err(format!(
+            "lease_authority_{}",
+            LeaseAuthorityError::UnsupportedSchema.as_str()
+        ));
+    }
     let verification_key = load_existing_lease_authority_verification_key()?;
     authorize_lease_effect_in_repository_with_verification_key(
         repository,
