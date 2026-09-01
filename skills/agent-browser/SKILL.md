@@ -1566,23 +1566,10 @@ Canonical release authenticates the profile capability and exact current claim i
 
 A strict claim may advertise `recover_plan`, but the legacy CLI, HTTP, MCP, generated-client, and dashboard recovery plan/apply adapters currently fail closed with `lease_authority_protected_recovery_surface_required`. A recovery bearer cannot be retained in Service State. Do not attempt recovery through a local plan file. These public operations become executable only after principal registration, resource registration, claim acquisition, planning, and apply all route through the protected authority service.
 
-Use `service recovery acquire --profile-id <id> --capability-file <path>` as the high-level capability-bound entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. It reuses an exact current lane, automatically applies only conclusive terminal-owner recovery, retries acquisition once, and hard-blocks current foreign-principal authority. `existing_session_profile_identity_unproven` returns a reviewed `reconcile_exact_principal_profile_identity` plan and must not launch a duplicate browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`. Use the lower-level plan, apply, and status operations only when explicit recovery review is required.
+Use `service recovery acquire --profile-id <id> --capability-file <path>` as the high-level capability-bound entry point. It never accepts a client-selected daemon route. On Linux, the protected root authority enrolls the exact profile, authenticates the capability, derives the route, acquires one broker-managed ephemeral claim, and consumes one in-process browser-launch permit. Retained Service State sessions, owners, transitions, and warnings cannot deny the acquisition. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`.
 
-An acquired response includes `leaseClaim`, `leaseEffectAuthorization`,
-`leaseAcquisitionReceipt`, and `leaseAcquisitionReplayed`. The service owns the
-five-minute ephemeral claim expiry. Replaying one operation grants no new
-authority after expiry. A new operation from the same capability may join the
-current claim without renewing it or minting another fence. Preserve the
-effect envelope because the daemon validates it immediately before launch.
-Effect authorization v5 includes an Ed25519 signature bound to the current
-capability ID and revision, the `browser_launch` action class, the exact daemon
-session, the acquisition operation ID, and the exact signing-key epoch. The private signing root is separate
-from Service State and capability digests. Executors load only its public
-verification keyring and cannot mint authority or accept an unknown or future
-key epoch. Copy `operationIdempotencyKey` to
-`leaseEffectOperationId` on the planned launch. Revoking or rotating the
-capability, changing scope, changing audience, or exceeding the two-minute
-authorization window prevents admission. Do not log or project the envelope.
+An acquired Linux response contains `leaseAuthority.kind=protected` with the current claim and committed process-backed owner. It never returns or serializes an executable authorization. Completion failure closes the browser and records the consumed effect as uncertain before any retry. A confirmed close reconciles the exact owner ID and generation. A failed or unproven shutdown retains the owner. Non-Linux builds retain the compatibility acquisition path until the protected authority service is ported.
+
 Trust material lives in immutable generations below
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json`, public

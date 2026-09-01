@@ -1806,6 +1806,61 @@ impl LeaseAuthorityProtocolKernel {
         Ok(LeaseAuthorityProtocolResponse::Acquired(outcome))
     }
 
+    fn acquire_after_owner_reconciliation(
+        &mut self,
+        request: AcquireLeaseAuthorityPayload,
+        owner_observation: Option<&BrowserOwnerProcessObservation>,
+        authority_observed_at: &str,
+    ) -> Result<LeaseAuthorityProtocolResponse, LeaseAuthorityProtocolError> {
+        let raw_capability =
+            std::str::from_utf8(request.raw_capability.expose()).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_capability_invalid",
+                }
+            })?;
+        authenticate_profile_capability(
+            &self.state.principals,
+            raw_capability,
+            Some(&request.resource.id),
+        )
+        .map_err(|error| LeaseAuthorityProtocolError {
+            code: error.code.as_str(),
+        })?;
+        let resource_key = request.resource.storage_key();
+        if let Some(binding) = self.state.owners.bindings.get(&resource_key).cloned() {
+            let observation = owner_observation.ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_owner_process_observation_required",
+            })?;
+            if matches!(observation, BrowserOwnerProcessObservation::ExactCurrent) {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_owner_process_still_current",
+                });
+            }
+            let reconciliation_idempotency_key = stable_protocol_id(
+                "pre-acquire-owner-reconciliation",
+                &format!(
+                    "{}\0{}\0{}\0{}",
+                    request.idempotency_key,
+                    binding.owner_id,
+                    binding.owner_generation,
+                    binding.process_instance_digest
+                ),
+            );
+            self.reconcile_browser_owner(
+                ReconcileBrowserOwnerPayload {
+                    raw_capability: LeaseAuthoritySecret(request.raw_capability.expose().to_vec()),
+                    resource: request.resource.clone(),
+                    expected_owner_id: binding.owner_id,
+                    expected_owner_generation: binding.owner_generation,
+                    idempotency_key: reconciliation_idempotency_key,
+                },
+                observation,
+                authority_observed_at,
+            )?;
+        }
+        self.acquire(request, authority_observed_at)
+    }
+
     fn authorize_effect(
         &mut self,
         request: AuthorizeLeaseEffectPayload,
@@ -3964,8 +4019,19 @@ fn dispatch_lease_authority_request(
         LeaseAuthorityProtocolRequest::Acquire(request) => {
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
-            let LeaseAuthorityProtocolResponse::Acquired(outcome) =
-                kernel.acquire(*request, &observed_at)?;
+            let owner_observation = kernel
+                .state
+                .owners
+                .bindings
+                .get(&request.resource.storage_key())
+                .map(derive_browser_owner_process_observation)
+                .transpose()?;
+            let LeaseAuthorityProtocolResponse::Acquired(outcome) = kernel
+                .acquire_after_owner_reconciliation(
+                    *request,
+                    owner_observation.as_ref(),
+                    &observed_at,
+                )?;
             let LeaseClaimAcquisitionOutcome {
                 claim,
                 receipt,
@@ -5343,6 +5409,93 @@ mod tests {
             replayed_owner.process_instance_digest,
             owner.process_instance_digest
         );
+        let encoded_after_owner_commit = restarted.encode_protected_state().unwrap();
+        let mut live_owner_rejected = LeaseAuthorityProtocolKernel::from_protected_state(
+            &encoded_after_owner_commit,
+            test_load_context(),
+        )
+        .unwrap();
+        let live_revision = live_owner_rejected.state.authority.revision();
+        let live_owner_error = match live_owner_rejected.acquire_after_owner_reconciliation(
+            AcquireLeaseAuthorityPayload {
+                raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                mode: LeaseClaimMode::Ephemeral,
+                expected_claim_revision: None,
+                idempotency_key: "acquire:last30days:while-owner-current".to_string(),
+                recovery_controller_id: None,
+            },
+            Some(&BrowserOwnerProcessObservation::ExactCurrent),
+            "2026-09-01T12:02:00Z",
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("a current physical owner must prevent a new acquisition"),
+        };
+        assert_eq!(
+            live_owner_error.code(),
+            "lease_authority_protocol_owner_process_still_current"
+        );
+        assert_eq!(
+            live_owner_rejected.state.authority.revision(),
+            live_revision
+        );
+        assert!(live_owner_rejected
+            .state
+            .owners
+            .bindings
+            .contains_key("profile:last30days-social"));
+        let invalid_capability_error = match live_owner_rejected.acquire_after_owner_reconciliation(
+            AcquireLeaseAuthorityPayload {
+                raw_capability: LeaseAuthoritySecret(b"invalid-capability".to_vec()),
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                mode: LeaseClaimMode::Ephemeral,
+                expected_claim_revision: None,
+                idempotency_key: "acquire:last30days:invalid-caller".to_string(),
+                recovery_controller_id: None,
+            },
+            Some(&BrowserOwnerProcessObservation::ExactCurrent),
+            "2026-09-01T12:02:00Z",
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("an invalid capability must not acquire a protected profile"),
+        };
+        assert_ne!(
+            invalid_capability_error.code(),
+            "lease_authority_protocol_owner_process_still_current"
+        );
+        let mut crash_recovered = LeaseAuthorityProtocolKernel::from_protected_state(
+            &encoded_after_owner_commit,
+            test_load_context(),
+        )
+        .unwrap();
+        let LeaseAuthorityProtocolResponse::Acquired(reacquired_after_crash) = crash_recovered
+            .acquire_after_owner_reconciliation(
+                AcquireLeaseAuthorityPayload {
+                    raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+                    resource: LeaseResourceKey::profile("last30days-social"),
+                    parent_claim_id: None,
+                    mode: LeaseClaimMode::Ephemeral,
+                    expected_claim_revision: None,
+                    idempotency_key: "acquire:last30days:after-daemon-crash".to_string(),
+                    recovery_controller_id: None,
+                },
+                Some(&BrowserOwnerProcessObservation::Stale {
+                    evidence_digest:
+                        "sha256:abababababababababababababababababababababababababababababababab"
+                            .to_string(),
+                }),
+                "2026-09-01T12:02:00Z",
+            )
+            .unwrap();
+        assert!(reacquired_after_crash.claim.is_some());
+        assert!(!crash_recovered
+            .state
+            .owners
+            .bindings
+            .contains_key("profile:last30days-social"));
+        assert_eq!(crash_recovered.state.owner_reconciliation_receipts.len(), 1);
         let mut duplicate_launch = effect_request();
         duplicate_launch.idempotency_key = "launch:last30days:duplicate".to_string();
         let duplicate_error = restarted

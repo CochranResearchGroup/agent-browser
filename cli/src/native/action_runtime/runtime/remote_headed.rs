@@ -475,6 +475,34 @@ pub(crate) fn persist_current_browser_health(
     metadata: Option<ServiceLaunchMetadata>,
 ) -> Result<(), String> {
     register_current_browser_lifecycle(state)?;
+    persist_current_browser_projection(state, host, health, metadata)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn persist_protected_current_browser_health(
+    state: &mut DaemonState,
+    owner: &crate::native::service_lease_authority::ProtectedBrowserOwner,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    metadata: Option<ServiceLaunchMetadata>,
+) -> Result<(), String> {
+    let observed_pid = state
+        .browser
+        .as_ref()
+        .and_then(|manager| manager.browser_pid().or(state.attached_browser_pid))
+        .ok_or_else(|| "protected_browser_projection_pid_missing".to_string())?;
+    if owner.process_pid != observed_pid || owner.daemon_session_route != state.session_id {
+        return Err("protected_browser_projection_owner_mismatch".to_string());
+    }
+    persist_current_browser_projection(state, host, health, metadata)
+}
+
+fn persist_current_browser_projection(
+    state: &mut DaemonState,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    metadata: Option<ServiceLaunchMetadata>,
+) -> Result<(), String> {
     let preserves_existing_metadata = metadata.is_none();
     let (pid, cdp_endpoint, browser_stderr_log_path) = state
         .browser

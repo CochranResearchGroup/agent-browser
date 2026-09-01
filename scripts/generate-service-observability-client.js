@@ -1455,8 +1455,34 @@ export interface ServiceLeaseAcquisitionReceipt {
   authorityRevision: number;
   occurredAt: string;
 }
+export interface ServiceProtectedProfileClaim {
+  resource: ServiceLeaseResourceKey;
+  claimId: string;
+  principalId: string;
+  capabilityId: string;
+  capabilityRevision: number;
+  claimRevision: number;
+  fencingToken: number;
+  expiresAt: string;
+}
+export interface ServiceProtectedBrowserOwner {
+  ownerId: string;
+  ownerGeneration: number;
+  logicalBrowserId: string;
+  daemonSessionRoute: string;
+  processInstanceDigest: string;
+  processPid: number;
+  revision: number;
+}
+export interface ServiceProtectedLeaseAuthorityResult {
+  kind: 'protected';
+  claim: ServiceProtectedProfileClaim;
+  owner: ServiceProtectedBrowserOwner;
+  replayed: boolean;
+}
 export interface ServiceProfileAcquireResponse {
   outcome: { state: 'acquired' | 'recovery_available' | 'blocked'; automatic: boolean; recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown };
+  leaseAuthority?: ServiceProtectedLeaseAuthorityResult;
   leaseClaim?: ServiceActiveLeaseClaim;
   leaseEffectAuthorization?: ServiceLeaseEffectAuthorization;
   leaseAcquisitionReceipt?: ServiceLeaseAcquisitionReceipt;

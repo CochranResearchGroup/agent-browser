@@ -23,6 +23,17 @@ pub(crate) fn run_linux_lease_authority_bootstrap() -> Result<(), String> {
     protocol::run_linux_lease_authority_bootstrap()
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) use protocol::client::{
+    acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
+    complete_protected_browser_launch_success, enroll_protected_profile,
+    mark_protected_browser_launch_uncertain, reconcile_protected_browser_owner,
+    ProtectedBrowserLaunchPermit, ProtectedBrowserLaunchRequest, ProtectedBrowserOwner,
+    ProtectedBrowserOwnerLease, ProtectedBrowserOwnerReconciliationRequest,
+    ProtectedEphemeralProfileClaim, ProtectedEphemeralProfileClaimRequest,
+    ProtectedProfileEnrollment, ProtectedProfileEnrollmentRequest,
+};
+
 use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

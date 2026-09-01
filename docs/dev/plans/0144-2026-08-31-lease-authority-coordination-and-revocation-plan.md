@@ -2667,7 +2667,7 @@ These mechanisms extend, rather than replace, the eight structural proof gates
 in the hotfix recurrence audit. The truthful current disposition remains that
 the design has no known incident family requiring another authority model, but
 the product does not yet make recurrence structurally impossible. That claim
-requires production cutover, exhaustive denial and sink manifests, the five
+requires production cutover, exhaustive denial and sink manifests, the six
 contracts above, fault and migration suites, and exact installed acceptance.
 
 ## Slice F Protected Owner Reconciliation Checkpoint | 2026-09-01
@@ -2706,3 +2706,79 @@ sink cutover. It is not yet supervisor-driven reconciliation, public
 `service_profile_acquire` migration, runtime-owner transfer migration, receipt
 compaction, or receipt-only Service State projection. Production installation
 remains withheld.
+
+## Sixth Hotfix Recurrence Gap Audit | 2026-09-01
+
+The selected protected launch sink exposed another cross-boundary ordering
+requirement. After the authority durably commits a browser owner, every local
+custody record needed to reconcile that owner must be retained before any
+fallible compatibility or observability projection runs. Otherwise a Service
+State write failure can leave a real process and canonical owner without the
+daemon retaining the exact capability required to close or reconcile it.
+
+The launch path now stores the protected owner lease before projecting browser
+health. A focused regression injects projection failure and proves that exact
+owner id, generation, profile, and secret capability custody remain available.
+This closes the immediate ordering defect, but structural acceptance still
+requires the same commit, custody, projection, and reply failure injection at
+every protected effect sink. Derived projection failure must never erase
+canonical custody, authorize a retry, or become evidence that no owner exists.
+
+## Slice F On-Demand Crash Reconciliation Checkpoint | 2026-09-01
+
+The protected acquisition dispatcher now authenticates the exact profile
+capability before consulting current browser-owner process state. When a
+committed owner exists, the root authority derives process liveness from its
+own protected binding. An exact current process returns the typed
+`owner_process_still_current` conflict without changing authority. An absent,
+zombie, or replaced process is reconciled from root-derived evidence before
+the acquisition proceeds, using an idempotency key bound to the acquisition,
+owner id, owner generation, and process instance.
+
+This makes the next authenticated acquisition a safe convergence trigger after
+an ephemeral daemon and its browser have disappeared. No historical session,
+runtime-owner projection, client liveness assertion, or retained warning
+participates. Focused tests prove stale-owner removal followed by acquisition,
+live-owner refusal without revision change, and authentication before owner
+state disclosure.
+
+This checkpoint does not yet adopt a still-running orphaned browser, run a
+periodic supervisor scan, or provide resource-scoped quarantine. Those paths
+remain required so a live process whose daemon vanished has bounded adoption
+or cleanup recourse rather than an accurate but indefinitely unresolved
+physical-owner conflict.
+
+## Slice F Public Protected Acquisition And Launch Cutover | 2026-09-01
+
+Linux `service_profile_acquire` now uses the protected root authority for the
+public broker-managed path. The route resolver enrolls the exact configured
+profile identity and derives a cold daemon route from the protected principal
+and profile. Acquisition obtains a broker-managed ephemeral claim, authorizes
+one `browser_launch` effect for that daemon audience, launches the exact
+profile through the selected local Chrome sink, and atomically completes the
+effect with the root-derived process owner.
+
+The protected launch command carries the exact profile id and path but no
+serialized effect bearer. It cannot attach a retained session, attach a shared
+or managed runtime, use CDP auto-connect, or select a provider. Historical
+session and runtime-owner projections do not participate in profile identity
+selection or admission. Start and completion uncertainty prohibit automatic
+retry. Normal close reconciles only after exact process exit and profile-lock
+release, and a fallible Service State projection cannot erase protected owner
+custody.
+
+The public response exposes redacted claim and owner receipt axes with
+`leaseAuthority.kind=protected`; it does not expose a capability or executable
+authorization. Non-Linux builds retain the legacy compatibility path and are
+described as such in the CLI help, README, docs site, generated client, and
+agent skill.
+
+Source acceptance includes 42 protected protocol tests, 22 profile-recovery
+tests, 27 protected-path tests, strict Rust formatting and Clippy, API and MCP
+parity, generated-client contracts and type coverage, docs build, serial
+workstation install fixtures, fresh-workstation harness, host provisioning,
+Guacamole asset and PostgreSQL durability contracts, and route-specific user
+synchronization. This is not installed-runtime acceptance. A development
+publication must still prove the root socket service, public broker request,
+real Chrome launch, exact owner readback, close reconciliation, daemon-crash
+reacquisition, and zero production drift before candidate installation.

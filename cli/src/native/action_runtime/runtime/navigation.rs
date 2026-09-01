@@ -16,6 +16,10 @@ use crate::native::browser_navigation::{
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::runtime_lifecycle::{RuntimeLifecycleAuthority, RuntimeLifecycleIntent};
+#[cfg(target_os = "linux")]
+use crate::native::service_lease_authority::{
+    reconcile_protected_browser_owner, ProtectedBrowserOwnerReconciliationRequest,
+};
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
     service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
@@ -1961,6 +1965,40 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
     handle_close_with_context(state, false).await
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn reconcile_closed_protected_browser_owner_with<Reconcile>(
+    state: &mut DaemonState,
+    shutdown_outcome: &BrowserShutdownOutcome,
+    reconcile: Reconcile,
+) -> Result<(), String>
+where
+    Reconcile: FnOnce(&ProtectedBrowserOwnerReconciliationRequest) -> Result<(), String>,
+{
+    if browser_terminal_evidence(shutdown_outcome).is_none() {
+        return Ok(());
+    }
+    let Some(lease) = state.protected_browser_owner.as_ref() else {
+        return Ok(());
+    };
+    let request_axes = format!(
+        "{}\0{}\0{}",
+        lease.profile_id, lease.owner.owner_id, lease.owner.owner_generation
+    );
+    let request = ProtectedBrowserOwnerReconciliationRequest {
+        raw_capability: lease.raw_capability.clone(),
+        profile_id: lease.profile_id.clone(),
+        expected_owner_id: lease.owner.owner_id.clone(),
+        expected_owner_generation: lease.owner.owner_generation,
+        idempotency_key: format!(
+            "protected-owner-close-reconcile:{:x}",
+            Sha256::digest(request_axes.as_bytes())
+        ),
+    };
+    reconcile(&request)?;
+    state.protected_browser_owner = None;
+    Ok(())
+}
+
 pub(crate) async fn handle_recovery_close(state: &mut DaemonState) -> Result<Value, String> {
     handle_close_with_context(state, true).await
 }
@@ -2142,6 +2180,10 @@ async fn handle_close_with_context(
                 )?;
         }
     }
+    #[cfg(target_os = "linux")]
+    reconcile_closed_protected_browser_owner_with(state, &shutdown_outcome, |request| {
+        reconcile_protected_browser_owner(request).map(|_| ())
+    })?;
     Ok(json!({ "closed" : true }))
 }
 

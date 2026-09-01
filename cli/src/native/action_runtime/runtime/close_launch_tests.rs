@@ -55,6 +55,8 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
+#[cfg(target_os = "linux")]
+use crate::native::service_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -209,6 +211,187 @@ async fn successful_owned_launch_persistence_skips_cleanup() {
     .expect("successful persistence must retain the browser");
 
     assert_eq!(cleanup_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn rejected_protected_launch_completion_cleans_up_and_terminalizes_uncertainty() {
+    use std::sync::{Arc, Mutex};
+
+    let observations = Arc::new(Mutex::new(Vec::new()));
+    let completion_observations = observations.clone();
+    let cleanup_observations = observations.clone();
+    let uncertainty_observations = observations.clone();
+
+    let result = require_protected_launch_completion(
+        || {
+            completion_observations
+                .lock()
+                .unwrap()
+                .push("complete".to_string());
+            Err::<String, _>("owner commit rejected".to_string())
+        },
+        || async move {
+            cleanup_observations
+                .lock()
+                .unwrap()
+                .push("cleanup".to_string());
+            Ok(BrowserShutdownOutcome {
+                exact_process_exited: true,
+                profile_lock_released: true,
+                ..BrowserShutdownOutcome::default()
+            })
+        },
+        |evidence_digest| {
+            assert!(evidence_digest.starts_with("sha256:"));
+            uncertainty_observations
+                .lock()
+                .unwrap()
+                .push("uncertain".to_string());
+            Ok(())
+        },
+    )
+    .await;
+
+    assert_eq!(
+        *observations.lock().unwrap(),
+        vec!["complete", "cleanup", "uncertain"]
+    );
+    let error = result.expect_err("rejected completion must fail the protected launch");
+    assert!(error.contains("owner commit rejected"));
+    assert!(error.contains("exact_process_exited"));
+    assert!(error.contains("profile_lock_released"));
+    assert!(error.contains("uncertainty=recorded"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn confirmed_protected_close_reconciles_exact_owner_and_clears_custody() {
+    use crate::native::service_lease_authority::{
+        ProtectedBrowserOwner, ProtectedBrowserOwnerLease,
+    };
+
+    let mut state = DaemonState::new();
+    state.session_id = "session:protected-close".to_string();
+    state.protected_browser_owner = Some(ProtectedBrowserOwnerLease {
+        raw_capability: "capability-secret".to_string(),
+        profile_id: "last30days-facebook".to_string(),
+        owner: ProtectedBrowserOwner {
+            owner_id: "owner:protected-close".to_string(),
+            owner_generation: 7,
+            logical_browser_id: "browser:session:protected-close".to_string(),
+            daemon_session_route: state.session_id.clone(),
+            process_instance_digest: format!("sha256:{}", "1".repeat(64)),
+            process_pid: 42007,
+            revision: 11,
+        },
+    });
+    let shutdown = BrowserShutdownOutcome {
+        exact_process_exited: true,
+        profile_lock_released: true,
+        ..BrowserShutdownOutcome::default()
+    };
+
+    crate::native::action_runtime::runtime::navigation::reconcile_closed_protected_browser_owner_with(
+        &mut state,
+        &shutdown,
+        |request| {
+            assert_eq!(request.raw_capability, "capability-secret");
+            assert_eq!(request.profile_id, "last30days-facebook");
+            assert_eq!(request.expected_owner_id, "owner:protected-close");
+            assert_eq!(request.expected_owner_generation, 7);
+            assert!(request
+                .idempotency_key
+                .starts_with("protected-owner-close-reconcile:"));
+            Ok(())
+        },
+    )
+    .expect("confirmed close should reconcile the exact protected owner");
+
+    assert!(state.protected_browser_owner.is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn protected_owner_custody_survives_projection_failure() {
+    let mut state = DaemonState::new();
+    let lease = ProtectedBrowserOwnerLease {
+        raw_capability: "profile-capability".to_string(),
+        profile_id: "profile-a".to_string(),
+        owner: ProtectedBrowserOwner {
+            owner_id: "owner-a".to_string(),
+            owner_generation: 7,
+            logical_browser_id: "browser-a".to_string(),
+            daemon_session_route: "protected-projection-failure".to_string(),
+            process_instance_digest: "a".repeat(64),
+            process_pid: 4242,
+            revision: 11,
+        },
+    };
+
+    let error = crate::native::action_runtime::runtime::launch::retain_protected_browser_owner_before_projection(
+        &mut state,
+        lease,
+        |_state, _owner| Err("projection_failed".to_string()),
+    )
+    .unwrap_err();
+
+    assert_eq!(error, "projection_failed");
+    let retained = state
+        .protected_browser_owner
+        .as_ref()
+        .expect("committed owner custody must survive a derived projection failure");
+    assert_eq!(retained.owner.owner_id, "owner-a");
+    assert_eq!(retained.owner.owner_generation, 7);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn protected_launch_hints_use_exact_command_identity_without_session_reconciliation() {
+    let mut options = LaunchOptions::default();
+    let command = json!({
+        "action": "tab_new",
+        "profileId": "last30days-facebook",
+        "profile": "/srv/agent-browser/profiles/last30days-facebook",
+        "sessionName": "principal-profile-protected",
+        "serviceName": "Last30days",
+    });
+
+    let (_, selection_reason, _, effective_command) =
+        crate::native::action_runtime::runtime::profile_lease::apply_protected_auto_launch_command_hints(
+            &mut options,
+            &command,
+        )
+        .expect("protected hints should accept exact profile identity");
+
+    assert_eq!(
+        options.profile.as_deref(),
+        Some("/srv/agent-browser/profiles/last30days-facebook")
+    );
+    assert_eq!(
+        options.runtime_profile.as_deref(),
+        Some("last30days-facebook")
+    );
+    assert_eq!(
+        selection_reason,
+        Some(ProfileSelectionReason::ExplicitProfile)
+    );
+    assert_eq!(effective_command["profileId"], "last30days-facebook");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn protected_launch_start_failure_is_uncertain_and_never_retryable() {
+    let mut observed_digest = None;
+    let error = protected_launch_start_failure("devtools endpoint unavailable", |digest| {
+        observed_digest = Some(digest.to_string());
+        Ok(())
+    });
+
+    let digest = observed_digest.expect("start failure must terminalize uncertainty");
+    assert!(digest.starts_with("sha256:"));
+    assert!(error.contains("devtools endpoint unavailable"));
+    assert!(error.contains("uncertainty=recorded"));
+    assert!(error.contains("automatic_retry=forbidden"));
 }
 #[test]
 fn managed_close_terminal_evidence_requires_exit_and_profile_unlock() {

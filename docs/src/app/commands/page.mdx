@@ -774,37 +774,30 @@ rejects a same-profile retained browser or lease conflict.
 `service leases` is the no-launch first-class lease view. The same collection is available from HTTP <code>GET /api/service/profile-leases</code>, MCP <code>agent-browser://profile-leases</code>, and generated helpers <code>getServiceProfileLeases()</code> and <code>findServiceProfileLease()</code>. Records report authenticated principal authority, exact owner generation, subordinate session and tab work, blocking identity axes, authorized actions, typed continuity recourse, and doctor findings. A current canonical profile claim is the sole operational projection for that profile. It reports <code>state=active</code> and <code>recourse=continue_with_active_claim</code>; retained session and owner rows remain context but cannot create doctor blockers. The claim is not proof that a browser process exists. Use <code>service leases doctor</code>, <code>service leases &lt;id&gt; inspect</code>, or <code>service leases &lt;id&gt; explain</code> for focused diagnosis. Registration writes a new capability only to the absolute private path supplied with <code>--capability-out</code> and can happen before or after first launch. Rejoin, renew, and release require the exact current <code>--revision</code> and read the capability from <code>--capability-file</code>. When a pre-registered capability later has one exact uncontested ready owner session, or a registered lease is blocked by <code>unproven_session_authority</code>, with or without <code>owner_generation_or_binding_mismatch</code>, and authorizes <code>rejoin</code>, supply <code>--expires-at &lt;rfc3339&gt;</code> with rejoin. The operation may establish the missing binding or compare-and-swap the same principal, profile, and capability binding to a newer current ready owner generation, then binds only the unique exact live session and its same-browser active tabs. After an unexpected browser exit, a non-expired registered session work lease preserves exact profile selection until replay establishes the next owner generation. Labels, expired work, and legacy observations remain insufficient. Ambiguous sessions, mismatched browsers, and foreign principals fail closed. The raw capability is never accepted on the command line or retained in Service State. HTTP mutations require an <code>Authorization: Bearer</code> header. MCP mutation tools accept <code>profileCapability</code> only as an ephemeral argument. Legacy retained evidence remains observation-only and cannot gain authority from service, agent, or task labels. Rows backed only by released or expired legacy sessions report <code>state=historical</code>, expose read actions only, have no blocking identity axes, and do not make lease doctor unhealthy. Current nonterminal legacy session or owner evidence requires identity reconciliation only when no canonical claim exists.
 
 `service recovery acquire --profile-id <id> --capability-file <path>` is the
-high-level capability-bound entry point. It returns `acquired`,
-`recovery_available`, or `blocked` and does not accept a client-selected daemon
-route. Exact current ownership by the same principal is reused. Only a fully
-proven terminal-owner action is applied automatically before one acquisition
-retry. A live foreign principal remains hard blocked. Unproven profile identity
-returns a reviewed reconciliation plan without launching another browser. HTTP
-uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`,
-and generated clients use `acquireServiceProfile()`.
+high-level capability-bound entry point and never accepts a client-selected
+daemon route. On Linux, the protected root authority enrolls the exact profile path,
+authenticates the capability, derives a fresh principal-owned daemon route,
+acquires one broker-managed ephemeral claim, and consumes one in-process
+browser-launch permit. Retained Service State sessions, owners, transitions,
+and warnings are observational only. They cannot select the route or deny the
+launch. HTTP uses `POST /api/service/profiles/acquire`, MCP uses
+`service_profile_acquire`, and generated clients use
+`acquireServiceProfile()`.
 
-An acquired response includes <code>leaseClaim</code>, the exact
-<code>leaseEffectAuthorization</code>, a durable
-<code>leaseAcquisitionReceipt</code>, and
-<code>leaseAcquisitionReplayed</code>. The service selects a five-minute
-ephemeral expiry. Operation replay never grants new authority after expiry,
-while another operation from the same capability may join the current claim
-without renewing it or minting a new fence. The daemon validates the envelope
-immediately before launch. Effect authorization v5 carries an Ed25519 signature
-from the private lease-authority root. Executors load only the public
-verification keyring and cannot mint authority or accept an unknown or future
-signing epoch. It binds the current capability ID
-and revision, the `browser_launch` action class, the exact daemon session, and
-the acquisition operation ID and signing-key epoch. Copy <code>operationIdempotencyKey</code> to
-<code>leaseEffectOperationId</code> when executing the planned launch.
-Capability revocation, scope changes, audience changes, or expiry prevent
-admission. Do not log or project the two-minute bearer. If the public verifier
-survives private-key loss, issuance returns
-<code>lease_authority_signing_key_recovery_required</code> and does not create a
-replacement signer.
-Signer and verifier files become current together through one digest-verified
-selected trust generation. Standalone legacy key files require explicit
-migration and cannot silently bootstrap a parallel trust root.
+An acquired Linux response contains <code>leaseAuthority.kind=protected</code>
+with the current claim and committed process-backed owner. It never returns an
+executable authorization. Launch and owner registration finish through the
+protected authority before the response is emitted. Completion failure closes
+the launched browser and records the consumed intent as uncertain before any
+retry. A confirmed close reconciles the exact owner ID and generation. A failed
+or unproven shutdown retains that owner for later reconciliation. Non-Linux
+builds retain the compatibility path until the protected authority service is
+ported.
+
+Trust material uses immutable, digest-verified selected generations. The
+private signer and public verifier become current together. Standalone legacy
+key files require explicit migration and cannot silently bootstrap a parallel
+trust root.
 
 `service recovery plan` creates a zero-effect, capability-bound plan for an
 exact profile. The first effect-capable class is limited to a terminal owner

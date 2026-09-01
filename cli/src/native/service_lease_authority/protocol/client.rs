@@ -97,6 +97,11 @@ impl std::fmt::Debug for ProtectedBrowserLaunchRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProtectedBrowserLaunchPermit {
     pub(crate) receipt_id: String,
+    pub(crate) resource: LeaseResourceKey,
+    pub(crate) claim_id: String,
+    pub(crate) claim_revision: u64,
+    pub(crate) fencing_token: u64,
+    pub(crate) daemon_session_route: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +113,24 @@ pub(crate) struct ProtectedBrowserOwner {
     pub(crate) process_instance_digest: String,
     pub(crate) process_pid: u32,
     pub(crate) revision: u64,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserOwnerLease {
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) owner: ProtectedBrowserOwner,
+}
+
+impl std::fmt::Debug for ProtectedBrowserOwnerLease {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedBrowserOwnerLease")
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field("owner", &self.owner)
+            .finish()
+    }
 }
 
 pub(crate) struct ProtectedBrowserOwnerReconciliationRequest {
@@ -432,6 +455,10 @@ fn encode_protected_browser_launch_request(
         || request.fencing_token == 0
         || request.audience.trim().is_empty()
         || request.idempotency_key.trim().is_empty()
+        || request
+            .audience
+            .strip_prefix("daemon-session:")
+            .is_none_or(|route| route.trim().is_empty())
     {
         return Err("lease_authority_effect_request_invalid".to_string());
     }
@@ -507,6 +534,15 @@ fn decode_protected_browser_launch_response(
         .ok_or_else(|| "lease_authority_effect_receipt_invalid".to_string())?;
     Ok(ProtectedBrowserLaunchPermit {
         receipt_id: receipt_id.to_string(),
+        resource: request.resource.clone(),
+        claim_id: request.claim_id.clone(),
+        claim_revision: request.claim_revision,
+        fencing_token: request.fencing_token,
+        daemon_session_route: request
+            .audience
+            .strip_prefix("daemon-session:")
+            .unwrap_or_default()
+            .to_string(),
     })
 }
 
@@ -566,6 +602,21 @@ fn decode_protected_browser_launch_success(
     {
         return Err("lease_authority_browser_launch_completion_response_mismatch".to_string());
     }
+    let receipt = response
+        .pointer("/payload/receipt")
+        .ok_or_else(|| "lease_authority_browser_launch_completion_response_mismatch".to_string())?;
+    let receipt_resource: LeaseResourceKey =
+        serde_json::from_value(receipt.get("resource").cloned().ok_or_else(|| {
+            "lease_authority_browser_launch_completion_response_mismatch".to_string()
+        })?)
+        .map_err(|_| "lease_authority_browser_launch_completion_response_mismatch".to_string())?;
+    if receipt_resource != permit.resource
+        || receipt.get("claimId").and_then(Value::as_str) != Some(permit.claim_id.as_str())
+        || receipt.get("claimRevision").and_then(Value::as_u64) != Some(permit.claim_revision)
+        || receipt.get("fencingToken").and_then(Value::as_u64) != Some(permit.fencing_token)
+    {
+        return Err("lease_authority_browser_launch_completion_response_mismatch".to_string());
+    }
     let owner = response
         .pointer("/payload/owner")
         .ok_or_else(|| "lease_authority_browser_launch_owner_invalid".to_string())?;
@@ -580,7 +631,15 @@ fn decode_protected_browser_launch_success(
         "processInstanceDigest",
         "lease_authority_browser_launch_owner_invalid",
     )?;
-    if process_pid != browser_pid || !super::valid_sha256_digest(&process_instance_digest) {
+    let daemon_session_route = required_response_string(
+        owner,
+        "daemonSessionRoute",
+        "lease_authority_browser_launch_owner_invalid",
+    )?;
+    if process_pid != browser_pid
+        || !super::valid_sha256_digest(&process_instance_digest)
+        || daemon_session_route != permit.daemon_session_route
+    {
         return Err("lease_authority_browser_launch_owner_mismatch".to_string());
     }
     Ok(ProtectedBrowserOwner {
@@ -599,11 +658,7 @@ fn decode_protected_browser_launch_success(
             "logicalBrowserId",
             "lease_authority_browser_launch_owner_invalid",
         )?,
-        daemon_session_route: required_response_string(
-            owner,
-            "daemonSessionRoute",
-            "lease_authority_browser_launch_owner_invalid",
-        )?,
+        daemon_session_route,
         process_instance_digest,
         process_pid,
         revision: required_response_u64(
@@ -977,7 +1032,11 @@ mod tests {
             "payload": {
                 "receipt": {
                     "receiptId": "effect-receipt:abc",
-                    "state": "completed"
+                    "state": "completed",
+                    "resource": {"kind": "profile", "id": "last30days-social"},
+                    "claimId": "claim-1",
+                    "claimRevision": 3,
+                    "fencingToken": 7
                 },
                 "owner": {
                     "ownerId": "owner:abc",
@@ -999,5 +1058,18 @@ mod tests {
         .unwrap();
         assert_eq!(owner.owner_id, "owner:abc");
         assert_eq!(owner.logical_browser_id, "browser:abc");
+
+        let mut wrong_route = completed;
+        wrong_route["payload"]["owner"]["daemonSessionRoute"] =
+            serde_json::json!("unrelated-session");
+        assert_eq!(
+            decode_protected_browser_launch_success(
+                &serde_json::to_vec(&wrong_route).unwrap(),
+                &permit,
+                4242,
+            )
+            .unwrap_err(),
+            "lease_authority_browser_launch_owner_mismatch"
+        );
     }
 }

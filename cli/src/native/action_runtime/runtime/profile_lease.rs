@@ -384,6 +384,41 @@ pub(crate) fn apply_auto_launch_command_hints(
         effective_command,
     ))
 }
+
+#[cfg(target_os = "linux")]
+pub(crate) fn apply_protected_auto_launch_command_hints(
+    options: &mut LaunchOptions,
+    command: &Value,
+) -> Result<
+    (
+        ServiceBrowserHost,
+        Option<ProfileSelectionReason>,
+        BrowserCapabilityLaunchResolution,
+        Value,
+    ),
+    String,
+> {
+    let effective_command = launch_command_with_effective_service_defaults(command, options);
+    let profile_id = optional_command_string(&effective_command, "profileId")
+        .ok_or_else(|| "protected_browser_launch_profile_id_missing".to_string())?;
+    let profile_path = optional_command_string(&effective_command, "profile")
+        .ok_or_else(|| "protected_browser_launch_profile_path_missing".to_string())?;
+    apply_explicit_launch_identity_from_command(options, &effective_command);
+    if options.runtime_profile.as_deref() != Some(profile_id.as_str())
+        || options.profile.as_deref() != Some(profile_path.as_str())
+    {
+        return Err("protected_browser_launch_profile_identity_mismatch".to_string());
+    }
+    let service_host = apply_launch_host_hints(options, &effective_command);
+    let browser_capability_launch =
+        apply_service_browser_capability_selection(options, &effective_command);
+    Ok((
+        service_host,
+        Some(ProfileSelectionReason::ExplicitProfile),
+        browser_capability_launch,
+        effective_command,
+    ))
+}
 pub(crate) fn service_profile_lease_conflict_session_ids(
     metadata: &ServiceLaunchMetadata,
     session_id: &str,

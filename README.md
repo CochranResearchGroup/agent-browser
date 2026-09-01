@@ -3182,25 +3182,9 @@ Canonical release authenticates the profile capability and exact current claim i
 
 A strict claim may advertise `recover_plan`, but the legacy CLI, HTTP, MCP, generated-client, and dashboard recovery plan/apply adapters currently fail closed with `lease_authority_protected_recovery_surface_required`. A recovery bearer cannot be retained in Service State. These public operations become executable only after principal registration, resource registration, claim acquisition, planning, and apply all route through the protected authority service.
 
-`service recovery acquire --profile-id <id> --capability-file <path>` is the high-level, capability-bound profile acquisition entry point. It returns `acquired`, `recovery_available`, or `blocked` and never accepts a client-selected daemon route. An exact process-backed lane for the same authenticated principal is reused. A conclusive terminal owner with satisfied cleanup, proven process exit, released profile lock, and no active foreign lease is repaired automatically before one acquisition retry. A current foreign principal remains hard blocked with wait or coordination recourse. `existing_session_profile_identity_unproven`, including the Odollo contractor portal fixture, returns a reviewed `reconcile_exact_principal_profile_identity` plan without launching another browser. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`.
+`service recovery acquire --profile-id <id> --capability-file <path>` is the high-level capability-bound profile acquisition entry point. It never accepts a client-selected daemon route. On Linux, the protected root authority enrolls the exact profile path, authenticates the capability, derives a fresh principal-owned route, acquires one broker-managed ephemeral claim, and consumes one in-process browser-launch permit. Retained Service State sessions, owners, transitions, and warnings are observational only and cannot select the route or deny the launch. HTTP uses `POST /api/service/profiles/acquire`, MCP uses `service_profile_acquire`, and generated clients use `acquireServiceProfile()`.
 
-An acquired response includes the canonical `leaseClaim`, its exact
-`leaseEffectAuthorization`, a durable `leaseAcquisitionReceipt`, and
-`leaseAcquisitionReplayed`. The service selects a five-minute ephemeral claim
-expiry. Replaying one operation grants no new authority after expiry. A new
-operation from the same capability may join the current claim without changing
-its fencing token or expiry. The daemon validates the envelope immediately
-before launch. Effect authorization v5 binds the claim to the current capability
-ID and revision, the `browser_launch` action class, the exact daemon-session
-audience, the acquisition operation ID, and the exact signing-key epoch. Its Ed25519 signature is produced
-by a private lease-authority root stored outside Service State. Executors load
-only its versioned public verification keyring, so verification cannot mint a new
-authorization or accept a future or unknown signing epoch. Revoking or
-rotating the capability invalidates admission, while changing any sealed scope
-field invalidates the proof. Copy `operationIdempotencyKey` to
-`leaseEffectOperationId` when executing the planned launch. Treat the effect
-envelope as a two-minute bearer: do not log it or expose it through status,
-history, or diagnostics.
+An acquired Linux response contains `leaseAuthority.kind=protected` with the current claim and committed process-backed owner. It never returns an executable authorization. Browser launch and owner registration complete through the protected authority before the response is emitted. If completion fails, Agent Browser closes the launched browser and records the consumed intent as uncertain before any retry. A confirmed close reconciles the exact owner ID and generation. A failed or unproven shutdown retains that owner for later reconciliation. Non-Linux builds retain the compatibility acquisition path until the protected authority service is ported.
 
 Trust material is stored as immutable generations under
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private

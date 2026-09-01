@@ -201,6 +201,12 @@ pub(crate) struct DaemonState {
     /// browser owner transfer. Browser effects then fail closed against the
     /// locked service-state owner generation.
     pub(crate) runtime_owner_binding: Option<crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    /// In-memory custody for a browser committed by the protected lease
+    /// authority. The capability is secret and is never projected to Service
+    /// State, command JSON, logs, or responses.
+    #[cfg(target_os = "linux")]
+    pub(crate) protected_browser_owner:
+        Option<crate::native::service_lease_authority::ProtectedBrowserOwnerLease>,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     pub(crate) tracked_origin_storage: HashMap<String, state::OriginStorage>,
@@ -263,6 +269,8 @@ impl DaemonState {
             current_cancellation: None,
             pending_shared_profile_acquisition: None,
             runtime_owner_binding: None,
+            #[cfg(target_os = "linux")]
+            protected_browser_owner: None,
             tracked_origin_storage: HashMap::new(),
         }
     }

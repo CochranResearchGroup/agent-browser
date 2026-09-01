@@ -11,9 +11,20 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
+#[cfg(not(target_os = "linux"))]
 use std::sync::{Arc, Mutex};
 
 use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
+#[cfg(target_os = "linux")]
+use super::action_runtime::runtime::{
+    auto_launch_protected_profile, ProtectedProfileLaunchContext,
+};
+#[cfg(target_os = "linux")]
+use super::service_lease_authority::{
+    acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
+    enroll_protected_profile, ProtectedBrowserLaunchRequest, ProtectedEphemeralProfileClaimRequest,
+    ProtectedProfileEnrollmentRequest,
+};
 use super::service_lease_authority::{
     issue_lease_effect_authorization_for_state, AcquireLeaseClaimRequest,
     LeaseClaimAcquisitionOutcome, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
@@ -209,6 +220,17 @@ fn profile_acquisition_retry_command(
     profile_acquisition_retry_command_with_claim(intent, daemon_session_route, None)
 }
 
+#[cfg(target_os = "linux")]
+fn protected_profile_acquisition_launch_command(
+    intent: &ProfileAcquisitionIntent,
+    daemon_session_route: &str,
+    profile_path: &str,
+) -> Value {
+    let mut command = profile_acquisition_retry_command(intent, daemon_session_route);
+    command["profile"] = json!(profile_path);
+    command
+}
+
 fn profile_acquisition_retry_command_with_claim(
     intent: &ProfileAcquisitionIntent,
     daemon_session_route: &str,
@@ -262,13 +284,75 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
     let snapshot = repository.load_snapshot()?;
     let profile_id = required_command_string(command, "profileId")?;
     let raw_capability = profile_capability_from_command(command)?;
-    let authority = authenticate_profile_capability(
-        &snapshot.service_principals,
-        &raw_capability,
-        Some(profile_id),
-    )
-    .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
-    profile_acquisition_retry_route(&snapshot, &authority)
+    #[cfg(target_os = "linux")]
+    {
+        let profile = snapshot
+            .profiles
+            .get(profile_id)
+            .ok_or_else(|| "profile_acquisition_profile_missing".to_string())?;
+        let enrollment = enroll_profile_with_protected_authority(profile, &raw_capability)?;
+        Ok(protected_profile_daemon_route(
+            &enrollment.principal_id,
+            profile_id,
+        ))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let authority = authenticate_profile_capability(
+            &snapshot.service_principals,
+            &raw_capability,
+            Some(profile_id),
+        )
+        .map_err(|error| format!("profile_acquisition_principal_{}", error.code.as_str()))?;
+        let profile = snapshot
+            .profiles
+            .get(&authority.profile_id)
+            .ok_or_else(|| "profile_acquisition_profile_missing".to_string())?;
+        super::service_access::authenticated_cold_session_name(&authority, profile)
+            .ok_or_else(|| "profile_acquisition_daemon_route_unavailable".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn enroll_profile_with_protected_authority(
+    profile: &BrowserProfile,
+    raw_capability: &str,
+) -> Result<super::service_lease_authority::ProtectedProfileEnrollment, String> {
+    let profile_path = profile
+        .user_data_dir
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| "profile_acquisition_profile_identity_unavailable".to_string())?;
+    let mut enrollment_hasher = Sha256::new();
+    enrollment_hasher.update(profile.id.as_bytes());
+    enrollment_hasher.update(b"\0");
+    enrollment_hasher.update(profile_path.as_bytes());
+    enrollment_hasher.update(b"\0");
+    enrollment_hasher.update(raw_capability.as_bytes());
+    enroll_protected_profile(&ProtectedProfileEnrollmentRequest {
+        raw_capability: raw_capability.to_string(),
+        profile_id: profile.id.clone(),
+        profile_path: profile_path.to_string(),
+        idempotency_key: format!(
+            "protected-profile-enrollment:{:x}",
+            enrollment_hasher.finalize()
+        ),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn protected_profile_daemon_route(principal_id: &str, profile_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(principal_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(profile_id.as_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("principal-profile-{suffix}")
 }
 
 pub(crate) fn profile_recovery_apply_daemon_route(command: &Value) -> Result<String, String> {
@@ -924,6 +1008,145 @@ pub(crate) async fn handle_service_profile_recovery_command(
     }
 }
 
+#[cfg(target_os = "linux")]
+async fn acquire_profile_command(
+    command: &Value,
+    daemon_state: &mut DaemonState,
+) -> Result<Value, String> {
+    if command.get("sessionName").is_some() {
+        return Err("profile_acquisition_client_route_forbidden".to_string());
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let profile_id = required_command_string(command, "profileId")?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let profile = snapshot
+        .profiles
+        .get(profile_id)
+        .ok_or_else(|| "profile_acquisition_profile_missing".to_string())?;
+    let enrollment = enroll_profile_with_protected_authority(profile, &raw_capability)?;
+    let daemon_session_route = protected_profile_daemon_route(&enrollment.principal_id, profile_id);
+    if daemon_session_route != daemon_state.session_id {
+        return Err("profile_acquisition_daemon_route_mismatch".to_string());
+    }
+    let idempotency_key = optional_command_string(command, "idempotencyKey")
+        .unwrap_or_else(|| format!("profile-acquisition-{}", uuid::Uuid::new_v4()));
+    let claim =
+        acquire_protected_ephemeral_profile_claim(&ProtectedEphemeralProfileClaimRequest {
+            raw_capability: raw_capability.clone(),
+            profile_id: profile_id.to_string(),
+            idempotency_key: idempotency_key.clone(),
+        })?;
+    if claim.principal_id != enrollment.principal_id
+        || claim.capability_id != enrollment.capability_id
+        || claim.capability_revision != enrollment.capability_revision
+    {
+        return Err("profile_acquisition_protected_identity_mismatch".to_string());
+    }
+
+    if let Some(existing) = daemon_state.protected_browser_owner.as_ref() {
+        if existing.profile_id == profile_id
+            && existing.owner.daemon_session_route == daemon_session_route
+            && existing.raw_capability == raw_capability
+        {
+            return Ok(protected_profile_acquisition_response(
+                &claim,
+                &existing.owner,
+                true,
+            ));
+        }
+    }
+
+    let operation_idempotency_key = format!("{idempotency_key}:browser-launch");
+    let permit = authorize_protected_browser_launch(&ProtectedBrowserLaunchRequest {
+        raw_capability: raw_capability.clone(),
+        resource: claim.resource.clone(),
+        claim_id: claim.claim_id.clone(),
+        claim_revision: claim.claim_revision,
+        fencing_token: claim.fencing_token,
+        audience: format!("daemon-session:{daemon_session_route}"),
+        idempotency_key: operation_idempotency_key.clone(),
+    })?;
+    let intent = ProfileAcquisitionIntent {
+        principal_id: enrollment.principal_id,
+        profile_id: profile_id.to_string(),
+        service_name: optional_command_string(command, "serviceName").unwrap_or_default(),
+        agent_name: optional_command_string(command, "agentName").unwrap_or_default(),
+        task_name: optional_command_string(command, "taskName").unwrap_or_default(),
+        target_service_ids: optional_command_string_array(command, "targetServiceIds")?,
+    };
+    let profile_path = profile
+        .user_data_dir
+        .as_deref()
+        .ok_or_else(|| "profile_acquisition_profile_identity_unavailable".to_string())?;
+    let launch_command =
+        protected_profile_acquisition_launch_command(&intent, &daemon_session_route, profile_path);
+    auto_launch_protected_profile(
+        daemon_state,
+        &launch_command,
+        ProtectedProfileLaunchContext {
+            permit,
+            raw_capability,
+            profile_id: profile_id.to_string(),
+            completion_idempotency_key: format!("{operation_idempotency_key}:complete"),
+        },
+    )
+    .await?;
+    let owner = daemon_state
+        .protected_browser_owner
+        .as_ref()
+        .map(|lease| lease.owner.clone())
+        .ok_or_else(|| "profile_acquisition_protected_owner_missing".to_string())?;
+    Ok(protected_profile_acquisition_response(
+        &claim, &owner, false,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn protected_profile_acquisition_response(
+    claim: &super::service_lease_authority::ProtectedEphemeralProfileClaim,
+    owner: &super::service_lease_authority::ProtectedBrowserOwner,
+    replayed: bool,
+) -> Value {
+    json!({
+        "outcome": ProfileAcquisitionOutcome {
+            schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
+            state: ProfileAcquisitionState::Acquired,
+            dominant_blocker: None,
+            automatic: true,
+            browser_id: Some(service_browser_id(&owner.daemon_session_route)),
+            daemon_session_route: Some(owner.daemon_session_route.clone()),
+            recovery: None,
+            next_action: None,
+            evidence: Vec::new(),
+        },
+        "leaseAuthority": {
+            "kind": "protected",
+            "claim": {
+                "resource": claim.resource,
+                "claimId": claim.claim_id,
+                "principalId": claim.principal_id,
+                "capabilityId": claim.capability_id,
+                "capabilityRevision": claim.capability_revision,
+                "claimRevision": claim.claim_revision,
+                "fencingToken": claim.fencing_token,
+                "expiresAt": claim.expires_at,
+            },
+            "owner": {
+                "ownerId": owner.owner_id,
+                "ownerGeneration": owner.owner_generation,
+                "logicalBrowserId": owner.logical_browser_id,
+                "daemonSessionRoute": owner.daemon_session_route,
+                "processInstanceDigest": owner.process_instance_digest,
+                "processPid": owner.process_pid,
+                "revision": owner.revision,
+            },
+            "replayed": replayed,
+        },
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
 async fn acquire_profile_command(
     command: &Value,
     daemon_state: &mut DaemonState,
@@ -2095,6 +2318,66 @@ mod tests {
             task_name: "acquire-facebook-profile".to_string(),
             target_service_ids: vec!["facebook".to_string()],
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_acquisition_launch_command_binds_exact_profile_without_a_bearer() {
+        let command = protected_profile_acquisition_launch_command(
+            &intent(),
+            "principal-profile-protected",
+            "/srv/agent-browser/profiles/last30days-facebook",
+        );
+
+        assert_eq!(command["action"], "tab_new");
+        assert_eq!(command["profileId"], "last30days-facebook");
+        assert_eq!(
+            command["profile"],
+            "/srv/agent-browser/profiles/last30days-facebook"
+        );
+        assert_eq!(command["sessionName"], "principal-profile-protected");
+        assert!(command.get("leaseEffectAuthorization").is_none());
+        assert!(command.get("leaseEffectOperationId").is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_acquisition_response_exposes_receipts_without_effect_authority() {
+        use crate::native::service_lease_authority::{
+            ProtectedBrowserOwner, ProtectedEphemeralProfileClaim,
+        };
+
+        let claim = ProtectedEphemeralProfileClaim {
+            resource: LeaseResourceKey::profile("last30days-facebook"),
+            claim_id: "claim:protected".to_string(),
+            principal_id: "principal:protected".to_string(),
+            capability_id: "capability:protected".to_string(),
+            capability_revision: 3,
+            claim_revision: 5,
+            fencing_token: 7,
+            expires_at: "2026-09-01T18:00:00Z".to_string(),
+        };
+        let owner = ProtectedBrowserOwner {
+            owner_id: "owner:protected".to_string(),
+            owner_generation: 11,
+            logical_browser_id: "browser:principal-profile-protected".to_string(),
+            daemon_session_route: "principal-profile-protected".to_string(),
+            process_instance_digest: format!("sha256:{}", "2".repeat(64)),
+            process_pid: 42111,
+            revision: 13,
+        };
+
+        let response = protected_profile_acquisition_response(&claim, &owner, false);
+
+        assert_eq!(response["outcome"]["state"], "acquired");
+        assert_eq!(response["leaseAuthority"]["kind"], "protected");
+        assert_eq!(
+            response["leaseAuthority"]["claim"]["claimId"],
+            "claim:protected"
+        );
+        assert_eq!(response["leaseAuthority"]["owner"]["ownerGeneration"], 11);
+        assert!(response.get("leaseEffectAuthorization").is_none());
+        assert!(response.get("leaseAcquisitionReceipt").is_none());
     }
 
     #[test]

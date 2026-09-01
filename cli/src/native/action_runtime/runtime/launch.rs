@@ -19,12 +19,16 @@ use super::daemon::{
     CloseBehavior,
 };
 use super::profile_lease::apply_auto_launch_command_hints;
+#[cfg(target_os = "linux")]
+use super::profile_lease::apply_protected_auto_launch_command_hints;
 use super::recovery::{
     can_attach_managed_runtime_for_launch, managed_runtime_attach_target,
     retained_session_attach_target_for_auto_launch, runtime_profile_pid,
     shared_profile_attach_target_for_auto_launch, DaemonState, ManagedRuntimeAttachTarget,
     SharedProfileAttachTarget,
 };
+#[cfg(target_os = "linux")]
+use super::remote_headed::persist_protected_current_browser_health;
 use super::remote_headed::{
     ensure_service_profile_lease_available, persist_current_browser_health,
     persist_service_browser_record,
@@ -71,6 +75,11 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
+#[cfg(target_os = "linux")]
+use crate::native::service_lease_authority::{
+    complete_protected_browser_launch_success, mark_protected_browser_launch_uncertain,
+    ProtectedBrowserLaunchPermit, ProtectedBrowserOwner, ProtectedBrowserOwnerLease,
+};
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -99,6 +108,7 @@ use crate::runtime_profile::{
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fmt::Debug;
 use std::future::Future;
@@ -546,6 +556,67 @@ where
     Err(format!("{error}; launched_browser_cleanup={cleanup:?}"))
 }
 
+pub(crate) async fn require_protected_launch_completion<
+    T,
+    Complete,
+    Cleanup,
+    CleanupFuture,
+    CleanupOutput,
+    Mark,
+>(
+    complete: Complete,
+    cleanup: Cleanup,
+    mark_uncertain: Mark,
+) -> Result<T, String>
+where
+    Complete: FnOnce() -> Result<T, String>,
+    Cleanup: FnOnce() -> CleanupFuture,
+    CleanupFuture: Future<Output = Result<CleanupOutput, String>>,
+    CleanupOutput: Debug,
+    Mark: FnOnce(&str) -> Result<(), String>,
+{
+    let completion_error = match complete() {
+        Ok(completed) => return Ok(completed),
+        Err(error) => error,
+    };
+    let cleanup = cleanup().await;
+    let evidence_digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!("protected-browser-launch-completion-failed\0{completion_error}\0{cleanup:?}")
+                .as_bytes()
+        )
+    );
+    let uncertainty = match mark_uncertain(&evidence_digest) {
+        Ok(()) => "recorded".to_string(),
+        Err(error) => format!("record_failed:{error}"),
+    };
+    Err(format!(
+        "protected_browser_launch_completion_failed:{completion_error}; launched_browser_cleanup={cleanup:?}; uncertainty={uncertainty}"
+    ))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn protected_launch_start_failure<Mark>(
+    launch_error: &str,
+    mark_uncertain: Mark,
+) -> String
+where
+    Mark: FnOnce(&str) -> Result<(), String>,
+{
+    let evidence_digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(format!("protected-browser-launch-start-failed\0{launch_error}").as_bytes())
+    );
+    let uncertainty = match mark_uncertain(&evidence_digest) {
+        Ok(()) => "recorded".to_string(),
+        Err(error) => format!("record_failed:{error}"),
+    };
+    format!(
+        "protected_browser_launch_start_uncertain:{launch_error}; uncertainty={uncertainty}; automatic_retry=forbidden"
+    )
+}
+
 async fn cleanup_failed_owned_launch(state: &mut DaemonState) -> Result<Value, String> {
     if state.runtime_owner_binding.is_some() {
         return super::navigation::handle_close(state).await;
@@ -576,10 +647,75 @@ async fn cleanup_failed_owned_launch(state: &mut DaemonState) -> Result<Value, S
     }))
 }
 
+enum AutoLaunchAuthority {
+    Legacy,
+    #[cfg(target_os = "linux")]
+    Protected(ProtectedProfileLaunchContext),
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct ProtectedProfileLaunchContext {
+    pub(crate) permit: ProtectedBrowserLaunchPermit,
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) completion_idempotency_key: String,
+}
+
+#[cfg(target_os = "linux")]
+impl std::fmt::Debug for ProtectedProfileLaunchContext {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedProfileLaunchContext")
+            .field("permit", &self.permit)
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field(
+                "completion_idempotency_key",
+                &self.completion_idempotency_key,
+            )
+            .finish()
+    }
+}
+
 pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
+    auto_launch_with_authority(state, command, AutoLaunchAuthority::Legacy).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn auto_launch_protected_profile(
+    state: &mut DaemonState,
+    command: &Value,
+    context: ProtectedProfileLaunchContext,
+) -> Result<(), String> {
+    auto_launch_with_authority(state, command, AutoLaunchAuthority::Protected(context)).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn retain_protected_browser_owner_before_projection<Project>(
+    state: &mut DaemonState,
+    lease: ProtectedBrowserOwnerLease,
+    project: Project,
+) -> Result<(), String>
+where
+    Project: FnOnce(&mut DaemonState, &ProtectedBrowserOwner) -> Result<(), String>,
+{
+    let owner = lease.owner.clone();
+    state.protected_browser_owner = Some(lease);
+    project(state, &owner)
+}
+
+async fn auto_launch_with_authority(
+    state: &mut DaemonState,
+    command: &Value,
+    authority: AutoLaunchAuthority,
+) -> Result<(), String> {
     state.pending_shared_profile_acquisition = None;
     let mut options = launch_options_from_env();
-    if command.get("leaseEffectAuthorization").is_some() {
+    let protected = matches!(&authority, AutoLaunchAuthority::Protected(_));
+    if protected && command.get("leaseEffectAuthorization").is_some() {
+        return Err("protected_browser_launch_legacy_authorization_forbidden".to_string());
+    }
+    if !protected && command.get("leaseEffectAuthorization").is_some() {
         let metadata = ServiceLaunchMetadata {
             profile_id: command
                 .get("profileId")
@@ -597,19 +733,33 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
-    if let Some(target) = retained_session_attach_target_for_auto_launch(command, &state.session_id)
-    {
-        attach_retained_service_session_browser_for_auto_launch(state, &target).await?;
-        return Ok(());
+    if !protected {
+        if let Some(target) =
+            retained_session_attach_target_for_auto_launch(command, &state.session_id)
+        {
+            attach_retained_service_session_browser_for_auto_launch(state, &target).await?;
+            return Ok(());
+        }
     }
-    let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, command);
+    let retained_remote_headed = (!protected)
+        .then(|| retained_remote_headed_launch_hint(&state.session_id, command))
+        .flatten();
     let (service_host, selection_reason, browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(
-            &mut options,
-            command,
-            retained_remote_headed.as_ref(),
-            &state.session_id,
-        )?;
+        if protected {
+            #[cfg(target_os = "linux")]
+            {
+                apply_protected_auto_launch_command_hints(&mut options, command)?
+            }
+            #[cfg(not(target_os = "linux"))]
+            unreachable!("protected launch authority is Linux-only")
+        } else {
+            apply_auto_launch_command_hints(
+                &mut options,
+                command,
+                retained_remote_headed.as_ref(),
+                &state.session_id,
+            )?
+        };
     let mut metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -617,23 +767,27 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
     );
     apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
-    if let Some(target) = shared_profile_attach_target_for_auto_launch(
-        &metadata,
-        &effective_command,
-        &state.session_id,
-    ) {
-        attach_shared_profile_browser_for_auto_launch(
-            state,
-            &target,
+    if !protected {
+        if let Some(target) = shared_profile_attach_target_for_auto_launch(
+            &metadata,
             &effective_command,
-            leave_open,
-            metadata,
-        )
-        .await?;
-        return Ok(());
+            &state.session_id,
+        ) {
+            attach_shared_profile_browser_for_auto_launch(
+                state,
+                &target,
+                &effective_command,
+                leave_open,
+                metadata,
+            )
+            .await?;
+            return Ok(());
+        }
     }
-    ensure_service_profile_lease_available(&metadata, &state.session_id, &effective_command)
-        .await?;
+    if !protected {
+        ensure_service_profile_lease_available(&metadata, &state.session_id, &effective_command)
+            .await?;
+    }
     let has_proxy_auth = options.proxy_username.is_some();
     if has_proxy_auth {
         let mut creds = state.proxy_credentials.write().await;
@@ -645,6 +799,13 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
     state.engine = engine.as_deref().unwrap_or("chrome").to_string();
     write_engine_file(&state.session_id, &state.engine);
     write_extensions_file(&state.session_id);
+    if protected
+        && (env::var_os("AGENT_BROWSER_CDP").is_some()
+            || env::var_os("AGENT_BROWSER_AUTO_CONNECT").is_some()
+            || env::var("AGENT_BROWSER_PROVIDER").is_ok_and(|provider| !provider.trim().is_empty()))
+    {
+        return Err("protected_browser_launch_requires_cold_local_spawn".to_string());
+    }
     if let Ok(cdp) = env::var("AGENT_BROWSER_CDP") {
         let mgr = BrowserManager::connect_cdp(&cdp).await?;
         state.reset_input_state();
@@ -740,7 +901,8 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         }
     }
     let hash = launch_hash(&options);
-    if engine.as_deref().unwrap_or("chrome") == "chrome"
+    if !protected
+        && engine.as_deref().unwrap_or("chrome") == "chrome"
         && can_attach_managed_runtime_for_launch(&options)
     {
         if let Some(target) = managed_runtime_attach_target(options.runtime_profile.as_deref()) {
@@ -750,7 +912,28 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         }
     }
     let remote_focus_options = options.clone();
-    let mgr = launch_browser_with_transient_retry(options, engine.as_deref()).await?;
+    let mgr = match &authority {
+        #[cfg(target_os = "linux")]
+        AutoLaunchAuthority::Protected(context) => {
+            match BrowserManager::launch(options, engine.as_deref()).await {
+                Ok(manager) => manager,
+                Err(error) => {
+                    let uncertainty_key =
+                        format!("{}:start-uncertain", context.completion_idempotency_key);
+                    return Err(protected_launch_start_failure(&error, |evidence_digest| {
+                        mark_protected_browser_launch_uncertain(
+                            &context.permit,
+                            evidence_digest,
+                            &uncertainty_key,
+                        )
+                    }));
+                }
+            }
+        }
+        AutoLaunchAuthority::Legacy => {
+            launch_browser_with_transient_retry(options, engine.as_deref()).await?
+        }
+    };
     let _ = focus_remote_headed_launch_for_view(&mgr, &remote_focus_options).await;
     state.reset_input_state();
     state.attached_runtime_profile = None;
@@ -759,13 +942,65 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         close_behavior_for_launched_browser(mgr.runtime_profile_name(), leave_open);
     state.browser = Some(mgr);
     state.launch_hash = Some(hash);
-    let persistence = persist_current_browser_health(
-        state,
-        service_host,
-        ServiceBrowserHealth::Ready,
-        Some(metadata),
-    );
-    require_owned_launch_persistence(persistence, || cleanup_failed_owned_launch(state)).await?;
+    match authority {
+        AutoLaunchAuthority::Legacy => {
+            let persistence = persist_current_browser_health(
+                state,
+                service_host,
+                ServiceBrowserHealth::Ready,
+                Some(metadata),
+            );
+            require_owned_launch_persistence(persistence, || cleanup_failed_owned_launch(state))
+                .await?;
+        }
+        #[cfg(target_os = "linux")]
+        AutoLaunchAuthority::Protected(context) => {
+            let browser_pid = state
+                .browser
+                .as_ref()
+                .and_then(BrowserManager::browser_pid)
+                .ok_or_else(|| "protected_browser_launch_pid_missing".to_string())?;
+            let completion_permit = context.permit.clone();
+            let uncertainty_permit = context.permit.clone();
+            let completion_key = context.completion_idempotency_key.clone();
+            let uncertainty_key = format!("{completion_key}:uncertain");
+            let owner = require_protected_launch_completion(
+                || {
+                    complete_protected_browser_launch_success(
+                        &completion_permit,
+                        browser_pid,
+                        &completion_key,
+                    )
+                },
+                || cleanup_failed_owned_launch(state),
+                |evidence_digest| {
+                    mark_protected_browser_launch_uncertain(
+                        &uncertainty_permit,
+                        evidence_digest,
+                        &uncertainty_key,
+                    )
+                },
+            )
+            .await?;
+            retain_protected_browser_owner_before_projection(
+                state,
+                ProtectedBrowserOwnerLease {
+                    raw_capability: context.raw_capability,
+                    profile_id: context.profile_id,
+                    owner,
+                },
+                |state, owner| {
+                    persist_protected_current_browser_health(
+                        state,
+                        owner,
+                        service_host,
+                        ServiceBrowserHealth::Ready,
+                        Some(metadata),
+                    )
+                },
+            )?;
+        }
+    }
     state.subscribe_to_browser_events();
     state.start_fetch_handler();
     state.start_dialog_handler();
