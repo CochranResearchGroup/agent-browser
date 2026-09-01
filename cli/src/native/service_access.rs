@@ -6103,6 +6103,7 @@ mod tests {
             )]),
             ..ServiceState::default()
         };
+        let claim_now = Utc::now();
         let claim = state
             .acquire_lease_claim(AcquireLeaseClaimRequest {
                 resource: LeaseResourceKey::profile("last30days-social"),
@@ -6113,8 +6114,8 @@ mod tests {
                 mode: LeaseClaimMode::Ephemeral,
                 expected_claim_revision: 0,
                 idempotency_key: "access-plan-claim".to_string(),
-                now: "2026-08-31T12:00:00Z".to_string(),
-                expires_at: "2026-08-31T12:05:00Z".to_string(),
+                now: claim_now.to_rfc3339(),
+                expires_at: (claim_now + chrono::Duration::minutes(5)).to_rfc3339(),
                 transition_deadline: None,
                 recovery_controller_id: None,
                 boot_epoch: None,

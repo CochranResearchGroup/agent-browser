@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 
 const rootDir = new URL('..', import.meta.url).pathname;
@@ -46,6 +47,45 @@ const env = {
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: '0',
 };
 const executableSha256 = createHash('sha256').update(readFileSync(binary)).digest('hex');
+const ingressPath = join(home, '.agent-browser', 'runtime-host-ingress.json');
+
+async function availableLoopbackPort() {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  assert(port > 0, 'could not allocate a loopback fixture port');
+  return port;
+}
+
+const alphaPort = await availableLoopbackPort();
+const betaPort = await availableLoopbackPort();
+
+if (process.platform === 'linux') {
+  mkdirSync(join(home, '.agent-browser'), { recursive: true });
+  const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+  writeFileSync(ingressPath, `${JSON.stringify({
+    schemaVersion: 'agent-browser.runtime-host-ingress.v1',
+    revision: 1,
+    bootEpoch: `linux:${bootId}`,
+    activeTransactionId: null,
+    selectedBackend: {
+      topology: 'single_host',
+      generationId: 'supervisor-restart-fixture',
+      socketDir: join(fixtureRoot, 'stale-selected-socket'),
+      binarySha256: executableSha256,
+      hostId: 'runtime-host:dead-selected',
+      pid: 4294967295,
+      socketIdentity: 'unix:dead:selected',
+    },
+    candidateBackend: null,
+    fallbackBackend: null,
+  }, null, 2)}\n`, { mode: 0o600 });
+}
 
 function manifest(session, streamPort) {
   return {
@@ -63,7 +103,7 @@ function manifest(session, streamPort) {
   };
 }
 
-for (const [session, port] of [['alpha', 39731], ['beta', 39732]]) {
+for (const [session, port] of [['alpha', alphaPort], ['beta', betaPort]]) {
   writeFileSync(
     join(manifestDir, `${session}.json`),
     `${JSON.stringify(manifest(session, port), null, 2)}\n`,
@@ -118,16 +158,26 @@ function assertHostTopology(expectedPid) {
   const sockets = readdirSync(socketDir).filter((name) => name.endsWith('.sock'));
   assert(pidFiles.length === 1 && pidFiles[0] === 'runtime-host.pid', `unexpected PID files: ${pidFiles}`);
   assert(sockets.length === 1 && sockets[0] === 'runtime-host.sock', `unexpected sockets: ${sockets}`);
-  assert(readFileSync(join(socketDir, 'alpha.stream'), 'utf8').trim() === '39731', 'alpha fixed port drifted');
-  assert(readFileSync(join(socketDir, 'beta.stream'), 'utf8').trim() === '39732', 'beta fixed port drifted');
+  assert(readFileSync(join(socketDir, 'alpha.stream'), 'utf8').trim() === String(alphaPort),
+    'alpha fixed port drifted');
+  assert(readFileSync(join(socketDir, 'beta.stream'), 'utf8').trim() === String(betaPort),
+    'beta fixed port drifted');
   const pid = Number.parseInt(readFileSync(join(socketDir, 'runtime-host.pid'), 'utf8'), 10);
   assert(Number.isInteger(pid) && processIsLive(pid), 'runtime host PID is not live');
   if (expectedPid !== undefined) assert(pid !== expectedPid, 'restarted host reused the old PID');
+  if (process.platform === 'linux') {
+    const ingress = JSON.parse(readFileSync(ingressPath, 'utf8'));
+    assert(ingress.selectedBackend.pid === pid, 'ingress did not select the restarted host PID');
+    assert(ingress.selectedBackend.socketDir === socketDir,
+      'ingress did not select the restarted host socket directory');
+    assert(ingress.selectedBackend.binarySha256 === executableSha256,
+      'ingress changed the selected binary identity');
+  }
   return pid;
 }
 
 async function assertDashboardDiscovery() {
-  const response = await fetch('http://127.0.0.1:39731/api/sessions');
+  const response = await fetch(`http://127.0.0.1:${alphaPort}/api/sessions`);
   assert(response.ok, `dashboard discovery returned HTTP ${response.status}`);
   const sessions = await response.json();
   const names = sessions.map((session) => session.session).sort();

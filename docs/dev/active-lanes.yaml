@@ -1,2 +1,18 @@
 schema_version: 1
-lanes: []
+lanes:
+  - id: P147 Runtime Host Ingress Supervisor Restart Repair
+    objective: Adopt an exact same-generation supervised replacement after the selected runtime host exits
+    plan: docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md
+    plan_ref: refs/heads/fix/runtime-ingress-same-generation-adoption
+    branch: fix/runtime-ingress-same-generation-adoption
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 45ca9556c08813ac9181ebf695668262698681dd
+    remote_ref: refs/remotes/origin/fix/runtime-ingress-same-generation-adoption
+    integration_receipt: null
+    integration: merge
+    dependencies: []
+    overlaps: [plan/lease-authority-coordination]
+    reconciled_overlaps: []
+    updated_at: 2026-09-01
