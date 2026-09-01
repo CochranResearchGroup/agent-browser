@@ -2408,8 +2408,12 @@ capability revision, exact claim axes, action, audience, executor UID and
 process identity, occurrence time, authorization expiry, and authority
 revision. The executor digest is part of the signed authorization payload. A
 different process cannot replay the operation, and changing the signed
-executor digest invalidates the proof. Exact restart replay returns the same
-receipt and authorization without advancing the authority revision.
+executor digest invalidates the proof. The first successful authorization
+delivery is single-use. Exact restart replay returns the same receipt without
+advancing the authority revision, but never returns another executable bearer:
+after delivery the kernel cannot distinguish a lost pre-effect response from a
+crash after the external effect, so replay requires reconciliation rather than
+permission to launch again.
 
 This checkpoint deliberately exposes only the currently modeled
 `browser_launch` action with a bounded `daemon-session:` audience. It rejects
@@ -2420,9 +2424,9 @@ returns a typed capacity outcome before mutation.
 The defect was first demonstrated by the protected service regression failing
 to compile because no durable `effect_receipts` collection existed. Focused
 tests now prove closed request fields, durable publication before reply,
-restart replay, principal and executor namespacing, proof tamper rejection,
-scope rejection, capability redaction, and compatibility with the existing
-profile recovery and lease callers.
+bearer-free restart replay, principal and executor namespacing, proof tamper
+rejection, scope rejection, capability redaction, and compatibility with the
+existing profile recovery and lease callers.
 
 This is not yet an effect-sink migration or final invariant 101 acceptance.
 The selected browser-launch sink must consume the committed intent and persist
@@ -2459,3 +2463,21 @@ yet. Compensation, bounded uncertainty reconciliation, selected sink
 integration, the exhaustive sink manifest, and the newly identified
 end-to-end deadline and outcome-fidelity invariants 111 through 113 remain.
 Production installation is still withheld.
+
+## Slice F Single-Use Effect Delivery Correction | 2026-09-01
+
+The sink trace found that a consumed but nonterminal effect receipt still
+returned its original executable authorization on exact replay. That behavior
+was safe only when response loss was known to occur before the effect. After a
+daemon crash, the kernel cannot know whether Chrome started before completion
+was recorded, so replaying the bearer could create the duplicate process storm
+this plan is intended to make unrepresentable.
+
+The protected kernel now returns the durable consumed receipt and
+`authorization: null` on every authorization replay. The first delivery remains
+executor-bound and effect-capable; every later delivery is evidence-only and
+must enter bounded physical reconciliation. A service-level regression first
+failed by observing the repeated bearer, then passed after the correction.
+Selected sink integration must treat a consumed replay as
+`effect_uncertain`/inspect-before-retry, not as an authorization outage and not
+as permission to request a new operation key automatically.

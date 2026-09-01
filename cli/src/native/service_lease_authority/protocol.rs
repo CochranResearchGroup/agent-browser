@@ -1775,7 +1775,12 @@ impl LeaseAuthorityProtocolKernel {
             }
             return Ok(LeaseAuthorityEffectOutcome {
                 receipt: record.receipt.clone(),
-                authorization: record.authorization.clone(),
+                // Authorization is a single-use delivery. Once the durable
+                // receipt exists, replay proves only that the operation was
+                // admitted; it cannot distinguish a lost pre-effect response
+                // from a crash after the external effect. Reissuing the bearer
+                // would permit a blind duplicate launch.
+                authorization: None,
                 replayed: true,
             });
         }
@@ -4117,7 +4122,7 @@ mod tests {
             .unwrap();
         assert!(replayed.replayed);
         assert_eq!(replayed.receipt, authorized.receipt);
-        assert_eq!(replayed.authorization, authorized.authorization);
+        assert!(replayed.authorization.is_none());
         assert_eq!(restarted.state.authority.revision(), authority_revision);
 
         let different_executor =

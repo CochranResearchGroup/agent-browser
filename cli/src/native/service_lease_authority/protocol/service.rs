@@ -975,9 +975,9 @@ mod tests {
         .unwrap();
         assert_eq!(effect_replay_response["outcome"], "effect_authorized");
         assert_eq!(effect_replay_response["payload"]["replayed"], true);
-        assert_eq!(
-            effect_replay_response["payload"]["authorization"],
-            effect_response["payload"]["authorization"]
+        assert!(
+            effect_replay_response["payload"]["authorization"].is_null(),
+            "a delivered single-use effect authorization cannot be replayed: {effect_replay_response}"
         );
         assert_eq!(
             effect_replay_response["payload"]["receipt"],
