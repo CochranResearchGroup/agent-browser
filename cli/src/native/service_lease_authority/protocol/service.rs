@@ -1041,12 +1041,24 @@ mod tests {
         let mut browser_process = browser_command
             .spawn()
             .expect("spawn bounded browser process fixture");
+        let singleton_lock = profile_path.join("SingletonLock");
+        std::os::unix::fs::symlink(format!("fixture-{}", browser_process.id()), &singleton_lock)
+            .unwrap();
+        if unsafe { libc::geteuid() } == 0 {
+            use std::os::unix::ffi::OsStrExt;
+            let lock_path = std::ffi::CString::new(singleton_lock.as_os_str().as_bytes()).unwrap();
+            assert_eq!(
+                unsafe { libc::lchown(lock_path.as_ptr(), operator_uid, peer.gid) },
+                0
+            );
+        }
         let completion = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",
             "operation": "complete_browser_launch",
             "payload": {
                 "receiptId": effect_response["payload"]["receipt"]["receiptId"],
                 "browserPid": browser_process.id(),
+                "profilePath": profile_path,
                 "completionIdempotencyKey": "complete:last30days:service-1"
             }
         }))
