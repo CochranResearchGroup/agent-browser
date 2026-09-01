@@ -1,3 +1,4 @@
+use ring::signature::{self, Ed25519KeyPair};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -7,11 +8,13 @@ use std::path::{Path, PathBuf};
 
 use super::{
     AcquireLeaseClaimRequest, ActiveLeaseClaim, LeaseAdministratorAuthority, LeaseAuthorityEvent,
-    LeaseAuthorityState, LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt,
-    LeaseClaimMode, LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey,
-    LeaseResourceKind,
+    LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
+    LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
+    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
 };
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
+
+mod custody;
 
 const LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-request.v1";
@@ -35,6 +38,8 @@ const LEASE_AUTHORITY_STORE_HISTORY_FILE: &str = "history.v1.json";
 const LEASE_AUTHORITY_STORE_HISTORY_MANIFEST_FILE: &str = "history-manifest.v1.json";
 const LEASE_AUTHORITY_STORE_MANIFEST_FILE: &str = "manifest.v1.json";
 const LEASE_AUTHORITY_STORE_SELECTOR_FILE: &str = "selected-generation.v1.json";
+const LEASE_AUTHORITY_SERVICE_IDENTITY_PROOF_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-service-identity-proof.v1";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -80,6 +85,29 @@ struct AcquireLeaseAuthorityPayload {
     recovery_controller_id: Option<String>,
     boot_epoch: Option<String>,
     owner_generation: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityServiceChallengeRequest {
+    nonce: String,
+    expected_authority_domain_id: String,
+    minimum_authority_epoch: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityServiceIdentityProof {
+    schema_version: String,
+    authority_domain_id: String,
+    authority_epoch: u64,
+    boot_epoch: String,
+    endpoint_identity_digest: String,
+    executable_sha256: String,
+    signing_key_id: String,
+    signing_key_epoch: u64,
+    nonce: String,
+    proof: String,
 }
 
 #[derive(PartialEq, Eq)]
@@ -713,6 +741,47 @@ impl LeaseAuthorityProtocolKernel {
         Ok(())
     }
 
+    fn issue_service_identity_challenge(
+        &self,
+        request: &LeaseAuthorityServiceChallengeRequest,
+        custody: &custody::LeaseAuthorityCustodyIdentity,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseAuthorityServiceIdentityProof, LeaseAuthorityProtocolError> {
+        if !valid_sha256_digest(&request.nonce)
+            || request.expected_authority_domain_id != self.state.domain.authority_domain_id
+            || request.minimum_authority_epoch == 0
+            || self.state.domain.authority_epoch < request.minimum_authority_epoch
+            || !valid_sha256_digest(&custody.endpoint_identity_digest)
+            || !valid_sha256_digest(&custody.executable_sha256)
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_service_identity_request_invalid",
+            });
+        }
+        let mut identity = LeaseAuthorityServiceIdentityProof {
+            schema_version: LEASE_AUTHORITY_SERVICE_IDENTITY_PROOF_SCHEMA_VERSION.to_string(),
+            authority_domain_id: self.state.domain.authority_domain_id.clone(),
+            authority_epoch: self.state.domain.authority_epoch,
+            boot_epoch: self.state.domain.boot_epoch.clone(),
+            endpoint_identity_digest: custody.endpoint_identity_digest.clone(),
+            executable_sha256: custody.executable_sha256.clone(),
+            signing_key_id: signing_key.key_id.clone(),
+            signing_key_epoch: signing_key.key_epoch,
+            nonce: request.nonce.clone(),
+            proof: String::new(),
+        };
+        let key = Ed25519KeyPair::from_seed_unchecked(&signing_key.private_key).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_service_identity_signing_failed",
+            }
+        })?;
+        identity.proof = hex::encode(
+            key.sign(service_identity_proof_payload(&identity).as_bytes())
+                .as_ref(),
+        );
+        Ok(identity)
+    }
+
     fn encode_protected_state(&self) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
         serde_json::to_vec_pretty(&self.state).map_err(|_| LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_state_encode_failed",
@@ -986,6 +1055,57 @@ fn valid_sha256_digest(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
+}
+
+fn verify_service_identity_challenge(
+    identity: &LeaseAuthorityServiceIdentityProof,
+    request: &LeaseAuthorityServiceChallengeRequest,
+    observed_custody: &custody::LeaseAuthorityCustodyIdentity,
+    verification_keys: &LeaseAuthorityVerificationKeyring,
+) -> Result<(), LeaseAuthorityProtocolError> {
+    if identity.schema_version != LEASE_AUTHORITY_SERVICE_IDENTITY_PROOF_SCHEMA_VERSION
+        || identity.authority_domain_id != request.expected_authority_domain_id
+        || identity.authority_epoch < request.minimum_authority_epoch
+        || identity.nonce != request.nonce
+        || identity.endpoint_identity_digest != observed_custody.endpoint_identity_digest
+        || identity.executable_sha256 != observed_custody.executable_sha256
+        || identity.boot_epoch.trim().is_empty()
+        || !valid_sha256_digest(&identity.authority_domain_id)
+        || !valid_sha256_digest(&identity.endpoint_identity_digest)
+        || !valid_sha256_digest(&identity.executable_sha256)
+    {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_service_identity_proof_invalid",
+        });
+    }
+    let verification_key = verification_keys
+        .verification_key(&identity.signing_key_id, identity.signing_key_epoch)
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_service_identity_proof_invalid",
+        })?;
+    let proof = hex::decode(&identity.proof).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_service_identity_proof_invalid",
+    })?;
+    signature::UnparsedPublicKey::new(&signature::ED25519, verification_key.public_key)
+        .verify(service_identity_proof_payload(identity).as_bytes(), &proof)
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_service_identity_proof_invalid",
+        })
+}
+
+fn service_identity_proof_payload(identity: &LeaseAuthorityServiceIdentityProof) -> String {
+    format!(
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        identity.schema_version,
+        identity.authority_domain_id,
+        identity.authority_epoch,
+        identity.boot_epoch,
+        identity.endpoint_identity_digest,
+        identity.executable_sha256,
+        identity.signing_key_id,
+        identity.signing_key_epoch,
+        identity.nonce
+    )
 }
 
 fn valid_bare_sha256(value: &str) -> bool {
@@ -1757,5 +1877,56 @@ mod tests {
         let error = store.load_history().unwrap_err();
         assert_eq!(error.code(), "lease_authority_protocol_history_unavailable");
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn service_identity_challenge_binds_nonce_domain_epoch_and_custody() {
+        let kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let signing_key = super::super::LeaseAuthoritySigningKey::from_private_bytes([7u8; 32]);
+        let verification_keys =
+            super::super::LeaseAuthorityVerificationKeyring::from_active(&signing_key);
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let request = LeaseAuthorityServiceChallengeRequest {
+            nonce: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .to_string(),
+            expected_authority_domain_id: TEST_AUTHORITY_DOMAIN_ID.to_string(),
+            minimum_authority_epoch: 7,
+        };
+
+        let proof = kernel
+            .issue_service_identity_challenge(&request, &custody, &signing_key)
+            .unwrap();
+        verify_service_identity_challenge(&proof, &request, &custody, &verification_keys).unwrap();
+
+        let replacement_snapshot =
+            custody::LeaseAuthorityCustodySnapshot::root_owned_fixture().with_replaced_socket();
+        let replacement_custody = replacement_snapshot.validate(991).unwrap();
+        let error = verify_service_identity_challenge(
+            &proof,
+            &request,
+            &replacement_custody,
+            &verification_keys,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_service_identity_proof_invalid"
+        );
+
+        let mut tampered = proof;
+        tampered.endpoint_identity_digest =
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+        let error =
+            verify_service_identity_challenge(&tampered, &request, &custody, &verification_keys)
+                .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_service_identity_proof_invalid"
+        );
     }
 }

@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_crash_durable_authority_publication_source_accepted_custody_in_progress`
+Execution state: `slice_g_protected_service_identity_source_accepted_custody_install_in_progress`
 
 Lane: P144
 
@@ -550,6 +550,13 @@ Every active claim contains at least:
     required audit history to the exact same selected generation before it
     can mutate or publish. History failure therefore blocks new mutation
     without truncating prior audit evidence or blocking current reads.
+100. A service-identity proof is accepted only when its signed endpoint and
+    executable identities equal evidence observed locally from the exact
+    connected transport. On Linux, the client binds that evidence to kernel
+    `SO_PEERCRED`, the root peer PID and UID, the socket device and inode,
+    root and group ownership plus mode, the root-owned non-writable executable
+    digest, and the root-only state root. A valid signature for a different or
+    replaced endpoint is invalid for the current connection.
 
 ## Claim Modes
 
@@ -797,6 +804,7 @@ runtime receipts all satisfy the acceptance matrix.
 | long-lived executor retains verifier epoch N while the authority selects N+1 | it securely refreshes or is removed from routing within the declared deadline; no false lease conflict or global readiness denial is emitted |
 | stale writer publishes an older valid protected snapshot | selector compare-and-swap rejects it with zero effect and the current generation remains selected |
 | read-only authority snapshot is mutated and republished without loading history | publication is structurally unavailable; mutation must bind the exact selected history generation first |
+| same-user process creates a compatible authority socket or replays a valid proof from another socket | local peer, socket, executable, and signed endpoint identities disagree; no authority response is accepted |
 
 ## Design Completeness Audit | 2026-08-31
 
@@ -1538,3 +1546,47 @@ reconciliation, platform filesystem qualification, transactional wiring of
 every kernel mutation, public administrator bootstrap and rotation, concrete
 effect-sink migration, mixed-version migration, and installed acceptance
 remain open. No production install is authorized at this checkpoint.
+
+## Slice G Protected Service Identity Checkpoint | 2026-08-31
+
+State transition: `slice_g_crash_durable_authority_publication_source_accepted_custody_in_progress`
+to `slice_g_protected_service_identity_source_accepted_custody_install_in_progress`.
+
+The private protocol now has an operating-system custody adapter rather than
+accepting caller-asserted service identity. On Linux it reads `SO_PEERCRED`
+from the exact connected Unix stream, resolves the peer executable through
+`/proc/<pid>/exe`, hashes its bytes, and inspects the socket and state-root
+metadata. Custody requires a root peer, the exact peer PID, a root-owned
+non-group-writable executable, a root-only state root, and a root-owned socket
+with the exact configured operator group and mode. The endpoint identity is
+content-bound to those observations, including socket device and inode.
+
+The authority signs a nonce-bound identity response containing its domain,
+authority epoch, boot epoch, executable digest, and endpoint identity. Client
+verification requires both a valid enrolled Ed25519 key and equality with the
+client's locally observed custody identity. A proof signed for a replaced
+socket is not valid on the current connection.
+
+Evidence:
+
+- Red then green: a same-user service and peer cannot satisfy root custody.
+- Red then green: a user-owned state root cannot hold operational authority.
+- Red then green: candidate-owned sockets and candidate-writable executables
+  cannot become the protected endpoint.
+- Red then green: peer PID must match the exact process on the connected Unix
+  stream, and changing the socket inode changes endpoint identity.
+- Red then green: the real Linux inspector rejects a user-owned socket that
+  speaks through a valid connected Unix stream.
+- Red then green: the signed service challenge rejects endpoint replacement
+  and signed-field tampering.
+- All 25 focused protocol and custody tests pass. Wrapper Rust formatting and
+  strict Clippy pass.
+
+This checkpoint establishes the source enforcement contract but does not yet
+run a root authority service. The root-owned supervisor executable and state
+root, system socket activation or equivalent transport lifecycle, framed typed
+request dispatch, request authentication, external epoch store, privileged
+bootstrap and rollback generations, installer and doctor integration, and
+installed adversarial acceptance remain open. The same-user production
+runtime still lacks this custody boundary, so no production install is
+authorized.
