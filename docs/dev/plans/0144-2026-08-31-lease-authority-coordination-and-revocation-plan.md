@@ -3363,3 +3363,47 @@ preservation, no bootstrap repetition, the new selected generation, and the
 retained old generation. Documentation, strict Rust checks, installer fixtures,
 and the documentation build pass. Protected installation and exact live
 acquisition acceptance remain.
+
+## Slice S Installed Acquire-Close And Forced Production Convergence | 2026-09-01
+
+The explicit protected-authority upgrade selected the exact release binary
+with SHA-256
+`f8fdb05e80fef05f210e1d5f3fab17c8f647f87e568c6c200b4dedf30ff0e4a0`.
+The protected socket remained enabled and listening, and the development
+runtime selected generation `0.28.0-f8fdb05e80fe` with a green doctor.
+
+One capability-bound acquisition against enrolled profile
+`p134-slice-j-crash-14` then completed through the installed protected
+authority. It acquired claim
+`lease-claim-v1:4643a1dd0817f692e47a10f1a83dfea9`, owner
+`owner:35f2e7bf46f3582193262bd5f0a7fce8`, logical browser
+`browser:56b08b8daa99c12c1e24c4270fba23cd`, browser PID `48803`, owner
+generation `1`, fencing token `4`, and authority receipt
+`effect-receipt:b49246696f9add8dd23a7229`. Closing exact session
+`principal-profile-31897dfe1765df52ae18e9b9` removed the session, browser
+process, and profile lock. Subsequent projections contained no matching claim,
+owner, session, or logical browser. The retained profile-lease row was
+`observationOnly=true` with `cleanupObligation=satisfied`; the profile had zero
+holders and projected `leaseState=available`. This proves retained warning
+history is not operational authority. The three-iteration development launch
+smoke also passed without residue.
+
+Production installation used the explicit audited browserless override. The
+first census correctly rejected while live browser roots remained. Under the
+operator's force-install direction, the exact idle transcribe runtime host and
+eight exact Agent Browser browser roots were closed after process, socket,
+profile, and target inspection. One orphaned Soylei contractor-review tab was
+among those roots and must be reopened if still needed; its durable profile was
+not removed. The accepted two-round browserless census recorded digest
+`b49eedddb993caaa49b0d43e3a965b393dbd3812ba70f7630ac42d6c09f8a87e`.
+
+Transaction `upgrade-993b3779-0524-46be-8623-105c182d24b2` completed every
+phase through workstation reconciliation and supervisor rebinding. Production
+selected generation `0.28.0-f8fdb05e80fe-3e34d18321c5`, whose installed
+binary hash exactly matches the protected-authority and tested development
+binary. `agent-browser install doctor --json` exited zero with
+`success=true`: workstation payload ready, runtime convergence ready, one
+current runtime host, one executable generation, zero legacy daemons, live
+dashboard ready, and remote-view privileges ready. Historical profile-lease
+identity findings remain warning-only audit evidence and do not make doctor or
+ordinary profile availability fail.
