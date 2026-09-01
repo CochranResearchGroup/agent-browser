@@ -273,6 +273,13 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
 ) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
     let encoded = read_lease_authority_frame(reader)?;
     let decoded = decode_lease_authority_request(&encoded)?;
+    let mutation = matches!(
+        decoded,
+        LeaseAuthorityProtocolRequest::RecoverPlan(_)
+            | LeaseAuthorityProtocolRequest::Recover(_)
+            | LeaseAuthorityProtocolRequest::RevokePlan(_)
+            | LeaseAuthorityProtocolRequest::Revoke(_)
+    );
     let administrative = matches!(
         decoded,
         LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
@@ -282,12 +289,12 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
             "lease_authority_protocol_administrator_peer_required",
         ));
     }
-    let mut kernel = if administrative {
+    let mut kernel = if mutation {
         store.load_for_mutation(load_context)?
     } else {
         store.load(load_context)?
     };
-    if !administrative {
+    if !mutation {
         return dispatch_lease_authority_request(
             &mut kernel,
             &encoded,
@@ -298,23 +305,28 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
         );
     }
 
-    let mut capability = load_administrator_capability(state_root, config, &kernel)?;
-    let observed_at = authority_observed_at();
-    let context = LeaseAuthorityAdministrativeDispatchContext {
-        administrator_id: &config.administrator_id,
-        administrator_revision: config.administrator_revision,
-        raw_administrator_capability: &capability,
-        authority_observed_at: &observed_at,
+    let dispatched = if administrative {
+        let mut capability = load_administrator_capability(state_root, config, &kernel)?;
+        let observed_at = authority_observed_at();
+        let context = LeaseAuthorityAdministrativeDispatchContext {
+            administrator_id: &config.administrator_id,
+            administrator_revision: config.administrator_revision,
+            raw_administrator_capability: &capability,
+            authority_observed_at: &observed_at,
+        };
+        let dispatched = dispatch_lease_authority_request(
+            &mut kernel,
+            &encoded,
+            custody,
+            peer,
+            signing_key,
+            Some(&context),
+        );
+        capability.fill(0);
+        dispatched
+    } else {
+        dispatch_lease_authority_request(&mut kernel, &encoded, custody, peer, signing_key, None)
     };
-    let dispatched = dispatch_lease_authority_request(
-        &mut kernel,
-        &encoded,
-        custody,
-        peer,
-        signing_key,
-        Some(&context),
-    );
-    capability.fill(0);
     store.publish(&kernel, None)?;
     dispatched
 }

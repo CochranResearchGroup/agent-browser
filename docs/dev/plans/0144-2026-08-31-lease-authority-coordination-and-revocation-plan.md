@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_root_service_source_accepted_installer_bootstrap_in_progress`
+Execution state: `slice_e_strict_recovery_plan_apply_source_accepted_hierarchy_in_progress`
 
 Lane: P144
 
@@ -2067,3 +2067,42 @@ generated client, dashboard, documentation, and shared-skill parity remain in
 Slice G. Full suspend and reboot fencing, signer and administrator rotation,
 loss recovery, bounded intent compaction, and the strict recovery-controller
 plan and apply path also remain. Production installation is still withheld.
+
+## Slice E Protected Strict Recovery Plan And Apply Checkpoint | 2026-08-31
+
+The protected authority service now implements typed `recover_plan` and
+`recover` operations for the exact recovery controller named by a strict
+claim. The request schema accepts the raw controller capability, canonical
+resource and claim axes, idempotency key, and requested successor owner
+generation. It rejects caller-supplied time. The authority service chooses the
+120-second authorization lifetime, 60-second transition deadline, and
+300-second recovered-claim lifetime from its durable nondecreasing time floor.
+
+Recovery planning authenticates the live controller capability against the
+protected principal registry and current strict claim. It persists the exact
+signed authorization in protected operational state before returning a
+proof-redacted plan id. Recovery apply accepts only that plan id plus the raw
+controller capability, authenticates the controller again, requires byte-exact
+agreement with the retained authorization, revalidates the current claim and
+fence, and atomically advances the claim revision, fencing token, transition
+deadline, owner generation, event, and recovery receipt.
+
+The production service classifies both recovery operations as protected
+mutations, obtains a compare-and-swap mutation load, and publishes the new
+generation before returning the result. Recovery intent and terminal receipt
+survive restart. An exact completed apply replays the original receipt instead
+of recovering twice. A wrong controller, altered plan, stale claim, expired
+plan, or missing retained authorization cannot mutate authority.
+
+Focused recovery and lease-authority tests pass for durable protected intent,
+proof and capability redaction, wrong-controller rejection with zero state
+change, caller-time rejection, restart apply, restart terminal replay, stale
+effect fencing, and recovery replay after controller lifecycle change.
+
+This closes the protected strict-controller IPC placeholder, not the whole
+hotfix taxonomy. Administrative recovery-controller replacement, bounded
+intent compaction, hierarchy and parent fencing, runtime-owner transfer,
+single-flight process spawn, receipt-only Service State projection, exhaustive
+denial and effect manifests, model and crash testing, mixed-version migration,
+and exact installed acceptance remain mandatory. Production installation is
+still withheld.

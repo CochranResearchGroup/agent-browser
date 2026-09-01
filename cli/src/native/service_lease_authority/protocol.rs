@@ -12,7 +12,8 @@ use super::{
     LeaseAdministrativeIntent, LeaseAdministratorAuthority, LeaseAuthorityEvent,
     LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
     LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
-    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
+    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseRecoveryAuthorization,
+    LeaseRecoveryIntent, LeaseResourceKey, LeaseResourceKind, RecoverLeaseClaimRequest,
     RevokeLeaseClaimRequest,
 };
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
@@ -133,6 +134,66 @@ struct RevokeLeaseApplyPayload {
     plan_id: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RecoverLeasePlanPayload {
+    raw_controller_capability: LeaseAuthoritySecret,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
+    idempotency_key: String,
+    owner_generation: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RecoverLeaseApplyPayload {
+    raw_controller_capability: LeaseAuthoritySecret,
+    plan_id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct RecoverLeasePlanProjection {
+    plan_id: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    recovery_controller_id: String,
+    recovery_controller_revision: u64,
+    claim_revision: u64,
+    fencing_token: u64,
+    issued_at: String,
+    authorization_expires_at: String,
+    claim_expires_at: String,
+    transition_deadline: String,
+    owner_generation: Option<u64>,
+    replayed: bool,
+}
+
+impl RecoverLeasePlanProjection {
+    fn from_outcome(outcome: super::LeaseRecoveryPlanOutcome) -> Self {
+        let authorization = outcome.authorization;
+        Self {
+            plan_id: authorization.plan_id(),
+            resource: authorization.resource.clone(),
+            claim_id: authorization.claim_id.clone(),
+            principal_id: authorization.principal_id.clone(),
+            recovery_controller_id: authorization.recovery_controller_id.clone(),
+            recovery_controller_revision: authorization.recovery_controller_revision,
+            claim_revision: authorization.claim_revision,
+            fencing_token: authorization.fencing_token,
+            issued_at: authorization.issued_at.clone(),
+            authorization_expires_at: authorization.authorization_expires_at.clone(),
+            claim_expires_at: authorization.claim_expires_at.clone(),
+            transition_deadline: authorization.transition_deadline.clone(),
+            owner_generation: authorization.owner_generation,
+            replayed: outcome.replayed,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct RevokeLeasePlanProjection {
@@ -202,7 +263,8 @@ enum LeaseAuthorityProtocolRequest {
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(Value),
     Release(Value),
-    Recover(Value),
+    RecoverPlan(RecoverLeasePlanPayload),
+    Recover(RecoverLeaseApplyPayload),
     RevokePlan(RevokeLeasePlanPayload),
     Revoke(RevokeLeaseApplyPayload),
     Inspect(Value),
@@ -973,6 +1035,125 @@ impl LeaseAuthorityProtocolKernel {
             .map_err(lease_authority_protocol_error)
     }
 
+    fn authenticate_recovery_controller(
+        &self,
+        raw_capability: &[u8],
+        profile_id: &str,
+    ) -> Result<
+        crate::native::service_principal::ServiceProfileCapability,
+        LeaseAuthorityProtocolError,
+    > {
+        let raw_capability =
+            std::str::from_utf8(raw_capability).map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_recovery_controller_invalid",
+            })?;
+        let authenticated = authenticate_profile_capability(
+            &self.state.principals,
+            raw_capability,
+            Some(profile_id),
+        )
+        .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_recovery_controller_invalid",
+        })?;
+        self.state
+            .principals
+            .profile_capabilities
+            .get(&authenticated.capability_id)
+            .filter(|controller| {
+                controller.principal_id == authenticated.principal_id
+                    && controller.profile_id == authenticated.profile_id
+                    && controller.revision == authenticated.capability_revision
+            })
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_recovery_controller_invalid",
+            })
+    }
+
+    fn plan_recovery(
+        &mut self,
+        request: RecoverLeasePlanPayload,
+        authority_observed_at: &str,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<RecoverLeasePlanProjection, LeaseAuthorityProtocolError> {
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let issued_at = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_state_invalid",
+            }
+        })?;
+        let controller = self.authenticate_recovery_controller(
+            request.raw_controller_capability.expose(),
+            &request.resource.id,
+        )?;
+        let claim = self
+            .state
+            .authority
+            .current_claim(&request.resource, &now)
+            .filter(|claim| {
+                claim.claim_id == request.claim_id
+                    && claim.revision == request.claim_revision
+                    && claim.fencing_token == request.fencing_token
+            })
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_stale_claim",
+            })?;
+        let intent = LeaseRecoveryIntent {
+            idempotency_key: request.idempotency_key,
+            issued_at: now,
+            authorization_expires_at: (issued_at
+                + chrono::Duration::seconds(super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            claim_expires_at: (issued_at
+                + chrono::Duration::seconds(super::MAX_STRICT_RECOVERY_TENURE_SECONDS))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            transition_deadline: (issued_at + chrono::Duration::seconds(60))
+                .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            owner_generation: request.owner_generation,
+        };
+        let outcome = self
+            .state
+            .authority
+            .plan_recovery(&claim, &controller, &intent, signing_key)
+            .map_err(lease_authority_protocol_error)?;
+        Ok(RecoverLeasePlanProjection::from_outcome(outcome))
+    }
+
+    fn apply_recovery(
+        &mut self,
+        request: RecoverLeaseApplyPayload,
+        authority_observed_at: &str,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<super::LeaseClaimRecoveryOutcome, LeaseAuthorityProtocolError> {
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let authorization = self
+            .state
+            .authority
+            .recovery_authorization_by_plan_id(&request.plan_id)
+            .map_err(lease_authority_protocol_error)?
+            .clone();
+        let controller = self.authenticate_recovery_controller(
+            request.raw_controller_capability.expose(),
+            &authorization.resource.id,
+        )?;
+        if controller.capability_id != authorization.recovery_controller_id
+            || controller.revision != authorization.recovery_controller_revision
+            || controller.principal_id != authorization.principal_id
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_recovery_controller_invalid",
+            });
+        }
+        self.state
+            .authority
+            .recover_with_receipt(
+                RecoverLeaseClaimRequest { authorization, now },
+                &LeaseAuthorityVerificationKeyring::from_active(signing_key),
+            )
+            .map_err(lease_authority_protocol_error)
+    }
+
     fn issue_service_identity_challenge(
         &self,
         request: &LeaseAuthorityServiceChallengeRequest,
@@ -1070,6 +1251,7 @@ impl LeaseAuthorityProtocolKernel {
             LeaseAuthorityProtocolRequest::ServiceChallenge(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
+            | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
             | LeaseAuthorityProtocolRequest::RevokePlan(_)
             | LeaseAuthorityProtocolRequest::Revoke(_)
@@ -1152,6 +1334,7 @@ mod lease_authority_operational_state_serde {
         terminal_receipts: &'a BTreeMap<String, LeaseClaimTerminalReceipt>,
         recovery_receipts: &'a BTreeMap<String, LeaseClaimRecoveryReceipt>,
         administrators: &'a BTreeMap<String, LeaseAdministratorAuthority>,
+        recovery_authorizations: &'a BTreeMap<String, LeaseRecoveryAuthorization>,
         administrative_authorizations: &'a BTreeMap<String, LeaseAdministrativeAuthorization>,
     }
 
@@ -1166,6 +1349,7 @@ mod lease_authority_operational_state_serde {
         terminal_receipts: BTreeMap<String, LeaseClaimTerminalReceipt>,
         recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
         administrators: BTreeMap<String, LeaseAdministratorAuthority>,
+        recovery_authorizations: BTreeMap<String, LeaseRecoveryAuthorization>,
         administrative_authorizations: BTreeMap<String, LeaseAdministrativeAuthorization>,
     }
 
@@ -1185,6 +1369,7 @@ mod lease_authority_operational_state_serde {
             terminal_receipts: &state.terminal_receipts,
             recovery_receipts: &state.recovery_receipts,
             administrators: &state.administrators,
+            recovery_authorizations: &state.recovery_authorizations,
             administrative_authorizations: &state.administrative_authorizations,
         }
         .serialize(serializer)
@@ -1205,6 +1390,7 @@ mod lease_authority_operational_state_serde {
             terminal_receipts: state.terminal_receipts,
             recovery_receipts: state.recovery_receipts,
             administrators: state.administrators,
+            recovery_authorizations: state.recovery_authorizations,
             administrative_authorizations: state.administrative_authorizations,
         })
     }
@@ -1238,6 +1424,57 @@ fn validate_protected_state(
             || !valid_sha256_digest(&administrator.capability_digest)
             || administrator.revision == 0
             || administrator.revision > state.authority.revision
+        {
+            return Err(invalid());
+        }
+    }
+    let mut recovery_plan_ids = BTreeSet::new();
+    for (idempotency_key, authorization) in &state.authority.recovery_authorizations {
+        let controller = state
+            .principals
+            .profile_capabilities
+            .get(&authorization.recovery_controller_id);
+        if idempotency_key != &authorization.idempotency_key
+            || idempotency_key.trim().is_empty()
+            || authorization.schema_version != super::LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION
+            || authorization.signing_key_id.trim().is_empty()
+            || authorization.signing_key_epoch == 0
+            || authorization.resource.kind != LeaseResourceKind::Profile
+            || authorization.resource.id.trim().is_empty()
+            || authorization.claim_id.trim().is_empty()
+            || authorization.principal_id.trim().is_empty()
+            || authorization.claim_revision == 0
+            || authorization.fencing_token == 0
+            || authorization.proof.trim().is_empty()
+            || !recovery_plan_ids.insert(authorization.plan_id())
+            || !super::timestamp_precedes(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+            )
+            || !super::timestamp_precedes(
+                &authorization.issued_at,
+                &authorization.transition_deadline,
+            )
+            || !super::timestamp_precedes(
+                &authorization.transition_deadline,
+                &authorization.claim_expires_at,
+            )
+            || !super::timestamp_span_within(
+                &authorization.issued_at,
+                &authorization.authorization_expires_at,
+                super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+            )
+            || !super::timestamp_span_within(
+                &authorization.issued_at,
+                &authorization.claim_expires_at,
+                super::MAX_STRICT_RECOVERY_TENURE_SECONDS,
+            )
+            || controller.is_none_or(|controller| {
+                controller.capability_id != authorization.recovery_controller_id
+                    || controller.principal_id != authorization.principal_id
+                    || controller.profile_id != authorization.resource.id
+                    || controller.revision != authorization.recovery_controller_revision
+            })
         {
             return Err(invalid());
         }
@@ -1504,7 +1741,16 @@ fn decode_lease_authority_request(
             envelope.payload,
         )),
         "release" => Ok(LeaseAuthorityProtocolRequest::Release(envelope.payload)),
-        "recover" => Ok(LeaseAuthorityProtocolRequest::Recover(envelope.payload)),
+        "recover_plan" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::RecoverPlan)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
+        "recover" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::Recover)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "revoke_plan" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::RevokePlan)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -1643,10 +1889,39 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
+        LeaseAuthorityProtocolRequest::RecoverPlan(request) => {
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let plan = kernel.plan_recovery(request, &observed_at, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "recovery_planned",
+                "payload": plan,
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::Recover(request) => {
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.apply_recovery(request, &observed_at, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "recovered",
+                "payload": {
+                    "claim": outcome.claim,
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
         LeaseAuthorityProtocolRequest::Acquire(_)
         | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
         | LeaseAuthorityProtocolRequest::Release(_)
-        | LeaseAuthorityProtocolRequest::Recover(_)
         | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
         }),
@@ -2315,6 +2590,160 @@ mod tests {
         assert_eq!(acquire.mode, super::super::LeaseClaimMode::Ephemeral);
         assert_eq!(acquire.raw_capability.expose(), b"last30days-secret");
         assert!(!format!("{acquire:?}").contains("last30days-secret"));
+    }
+
+    #[test]
+    fn strict_recovery_plan_is_controller_authenticated_durable_and_exact() {
+        let raw_controller =
+            "abpc_v1_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let mut principals = ServicePrincipalRegistry::default();
+        let registered = crate::native::service_principal::register_profile_capability(
+            &mut principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".to_string(),
+                display_name: None,
+                profile_id: "last30days-social".to_string(),
+                registered_at: Some("2026-08-31T12:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            raw_controller,
+        )
+        .unwrap();
+        let mut authority = LeaseAuthorityState::default();
+        let claim = authority
+            .acquire_with_receipt(super::super::AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: registered.principal.principal_id.clone(),
+                capability_id: registered.capability.capability_id.clone(),
+                capability_revision: registered.capability.revision,
+                mode: LeaseClaimMode::Strict,
+                expected_authority_revision: 0,
+                idempotency_key: "acquire:last30days:strict-recovery-protocol".to_string(),
+                now: "2026-08-31T12:00:00Z".to_string(),
+                expires_at: "2026-08-31T12:05:00Z".to_string(),
+                transition_deadline: Some("2026-08-31T12:01:00Z".to_string()),
+                recovery_controller_id: Some(registered.capability.capability_id.clone()),
+                boot_epoch: Some("boot-1".to_string()),
+                owner_generation: Some(57),
+            })
+            .unwrap()
+            .claim
+            .unwrap();
+        let mut kernel = test_kernel(authority, principals);
+        kernel
+            .bootstrap_profile_resource(
+                "last30days-social",
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x4d; 32]);
+        let request = RecoverLeasePlanPayload {
+            raw_controller_capability: LeaseAuthoritySecret(raw_controller.as_bytes().to_vec()),
+            resource: claim.resource.clone(),
+            claim_id: claim.claim_id.clone(),
+            claim_revision: claim.revision,
+            fencing_token: claim.fencing_token,
+            idempotency_key: "recover:last30days:protected-plan".to_string(),
+            owner_generation: Some(58),
+        };
+        let plan = kernel
+            .plan_recovery(request, "2026-08-31T12:00:30Z", &signing_key)
+            .unwrap();
+        let encoded_plan = serde_json::to_string(&plan).unwrap();
+        assert!(!encoded_plan.contains("proof"));
+        assert!(!encoded_plan.contains(raw_controller));
+
+        let encoded_state = kernel.encode_protected_state().unwrap();
+        let mut restarted =
+            LeaseAuthorityProtocolKernel::from_protected_state(&encoded_state, test_load_context())
+                .unwrap();
+        assert_eq!(
+            restarted
+                .state
+                .authority
+                .recovery_authorization_by_plan_id(&plan.plan_id)
+                .unwrap()
+                .claim_id(),
+            claim.claim_id
+        );
+        let before_wrong_controller = restarted.state.authority.clone();
+        let wrong_controller = restarted
+            .apply_recovery(
+                RecoverLeaseApplyPayload {
+                    raw_controller_capability: LeaseAuthoritySecret(
+                        b"abpc_v1_wrong-controller-capability-which-is-not-registered".to_vec(),
+                    ),
+                    plan_id: plan.plan_id.clone(),
+                },
+                "2026-08-31T12:00:45Z",
+                &signing_key,
+            )
+            .unwrap_err();
+        assert_eq!(
+            wrong_controller.code(),
+            "lease_authority_protocol_recovery_controller_invalid"
+        );
+        assert_eq!(restarted.state.authority, before_wrong_controller);
+        let recovered = restarted
+            .apply_recovery(
+                RecoverLeaseApplyPayload {
+                    raw_controller_capability: LeaseAuthoritySecret(
+                        raw_controller.as_bytes().to_vec(),
+                    ),
+                    plan_id: plan.plan_id.clone(),
+                },
+                "2026-08-31T12:01:00Z",
+                &signing_key,
+            )
+            .unwrap();
+        assert!(!recovered.replayed);
+        assert_eq!(recovered.claim.as_ref().unwrap().owner_generation, Some(58));
+
+        let encoded_recovered = restarted.encode_protected_state().unwrap();
+        let mut replay_kernel = LeaseAuthorityProtocolKernel::from_protected_state(
+            &encoded_recovered,
+            test_load_context(),
+        )
+        .unwrap();
+        let replay = replay_kernel
+            .apply_recovery(
+                RecoverLeaseApplyPayload {
+                    raw_controller_capability: LeaseAuthoritySecret(
+                        raw_controller.as_bytes().to_vec(),
+                    ),
+                    plan_id: plan.plan_id,
+                },
+                "2026-08-31T12:01:15Z",
+                &signing_key,
+            )
+            .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt, recovered.receipt);
+    }
+
+    #[test]
+    fn recovery_protocol_rejects_caller_owned_time() {
+        let error = match decode_lease_authority_request(
+            br#"{
+                "schemaVersion":"agent-browser.lease-authority-request.v1",
+                "operation":"recover_plan",
+                "payload":{
+                    "rawControllerCapability":[97,98,112,99],
+                    "resource":{"kind":"profile","id":"last30days-social"},
+                    "claimId":"claim-1",
+                    "claimRevision":1,
+                    "fencingToken":1,
+                    "idempotencyKey":"recover:last30days:caller-time",
+                    "ownerGeneration":58,
+                    "now":"2099-01-01T00:00:00Z"
+                }
+            }"#,
+        ) {
+            Ok(_) => panic!("caller-owned recovery time must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_request_invalid");
     }
 
     #[test]

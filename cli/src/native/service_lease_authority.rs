@@ -1150,6 +1150,7 @@ pub(crate) enum LeaseEventKind {
     Expired,
     Revoked,
     Recovered,
+    RecoveryPlanned,
     RevocationPlanned,
     Superseded,
 }
@@ -1380,6 +1381,12 @@ impl LeaseClaimRecoveryReceipt {
 pub(crate) struct LeaseClaimRecoveryOutcome {
     pub(crate) claim: Option<ActiveLeaseClaim>,
     pub(crate) receipt: LeaseClaimRecoveryReceipt,
+    pub(crate) replayed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LeaseRecoveryPlanOutcome {
+    pub(crate) authorization: LeaseRecoveryAuthorization,
     pub(crate) replayed: bool,
 }
 
@@ -1695,6 +1702,8 @@ pub(crate) struct LeaseAuthorityState {
     recovery_receipts: BTreeMap<String, LeaseClaimRecoveryReceipt>,
     administrators: BTreeMap<String, LeaseAdministratorAuthority>,
     #[serde(skip)]
+    recovery_authorizations: BTreeMap<String, LeaseRecoveryAuthorization>,
+    #[serde(skip)]
     administrative_authorizations: BTreeMap<String, LeaseAdministrativeAuthorization>,
 }
 
@@ -1848,6 +1857,91 @@ impl LeaseAuthorityState {
             .ok_or(LeaseAuthorityError::InvalidAdministrativeProof)
     }
 
+    fn plan_recovery(
+        &mut self,
+        claim: &ActiveLeaseClaim,
+        controller: &super::service_principal::ServiceProfileCapability,
+        intent: &LeaseRecoveryIntent,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseRecoveryPlanOutcome, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        if let Some(existing) = self.recovery_authorizations.get(&intent.idempotency_key) {
+            if existing.resource != claim.resource
+                || existing.claim_id != claim.claim_id
+                || existing.principal_id != claim.principal_id
+                || existing.recovery_controller_id != controller.capability_id
+                || existing.recovery_controller_revision != controller.revision
+                || existing.claim_revision != claim.revision
+                || existing.fencing_token != claim.fencing_token
+                || existing.owner_generation != intent.owner_generation
+            {
+                return Err(LeaseAuthorityError::IdempotencyConflict);
+            }
+            return Ok(LeaseRecoveryPlanOutcome {
+                authorization: existing.clone(),
+                replayed: true,
+            });
+        }
+        if claim.mode != LeaseClaimMode::Strict
+            || claim.recovery_controller_id.as_deref() != Some(controller.capability_id.as_str())
+            || controller.state != super::service_principal::ServiceProfileCapabilityState::Active
+            || controller.principal_id != claim.principal_id
+            || claim
+                .profile_id()
+                .is_some_and(|profile_id| controller.profile_id != profile_id)
+        {
+            return Err(LeaseAuthorityError::RecoveryControllerMismatch);
+        }
+        let authorization = issue_lease_recovery_authorization_with_signing_key(
+            self,
+            claim,
+            controller,
+            intent,
+            signing_key,
+        )?;
+        let next_revision = self
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        self.revision = next_revision;
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.recovery_authorizations
+            .insert(intent.idempotency_key.clone(), authorization.clone());
+        self.events.push(LeaseAuthorityEvent {
+            event_id: stable_id(
+                "lease-event-v1",
+                &format!(
+                    "{}\0recovery_planned\0{}\0{}",
+                    claim.claim_id, intent.idempotency_key, next_revision
+                ),
+            ),
+            resource: claim.resource.clone(),
+            claim_id: claim.claim_id.clone(),
+            principal_id: claim.principal_id.clone(),
+            fencing_token: claim.fencing_token,
+            kind: LeaseEventKind::RecoveryPlanned,
+            occurred_at: intent.issued_at.clone(),
+        });
+        Ok(LeaseRecoveryPlanOutcome {
+            authorization,
+            replayed: false,
+        })
+    }
+
+    fn recovery_authorization_by_plan_id(
+        &self,
+        plan_id: &str,
+    ) -> Result<&LeaseRecoveryAuthorization, LeaseAuthorityError> {
+        if plan_id.trim().is_empty() {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        self.recovery_authorizations
+            .values()
+            .find(|authorization| authorization.plan_id() == plan_id)
+            .ok_or(LeaseAuthorityError::InvalidRecoveryProof)
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.active_claims.is_empty()
             && self.next_fencing_tokens.is_empty()
@@ -1856,6 +1950,7 @@ impl LeaseAuthorityState {
             && self.terminal_receipts.is_empty()
             && self.recovery_receipts.is_empty()
             && self.administrators.is_empty()
+            && self.recovery_authorizations.is_empty()
             && self.administrative_authorizations.is_empty()
     }
 
@@ -2301,6 +2396,10 @@ impl LeaseAuthorityState {
         self.ensure_supported_schema()?;
         if let Some(replayed) = self.replay_recovery(&request)? {
             return Ok(replayed);
+        }
+        let retained = self.recovery_authorization_by_plan_id(&request.authorization.plan_id())?;
+        if retained != &request.authorization {
+            return Err(LeaseAuthorityError::InvalidRecoveryProof);
         }
         verify_recovery_authorization(&request.authorization, verification_key)?;
         let authorization = &request.authorization;
@@ -3180,11 +3279,60 @@ fn issue_lease_recovery_authorization_for_state_with_signing_key(
     {
         return Err("lease_authority_recovery_controller_mismatch".to_string());
     }
+    issue_lease_recovery_authorization_with_signing_key(
+        state.lease_authority(),
+        current,
+        controller,
+        intent,
+        signing_key,
+    )
+    .map_err(|error| format!("lease_authority_{}", error.as_str()))
+}
+
+fn issue_lease_recovery_authorization_with_signing_key(
+    authority: &LeaseAuthorityState,
+    claim: &ActiveLeaseClaim,
+    controller: &super::service_principal::ServiceProfileCapability,
+    intent: &LeaseRecoveryIntent,
+    signing_key: &LeaseAuthoritySigningKey,
+) -> Result<LeaseRecoveryAuthorization, LeaseAuthorityError> {
+    let current = authority
+        .current_claim(&claim.resource, &intent.issued_at)
+        .filter(|current| {
+            current.claim_id == claim.claim_id
+                && current.revision == claim.revision
+                && current.fencing_token == claim.fencing_token
+        })
+        .ok_or(LeaseAuthorityError::ClaimUnavailable)?;
+    if intent.idempotency_key.trim().is_empty()
+        || current.mode != LeaseClaimMode::Strict
+        || current.recovery_controller_id.as_deref() != Some(controller.capability_id.as_str())
+        || controller.state != super::service_principal::ServiceProfileCapabilityState::Active
+        || controller.principal_id != current.principal_id
+        || current
+            .profile_id()
+            .is_some_and(|profile_id| controller.profile_id != profile_id)
+        || !timestamp_precedes(&intent.issued_at, &intent.authorization_expires_at)
+        || !timestamp_precedes(&intent.issued_at, &intent.transition_deadline)
+        || !timestamp_precedes(&intent.transition_deadline, &intent.claim_expires_at)
+        || !timestamp_span_within(
+            &intent.issued_at,
+            &intent.authorization_expires_at,
+            MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS,
+        )
+        || !timestamp_span_within(
+            &intent.issued_at,
+            &intent.claim_expires_at,
+            MAX_STRICT_RECOVERY_TENURE_SECONDS,
+        )
+    {
+        return Err(LeaseAuthorityError::InvalidRequest);
+    }
     let mut authorization = LeaseRecoveryAuthorization {
         schema_version: LEASE_RECOVERY_AUTHORIZATION_SCHEMA_VERSION.to_string(),
         signing_key_id: signing_key.key_id.clone(),
         signing_key_epoch: signing_key.key_epoch,
-        resource: current.resource.clone(),
+        resource: claim.resource.clone(),
         claim_id: current.claim_id.clone(),
         principal_id: current.principal_id.clone(),
         recovery_controller_id: controller.capability_id.clone(),
@@ -3199,8 +3347,7 @@ fn issue_lease_recovery_authorization_for_state_with_signing_key(
         owner_generation: intent.owner_generation,
         proof: String::new(),
     };
-    authorization.proof = sign_recovery_authorization(&authorization, signing_key)
-        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
+    authorization.proof = sign_recovery_authorization(&authorization, signing_key)?;
     Ok(authorization)
 }
 
@@ -4724,18 +4871,15 @@ mod tests {
             idempotency_key: "recover:last30days:strict-1".to_string(),
             issued_at: "2026-08-31T12:00:30Z".to_string(),
             authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
-            claim_expires_at: "2026-08-31T12:06:00Z".to_string(),
+            claim_expires_at: "2026-08-31T12:05:30Z".to_string(),
             transition_deadline: "2026-08-31T12:03:00Z".to_string(),
             owner_generation: Some(58),
         };
-        let authorization = issue_lease_recovery_authorization_for_state(
-            &state,
-            &claim,
-            &controller,
-            &intent,
-            &signing_key,
-        )
-        .unwrap();
+        let authorization = state
+            .lease_authority
+            .plan_recovery(&claim, &controller, &intent, &signing_key)
+            .unwrap()
+            .authorization;
         let request = RecoverLeaseClaimRequest {
             authorization,
             now: "2026-08-31T12:01:00Z".to_string(),
