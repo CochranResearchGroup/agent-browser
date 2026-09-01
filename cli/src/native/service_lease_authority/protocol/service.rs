@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::os::fd::FromRawFd;
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
@@ -11,6 +11,10 @@ use super::{
 
 pub(super) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
     "AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_SERVICE";
+pub(super) const LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV: &str =
+    "AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP";
+const LEASE_AUTHORITY_BOOTSTRAP_GROUP_ID_ENV: &str =
+    "AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_OPERATOR_GROUP_ID";
 pub(super) const LEASE_AUTHORITY_SERVICE_STATE_ROOT: &str =
     "/var/lib/agent-browser/lease-authority";
 pub(super) const LEASE_AUTHORITY_SERVICE_SOCKET_PATH: &str =
@@ -26,13 +30,19 @@ const LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY: &str = "trust";
 const LEASE_AUTHORITY_SYSTEMD_LISTEN_FD: i32 = 3;
 const LEASE_AUTHORITY_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityServiceConfig {
     schema_version: String,
     authority_domain_id: String,
     minimum_authority_epoch: u64,
     operator_group_id: u32,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct LeaseAuthorityBootstrapReceipt {
+    authority_domain_id: String,
+    authority_epoch: u64,
 }
 
 pub(super) fn validate_linux_service_launch(
@@ -160,6 +170,136 @@ pub(super) fn run_linux_service() -> Result<(), LeaseAuthorityProtocolError> {
     Ok(())
 }
 
+pub(super) fn run_linux_bootstrap() -> Result<(), LeaseAuthorityProtocolError> {
+    let process_id = std::process::id();
+    let effective_uid = unsafe { libc::geteuid() };
+    let current_executable = std::fs::canonicalize(format!("/proc/{process_id}/exe"))
+        .map_err(|_| service_error("lease_authority_bootstrap_process_identity_invalid"))?;
+    validate_linux_bootstrap_launch(effective_uid, process_id, &current_executable)?;
+    let operator_group_id = std::env::var(LEASE_AUTHORITY_BOOTSTRAP_GROUP_ID_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| service_error("lease_authority_bootstrap_operator_group_invalid"))?;
+    bootstrap_state_root(&fixed_state_root(), operator_group_id).map(|_| ())
+}
+
+fn validate_linux_bootstrap_launch(
+    effective_uid: u32,
+    process_id: u32,
+    current_executable: &Path,
+) -> Result<(), LeaseAuthorityProtocolError> {
+    validate_linux_service_launch(effective_uid, process_id, current_executable).map_err(|error| {
+        match error.code {
+            "lease_authority_service_root_required" => {
+                service_error("lease_authority_bootstrap_root_required")
+            }
+            "lease_authority_service_process_identity_invalid" => {
+                service_error("lease_authority_bootstrap_process_identity_invalid")
+            }
+            _ => service_error("lease_authority_bootstrap_executable_untrusted"),
+        }
+    })
+}
+
+fn bootstrap_state_root(
+    state_root: &Path,
+    operator_group_id: u32,
+) -> Result<LeaseAuthorityBootstrapReceipt, LeaseAuthorityProtocolError> {
+    if operator_group_id == 0 {
+        return Err(service_error(
+            "lease_authority_bootstrap_operator_group_invalid",
+        ));
+    }
+    if std::fs::symlink_metadata(state_root).is_ok() {
+        return Err(service_error("lease_authority_bootstrap_state_exists"));
+    }
+    let parent = state_root
+        .parent()
+        .ok_or_else(|| service_error("lease_authority_bootstrap_state_root_invalid"))?;
+    let parent_metadata = std::fs::symlink_metadata(parent)
+        .map_err(|_| service_error("lease_authority_bootstrap_parent_unavailable"))?;
+    if !parent_metadata.file_type().is_dir() || parent_metadata.file_type().is_symlink() {
+        return Err(service_error(
+            "lease_authority_bootstrap_parent_unprotected",
+        ));
+    }
+
+    let state_name = state_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| service_error("lease_authority_bootstrap_state_root_invalid"))?;
+    let staging = parent.join(format!(".{state_name}.{}.tmp", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&staging)
+        .map_err(|_| service_error("lease_authority_bootstrap_stage_failed"))?;
+    super::super::set_private_directory_permissions(&staging)
+        .map_err(|_| service_error("lease_authority_bootstrap_stage_failed"))?;
+
+    let initialized = (|| {
+        let mut domain_seed = [0u8; 32];
+        let mut boot_seed = [0u8; 32];
+        let mut private_key = [0u8; 32];
+        getrandom::getrandom(&mut domain_seed)
+            .and_then(|_| getrandom::getrandom(&mut boot_seed))
+            .and_then(|_| getrandom::getrandom(&mut private_key))
+            .map_err(|_| service_error("lease_authority_bootstrap_entropy_unavailable"))?;
+        let authority_domain_id = format!("sha256:{}", hex::encode(domain_seed));
+        let boot_epoch = format!("sha256:{}", hex::encode(boot_seed));
+        let authority_epoch = 1;
+
+        let trust_root = staging.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY);
+        std::fs::create_dir(&trust_root)
+            .map_err(|_| service_error("lease_authority_bootstrap_trust_failed"))?;
+        super::super::set_private_directory_permissions(&trust_root)
+            .map_err(|_| service_error("lease_authority_bootstrap_trust_failed"))?;
+        let signing_key = super::super::LeaseAuthoritySigningKey::from_private_bytes(private_key);
+        super::super::persist_lease_authority_trust_generation_in(
+            &trust_root,
+            &signing_key,
+            &super::super::LeaseAuthorityVerificationKeyring::from_active(&signing_key),
+        )
+        .map_err(|_| service_error("lease_authority_bootstrap_trust_failed"))?;
+
+        let store = LeaseAuthorityDurableStore::initialize(
+            &staging.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
+        )?;
+        let kernel = super::LeaseAuthorityProtocolKernel::bootstrap(
+            &authority_domain_id,
+            authority_epoch,
+            &boot_epoch,
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        )?;
+        store.publish(&kernel, None)?;
+
+        let config = LeaseAuthorityServiceConfig {
+            schema_version: LEASE_AUTHORITY_SERVICE_CONFIG_SCHEMA_VERSION.to_string(),
+            authority_domain_id: authority_domain_id.clone(),
+            minimum_authority_epoch: authority_epoch,
+            operator_group_id,
+        };
+        super::super::write_private_json_atomic_replace(
+            &staging.join(LEASE_AUTHORITY_SERVICE_CONFIG_FILE),
+            &config,
+        )
+        .map_err(|_| service_error("lease_authority_bootstrap_config_failed"))?;
+        super::super::sync_authority_key_directory(&staging)
+            .map_err(|_| service_error("lease_authority_bootstrap_sync_failed"))?;
+        std::fs::rename(&staging, state_root)
+            .map_err(|_| service_error("lease_authority_bootstrap_publish_failed"))?;
+        super::super::sync_authority_key_directory(parent)
+            .map_err(|_| service_error("lease_authority_bootstrap_sync_failed"))?;
+        Ok(LeaseAuthorityBootstrapReceipt {
+            authority_domain_id,
+            authority_epoch,
+        })
+    })();
+    if initialized.is_err() && staging.exists() {
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    initialized
+}
+
 fn load_service_config(
     state_root: &Path,
 ) -> Result<LeaseAuthorityServiceConfig, LeaseAuthorityProtocolError> {
@@ -188,4 +328,83 @@ fn load_service_config(
 
 fn service_error(code: &'static str) -> LeaseAuthorityProtocolError {
     LeaseAuthorityProtocolError { code }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_parent(label: &str) -> PathBuf {
+        let parent = std::env::temp_dir().join(format!(
+            "agent-browser-lease-authority-bootstrap-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&parent).unwrap();
+        parent
+    }
+
+    #[test]
+    fn bootstrap_is_atomic_single_use_and_loadable() {
+        let parent = temp_parent("single-use");
+        let state_root = parent.join("lease-authority");
+        let receipt = bootstrap_state_root(&state_root, 991).unwrap();
+        assert_eq!(receipt.authority_epoch, 1);
+        assert!(super::super::valid_sha256_digest(
+            &receipt.authority_domain_id
+        ));
+        let config = load_service_config(&state_root).unwrap();
+        assert_eq!(config.authority_domain_id, receipt.authority_domain_id);
+        assert_eq!(config.minimum_authority_epoch, 1);
+        assert_eq!(config.operator_group_id, 991);
+        super::super::super::load_selected_lease_authority_signing_key_in(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY),
+        )
+        .unwrap();
+        LeaseAuthorityDurableStore::open_existing(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
+        )
+        .unwrap()
+        .load(LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id: &receipt.authority_domain_id,
+            minimum_authority_epoch: 1,
+        })
+        .unwrap();
+
+        let error = bootstrap_state_root(&state_root, 991).unwrap_err();
+        assert_eq!(error.code(), "lease_authority_bootstrap_state_exists");
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn bootstrap_rejects_zero_group_without_creating_state() {
+        let parent = temp_parent("group");
+        let state_root = parent.join("lease-authority");
+        let error = bootstrap_state_root(&state_root, 0).unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_bootstrap_operator_group_invalid"
+        );
+        assert!(!state_root.exists());
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn bootstrap_requires_root_and_a_banked_executable() {
+        let banked = Path::new(
+            "/usr/local/libexec/agent-browser/lease-authority/generations/generation-1/agent-browser",
+        );
+        let error = validate_linux_bootstrap_launch(1000, 4100, banked).unwrap_err();
+        assert_eq!(error.code(), "lease_authority_bootstrap_root_required");
+
+        let error = validate_linux_bootstrap_launch(
+            0,
+            4100,
+            Path::new("/home/operator/candidate/agent-browser"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_bootstrap_executable_untrusted"
+        );
+    }
 }

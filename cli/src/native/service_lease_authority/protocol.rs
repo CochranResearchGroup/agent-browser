@@ -24,8 +24,17 @@ pub(super) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
     service::LEASE_AUTHORITY_SERVICE_PROCESS_ENV;
 
 #[cfg(target_os = "linux")]
+pub(super) const LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV: &str =
+    service::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV;
+
+#[cfg(target_os = "linux")]
 pub(super) fn run_linux_lease_authority_service() -> Result<(), String> {
     service::run_linux_service().map_err(|error| error.code().to_string())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn run_linux_lease_authority_bootstrap() -> Result<(), String> {
+    service::run_linux_bootstrap().map_err(|error| error.code().to_string())
 }
 
 const LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION: &str =

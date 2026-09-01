@@ -10,8 +10,17 @@ pub(crate) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
     protocol::LEASE_AUTHORITY_SERVICE_PROCESS_ENV;
 
 #[cfg(target_os = "linux")]
+pub(crate) const LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV: &str =
+    protocol::LEASE_AUTHORITY_BOOTSTRAP_PROCESS_ENV;
+
+#[cfg(target_os = "linux")]
 pub(crate) fn run_linux_lease_authority_service() -> Result<(), String> {
     protocol::run_linux_lease_authority_service()
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn run_linux_lease_authority_bootstrap() -> Result<(), String> {
+    protocol::run_linux_lease_authority_bootstrap()
 }
 
 use ring::signature::{self, Ed25519KeyPair, KeyPair};

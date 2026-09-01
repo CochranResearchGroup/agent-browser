@@ -1815,3 +1815,31 @@ NOPASSWD upgrade or signing oracle. Peer workload authentication, concurrency
 and rate budgets, mutation dispatch, public administration, doctor integration,
 and adversarial installed acceptance remain open. No production install is
 authorized.
+
+## Slice G Atomic Root Bootstrap Source Checkpoint | 2026-08-31
+
+The protected executable now has a distinct one-shot bootstrap process marker.
+Bootstrap runs before user environment loading, requires effective root, and
+accepts only the same immutable banked executable identity as the online
+authority service. It is not a public command and is not exposed through the
+passwordless privileged helper.
+
+The bootstrap publishes an entirely new authority root from one private staged
+directory. It creates fresh domain and boot identities, a private Ed25519
+signing generation, the corresponding verification keyring, an empty protected
+authority store generation, and the root-private service configuration. The
+final state-root rename is single-use: any existing state, including incomplete
+or damaged state, is rejected rather than repaired or overwritten. The online
+service continues to call `open_existing` and therefore cannot bootstrap itself.
+
+Focused tests prove that the resulting trust and protected store can be loaded,
+that repeated bootstrap cannot alter the selected generation, that an invalid
+operator group creates no state, and that non-root or unbanked execution is
+rejected. Repository formatting and strict Clippy pass for the source
+checkpoint.
+
+This checkpoint remains noninstallable. The next packet must bank the exact
+reviewed binary, install fixed systemd socket and service units, invoke the
+one-shot bootstrap only inside the explicit interactive sudo boundary, and
+verify custody without adding any generic passwordless signer, state mutation,
+bootstrap, or upgrade operation.
