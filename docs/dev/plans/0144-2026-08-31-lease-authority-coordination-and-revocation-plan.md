@@ -1960,3 +1960,69 @@ protected restart persistence, projection redaction, bearer-free history, and
 malformed retained-intent rejection. Authority-owned clock observation and the
 root-service plan/apply dispatcher remain required before this becomes a public
 operation.
+
+## Hotfix Recurrence Structural Audit | 2026-08-31
+
+The known hotfix reports are covered by the frozen model, but they are not yet
+structurally impossible in the product. The current source has the protected
+kernel, atomic acquisition primitive, fenced claim model, durable authority
+publication, service identity challenge, root peer gate, administrator
+bootstrap, and durable administrative revoke intent. Production service
+dispatch still leaves effect authorization, release, recovery, revoke plan,
+revoke apply, and inspection unimplemented. Browser spawn, runtime-owner
+transfer, profile and session mutation, physical-collision denial, and
+installer selection are not yet exhaustively sealed behind the kernel.
+
+The historical incident families map to the following mandatory invariants:
+
+| Reported failure | Structural prevention contract | Current disposition |
+| --- | --- | --- |
+| Retained sessions, terminal owners, or lease warnings block ordinary work | 1, 2, 24, 37, 42, 49, 63, 65, 80, 97, and 99 | Modelled; production gates and projections not yet exhaustively sealed |
+| An absent client or crashed worker leaves a permanent lease | 7, 25, 45, 61, 63, 65, 66, 84, and 89 | Modelled; authority clock and stable deadline reconciler remain |
+| An abandoned strict lease requires a hotfix or raw state edit | 9, 10, 23, 40, 57, 64, 69, 88, and 102 | Kernel revoke intent exists; public recover and revoke lifecycle remains |
+| Access plan says launch is executable, then execution rejects an invented session or owner identity | 12, 13, 35, 37, 38, 41, 42, 47, 60, 73, 80, and 95 | Modelled; shared planner, acquire, admission, and denial dispatcher remains |
+| `closing`, `prepared`, or `transferring` survives its owner indefinitely | 8, 16, 29, 39, 54, 61, 71, 76, and 89 | Modelled; transfer saga and supervisor reconciliation remain |
+| Dashboard or read reconciliation creates fictitious browsers or ready-looking owners | 6, 17, 32, 41, 63, 80, 94, 97, and 103 | Modelled; projections remain to be made receipt-only |
+| Candidate upgrade blocks itself or old and new generations disagree | 20, 35, 46, 52, 60, 83, 87, 90, 93, 98, and 103 | Protected supervisor foundation exists; installer ownership and mixed-version migration remain |
+| Retried requests create duplicate daemons, browsers, routes, or external effects | 18, 19, 28, 39, 44, 54, 55, 76, 77, 78, and 79 | Authority receipts exist in part; single-flight spawn and every effect sink remain |
+| Logical lease records are mistaken for live process, lock, route, display, or socket evidence | 11, 17, 37, 43, 56, 63, 71, 72, 96, 105, and 107 | Modelled; fresh physical-evidence permits and bounded resolution remain |
+| Concurrent or stale Service State writers lose a mutation or manufacture a blocker | 35, 44, 51, 52, 79, 94, 98, 99, and 103 | Protected generation compare-and-swap exists; all production writers remain to converge |
+
+No historical incident family identified in Plans 0128, 0134, 0137, 0142, or
+0143 requires a second authority model or an exception to these invariants.
+Profile registration, authentication, and readiness remain eligibility or
+product-state facts. They never constitute a lease holder, process, session,
+or blocker. Conversely, a lease claim never proves that a profile is
+authenticated or that a browser process exists.
+
+Structural closure requires all of these proof gates, not only regression
+tests for the examples above:
+
+1. an exhaustive denial-gate manifest proves that every ordinary denial is
+   constructed only from a current claim conflict, fresh exact physical
+   collision, authority outage, bounded capacity outcome, or non-authority
+   product error;
+2. an exhaustive low-level effect-sink manifest proves that every browser,
+   profile, process, route, display, session, tab, installer, and input mutation
+   consumes a kernel authorization or typed physical-safety permit;
+3. dependency and visibility tests prove no production module can mutate the
+   active index, counters, registrations, owner bindings, capabilities,
+   receipts, verifier trust, or selected authority generation except through
+   authenticated kernel IPC;
+4. a reference-model and fault-injection suite proves arbitrary crashes,
+   response loss, replay, expiry, suspend, restart, transfer interruption,
+   store faults, and mixed-version ordering preserve one authority, bounded
+   liveness, and unique receipts;
+5. migration tests inject arbitrary terminal and ambiguous legacy history and
+   prove byte-for-byte identical planning and admission outcomes before and
+   after that history is added; and
+6. installed acceptance proves ephemeral abandonment, strict administrative
+   recovery, transferring-deadline recovery, candidate rollback, duplicate
+   retry suppression, zero process residue, historical-warning isolation, and
+   an ordinary authenticated client using its own profile without a retained
+   session or runtime-owner prerequisite.
+
+Until all six gates pass against one exact installed candidate, the correct
+claim is that the design closes the known failure taxonomy and the kernel is
+being built toward structural prevention. It is not yet correct to claim that
+the bugs cannot recur.
