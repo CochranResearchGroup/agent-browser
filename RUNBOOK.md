@@ -4,6 +4,36 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 190 | 2026-09-01
+
+Scope: reconcile P152 with P150/P151 and qualify the exact integrated terminal
+replacement repair before production installation.
+
+Actions:
+
+- merged current `origin/main` into the P152 topic branch while preserving both
+  plan histories and the current P150/P151 lane population;
+- kept P150 automatic quarantine convergence and P152 terminal session
+  replacement as distinct, composed safety contracts;
+- qualified the schema-17 Last30days companion source and compatibility
+  contract; and
+- built and installed only an isolated Agent Browser development generation.
+
+Validation:
+
+- focused P152 regressions and strict production-binary Clippy pass;
+- the complete serial Rust workspace passes 2,854 tests with zero failures and
+  57 intentional ignores;
+- development generation `0.28.0-4a9882a9f4d7` passes doctor; and
+- three disposable development browser launch, URL-read, close, and residue
+  cycles pass.
+
+Result:
+
+- P152 is development-qualified at `slice_f_production_installation`;
+- production remained unchanged; and
+- the exact integrated workstation dry-run and apply are the next gate.
+
 ## Turn 189 | 2026-09-01
 
 Scope: open P152 to repair terminal session replacement planner and executor

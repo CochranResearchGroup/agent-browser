@@ -2,9 +2,9 @@
 
 Date: 2026-09-01
 
-State: OPEN
+State: ACTIVE
 
-Execution state: `slice_a_red_fixture`
+Execution state: `slice_f_production_installation`
 
 Lane: P152
 
@@ -184,3 +184,38 @@ Progress classification: `blocker_reduction`.
 
 Next action: implement the Last30days retry-ordinal schema migration with a
 red migration regression, then qualify both repositories before installation.
+
+## Integrated Development Qualification
+
+State transition: `source_repair_validated -> development_qualified` for
+Slices C through E.
+
+The Last30days companion branch adds schema 17, preserves referenced provider
+results while rebuilding only `service_tick_provider_attempts`, admits retry
+ordinal two, and continues to reject ordinal three. Its complete Python suite,
+Go suite, lifecycle rollback coverage, compatibility-contract generation, and
+planning audits pass.
+
+Agent Browser was reconciled with the integrated P150/P151 mainline at
+`29962d9f`. Both plan histories and current lane ownership were retained. On
+that exact merged tree:
+
+- focused planner-to-executor regressions pass;
+- production-binary Clippy with warnings denied passes;
+- the complete serial Rust workspace passes with 2,854 tests, zero failures,
+  and 57 intentional ignores;
+- the all-target Clippy gate still reports 31 mainline test-only warnings in
+  unrelated P150/P151 fixtures, while the production target is clean;
+- optimized candidate SHA prefix `4a9882a9f4d7` installed as isolated
+  development generation `0.28.0-4a9882a9f4d7`;
+- development doctor reports ready across selected generation, executable,
+  runtime host, dashboard, protected authority, provider isolation, routes,
+  and warm displays; and
+- three disposable browser open, URL-read, close, and residue cycles pass.
+
+Production remained unchanged during development qualification.
+
+Progress classification: `outcome_progress`.
+
+Next action: checkpoint this evidence, merge P152 to `main`, build the exact
+integrated production candidate, and run the workstation dry-run before apply.
