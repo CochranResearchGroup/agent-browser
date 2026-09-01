@@ -764,7 +764,7 @@ fn exchange_with_protected_lease_authority(encoded: &[u8]) -> Result<Vec<u8>, St
         &stream,
         socket_group_id,
     )
-    .map_err(|_| "lease_authority_service_identity_unproven".to_string())?;
+    .map_err(|error| error.code().to_string())?;
     exchange_framed(&mut stream, encoded)
 }
 

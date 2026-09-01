@@ -54,7 +54,7 @@ pub(super) struct LeaseAuthorityCustodyError {
 }
 
 impl LeaseAuthorityCustodyError {
-    fn code(&self) -> &'static str {
+    pub(super) fn code(&self) -> &'static str {
         self.code
     }
 }
