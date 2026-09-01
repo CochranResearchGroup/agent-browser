@@ -87,7 +87,11 @@ The development doctor also requires the shared root-owned
 root, group-accessible through the `agent-browser` operator group, and mode
 `0660`. Development services do not create a second authority daemon. If this
 check fails, run the reviewed one-sudo `pnpm install:privileges -- --apply`
-bootstrap before browser acquisition.
+bootstrap before browser acquisition. The protected service has read-only home
+visibility so it can prove an enrolled user-owned managed profile without being
+able to modify that profile. A healthy rerun automatically migrates only the
+exact prior `ProtectHome=true` unit to this read-only contract. Any other unit
+drift still fails closed.
 
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns

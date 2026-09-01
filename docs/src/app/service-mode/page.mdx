@@ -1200,7 +1200,11 @@ units. From a source checkout, set
 release binary. The passwordless helper cannot sign, mutate, bootstrap, or
 upgrade lease authority. A healthy rerun retains the selected installed
 generation. It may restart the exact stopped socket, but it refuses modified
-units, modified banked bytes, or invalid existing authority state.
+units, modified banked bytes, or invalid existing authority state. The service
+uses <code>ProtectHome=read-only</code> so it can prove an enrolled user-owned
+managed profile without modifying that profile. A healthy rerun has one
+guarded migration for the exact prior <code>ProtectHome=true</code> unit. Any
+other unit drift remains an error.
 
 ## Operator request model
 

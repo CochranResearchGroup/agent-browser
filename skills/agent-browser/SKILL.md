@@ -973,7 +973,11 @@ The development doctor also verifies the shared root-owned protected lease
 authority socket, including its system unit state, root ownership,
 `agent-browser` group, and mode `0660`. Do not create a development authority
 daemon. When the check fails, use the reviewed one-sudo
-`pnpm install:privileges -- --apply` bootstrap before acquisition.
+`pnpm install:privileges -- --apply` bootstrap before acquisition. The
+protected service has read-only home visibility so it can prove an enrolled
+user-owned managed profile without modifying it. A healthy rerun automatically
+migrates only the exact prior `ProtectHome=true` unit to this read-only
+contract. Any other unit drift still fails closed.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped
