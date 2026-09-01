@@ -1213,6 +1213,13 @@ well-formed banked generation and exactly one valid retained generation is
 proven, even when the retry uses a different candidate. It does not install
 either candidate or repeat bootstrap.
 
+Normal privilege-installer reruns retain an exact ready authority generation.
+To replace it with an explicit reviewed candidate while preserving protected
+state, set <code>AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE</code> and run
+<code>pnpm install:privileges -- --apply --upgrade-lease-authority</code>. The
+upgrade banks the candidate immutably and switches only the exact ready service
+unit.
+
 Clients prove either the root PID 1 socket activator before service startup or
 a root peer PID in the exact
 <code>/system.slice/agent-browser-lease-authority.service</code> cgroup after

@@ -5351,7 +5351,7 @@ fn derive_effect_executor_identity(
     }
     let stat = fs::read_to_string(format!("/proc/{}/stat", peer.pid)).map_err(|_| {
         LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_effect_executor_unavailable",
+            code: "lease_authority_protocol_effect_executor_stat_unavailable",
         }
     })?;
     let after_comm = stat
@@ -5367,26 +5367,108 @@ fn derive_effect_executor_identity(
         .ok_or(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_effect_executor_invalid",
         })?;
-    let executable_path = fs::canonicalize(format!("/proc/{}/exe", peer.pid)).map_err(|_| {
-        LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_effect_executor_unavailable",
-        }
-    })?;
-    let executable = fs::read(&executable_path).map_err(|_| LeaseAuthorityProtocolError {
-        code: "lease_authority_protocol_effect_executor_unavailable",
-    })?;
-    let executable_sha256 = format!("sha256:{:x}", Sha256::digest(executable));
+    let (executable_path, executable_sha256) =
+        derive_effect_executor_executable_identity(peer, start_time)?;
     let mut evidence = EffectExecutorIdentityEvidence {
         uid: peer.uid,
         gid: peer.gid,
         pid: peer.pid,
         start_token: start_time.to_string(),
-        executable_path: executable_path.display().to_string(),
+        executable_path,
         executable_sha256,
         identity_digest: String::new(),
     };
     evidence.identity_digest = effect_executor_identity_digest(&evidence);
     Ok(evidence)
+}
+
+#[cfg(target_os = "linux")]
+fn derive_effect_executor_executable_identity(
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    start_time: &str,
+) -> Result<(String, String), LeaseAuthorityProtocolError> {
+    let proc_root = PathBuf::from(format!("/proc/{}", peer.pid));
+    let executable_link = proc_root.join("exe");
+    match fs::canonicalize(&executable_link) {
+        Ok(executable_path) => match fs::read(&executable_path) {
+            Ok(executable) => Ok((
+                executable_path.display().to_string(),
+                format!("sha256:{:x}", Sha256::digest(executable)),
+            )),
+            Err(_) => derive_effect_executor_kernel_identity(peer, start_time, &proc_root),
+        },
+        Err(_) => derive_effect_executor_kernel_identity(peer, start_time, &proc_root),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn derive_effect_executor_kernel_identity(
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    start_time: &str,
+    proc_root: &Path,
+) -> Result<(String, String), LeaseAuthorityProtocolError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = fs::metadata(proc_root).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_effect_executor_process_metadata_unavailable",
+    })?;
+    if metadata.uid() != peer.uid || metadata.gid() != peer.gid {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_invalid",
+        });
+    }
+    let cgroup =
+        fs::read_to_string(proc_root.join("cgroup")).map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_cgroup_unavailable",
+        })?;
+    derive_effect_executor_kernel_identity_from_observation(
+        peer,
+        start_time,
+        metadata.uid(),
+        metadata.gid(),
+        &cgroup,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn derive_effect_executor_kernel_identity_from_observation(
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    start_time: &str,
+    process_uid: u32,
+    process_gid: u32,
+    cgroup: &str,
+) -> Result<(String, String), LeaseAuthorityProtocolError> {
+    let cgroup = cgroup.trim();
+    let cgroup_is_kernel_shaped = !cgroup.is_empty()
+        && cgroup.lines().all(|line| {
+            let mut fields = line.splitn(3, ':');
+            fields.next().is_some()
+                && fields.next().is_some()
+                && fields.next().is_some_and(|path| path.starts_with('/'))
+        });
+    if process_uid != peer.uid
+        || process_gid != peer.gid
+        || peer.uid == 0
+        || peer.pid <= 1
+        || start_time.is_empty()
+        || !start_time.bytes().all(|byte| byte.is_ascii_digit())
+        || !cgroup_is_kernel_shaped
+    {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_invalid",
+        });
+    }
+    let digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "agent-browser.lease-authority-effect-executor-kernel-identity.v1\n{}\n{}\n{}\n{}\n{}",
+                peer.uid, peer.gid, peer.pid, start_time, cgroup
+            )
+            .as_bytes()
+        )
+    );
+    Ok((format!("kernel-peer-cgroup:{digest}"), digest))
 }
 
 fn effect_executor_identity_digest(executor: &EffectExecutorIdentityEvidence) -> String {
@@ -8945,6 +9027,59 @@ mod tests {
             test_load_context(),
         )
         .expect("uncertain terminal receipt must remain restart-valid");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn effect_executor_kernel_identity_is_peer_start_and_cgroup_bound() {
+        let peer = custody::LeaseAuthorityRequestPeerIdentity {
+            uid: 1000,
+            gid: 1000,
+            pid: 42_000,
+        };
+        let first = derive_effect_executor_kernel_identity_from_observation(
+            peer,
+            "123456",
+            1000,
+            1000,
+            "0::/user.slice/user-1000.slice/user@1000.service/app.slice/agent-browser-dev-runtime-host.service\n",
+        )
+        .unwrap();
+        let second = derive_effect_executor_kernel_identity_from_observation(
+            peer,
+            "123457",
+            1000,
+            1000,
+            "0::/user.slice/user-1000.slice/user@1000.service/app.slice/agent-browser-dev-runtime-host.service\n",
+        )
+        .unwrap();
+        assert!(first.0.starts_with("kernel-peer-cgroup:sha256:"));
+        assert!(valid_sha256_digest(&first.1));
+        assert_ne!(first, second);
+        assert_eq!(
+            derive_effect_executor_kernel_identity_from_observation(
+                peer,
+                "123456",
+                1001,
+                1000,
+                "0::/user.slice/user-1000.slice/user@1000.service\n",
+            )
+            .unwrap_err()
+            .code,
+            "lease_authority_protocol_effect_executor_invalid"
+        );
+        assert_eq!(
+            derive_effect_executor_kernel_identity_from_observation(
+                peer,
+                "123456",
+                1000,
+                1000,
+                "not-a-kernel-cgroup",
+            )
+            .unwrap_err()
+            .code,
+            "lease_authority_protocol_effect_executor_invalid"
+        );
     }
 
     #[cfg(target_os = "linux")]

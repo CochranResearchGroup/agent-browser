@@ -3261,3 +3261,63 @@ mixed PID identities all fail closed.
 The focused custody suite is green with twelve tests, including exact unified
 and legacy cgroup forms plus negative user-slice and suffix-lookalike cases.
 Exact release publication and one installed acquisition acceptance remain.
+
+## Slice P User-Namespace Root Projection | 2026-09-01
+
+The development runtime host receives the protected system socket through a
+user namespace whose UID and GID maps contain only the operator identity. In
+that namespace, the kernel projects the host-root socket activator or service
+peer as the configured overflow identity, UID and GID 65534. The prior custody
+check treated only namespace-local UID and GID zero as protected root, so the
+same kernel-proven protected endpoint was accepted from the outer client and
+rejected from the isolated development runtime with
+`lease_authority_custody_service_identity_unprotected`. No request frame was
+sent and no browser launched.
+
+Custody now derives the host-root projection from `/proc/self/uid_map` and the
+kernel overflow UID and GID settings. Direct zero is accepted only when host
+root is mapped into the current namespace. The overflow identity is accepted
+only when host root is absent from that map. The connected peer, protected
+socket inode, and authority state must all use that same observed projection;
+their normalized custody identity remains root. This prevents an ordinary
+UID 65534 process in a namespace that maps host root from impersonating the
+authority. Focused tests cover direct root, unmapped host root, mapped-root
+rejection, and mixed-projection rejection.
+
+With this repair published into the development runtime, exact acquisition
+crossed client endpoint custody and reached the protected protocol. It then
+failed before launch with
+`lease_authority_protocol_effect_executor_unavailable`, proving the next
+failure was server-side executor attribution rather than a lease conflict.
+
+## Slice Q Kernel-Bound Effect Executor And Explicit Authority Upgrade | 2026-09-01
+
+The protected authority must attribute each mutating request to the connected
+unprivileged executor. Its original proof canonicalized `/proc/<peer-pid>/exe`.
+The hardened root service does not have and must not receive broad
+`CAP_SYS_PTRACE`, so the host's procfs policy can deny that executable link even
+though `SO_PEERCRED`, process metadata, start time, ownership, and cgroup remain
+kernel-readable. The authority collapsed that condition into
+`lease_authority_protocol_effect_executor_unavailable`.
+
+Executor proof now prefers the exact canonical executable and digest when the
+kernel permits it. When executable inspection is unavailable, it derives a
+domain-separated identity from the authenticated peer UID, GID, PID,
+`/proc/<pid>/stat` start token, process metadata ownership, and the exact cgroup
+record. PID reuse changes the start token, and runtime movement changes the
+cgroup binding. Missing stat, metadata, or cgroup evidence has a distinct typed
+failure and never degrades to an unbound identity. A focused pure test proves
+the identity changes with peer, start token, or cgroup.
+
+Normal privilege-installer reruns continue to retain an exact ready protected
+authority generation. A new explicit `--upgrade-lease-authority` operation is
+the only path that switches a ready service to a differing reviewed candidate.
+It banks the candidate immutably, stops only the authority service while
+leaving socket activation intact, preserves root-private state and signing
+material, rewrites the exact unit, reloads systemd, and requires exact readiness
+before success. The prior generation remains banked for bounded rollback.
+Clean-fixture coverage proves dry-run reporting, one sudo boundary, state
+preservation, no bootstrap repetition, the new selected generation, and the
+retained old generation. Documentation, strict Rust checks, installer fixtures,
+and the documentation build pass. Protected installation and exact live
+acquisition acceptance remain.

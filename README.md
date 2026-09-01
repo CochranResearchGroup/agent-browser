@@ -98,6 +98,11 @@ closed. If the home-visibility migration was interrupted by the prior
 candidate-path rendering defect, a rerun recovers only when the unit names an
 absent, well-formed banked generation and one valid retained generation is
 uniquely proven. The retry candidate may differ from the interrupted candidate.
+Normal privilege-installer reruns retain an exact ready authority generation.
+To replace it with an explicit reviewed candidate while preserving protected
+state, set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` and run
+`pnpm install:privileges -- --apply --upgrade-lease-authority`. The upgrade
+banks the candidate immutably and switches only the exact ready service unit.
 Clients prove either the root PID 1 socket activator before service startup or
 a root peer PID in the exact
 `/system.slice/agent-browser-lease-authority.service` cgroup after startup.

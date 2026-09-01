@@ -4,6 +4,23 @@ const LEASE_AUTHORITY_ROOT_UID: u32 = 0;
 const LEASE_AUTHORITY_SYSTEMD_SERVICE_CGROUP: &str =
     "/system.slice/agent-browser-lease-authority.service";
 
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LeaseAuthorityHostRootProjection {
+    observed_root_uid: u32,
+}
+
+#[cfg(target_os = "linux")]
+impl LeaseAuthorityHostRootProjection {
+    fn normalize_owner_uid(self, observed_uid: u32) -> Result<u32, LeaseAuthorityCustodyError> {
+        (observed_uid == self.observed_root_uid)
+            .then_some(LEASE_AUTHORITY_ROOT_UID)
+            .ok_or(LeaseAuthorityCustodyError {
+                code: "lease_authority_custody_service_identity_unprotected",
+            })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LeaseAuthorityCustodySnapshot {
     service_uid: u32,
@@ -203,18 +220,60 @@ pub(super) fn inspect_linux_authority_endpoint(
     // separately proves its own root process and banked executable before it
     // reads any request frame.
     let peer = inspect_linux_request_peer(stream)?;
-    if peer.uid != LEASE_AUTHORITY_ROOT_UID {
-        return Err(LeaseAuthorityCustodyError {
-            code: "lease_authority_custody_service_identity_unprotected",
-        });
-    }
+    let root_projection = inspect_linux_host_root_projection(peer.uid)?;
 
     let snapshot = if peer.pid == 1 {
-        inspect_linux_systemd_socket_activator_snapshot(state_root, socket_path, peer.pid, peer.uid)
+        inspect_linux_systemd_socket_activator_snapshot(
+            state_root,
+            socket_path,
+            peer.pid,
+            root_projection,
+        )
     } else {
-        inspect_linux_systemd_service_snapshot(state_root, socket_path, peer.pid, peer.uid)
+        inspect_linux_systemd_service_snapshot(state_root, socket_path, peer.pid, root_projection)
     }?;
     snapshot.validate_endpoint(expected_group_id)
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_linux_host_root_projection(
+    observed_peer_uid: u32,
+) -> Result<LeaseAuthorityHostRootProjection, LeaseAuthorityCustodyError> {
+    let uid_map =
+        std::fs::read_to_string("/proc/self/uid_map").map_err(|_| custody_inspection_error())?;
+    let overflow_uid = std::fs::read_to_string("/proc/sys/kernel/overflowuid")
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .ok_or_else(custody_inspection_error)?;
+    host_root_projection_from_uid_map(observed_peer_uid, overflow_uid, &uid_map).ok_or(
+        LeaseAuthorityCustodyError {
+            code: "lease_authority_custody_service_identity_unprotected",
+        },
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn host_root_projection_from_uid_map(
+    observed_peer_uid: u32,
+    overflow_uid: u32,
+    uid_map: &str,
+) -> Option<LeaseAuthorityHostRootProjection> {
+    let host_root_is_mapped = uid_map
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let _inside_start = fields.next()?.parse::<u64>().ok()?;
+            let outside_start = fields.next()?.parse::<u64>().ok()?;
+            let length = fields.next()?.parse::<u64>().ok()?;
+            Some(outside_start == 0 && length > 0)
+        })
+        .any(|mapped| mapped);
+    let observed_root_uid = if host_root_is_mapped {
+        (observed_peer_uid == LEASE_AUTHORITY_ROOT_UID).then_some(LEASE_AUTHORITY_ROOT_UID)?
+    } else {
+        (observed_peer_uid == overflow_uid).then_some(overflow_uid)?
+    };
+    Some(LeaseAuthorityHostRootProjection { observed_root_uid })
 }
 
 #[cfg(target_os = "linux")]
@@ -222,7 +281,7 @@ fn inspect_linux_systemd_service_snapshot(
     state_root: &std::path::Path,
     socket_path: &std::path::Path,
     service_pid: u32,
-    service_uid: u32,
+    root_projection: LeaseAuthorityHostRootProjection,
 ) -> Result<LeaseAuthorityCustodySnapshot, LeaseAuthorityCustodyError> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -248,12 +307,12 @@ fn inspect_linux_systemd_service_snapshot(
     );
 
     Ok(LeaseAuthorityCustodySnapshot {
-        service_uid,
+        service_uid: LEASE_AUTHORITY_ROOT_UID,
         service_pid,
-        peer_uid: service_uid,
+        peer_uid: LEASE_AUTHORITY_ROOT_UID,
         peer_pid: service_pid,
         state_root: LeaseAuthorityCustodyPath {
-            owner_uid: state_metadata.uid(),
+            owner_uid: root_projection.normalize_owner_uid(state_metadata.uid())?,
             mode: state_metadata.mode() & 0o7777,
             is_directory: state_metadata.file_type().is_dir()
                 && !state_metadata.file_type().is_symlink(),
@@ -267,7 +326,7 @@ fn inspect_linux_systemd_service_snapshot(
         executable_owner_gid: LEASE_AUTHORITY_ROOT_UID,
         executable_mode: 0o555,
         executable_sha256: service_identity,
-        socket_owner_uid: socket_metadata.uid(),
+        socket_owner_uid: root_projection.normalize_owner_uid(socket_metadata.uid())?,
         socket_owner_gid: socket_metadata.gid(),
         socket_mode: socket_metadata.mode() & 0o7777,
         socket_device: socket_metadata.dev(),
@@ -411,7 +470,7 @@ fn inspect_linux_systemd_socket_activator_snapshot(
     state_root: &std::path::Path,
     socket_path: &std::path::Path,
     activator_pid: u32,
-    activator_uid: u32,
+    root_projection: LeaseAuthorityHostRootProjection,
 ) -> Result<LeaseAuthorityCustodySnapshot, LeaseAuthorityCustodyError> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -425,12 +484,12 @@ fn inspect_linux_systemd_socket_activator_snapshot(
     );
 
     Ok(LeaseAuthorityCustodySnapshot {
-        service_uid: activator_uid,
+        service_uid: LEASE_AUTHORITY_ROOT_UID,
         service_pid: activator_pid,
-        peer_uid: activator_uid,
+        peer_uid: LEASE_AUTHORITY_ROOT_UID,
         peer_pid: activator_pid,
         state_root: LeaseAuthorityCustodyPath {
-            owner_uid: state_metadata.uid(),
+            owner_uid: root_projection.normalize_owner_uid(state_metadata.uid())?,
             mode: state_metadata.mode() & 0o7777,
             is_directory: state_metadata.file_type().is_dir()
                 && !state_metadata.file_type().is_symlink(),
@@ -444,7 +503,7 @@ fn inspect_linux_systemd_socket_activator_snapshot(
         executable_owner_gid: LEASE_AUTHORITY_ROOT_UID,
         executable_mode: 0o555,
         executable_sha256: activator_identity,
-        socket_owner_uid: socket_metadata.uid(),
+        socket_owner_uid: root_projection.normalize_owner_uid(socket_metadata.uid())?,
         socket_owner_gid: socket_metadata.gid(),
         socket_mode: socket_metadata.mode() & 0o7777,
         socket_device: socket_metadata.dev(),
@@ -600,6 +659,41 @@ mod tests {
         assert!(!is_protected_lease_authority_service_cgroup(
             "0::/system.slice/agent-browser-lease-authority.socket\n"
         ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn host_root_projection_accepts_direct_and_unmapped_kernel_identities_only() {
+        let direct =
+            host_root_projection_from_uid_map(0, 65_534, "         0          0 4294967295\n")
+                .unwrap();
+        assert_eq!(direct.observed_root_uid, 0);
+        assert_eq!(direct.normalize_owner_uid(0).unwrap(), 0);
+        assert!(direct.normalize_owner_uid(1000).is_err());
+
+        let unmapped =
+            host_root_projection_from_uid_map(65_534, 65_534, "      1000       1000          1\n")
+                .unwrap();
+        assert_eq!(unmapped.observed_root_uid, 65_534);
+        assert_eq!(unmapped.normalize_owner_uid(65_534).unwrap(), 0);
+        assert!(unmapped.normalize_owner_uid(1000).is_err());
+
+        assert!(host_root_projection_from_uid_map(
+            1000,
+            65_534,
+            "      1000       1000          1\n"
+        )
+        .is_none());
+        assert!(
+            host_root_projection_from_uid_map(0, 65_534, "      1000       1000          1\n")
+                .is_none()
+        );
+        assert!(host_root_projection_from_uid_map(
+            65_534,
+            65_534,
+            "         0          0 4294967295\n"
+        )
+        .is_none());
     }
 
     #[test]

@@ -5714,6 +5714,10 @@ recover the home-visibility migration's prior interrupted form when the unit
 names any absent, well-formed banked generation and one valid retained banked
 generation is uniquely proven, even when a later retry uses a different
 candidate. Any other unit drift still fails closed.
+Normal privilege-installer reruns retain an exact ready authority generation.
+Use --upgrade-lease-authority with an explicit
+AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE to bank a reviewed replacement,
+preserve protected state, and switch only the exact ready service unit.
 Clients prove either the root PID 1 socket activator before service startup or
 a root peer PID in the exact /system.slice/agent-browser-lease-authority.service
 cgroup after startup. Both states bind the same protected socket before any

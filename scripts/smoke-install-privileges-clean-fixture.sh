@@ -564,4 +564,41 @@ if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PAT
   exit 1
 fi
 
+# An explicit reviewed authority upgrade banks a new immutable generation,
+# switches only an exact ready service unit, and preserves authority state.
+AUTHORITY_UPGRADE_CANDIDATE="$WORKDIR/source/agent-browser-upgrade-candidate"
+cp "$AUTHORITY_SOURCE" "$AUTHORITY_UPGRADE_CANDIDATE"
+printf '\n# explicit reviewed authority upgrade\n' >>"$AUTHORITY_UPGRADE_CANDIDATE"
+chmod +x "$AUTHORITY_UPGRADE_CANDIDATE"
+upgrade_sha256="$(sha256sum "$AUTHORITY_UPGRADE_CANDIDATE" | awk '{print $1}')"
+upgrade_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$upgrade_sha256/agent-browser"
+upgrade_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_UPGRADE_CANDIDATE" run_installer_mode --dry-run --upgrade-lease-authority)"
+if ! grep -q 'switch the exact ready service unit to the reviewed generation' <<<"$upgrade_dry_run"; then
+  echo "Explicit authority upgrade dry run did not describe the bounded switch." >&2
+  exit 1
+fi
+sudo_v_count_before_upgrade="$(grep -c '^SUDO -v$' "$LOG" || true)"
+AUTHORITY_RUN_SOURCE="$AUTHORITY_UPGRADE_CANDIDATE" \
+  run_installer_mode --apply --upgrade-lease-authority \
+  >/tmp/agent-browser-install-privileges-clean-fixture-upgrade.out
+sudo_v_count_after_upgrade="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_upgrade" != "$((sudo_v_count_before_upgrade + 1))" ]]; then
+  echo "Explicit authority upgrade must cross one sudo boundary." >&2
+  exit 1
+fi
+if [[ ! -x "$upgrade_banked_binary" ]] \
+  || ! grep -q "^ExecStart=$upgrade_banked_binary$" "$AUTHORITY_SERVICE_UNIT"; then
+  echo "Explicit authority upgrade did not publish the reviewed generation." >&2
+  exit 1
+fi
+if [[ ! -d "$AUTHORITY_STATE_ROOT" ]] \
+  || [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
+  echo "Explicit authority upgrade did not preserve existing protected state." >&2
+  exit 1
+fi
+if [[ ! -x "$AUTHORITY_BANKED_BINARY" ]]; then
+  echo "Explicit authority upgrade removed the retained rollback generation." >&2
+  exit 1
+fi
+
 echo "Install privileges clean-fixture smoke passed"

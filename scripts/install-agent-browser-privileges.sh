@@ -3,6 +3,7 @@ set -euo pipefail
 
 APPLY=0
 WITH_WORKSTATION_DEPS=0
+UPGRADE_LEASE_AUTHORITY=0
 GROUP_NAME="${AGENT_BROWSER_PRIVILEGED_GROUP:-agent-browser}"
 OPERATOR_USER="${AGENT_BROWSER_PRIVILEGED_USER:-${SUDO_USER:-${USER:-}}}"
 HELPER_SOURCE="${AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE:-scripts/libexec/agent-browser-privileged-helper}"
@@ -40,13 +41,15 @@ trap cleanup_temp_files EXIT
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps]
+Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--upgrade-lease-authority]
 
 Installs the narrow root-owned helper and protected lease-authority service.
 The helper is protected by a sudoers rule for the agent-browser group so later
 route-user and display-access maintenance can run without repeated prompts.
 The optional workstation dependency phase is Ubuntu 24.04 amd64 only and
 installs Docker, Compose, XRDP, XorgXRDP, Openbox, and required host tools.
+The upgrade flag replaces only an exact ready protected authority with the
+explicit reviewed binary source while preserving protected authority state.
 EOF
 }
 
@@ -62,6 +65,9 @@ for arg in "$@"; do
       ;;
     --with-workstation-deps)
       WITH_WORKSTATION_DEPS=1
+      ;;
+    --upgrade-lease-authority)
+      UPGRADE_LEASE_AUTHORITY=1
       ;;
     -h|--help)
       usage
@@ -451,6 +457,14 @@ current_install_ready() {
   fi
 }
 
+lease_authority_upgrade_needed() {
+  [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]] || return 1
+  lease_authority_contract_ready || return 1
+  local installed_authority_binary
+  installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+  [[ "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]
+}
+
 helper_contract_ready() {
   [[ -x "$HELPER_PATH" ]] || return 1
   [[ "$(stat -c '%U:%G:%a' "$HELPER_PATH" 2>/dev/null)" == "root:root:755" ]] || return 1
@@ -587,7 +601,16 @@ Would run with one privileged authorization:
   sudo install validated sudoers policy at $SUDOERS_PATH
 EOF
   if lease_authority_contract_ready; then
-    echo "  retain the exact ready protected lease-authority contract"
+    installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+    if [[ "$UPGRADE_LEASE_AUTHORITY" == "1" && "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]; then
+      echo "  sudo bank reviewed lease-authority generation at $LEASE_AUTHORITY_BANKED_BINARY"
+      echo "  sudo stop only agent-browser-lease-authority.service"
+      echo "  preserve protected authority state at $LEASE_AUTHORITY_STATE_ROOT"
+      echo "  sudo switch the exact ready service unit to the reviewed generation"
+      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
+    else
+      echo "  retain the exact ready protected lease-authority contract"
+    fi
   elif [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
     if lease_authority_legacy_home_protection_ready; then
       installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
@@ -639,7 +662,7 @@ EOF
   exit 0
 fi
 
-if current_install_ready; then
+if current_install_ready && ! lease_authority_upgrade_needed; then
   echo "agent-browser privileged helper is already ready."
   echo "No privileged changes were needed."
   exit 0
@@ -712,6 +735,29 @@ sudo -n install -d -o root -g root -m 0755 "$HELPER_DIR"
 sudo -n install -o root -g root -m 0755 "$HELPER_SOURCE" "$HELPER_PATH"
 sudo -n groupadd --force "$GROUP_NAME"
 sudo -n usermod -aG "$GROUP_NAME" "$OPERATOR_USER"
+
+if lease_authority_contract_ready && [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]]; then
+  installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+  if [[ "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]; then
+    if [[ -e "$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION" ]]; then
+      lease_authority_banked_binary_integrity_ready "$LEASE_AUTHORITY_BANKED_BINARY" || {
+        echo "Reviewed lease-authority generation already exists with invalid integrity." >&2
+        exit 1
+      }
+    else
+      sudo -n install -d -o root -g root -m 0755 "$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION"
+      sudo -n install -o root -g root -m 0755 "$LEASE_AUTHORITY_BINARY_SOURCE" "$LEASE_AUTHORITY_BANKED_BINARY"
+    fi
+    sudo -n systemctl stop agent-browser-lease-authority.service
+    sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
+    sudo -n systemctl daemon-reload
+    sudo -n systemctl enable --now agent-browser-lease-authority.socket
+    lease_authority_contract_ready || {
+      echo "Protected lease-authority upgrade did not pass exact readiness verification." >&2
+      exit 1
+    }
+  fi
+fi
 
 if ! lease_authority_contract_ready; then
   if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
