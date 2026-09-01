@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P152 Terminal Session Replacement Planner Executor Parity
+    objective: Make authenticated terminal replacement plans executable without weakening identity or live-owner fences
+    plan: docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md
+    plan_ref: refs/heads/fix/terminal-session-replacement-parity
+    branch: fix/terminal-session-replacement-parity
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 09e1d6f69eecd0a5e2590a44f2ecba903e36214d
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P137, P144, P148]
+    overlaps: [P150]
+    reconciled_overlaps: [distinct_implementation_surfaces_shared_terminal_state_domain]
+    updated_at: 2026-09-01
   - id: P144 Cross-Candidate Interrupted Authority Migration Recovery
     objective: Recover an exact interrupted protected authority unit even when the retry candidate changed
     plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md

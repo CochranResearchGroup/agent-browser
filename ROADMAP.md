@@ -7,6 +7,24 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P152 | Terminal Session Replacement Planner Executor Parity
+
+State: IN PROGRESS
+Current state: live evidence proves an authenticated terminal owner can be
+declared replaceable by access planning while the copied replacement session
+route is rejected by executor identity reconciliation. Source work begins with
+one provider-free public-seam regression. No runtime or profile state has been
+changed by this lane.
+
+### Plan
+
+- `docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md`
+
+### Next Recommendation
+
+Prove planner-to-executor parity for the exact terminal owner fixture, then
+repair the Last30days retry schema before installing either candidate.
+
 ## P144 | Lease Authority Coordination And Revocation
 
 State: IN PROGRESS

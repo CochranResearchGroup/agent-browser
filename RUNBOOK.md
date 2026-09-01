@@ -4,6 +4,45 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 188 | 2026-09-01
+
+Scope: open P152 to repair terminal session replacement planner and executor
+parity plus the downstream Last30days retry persistence contradiction.
+
+Actions:
+
+- confirmed the production profile is available with zero holders and zero
+  live browsers;
+- proved access planning recommends a new browser while copying terminal route
+  `last30days-force-20260901-c35` into the request;
+- proved the terminal owner is generation 71 while its retained authenticated
+  principal binding is generation 66;
+- reconciled conceptual overlap with active P150 while preserving its separate
+  remote-view quarantine implementation files; and
+- opened isolated branch `fix/terminal-session-replacement-parity` without
+  touching the dirty P150 worktree.
+
+Validation:
+
+- Last30days service 0.3.92 is ready and MCP-compatible;
+- Agent Browser reports the selected profile available and the terminal lane's
+  exact process exit plus profile-lock release;
+- CodeGraph identifies the terminal relaunch and authenticated continuity
+  predicates used by the executor; and
+- Graphiti returned ten older routing facts but no current incident evidence,
+  so live state and repository source remain authoritative.
+
+Result:
+
+- P152 is OPEN at `slice_a_red_fixture`;
+- progress classification is `blocker_reduction` under inherited operator
+  authority; and
+- no browser, profile, provider, database, or installed-runtime mutation has
+  occurred.
+
+Next action: add one provider-free public-seam regression that reproduces the
+planner-to-executor failure before implementation.
+
 ## Turn 187 | 2026-08-29
 
 Scope: implement and source-accept the provider-free Authentication Run
