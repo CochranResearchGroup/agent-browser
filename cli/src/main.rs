@@ -1762,6 +1762,24 @@ fn main() {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
+    // The protected lease-authority service is entered only from the root
+    // system unit. Dispatch happens before user-scoped environment loading so
+    // a repository or home .env file cannot configure the authority process.
+    #[cfg(target_os = "linux")]
+    if let Ok(value) =
+        env::var(native::service_lease_authority::LEASE_AUTHORITY_SERVICE_PROCESS_ENV)
+    {
+        if value != "1" {
+            eprintln!("lease_authority_service_process_marker_invalid");
+            exit(1);
+        }
+        if let Err(error) = native::service_lease_authority::run_linux_lease_authority_service() {
+            eprintln!("{error}");
+            exit(1);
+        }
+        return;
+    }
+
     // Prevent MSYS/Git Bash path translation from mangling arguments
     #[cfg(windows)]
     {

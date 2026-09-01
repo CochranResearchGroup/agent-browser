@@ -5,6 +5,15 @@
 
 mod protocol;
 
+#[cfg(target_os = "linux")]
+pub(crate) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
+    protocol::LEASE_AUTHORITY_SERVICE_PROCESS_ENV;
+
+#[cfg(target_os = "linux")]
+pub(crate) fn run_linux_lease_authority_service() -> Result<(), String> {
+    protocol::run_linux_lease_authority_service()
+}
+
 use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -16,6 +16,17 @@ use super::{
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
 
 mod custody;
+#[cfg(target_os = "linux")]
+mod service;
+
+#[cfg(target_os = "linux")]
+pub(super) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
+    service::LEASE_AUTHORITY_SERVICE_PROCESS_ENV;
+
+#[cfg(target_os = "linux")]
+pub(super) fn run_linux_lease_authority_service() -> Result<(), String> {
+    service::run_linux_service().map_err(|error| error.code().to_string())
+}
 
 const LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-request.v1";
@@ -268,6 +279,15 @@ impl LeaseAuthorityDurableStore {
         let generations = root.join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY);
         fs::create_dir_all(&generations).map_err(store_io_error)?;
         super::set_private_directory_permissions(&generations).map_err(store_io_error)?;
+        Ok(Self {
+            root: root.to_path_buf(),
+        })
+    }
+
+    fn open_existing(root: &Path) -> Result<Self, LeaseAuthorityProtocolError> {
+        super::ensure_private_directory(root).map_err(store_io_error)?;
+        super::ensure_private_directory(&root.join(LEASE_AUTHORITY_STORE_GENERATIONS_DIRECTORY))
+            .map_err(store_io_error)?;
         Ok(Self {
             root: root.to_path_buf(),
         })
@@ -1478,6 +1498,82 @@ mod tests {
             response["error"]["code"],
             "lease_authority_protocol_operation_unsupported"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_service_rejects_non_root_before_consulting_installed_paths() {
+        let error = service::validate_linux_service_launch(
+            1000,
+            4100,
+            std::path::Path::new("/missing/candidate"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "lease_authority_service_root_required");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_service_accepts_only_a_banked_root_generation_path() {
+        service::validate_linux_service_launch(
+            0,
+            4100,
+            std::path::Path::new(
+                "/usr/local/libexec/agent-browser/lease-authority/generations/generation-7/agent-browser",
+            ),
+        )
+        .unwrap();
+        for candidate in [
+            "/home/operator/agent-browser",
+            "/usr/local/libexec/agent-browser/lease-authority/generations/agent-browser",
+            "/usr/local/libexec/agent-browser/lease-authority/generations/../candidate/agent-browser",
+            "/usr/local/libexec/agent-browser/lease-authority/generations/generation-7/other",
+        ] {
+            let error = service::validate_linux_service_launch(
+                0,
+                4100,
+                std::path::Path::new(candidate),
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.code(),
+                "lease_authority_service_executable_untrusted"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_service_accepts_only_its_exact_systemd_socket_activation() {
+        service::validate_systemd_socket_activation(Some(4100), Some(1), 4100).unwrap();
+        for (listen_pid, listen_fds) in [
+            (None, Some(1)),
+            (Some(4099), Some(1)),
+            (Some(4100), None),
+            (Some(4100), Some(0)),
+            (Some(4100), Some(2)),
+        ] {
+            let error = service::validate_systemd_socket_activation(listen_pid, listen_fds, 4100)
+                .unwrap_err();
+            assert_eq!(
+                error.code(),
+                "lease_authority_service_socket_activation_invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn protected_service_store_open_never_bootstraps_missing_state() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-missing-lease-authority-store-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let error = match LeaseAuthorityDurableStore::open_existing(&root) {
+            Ok(_) => panic!("the online service must not create its own authority store"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_store_io_failed");
+        assert!(!root.exists());
     }
 
     #[test]

@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_g_bounded_service_dispatch_source_accepted_root_service_in_progress`
+Execution state: `slice_g_root_service_source_accepted_installer_bootstrap_in_progress`
 
 Lane: P144
 
@@ -1761,3 +1761,57 @@ process entry, fixed protected paths, system socket lifecycle, peer request
 authentication, per-peer rate and concurrency budgets, store and trust reload,
 external epoch selection, administrator bootstrap, and installer integration
 remain open. No production install is authorized.
+
+## Slice G Root Authority Service Source Checkpoint | 2026-08-31
+
+State transition: `slice_g_bounded_service_dispatch_source_accepted_root_service_in_progress`
+to `slice_g_root_service_source_accepted_installer_bootstrap_in_progress`.
+
+The binary now has an internal Linux authority-service process mode entered
+before any user-scoped `.env` loading. Startup requires effective UID zero, a
+PID greater than one, and an executable resolved under exactly one banked
+generation below
+`/usr/local/libexec/agent-browser/lease-authority/generations/`. A workspace,
+user-home, selected-candidate, relative, or wrongly named executable cannot run
+the protected service.
+
+The process accepts exactly one systemd socket-activation descriptor whose
+`LISTEN_PID` is the current process, whose `LISTEN_FDS` is one, and whose local
+address is `/run/agent-browser/lease-authority.sock`. Custody then proves the
+fixed `/var/lib/agent-browser/lease-authority` state root, socket owner, group,
+mode, device and inode, current root process, and root-owned executable digest.
+The service loads a root-private fixed configuration, pre-existing protected
+store, and pre-existing selected trust generation. It reloads the selected
+signer and protected authority for every connection and applies bounded read
+and write timeouts.
+
+The online process deliberately cannot initialize a missing store, trust root,
+configuration, socket, signing key, resource registration, authority domain,
+or external epoch. Those are bootstrap-coordinator responsibilities. Its only
+currently executable request remains the signed service challenge; mutation
+operations stay unavailable until their online current-state consume and
+durable publication paths are complete.
+
+Evidence:
+
+- Red: no root service module or process entry existed.
+- Non-root startup fails before consulting any installed path.
+- Root startup accepts one exact banked-generation shape and rejects user,
+  relative, parent-traversal, missing-generation, and wrong-executable paths.
+- Socket activation accepts one exact current-PID descriptor and rejects
+  missing, foreign-PID, zero, or multiple descriptors.
+- Opening a missing online store fails without creating any filesystem path.
+- The built source binary with the internal process marker exits one with
+  `lease_authority_service_root_required` under the ordinary user and emits no
+  standard output.
+- All 33 protocol, custody, framing, history, and service tests pass. Wrapper
+  Rust formatting, strict Clippy, and the source binary build pass.
+
+This source is not installed or operational. The privileged bootstrap must
+install immutable banked service generations, root state and trust, the root
+configuration, socket and service units, exact verification and rollback, and
+an independently durable external epoch selection without exposing a generic
+NOPASSWD upgrade or signing oracle. Peer workload authentication, concurrency
+and rate budgets, mutation dispatch, public administration, doctor integration,
+and adversarial installed acceptance remain open. No production install is
+authorized.

@@ -152,7 +152,6 @@ pub(super) fn inspect_linux_authority_endpoint(
     expected_group_id: u32,
 ) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
     use std::os::fd::AsRawFd;
-    use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
     let mut credentials: libc::ucred = unsafe { std::mem::zeroed() };
     let mut credentials_length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
@@ -176,6 +175,42 @@ pub(super) fn inspect_linux_authority_endpoint(
     }
     let service_pid = u32::try_from(credentials.pid).map_err(|_| custody_inspection_error())?;
     let service_uid = credentials.uid;
+
+    inspect_linux_authority_identity(
+        state_root,
+        socket_path,
+        service_pid,
+        service_uid,
+        expected_group_id,
+    )
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn inspect_linux_authority_service_identity(
+    state_root: &std::path::Path,
+    socket_path: &std::path::Path,
+    expected_group_id: u32,
+) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+    let service_pid = std::process::id();
+    let service_uid = unsafe { libc::geteuid() };
+    inspect_linux_authority_identity(
+        state_root,
+        socket_path,
+        service_pid,
+        service_uid,
+        expected_group_id,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_linux_authority_identity(
+    state_root: &std::path::Path,
+    socket_path: &std::path::Path,
+    service_pid: u32,
+    service_uid: u32,
+    expected_group_id: u32,
+) -> Result<LeaseAuthorityCustodyIdentity, LeaseAuthorityCustodyError> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
     let state_metadata =
         std::fs::symlink_metadata(state_root).map_err(|_| custody_inspection_error())?;
