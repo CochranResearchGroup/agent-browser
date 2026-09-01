@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use super::cdp::client::CdpClient;
+use agent_browser_cdp::client::CdpClient;
 
 const MAX_PROFILE_EVENTS: usize = 5_000_000;
 
@@ -382,10 +382,10 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
     use crate::native::tracing::{self as native_tracing, TracingState};
+    use agent_browser_cdp::client::CdpClient;
     use serde_json::{json, Map, Value};
     use std::env;
     use std::fs;

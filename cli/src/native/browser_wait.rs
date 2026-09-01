@@ -9,12 +9,12 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
-    use crate::native::cdp::client::CdpClient;
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
+    use agent_browser_cdp::client::CdpClient;
     use std::time::{Duration, Instant};
     pub(crate) async fn wait_for_selector(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         selector: &str,
         state: &str,
@@ -60,7 +60,7 @@ pub(crate) mod action_commands {
         poll_until_true(client, session_id, &check_fn, timeout_ms).await
     }
     pub(crate) async fn wait_for_url(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         pattern: &str,
         timeout_ms: u64,
@@ -72,7 +72,7 @@ pub(crate) mod action_commands {
         poll_until_true(client, session_id, &check_fn, timeout_ms).await
     }
     pub(crate) async fn wait_for_text(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         text: &str,
         timeout_ms: u64,
@@ -84,7 +84,7 @@ pub(crate) mod action_commands {
         poll_until_true(client, session_id, &check_fn, timeout_ms).await
     }
     pub(crate) async fn wait_for_function(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         fn_str: &str,
         timeout_ms: u64,
@@ -93,17 +93,17 @@ pub(crate) mod action_commands {
         poll_until_true(client, session_id, &check_fn, timeout_ms).await
     }
     pub(crate) async fn poll_until_true(
-        client: &super::super::cdp::client::CdpClient,
+        client: &agent_browser_cdp::client::CdpClient,
         session_id: &str,
         expression: &str,
         timeout_ms: u64,
     ) -> Result<(), String> {
         let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
         loop {
-            let result: super::super::cdp::types::EvaluateResult = client
+            let result: agent_browser_cdp::types::EvaluateResult = client
                 .send_command_typed(
                     "Runtime.evaluate",
-                    &super::super::cdp::types::EvaluateParams {
+                    &agent_browser_cdp::types::EvaluateParams {
                         expression: expression.to_string(),
                         return_by_value: Some(true),
                         await_promise: Some(true),

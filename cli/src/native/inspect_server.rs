@@ -8,7 +8,7 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::cdp::client::InspectProxyHandle;
+use agent_browser_cdp::client::InspectProxyHandle;
 
 /// Counter for unique attach IDs so concurrent connections don't collide.
 static ATTACH_ID: AtomicI64 = AtomicI64::new(-1000);

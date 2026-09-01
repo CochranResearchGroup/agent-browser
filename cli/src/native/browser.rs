@@ -9,11 +9,11 @@ use tokio::sync::{broadcast, Mutex};
 use super::cdp::chrome::{
     auto_connect_cdp, launch_chrome, ChromeProcess, LaunchOptions, ProcessShutdownOutcome,
 };
-use super::cdp::client::CdpClient;
 use super::cdp::discovery::discover_cdp_url;
 use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
-use super::cdp::types::*;
 use super::element::{resolve_element_object_id, RefMap};
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::*;
 use std::path::Path;
 
 pub use super::cdp::chrome::ProcessExitObservation;

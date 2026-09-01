@@ -13,8 +13,9 @@
   },
   "scripts": {
     "version:sync": "node scripts/sync-version.js",
-    "version": "npm run version:sync && git add cli/Cargo.toml",
+    "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
+    "test:cdp-crate-architecture": "node scripts/test-cdp-crate-architecture.js",
     "test:actions-architecture": "node scripts/check-actions-architecture.js --check && pnpm test:actions-remediation-architecture && pnpm test:wsl-cargo-safety",
     "test:actions-remediation-architecture": "node scripts/test-actions-remediation-architecture.js",
     "test:wsl-cargo-safety": "node scripts/test-wsl-cargo-entrypoints.js && node scripts/test-cargo-safe-capacity.js",

@@ -20,6 +20,7 @@ use super::service_model::{
     ServiceBrowserProcessIdentity, ServiceEvent, ServiceEventKind, ServiceIncident,
     ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
 };
+use super::service_retained_state::reconcile_inactive_terminal_route_quarantines;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -381,7 +382,9 @@ async fn reconcile_service_state_with_controller_fence(
     refresh_persisted_browser_health(state).await;
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
-    let remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
+    let mut remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
+    remote_view_repair.completed_acquisition_rollbacks =
+        reconcile_inactive_terminal_route_quarantines(state, &before, reconciled_at.as_str());
     let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
     let completed_runtime_lifecycles = reconcile_absent_runtime_lifecycles(state);
     normalize_ready_browsers_without_runtime_evidence(state);
@@ -2275,6 +2278,7 @@ pub struct RemoteViewReconcileRepair {
     pub released_viewer_leases: usize,
     pub expired_viewer_leases: usize,
     pub cleared_controller_leases: usize,
+    pub completed_acquisition_rollbacks: usize,
 }
 
 impl RemoteViewReconcileRepair {
@@ -2288,11 +2292,13 @@ impl RemoteViewReconcileRepair {
             "releasedViewerLeases": self.released_viewer_leases,
             "expiredViewerLeases": self.expired_viewer_leases,
             "clearedControllerLeases": self.cleared_controller_leases,
+            "completedAcquisitionRollbacks": self.completed_acquisition_rollbacks,
             "repaired": self.unavailable_route_pool_entries
                 + self.restored_route_pool_entries
                 + self.released_route_pool_entries
                 + self.orphaned_display_allocations
-                + self.orphaned_routes,
+                + self.orphaned_routes
+                + self.completed_acquisition_rollbacks,
             "released": self.released_route_pool_entries
                 + self.released_viewer_leases
                 + self.expired_viewer_leases,
@@ -3432,8 +3438,9 @@ mod tests {
         PresentationSlotState,
     };
     use crate::native::service_model::{
-        ControlInputProvider, DisplayAllocation, JobState, RemoteViewRoute, RoutePoolEntry,
-        ServiceJob, ServiceProvider, SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
+        ControlInputProvider, DisplayAllocation, JobState, RemoteViewAcquisitionLease,
+        RemoteViewRoute, RoutePoolEntry, ServiceJob, ServiceProvider, SitePolicy, ViewStream,
+        ViewStreamProvider, ViewerLease,
     };
     use crate::native::service_store::{
         mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
@@ -4632,6 +4639,167 @@ mod tests {
         assert_eq!(remote_view["releasedRoutePoolEntries"], 1);
         assert_eq!(remote_view["releasedViewerLeases"], 1);
         assert_eq!(remote_view["clearedControllerLeases"], 1);
+    }
+
+    fn inactive_acquisition_quarantine_state() -> ServiceState {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    owner_session_id: Some("session-1".to_string()),
+                    state: "orphaned".to_string(),
+                    route_ids: vec!["route-1".to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    display_allocation_id: Some("display-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("session-1".to_string()),
+                    state: "orphaned".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "route-pool-1".to_string(),
+                RoutePoolEntry {
+                    id: "route-pool-1".to_string(),
+                    route_id: "route-1".to_string(),
+                    state: "available".to_string(),
+                    current_route_allocation_id: None,
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            remote_view_acquisition_leases: BTreeMap::from([(
+                acquisition_lease_id.to_string(),
+                RemoteViewAcquisitionLease {
+                    id: acquisition_lease_id.to_string(),
+                    browser_id: "browser-1".to_string(),
+                    session_id: "session-1".to_string(),
+                    route_id: "route-1".to_string(),
+                    display_allocation_id: "display-1".to_string(),
+                    route_pool_entry_id: Some("route-pool-1".to_string()),
+                    state: "failed".to_string(),
+                    phase: "rollback_incomplete".to_string(),
+                    failure_reason: Some("focus_timeout".to_string()),
+                    cleanup: Some(json!({
+                        "state": "quarantined",
+                        "quarantine": {
+                            "active": true,
+                            "reason": "rollback_incomplete",
+                        },
+                    })),
+                    ..RemoteViewAcquisitionLease::default()
+                },
+            )]),
+            ..ServiceState::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn reconcile_closes_inactive_acquisition_quarantine_after_resources_are_orphaned() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(state.remote_view_routes["route-1"].state, "released");
+        assert_eq!(state.display_allocations["display-1"].state, "released");
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            1
+        );
+        let acquisition = &state.remote_view_acquisition_leases[acquisition_lease_id];
+        assert_eq!(acquisition.state, "failed");
+        assert_eq!(acquisition.phase, "rollback_complete");
+        assert_eq!(acquisition.failure_reason.as_deref(), Some("focus_timeout"));
+        assert!(acquisition
+            .cleanup
+            .as_ref()
+            .is_some_and(|cleanup| cleanup.get("quarantine").is_none()));
+    }
+
+    #[tokio::test]
+    async fn reconcile_preserves_acquisition_quarantine_with_active_viewer() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+        state.viewer_leases.insert(
+            "viewer-1".to_string(),
+            ViewerLease {
+                id: "viewer-1".to_string(),
+                route_id: Some("route-1".to_string()),
+                browser_id: Some("browser-1".to_string()),
+                state: "observing".to_string(),
+                ..ViewerLease::default()
+            },
+        );
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(state.remote_view_routes["route-1"].state, "orphaned");
+        assert_eq!(state.display_allocations["display-1"].state, "orphaned");
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_incomplete"
+        );
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_preserves_acquisition_quarantine_with_active_route_checkout() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+        state.route_pool.get_mut("route-pool-1").unwrap().state = "checked_out".to_string();
+        state
+            .route_pool
+            .get_mut("route-pool-1")
+            .unwrap()
+            .current_route_allocation_id = Some("route-1".to_string());
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_incomplete"
+        );
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_inactive_acquisition_quarantine_is_idempotent() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+
+        let first = reconcile_service_state(&mut state).await;
+        let first_cleanup = state.remote_view_acquisition_leases[acquisition_lease_id]
+            .cleanup
+            .clone();
+        let second = reconcile_service_state(&mut state).await;
+
+        assert_eq!(first.remote_view_repair.completed_acquisition_rollbacks, 1);
+        assert_eq!(second.remote_view_repair.completed_acquisition_rollbacks, 0);
+        assert_eq!(state.remote_view_routes["route-1"].state, "released");
+        assert_eq!(state.display_allocations["display-1"].state, "released");
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_complete"
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].cleanup,
+            first_cleanup
+        );
     }
 
     #[test]

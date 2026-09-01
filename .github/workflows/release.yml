@@ -156,7 +156,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: cli
+          workspaces: .
 
       - name: Build with zigbuild
         if: matrix.use_zigbuild

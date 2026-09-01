@@ -8,43 +8,43 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 09e1d6f69eecd0a5e2590a44f2ecba903e36214d
-    remote_ref: null
+    checkpoint: 97466f05c7d91d15d4ffe20f0ee468bf4e02ccb4
+    remote_ref: refs/remotes/origin/fix/terminal-session-replacement-parity
     integration_receipt: null
     integration: merge
-    dependencies: [P137, P144, P148]
+    dependencies: [P137, P144, P148, P150]
     overlaps: [P150]
-    reconciled_overlaps: [distinct_implementation_surfaces_shared_terminal_state_domain]
+    reconciled_overlaps: [P150_integrated_and_distinct_implementation_surfaces]
     updated_at: 2026-09-01
-  - id: P144 Cross-Candidate Interrupted Authority Migration Recovery
-    objective: Recover an exact interrupted protected authority unit even when the retry candidate changed
-    plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
-    plan_ref: refs/heads/fix/interrupted-lease-authority-cross-candidate-recovery
-    branch: fix/interrupted-lease-authority-cross-candidate-recovery
+  - id: P150 Automatic Terminal Quarantine Convergence
+    objective: Automatically close a provably inactive route-bound acquisition quarantine after retained owners disappear
+    plan: docs/dev/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md
+    plan_ref: refs/heads/fix/automatic-terminal-quarantine-convergence
+    branch: fix/automatic-terminal-quarantine-convergence
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: eb0cc5cce49f1686d9dd2c4d5c9c6f1c174e3e27
-    remote_ref: null
-    integration_receipt: null
+    custody_state: INTEGRATED
+    checkpoint: 8673204661340d92dfbf4eeb847588a16df59e78
+    remote_ref: refs/remotes/origin/fix/automatic-terminal-quarantine-convergence
+    integration_receipt: 6390528b73d0422053c05701b9a1098b4d3f0569
     integration: merge
-    dependencies: []
+    dependencies: [P114, P144]
+    overlaps: [P144]
+    reconciled_overlaps: [P144_integrated_tip_is_ancestor_of_source_baseline]
+    updated_at: 2026-09-01
+  - id: P151
+    objective: Extract CDP protocol and websocket transport into a focused Rust library crate
+    plan: docs/dev/plans/0151-2026-09-01-cdp-transport-crate-extraction-plan.md
+    plan_ref: refs/heads/architecture/cdp-transport-crate
+    branch: architecture/cdp-transport-crate
+    target: main
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    checkpoint: 88e2468f8d8ad76bb66e4c341f35d5913949d399
+    remote_ref: refs/remotes/origin/architecture/cdp-transport-crate
+    integration_receipt: 6d5b3377c9438d3a6b86a20da9c5c97f3da9ab59
+    integration: merge
+    dependencies: [P149]
     overlaps: []
-    reconciled_overlaps: []
-    updated_at: 2026-09-01
-  - id: P147 Runtime Host Ingress Supervisor Restart Repair
-    objective: Adopt an exact same-generation supervised replacement after the selected runtime host exits
-    plan: docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md
-    plan_ref: refs/heads/fix/runtime-ingress-same-generation-adoption
-    branch: fix/runtime-ingress-same-generation-adoption
-    target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 45ca9556c08813ac9181ebf695668262698681dd
-    remote_ref: refs/remotes/origin/fix/runtime-ingress-same-generation-adoption
-    integration_receipt: null
-    integration: merge
-    dependencies: []
-    overlaps: [plan/lease-authority-coordination]
     reconciled_overlaps: []
     updated_at: 2026-09-01

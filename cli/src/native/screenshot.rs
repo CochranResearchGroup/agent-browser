@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use std::collections::HashMap;
 
-use super::cdp::client::CdpClient;
-use super::cdp::types::*;
 use super::element::RefMap;
+use agent_browser_cdp::client::CdpClient;
+use agent_browser_cdp::types::*;
 
 const ANNOTATION_OVERLAY_ID: &str = "__agent_browser_annotations__";
 

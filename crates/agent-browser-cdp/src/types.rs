@@ -595,9 +595,9 @@ pub struct BrowserVersionInfo {
 ///
 /// To populate: download `browser_protocol.json` and `js_protocol.json` from
 /// <https://github.com/nicolo-ribaudo/nicolo-ribaudo.github.io/> (or any
-/// Chromium source) into `cli/cdp-protocol/` and rebuild.
+/// Chromium source) into `crates/agent-browser-cdp/cdp-protocol/` and rebuild.
 ///
-/// Usage: `use super::cdp::types::generated::cdp_page::*;`
+/// Usage: `use agent_browser_cdp::types::generated::cdp_page::*;`
 #[allow(clippy::upper_case_acronyms)]
 pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/cdp_generated.rs"));
