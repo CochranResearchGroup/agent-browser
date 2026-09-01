@@ -196,6 +196,7 @@ struct CompleteLeaseEffectPayload {
 struct CompleteBrowserLaunchPayload {
     receipt_id: String,
     browser_pid: u32,
+    profile_path: String,
     completion_idempotency_key: String,
 }
 
@@ -460,6 +461,7 @@ struct LeaseAuthorityOwnerReconciliationOutcome {
 struct BrowserProcessIdentityEvidence {
     pid: u32,
     start_token: String,
+    profile_path: String,
     executable_path: String,
     executable_sha256: String,
     profile_identity_digest: String,
@@ -776,6 +778,8 @@ struct LeaseAuthorityResourceRegistry {
 struct LeaseAuthorityOwnerBinding {
     resource: LeaseResourceKey,
     physical_identity_digest: String,
+    #[serde(default)]
+    profile_path: String,
     owner_id: String,
     owner_generation: u64,
     logical_browser_id: String,
@@ -2610,6 +2614,7 @@ impl LeaseAuthorityProtocolKernel {
         let binding = LeaseAuthorityOwnerBinding {
             resource: record.receipt.resource.clone(),
             physical_identity_digest: registration.physical_identity_digest,
+            profile_path: process.profile_path.clone(),
             owner_id: stable_protocol_id(
                 "owner",
                 &format!(
@@ -4487,6 +4492,7 @@ fn validate_protected_state(
         if storage_key != &binding.resource.storage_key()
             || binding.resource.kind != LeaseResourceKind::Profile
             || !valid_sha256_digest(&binding.physical_identity_digest)
+            || (!binding.profile_path.is_empty() && !Path::new(&binding.profile_path).is_absolute())
             || !valid_sha256_digest(&binding.process_instance_digest)
             || binding.process_pid <= 1
             || binding.process_start_token.trim().is_empty()
@@ -5588,13 +5594,22 @@ fn stale_browser_owner_executor_observation(
 fn derive_browser_process_identity(
     peer: custody::LeaseAuthorityRequestPeerIdentity,
     browser_pid: u32,
+    profile_path: &Path,
+    expected_profile_identity_digest: &str,
 ) -> Result<BrowserProcessIdentityEvidence, LeaseAuthorityProtocolError> {
-    if peer.uid == 0 || peer.pid <= 1 || browser_pid <= 1 || browser_pid == peer.pid {
+    if peer.uid == 0
+        || peer.pid <= 1
+        || browser_pid <= 1
+        || browser_pid == peer.pid
+        || !profile_path.is_absolute()
+        || !valid_sha256_digest(expected_profile_identity_digest)
+    {
         return Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_invalid",
         });
     }
-    let (process_uid, parent_pid, evidence) = observe_linux_browser_process(browser_pid)?;
+    let (process_uid, parent_pid, evidence) =
+        observe_linux_browser_process(browser_pid, profile_path, expected_profile_identity_digest)?;
     if process_uid != peer.uid {
         return Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_owner_mismatch",
@@ -5611,8 +5626,13 @@ fn derive_browser_process_identity(
 #[cfg(target_os = "linux")]
 fn observe_linux_browser_process(
     browser_pid: u32,
+    profile_path: &Path,
+    expected_profile_identity_digest: &str,
 ) -> Result<(u32, u32, BrowserProcessIdentityEvidence), LeaseAuthorityProtocolError> {
-    if browser_pid <= 1 {
+    if browser_pid <= 1
+        || !profile_path.is_absolute()
+        || !valid_sha256_digest(expected_profile_identity_digest)
+    {
         return Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_browser_process_invalid",
         });
@@ -5646,51 +5666,45 @@ fn observe_linux_browser_process(
             code: "lease_authority_protocol_browser_process_invalid",
         })?
         .to_string();
-    let executable_path =
-        fs::canonicalize(process_root.join("exe")).map_err(|_| LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_process_unavailable",
-        })?;
-    let executable = fs::read(&executable_path).map_err(|_| LeaseAuthorityProtocolError {
-        code: "lease_authority_protocol_browser_process_unavailable",
+    let profile_path = fs::canonicalize(profile_path).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_profile_unavailable",
     })?;
-    let executable_sha256 = format!("sha256:{:x}", Sha256::digest(executable));
-    let executable_path = executable_path.to_string_lossy().into_owned();
-    let command_line =
-        fs::read(process_root.join("cmdline")).map_err(|_| LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_process_unavailable",
-        })?;
-    let arguments = command_line
-        .split(|byte| *byte == 0)
-        .filter(|argument| !argument.is_empty())
-        .map(|argument| String::from_utf8(argument.to_vec()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_process_invalid",
-        })?;
-    let profile_path = arguments
-        .iter()
-        .find_map(|argument| argument.strip_prefix("--user-data-dir="))
-        .or_else(|| {
-            arguments.windows(2).find_map(|arguments| {
-                (arguments[0] == "--user-data-dir").then_some(arguments[1].as_str())
-            })
-        })
-        .filter(|path| !path.trim().is_empty())
-        .ok_or(LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_process_profile_unavailable",
-        })?;
     let profile_identity_digest = format!(
         "sha256:{}",
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))
-            .map_err(|_| LeaseAuthorityProtocolError {
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).map_err(|_| {
+            LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_browser_process_profile_unavailable",
-            })?
+            }
+        })?
     );
+    if profile_identity_digest != expected_profile_identity_digest {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_profile_mismatch",
+        });
+    }
+    let executable_identity = fs::canonicalize(process_root.join("exe"))
+        .ok()
+        .and_then(|path| fs::read(&path).ok().map(|bytes| (path, bytes)));
+    let (executable_path, executable_sha256) = match executable_identity {
+        Some((path, executable)) => (
+            path.to_string_lossy().into_owned(),
+            format!("sha256:{:x}", Sha256::digest(executable)),
+        ),
+        None => derive_browser_process_kernel_identity(
+            browser_pid,
+            process_uid,
+            &start_token,
+            &process_root,
+        )?,
+    };
+    let profile_path = profile_path.to_string_lossy().into_owned();
+    let profile_lock_identity_digest =
+        derive_browser_profile_lock_identity(Path::new(&profile_path), process_uid, browser_pid)?;
     let process_instance_digest = format!(
         "sha256:{:x}",
         Sha256::digest(
             format!(
-                "agent-browser.browser-process.v1\n{}\n{browser_pid}\n{start_token}\n{executable_path}\n{executable_sha256}\n{profile_identity_digest}",
+                "agent-browser.browser-process.v2\n{}\n{browser_pid}\n{start_token}\n{executable_path}\n{executable_sha256}\n{profile_identity_digest}\n{profile_lock_identity_digest}",
                 process_uid
             )
             .as_bytes()
@@ -5702,12 +5716,113 @@ fn observe_linux_browser_process(
         BrowserProcessIdentityEvidence {
             pid: browser_pid,
             start_token,
+            profile_path,
             executable_path,
             executable_sha256,
             profile_identity_digest,
             process_instance_digest,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+fn derive_browser_profile_lock_identity(
+    profile_path: &Path,
+    process_uid: u32,
+    browser_pid: u32,
+) -> Result<String, LeaseAuthorityProtocolError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let lock_path = profile_path.join("SingletonLock");
+    let metadata = fs::symlink_metadata(&lock_path).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_profile_lock_unavailable",
+    })?;
+    let target = fs::read_link(&lock_path).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_browser_process_profile_lock_unavailable",
+    })?;
+    let target = target.to_string_lossy();
+    if browser_pid <= 1
+        || process_uid == 0
+        || !metadata.file_type().is_symlink()
+        || metadata.uid() != process_uid
+        || !target.ends_with(&format!("-{browser_pid}"))
+    {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_profile_lock_mismatch",
+        });
+    }
+    Ok(format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "agent-browser.browser-process-profile-lock.v1\n{}\n{}\n{}\n{}\n{}\n{}",
+                profile_path.display(),
+                metadata.dev(),
+                metadata.ino(),
+                metadata.uid(),
+                browser_pid,
+                target
+            )
+            .as_bytes()
+        )
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn derive_browser_process_kernel_identity(
+    browser_pid: u32,
+    process_uid: u32,
+    start_token: &str,
+    process_root: &Path,
+) -> Result<(String, String), LeaseAuthorityProtocolError> {
+    let cgroup = fs::read_to_string(process_root.join("cgroup")).map_err(|_| {
+        LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_cgroup_unavailable",
+        }
+    })?;
+    derive_browser_process_kernel_identity_from_observation(
+        browser_pid,
+        process_uid,
+        start_token,
+        &cgroup,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn derive_browser_process_kernel_identity_from_observation(
+    browser_pid: u32,
+    process_uid: u32,
+    start_token: &str,
+    cgroup: &str,
+) -> Result<(String, String), LeaseAuthorityProtocolError> {
+    let cgroup = cgroup.trim();
+    let cgroup_is_kernel_shaped = !cgroup.is_empty()
+        && cgroup.lines().all(|line| {
+            let mut fields = line.splitn(3, ':');
+            fields.next().is_some()
+                && fields.next().is_some()
+                && fields.next().is_some_and(|path| path.starts_with('/'))
+        });
+    if browser_pid <= 1
+        || process_uid == 0
+        || start_token.is_empty()
+        || !start_token.bytes().all(|byte| byte.is_ascii_digit())
+        || !cgroup_is_kernel_shaped
+    {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_invalid",
+        });
+    }
+    let digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "agent-browser.lease-authority-browser-process-kernel-identity.v1\n{process_uid}\n{browser_pid}\n{start_token}\n{cgroup}"
+            )
+            .as_bytes()
+        )
+    );
+    Ok((format!("kernel-browser-cgroup:{digest}"), digest))
 }
 
 #[cfg(target_os = "linux")]
@@ -5729,8 +5844,20 @@ fn derive_browser_adoption_physical_observation(
     if let BrowserOwnerProcessObservation::Stale { evidence_digest } = process_observation {
         return Ok(BrowserAdoptionPhysicalObservation::Stale { evidence_digest });
     }
-    let (_, _, process) = observe_linux_browser_process(binding.process_pid)?;
-    let profile_path = linux_process_profile_path(binding.process_pid)?;
+    if binding.profile_path.trim().is_empty() {
+        return Ok(BrowserAdoptionPhysicalObservation::Uncertain {
+            evidence_digest: browser_adoption_observation_digest(
+                binding,
+                "profile_path_not_recorded",
+            ),
+        });
+    }
+    let profile_path = PathBuf::from(&binding.profile_path);
+    let (_, _, process) = observe_linux_browser_process(
+        binding.process_pid,
+        &profile_path,
+        &binding.physical_identity_digest,
+    )?;
     let profile_identity_digest = format!(
         "sha256:{}",
         crate::runtime_profile::canonical_profile_identity_digest(&profile_path).map_err(|_| {
@@ -6078,37 +6205,6 @@ fn derive_browser_effect_channel_observation(
 }
 
 #[cfg(target_os = "linux")]
-fn linux_process_profile_path(pid: u32) -> Result<PathBuf, LeaseAuthorityProtocolError> {
-    let command_line =
-        fs::read(format!("/proc/{pid}/cmdline")).map_err(|_| LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_adoption_profile_unavailable",
-        })?;
-    let arguments = command_line
-        .split(|byte| *byte == 0)
-        .filter(|argument| !argument.is_empty())
-        .map(|argument| String::from_utf8(argument.to_vec()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_adoption_profile_unavailable",
-        })?;
-    let profile_path = arguments
-        .iter()
-        .find_map(|argument| argument.strip_prefix("--user-data-dir="))
-        .or_else(|| {
-            arguments.windows(2).find_map(|arguments| {
-                (arguments[0] == "--user-data-dir").then_some(arguments[1].as_str())
-            })
-        })
-        .filter(|path| !path.trim().is_empty())
-        .ok_or(LeaseAuthorityProtocolError {
-            code: "lease_authority_protocol_browser_adoption_profile_unavailable",
-        })?;
-    fs::canonicalize(profile_path).map_err(|_| LeaseAuthorityProtocolError {
-        code: "lease_authority_protocol_browser_adoption_profile_unavailable",
-    })
-}
-
-#[cfg(target_os = "linux")]
 fn linux_process_socket_inodes(pid: u32) -> Result<BTreeSet<u64>, LeaseAuthorityProtocolError> {
     let entries =
         fs::read_dir(format!("/proc/{pid}/fd")).map_err(|_| LeaseAuthorityProtocolError {
@@ -6287,7 +6383,16 @@ fn derive_browser_owner_process_observation(
     if linux_process_stat_is_zombie(&stat)? {
         return Ok(stale_browser_owner_observation(binding, "process_zombie"));
     }
-    let observed = match observe_linux_browser_process(binding.process_pid) {
+    if binding.profile_path.trim().is_empty() {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_browser_process_profile_unavailable",
+        });
+    }
+    let observed = match observe_linux_browser_process(
+        binding.process_pid,
+        Path::new(&binding.profile_path),
+        &binding.physical_identity_digest,
+    ) {
         Ok((_, _, observed)) => observed,
         Err(_error)
             if fs::metadata(&process_root)
@@ -6359,6 +6464,8 @@ fn stale_browser_owner_observation(
 fn derive_browser_process_identity(
     _peer: custody::LeaseAuthorityRequestPeerIdentity,
     _browser_pid: u32,
+    _profile_path: &Path,
+    _expected_profile_identity_digest: &str,
 ) -> Result<BrowserProcessIdentityEvidence, LeaseAuthorityProtocolError> {
     Err(LeaseAuthorityProtocolError {
         code: "lease_authority_protocol_browser_process_platform_unsupported",
@@ -6532,7 +6639,20 @@ fn dispatch_lease_authority_request(
         }
         LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(request) => {
             let executor = derive_effect_executor_identity(peer)?;
-            let process = derive_browser_process_identity(peer, request.browser_pid)?;
+            let profile_path = fs::canonicalize(&request.profile_path).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_browser_process_profile_unavailable",
+                }
+            })?;
+            let profile_path_string = profile_path.to_string_lossy().into_owned();
+            let physical_identity_digest =
+                derive_profile_enrollment_identity(&profile_path_string, peer)?;
+            let process = derive_browser_process_identity(
+                peer,
+                request.browser_pid,
+                &profile_path,
+                &physical_identity_digest,
+            )?;
             let observed_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
             let (outcome, owner) =
@@ -7000,6 +7120,7 @@ mod tests {
         let process = BrowserProcessIdentityEvidence {
             pid: 4242,
             start_token: "browser-start-1".to_string(),
+            profile_path: "/var/lib/agent-browser/profiles/adoption-profile".to_string(),
             executable_path: "/opt/agent-browser/chrome".to_string(),
             executable_sha256:
                 "sha256:6666666666666666666666666666666666666666666666666666666666666666"
@@ -7014,6 +7135,7 @@ mod tests {
                 CompleteBrowserLaunchPayload {
                     receipt_id: authorized.receipt.receipt_id,
                     browser_pid: process.pid,
+                    profile_path: process.profile_path.clone(),
                     completion_idempotency_key: "complete:adoption-profile:1".to_string(),
                 },
                 &executor,
@@ -8751,6 +8873,7 @@ mod tests {
         let browser_process = BrowserProcessIdentityEvidence {
             pid: 4242,
             start_token: "987654".to_string(),
+            profile_path: "/var/lib/agent-browser/profiles/last30days".to_string(),
             executable_path: "/opt/agent-browser/chrome".to_string(),
             executable_sha256:
                 "sha256:6666666666666666666666666666666666666666666666666666666666666666"
@@ -8763,6 +8886,7 @@ mod tests {
         let browser_completion_request = || CompleteBrowserLaunchPayload {
             receipt_id: owner_authorized.receipt.receipt_id.clone(),
             browser_pid: browser_process.pid,
+            profile_path: browser_process.profile_path.clone(),
             completion_idempotency_key: "complete:last30days:owner-commit".to_string(),
         };
         let (browser_completion, owner) = restarted
@@ -9005,6 +9129,7 @@ mod tests {
                 CompleteBrowserLaunchPayload {
                     receipt_id: replacement_authorized.receipt.receipt_id,
                     browser_pid: replacement_process.pid,
+                    profile_path: replacement_process.profile_path.clone(),
                     completion_idempotency_key: "complete:last30days:replacement".to_string(),
                 },
                 &executor,
@@ -9084,6 +9209,35 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn browser_process_kernel_identity_is_uid_pid_start_and_cgroup_bound() {
+        let cgroup = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/browser.scope\n";
+        let first =
+            derive_browser_process_kernel_identity_from_observation(42_001, 1000, "123456", cgroup)
+                .unwrap();
+        let changed_start =
+            derive_browser_process_kernel_identity_from_observation(42_001, 1000, "123457", cgroup)
+                .unwrap();
+        let changed_cgroup = derive_browser_process_kernel_identity_from_observation(
+            42_001,
+            1000,
+            "123456",
+            "0::/user.slice/user-1000.slice/user@1000.service/app.slice/other.scope\n",
+        )
+        .unwrap();
+        assert!(first.0.starts_with("kernel-browser-cgroup:sha256:"));
+        assert!(valid_sha256_digest(&first.1));
+        assert_ne!(first, changed_start);
+        assert_ne!(first, changed_cgroup);
+        assert_eq!(
+            derive_browser_process_kernel_identity_from_observation(42_001, 0, "123456", cgroup,)
+                .unwrap_err()
+                .code,
+            "lease_authority_protocol_browser_process_invalid"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn browser_launch_completion_derives_an_exact_direct_child_process_identity() {
         let profile = std::env::temp_dir().join(format!(
             "agent-browser-process-profile-{}",
@@ -9097,13 +9251,23 @@ mod tests {
             .arg(format!("--user-data-dir={}", profile.display()))
             .spawn()
             .expect("spawn bounded process identity fixture");
+        std::os::unix::fs::symlink(
+            format!("fixture-{}", child.id()),
+            profile.join("SingletonLock"),
+        )
+        .unwrap();
         let peer = custody::LeaseAuthorityRequestPeerIdentity {
             uid: unsafe { libc::geteuid() },
             gid: unsafe { libc::getegid() },
             pid: std::process::id(),
         };
-        let evidence = derive_browser_process_identity(peer, child.id())
-            .expect("direct child identity must be derivable");
+        let profile_identity_digest = format!(
+            "sha256:{}",
+            crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+        );
+        let evidence =
+            derive_browser_process_identity(peer, child.id(), &profile, &profile_identity_digest)
+                .expect("direct child identity must be derivable");
         let executor = derive_effect_executor_identity(peer)
             .expect("current executor identity must be derivable");
         assert_eq!(evidence.pid, child.id());
@@ -9122,6 +9286,7 @@ mod tests {
         let mut binding = LeaseAuthorityOwnerBinding {
             resource: LeaseResourceKey::profile("process-fixture"),
             physical_identity_digest: evidence.profile_identity_digest.clone(),
+            profile_path: evidence.profile_path.clone(),
             owner_id: "owner:process-fixture".to_string(),
             owner_generation: 1,
             logical_browser_id: "browser:process-fixture".to_string(),
@@ -9160,9 +9325,14 @@ mod tests {
             ..peer
         };
         assert_eq!(
-            derive_browser_process_identity(wrong_parent, child.id())
-                .unwrap_err()
-                .code(),
+            derive_browser_process_identity(
+                wrong_parent,
+                child.id(),
+                &profile,
+                &profile_identity_digest,
+            )
+            .unwrap_err()
+            .code(),
             "lease_authority_protocol_browser_process_parent_mismatch"
         );
         child.kill().expect("stop bounded process identity fixture");
@@ -9254,11 +9424,18 @@ while not os.path.exists(stop):
             gid: unsafe { libc::getegid() },
             pid: std::process::id(),
         };
-        let process = derive_browser_process_identity(peer, browser.id()).unwrap();
+        let profile_identity_digest = format!(
+            "sha256:{}",
+            crate::runtime_profile::canonical_profile_identity_digest(&profile).unwrap()
+        );
+        let process =
+            derive_browser_process_identity(peer, browser.id(), &profile, &profile_identity_digest)
+                .unwrap();
         let executor = derive_effect_executor_identity(peer).unwrap();
         let binding = LeaseAuthorityOwnerBinding {
             resource: LeaseResourceKey::profile("adoption-observation"),
             physical_identity_digest: process.profile_identity_digest.clone(),
+            profile_path: process.profile_path.clone(),
             owner_id: "owner:adoption-observation".to_string(),
             owner_generation: 1,
             logical_browser_id: "browser:adoption-observation".to_string(),

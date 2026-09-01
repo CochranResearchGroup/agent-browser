@@ -3214,6 +3214,48 @@ empty capability set. Red-green fixture coverage proves both exact migrations
 and continues to refuse all other unit drift. Installed migration and one live
 acquisition acceptance remain.
 
+## Slice R Profile-Lock-Bound Browser Completion | 2026-09-01
+
+The explicit protected-authority upgrade succeeded and selected exact banked
+generation `4987bf036d91...6cd76e`; its installed digest matched the source
+release artifact, the socket was enabled and listening, and development doctor
+was green on the same generation. The attributed access plan again selected no
+catalog profile and reported zero active lease pressure. One explicit
+capability-bound acquisition against the already-enrolled internal profile
+crossed custody, enrollment, claim acquisition, effect authorization, and real
+browser launch. It then failed at launch completion with
+`lease_authority_protocol_browser_process_unavailable`. The exact child exited,
+the profile lock released, force kill did not fail, and uncertainty was durably
+recorded.
+
+The remaining divergence was the browser counterpart of Slice Q. The protected
+root authority still required `/proc/<browser-pid>/exe` and `cmdline`, which the
+host's ptrace policy denies without `CAP_SYS_PTRACE`. The service intentionally
+does not receive that broad capability. Launch completion now sends the exact
+absolute profile path held by the local browser manager. The authority
+independently canonicalizes that path, proves peer ownership, recomputes its
+canonical identity, and later matches that identity to the enrolled resource.
+It observes process UID, direct-parent PID, start token, and exact cgroup from
+the kernel. Executable path and content digest remain preferred when readable;
+otherwise a domain-separated UID, PID, start-token, and cgroup identity is
+used.
+
+A caller-supplied enrolled path alone is insufficient. Before committing an
+owner, the authority also requires the profile's `SingletonLock` to be a
+user-owned symlink whose target names the exact browser PID. The profile-lock
+inode and target are included in the process-instance digest. Subsequent owner
+observation uses the recorded canonical profile path and the same process and
+lock proof, removing the earlier launch-versus-recovery divergence. Legacy
+bindings without a recorded path remain readable but cannot be silently
+upgraded into current physical authority.
+
+The focused protocol, protected socket-service, and client suites pass with
+56, 8, and 6 tests respectively. Strict Clippy and formatting pass. Tests cover
+direct-parent enforcement, exact lock ownership and PID binding, kernel browser
+identity changes across start token and cgroup, request serialization, durable
+publication before reply, and replay behavior. A new exact release build,
+protected generation upgrade, and one live acquire-close acceptance remain.
+
 ## Slice N Active-Service Endpoint Custody | 2026-09-01
 
 The profile-traversal migration completed and every maintenance axis passed:

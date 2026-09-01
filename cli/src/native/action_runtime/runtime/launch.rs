@@ -1058,6 +1058,12 @@ async fn auto_launch_with_authority(
                 .as_ref()
                 .and_then(BrowserManager::browser_pid)
                 .ok_or_else(|| "protected_browser_launch_pid_missing".to_string())?;
+            let profile_path = state
+                .browser
+                .as_ref()
+                .and_then(BrowserManager::browser_user_data_dir)
+                .map(Path::to_path_buf)
+                .ok_or_else(|| "protected_browser_launch_profile_path_missing".to_string())?;
             let completion_permit = context.permit.clone();
             let uncertainty_permit = context.permit.clone();
             let completion_key = context.completion_idempotency_key.clone();
@@ -1067,6 +1073,7 @@ async fn auto_launch_with_authority(
                     complete_protected_browser_launch_success(
                         &completion_permit,
                         browser_pid,
+                        &profile_path,
                         &completion_key,
                     )
                 },

@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::time::Duration;
 
 const PROTECTED_LEASE_AUTHORITY_CLIENT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -326,10 +327,12 @@ pub(crate) fn mark_protected_browser_launch_uncertain(
 pub(crate) fn complete_protected_browser_launch_success(
     permit: &ProtectedBrowserLaunchPermit,
     browser_pid: u32,
+    profile_path: &Path,
     completion_idempotency_key: &str,
 ) -> Result<ProtectedBrowserOwner, String> {
     if permit.receipt_id.trim().is_empty()
         || browser_pid <= 1
+        || !profile_path.is_absolute()
         || completion_idempotency_key.trim().is_empty()
     {
         return Err("lease_authority_browser_launch_completion_invalid".to_string());
@@ -340,6 +343,7 @@ pub(crate) fn complete_protected_browser_launch_success(
         "payload": {
             "receiptId": permit.receipt_id,
             "browserPid": browser_pid,
+            "profilePath": profile_path,
             "completionIdempotencyKey": completion_idempotency_key,
         }
     }))
