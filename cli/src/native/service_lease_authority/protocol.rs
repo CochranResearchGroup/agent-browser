@@ -293,6 +293,7 @@ enum LeaseAuthorityBrowserAdoptionState {
     Prepared,
     Completed,
     Uncertain,
+    Aborted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2890,6 +2891,174 @@ impl LeaseAuthorityProtocolKernel {
             })
     }
 
+    fn abort_expired_browser_adoption_without_effect_custody(
+        &mut self,
+        resource: &LeaseResourceKey,
+        physical_observation: &BrowserAdoptionPhysicalObservation,
+        effect_channel_observation: &BrowserEffectChannelObservation,
+        now: &str,
+    ) -> Result<(), LeaseAuthorityProtocolError> {
+        let effect_evidence_digest = match effect_channel_observation {
+            BrowserEffectChannelObservation::Absent { evidence_digest }
+                if valid_sha256_digest(evidence_digest) =>
+            {
+                evidence_digest.clone()
+            }
+            _ => return Ok(()),
+        };
+        let physical_evidence_digest = match physical_observation {
+            BrowserAdoptionPhysicalObservation::ExactCurrent {
+                evidence_digest, ..
+            }
+            | BrowserAdoptionPhysicalObservation::Stale { evidence_digest }
+                if valid_sha256_digest(evidence_digest) =>
+            {
+                evidence_digest.clone()
+            }
+            BrowserAdoptionPhysicalObservation::Uncertain { .. }
+            | BrowserAdoptionPhysicalObservation::ExactCurrent { .. }
+            | BrowserAdoptionPhysicalObservation::Stale { .. } => return Ok(()),
+        };
+        let Some((storage_key, mut receipt)) = self
+            .state
+            .browser_adoption_receipts
+            .iter()
+            .find(|(_, receipt)| {
+                receipt.resource == *resource
+                    && matches!(
+                        receipt.state,
+                        LeaseAuthorityBrowserAdoptionState::Prepared
+                            | LeaseAuthorityBrowserAdoptionState::Uncertain
+                    )
+                    && super::timestamp_at_or_after(now, &receipt.transition_deadline)
+            })
+            .map(|(storage_key, receipt)| (storage_key.clone(), receipt.clone()))
+        else {
+            return Ok(());
+        };
+        let binding = self
+            .state
+            .owners
+            .bindings
+            .get(&resource.storage_key())
+            .filter(|binding| {
+                binding.owner_id == receipt.owner_id
+                    && binding.owner_generation == receipt.owner_generation
+                    && binding.process_instance_digest == receipt.browser_process_instance_digest
+                    && binding.logical_browser_id == receipt.logical_browser_id
+                    && binding.revision == receipt.owner_revision
+            });
+        if binding.is_none() {
+            return Ok(());
+        }
+        let next_authority_revision = self
+            .state
+            .authority
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_counter_exhausted",
+            })?;
+        let terminal_observation_evidence_digest = format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                format!(
+                    "agent-browser.browser-adoption-abort-observation.v1\n{}\n{}\n{}",
+                    receipt.receipt_id, physical_evidence_digest, effect_evidence_digest
+                )
+                .as_bytes()
+            )
+        );
+        receipt.state = LeaseAuthorityBrowserAdoptionState::Aborted;
+        receipt.completion_idempotency_key = Some(stable_protocol_id(
+            "browser-adoption-abort",
+            &format!("{}\0{}", receipt.receipt_id, next_authority_revision),
+        ));
+        receipt.attachment_evidence_digest = Some(effect_evidence_digest);
+        receipt.terminal_observation_evidence_digest = Some(terminal_observation_evidence_digest);
+        receipt.completed_at = Some(now.to_string());
+        receipt.terminal_authority_revision = Some(next_authority_revision);
+        receipt.terminal_owner_revision = None;
+        receipt.completed_owner_id = None;
+        receipt.completed_owner_generation = None;
+        self.state.authority.revision = next_authority_revision;
+        self.state.authority.events.push(LeaseAuthorityEvent {
+            event_id: stable_protocol_id(
+                "lease-event-owner-adoption-abort",
+                &format!("{}\0{}", receipt.receipt_id, next_authority_revision),
+            ),
+            resource: receipt.resource.clone(),
+            claim_id: receipt.claim_id.clone(),
+            principal_id: receipt.principal_id.clone(),
+            fencing_token: receipt.fencing_token,
+            kind: super::LeaseEventKind::OwnerAdoptionAborted,
+            occurred_at: now.to_string(),
+        });
+        self.state
+            .browser_adoption_receipts
+            .insert(storage_key, receipt);
+        validate_protected_state(&self.state)
+    }
+
+    fn compact_terminal_browser_adoption_receipts(&mut self) {
+        if self.state.browser_adoption_receipts.len()
+            < MAX_LEASE_AUTHORITY_BROWSER_ADOPTION_RECEIPTS
+        {
+            return;
+        }
+        let current_owner_receipt_ids = self
+            .state
+            .owners
+            .bindings
+            .values()
+            .filter_map(|owner| {
+                self.state
+                    .browser_adoption_receipts
+                    .values()
+                    .find(|receipt| {
+                        receipt.state == LeaseAuthorityBrowserAdoptionState::Completed
+                            && receipt.completed_owner_id.as_deref()
+                                == Some(owner.owner_id.as_str())
+                            && receipt.completed_owner_generation == Some(owner.owner_generation)
+                            && receipt.terminal_owner_revision == Some(owner.revision)
+                    })
+                    .map(|receipt| receipt.receipt_id.clone())
+            })
+            .collect::<BTreeSet<_>>();
+        let mut removable = self
+            .state
+            .browser_adoption_receipts
+            .iter()
+            .filter(|(_, receipt)| {
+                matches!(
+                    receipt.state,
+                    LeaseAuthorityBrowserAdoptionState::Completed
+                        | LeaseAuthorityBrowserAdoptionState::Aborted
+                ) && !current_owner_receipt_ids.contains(&receipt.receipt_id)
+            })
+            .map(|(storage_key, receipt)| {
+                (
+                    receipt
+                        .completed_at
+                        .clone()
+                        .unwrap_or_else(|| receipt.prepared_at.clone()),
+                    receipt.receipt_id.clone(),
+                    storage_key.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        removable.sort();
+        for (_, _, storage_key) in removable {
+            if self.state.browser_adoption_receipts.len()
+                < MAX_LEASE_AUTHORITY_BROWSER_ADOPTION_RECEIPTS
+            {
+                break;
+            }
+            self.state.browser_adoption_receipts.remove(&storage_key);
+        }
+    }
+
     fn prepare_browser_adoption(
         &mut self,
         request: PrepareBrowserAdoptionPayload,
@@ -2919,6 +3088,7 @@ impl LeaseAuthorityProtocolKernel {
             &request.resource,
             &request.idempotency_key,
         );
+        let now = self.observe_authority_time(authority_observed_at)?;
         if let Some(receipt) = self.state.browser_adoption_receipts.get(&receipt_key) {
             if receipt.request_digest != request_digest
                 || receipt.candidate_executor_identity_digest != candidate.identity_digest
@@ -2927,10 +3097,19 @@ impl LeaseAuthorityProtocolKernel {
                     code: "lease_authority_idempotency_conflict",
                 });
             }
-            return Ok(LeaseAuthorityBrowserAdoptionOutcome {
-                receipt: receipt.clone(),
-                replayed: true,
-            });
+            if receipt.state == LeaseAuthorityBrowserAdoptionState::Aborted {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_browser_adoption_aborted_retry_safe",
+                });
+            }
+            if matches!(receipt.state, LeaseAuthorityBrowserAdoptionState::Completed)
+                || !super::timestamp_at_or_after(&now, &receipt.transition_deadline)
+            {
+                return Ok(LeaseAuthorityBrowserAdoptionOutcome {
+                    receipt: receipt.clone(),
+                    replayed: true,
+                });
+            }
         }
         let (physical_evidence_digest, cdp_endpoint_identity_digest, profile_lock_identity_digest) =
             match physical_observation {
@@ -3001,6 +3180,31 @@ impl LeaseAuthorityProtocolKernel {
                 });
             }
         };
+        self.abort_expired_browser_adoption_without_effect_custody(
+            &request.resource,
+            physical_observation,
+            effect_channel_observation,
+            &now,
+        )?;
+        self.compact_terminal_browser_adoption_receipts();
+        if let Some(receipt) = self.state.browser_adoption_receipts.get(&receipt_key) {
+            if receipt.request_digest != request_digest
+                || receipt.candidate_executor_identity_digest != candidate.identity_digest
+            {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_idempotency_conflict",
+                });
+            }
+            if receipt.state == LeaseAuthorityBrowserAdoptionState::Aborted {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_browser_adoption_aborted_retry_safe",
+                });
+            }
+            return Ok(LeaseAuthorityBrowserAdoptionOutcome {
+                receipt: receipt.clone(),
+                replayed: true,
+            });
+        }
         if self.state.browser_adoption_receipts.len()
             >= MAX_LEASE_AUTHORITY_BROWSER_ADOPTION_RECEIPTS
         {
@@ -3034,7 +3238,6 @@ impl LeaseAuthorityProtocolKernel {
                 code: "lease_authority_protocol_browser_adoption_in_progress",
             });
         }
-        let now = self.observe_authority_time(authority_observed_at)?;
         let claim = self
             .state
             .authority
@@ -4465,6 +4668,31 @@ fn validate_protected_state(
                         .is_some_and(valid_sha256_digest)
                     && receipt.completed_at.as_deref().is_some_and(|completed_at| {
                         super::timestamp_at_or_after(completed_at, &receipt.prepared_at)
+                    })
+                    && receipt.terminal_authority_revision.is_some_and(|revision| {
+                        revision > receipt.authority_revision
+                            && revision <= state.authority.revision
+                    })
+                    && receipt.terminal_owner_revision.is_none()
+                    && receipt.completed_owner_id.is_none()
+                    && receipt.completed_owner_generation.is_none()
+            }
+            LeaseAuthorityBrowserAdoptionState::Aborted => {
+                prepared_binding_is_valid
+                    && receipt
+                        .completion_idempotency_key
+                        .as_deref()
+                        .is_some_and(|key| !key.trim().is_empty())
+                    && receipt
+                        .attachment_evidence_digest
+                        .as_deref()
+                        .is_some_and(valid_sha256_digest)
+                    && receipt
+                        .terminal_observation_evidence_digest
+                        .as_deref()
+                        .is_some_and(valid_sha256_digest)
+                    && receipt.completed_at.as_deref().is_some_and(|completed_at| {
+                        super::timestamp_at_or_after(completed_at, &receipt.transition_deadline)
                     })
                     && receipt.terminal_authority_revision.is_some_and(|revision| {
                         revision > receipt.authority_revision
@@ -6333,6 +6561,11 @@ fn dispatch_lease_authority_request(
             let response_outcome = match outcome.receipt.state {
                 LeaseAuthorityBrowserAdoptionState::Completed => "browser_adoption_completed",
                 LeaseAuthorityBrowserAdoptionState::Uncertain => "browser_adoption_uncertain",
+                LeaseAuthorityBrowserAdoptionState::Aborted => {
+                    return Err(LeaseAuthorityProtocolError {
+                        code: "lease_authority_protocol_browser_adoption_aborted",
+                    });
+                }
                 LeaseAuthorityBrowserAdoptionState::Prepared => {
                     return Err(LeaseAuthorityProtocolError {
                         code: "lease_authority_protocol_state_invalid",
@@ -7169,6 +7402,121 @@ mod tests {
         assert_eq!(kernel.state.authority.revision(), authority_revision);
         assert_eq!(kernel.state.owners.revision, owner_revision);
         assert_eq!(kernel.state.browser_adoption_receipts.len(), 1);
+    }
+
+    #[test]
+    fn expired_prepared_adoption_without_effect_custody_cannot_block_a_fresh_candidate() {
+        let (mut kernel, prepared, original_owner, mut candidate, executor_observation, physical) =
+            protected_kernel_with_prepared_browser_adoption();
+        candidate.pid = 5200;
+        candidate.start_token = "candidate-start-2".to_string();
+        candidate.identity_digest = effect_executor_identity_digest(&candidate);
+
+        let fresh = kernel
+            .prepare_browser_adoption(
+                PrepareBrowserAdoptionPayload {
+                    raw_capability: LeaseAuthoritySecret(
+                        b"adoption-profile-capability-secret-v1".to_vec(),
+                    ),
+                    resource: LeaseResourceKey::profile("adoption-profile"),
+                    expected_owner_id: original_owner.owner_id,
+                    expected_owner_generation: original_owner.owner_generation,
+                    candidate_daemon_session_route: "adoption-candidate-2".to_string(),
+                    idempotency_key: "adopt:adoption-profile:2".to_string(),
+                },
+                &candidate,
+                &executor_observation,
+                &physical,
+                &absent_effect_channel_observation(),
+                "2026-09-01T13:02:00Z",
+            )
+            .unwrap();
+
+        assert_eq!(
+            fresh.receipt.state,
+            LeaseAuthorityBrowserAdoptionState::Prepared
+        );
+        assert_eq!(kernel.state.browser_adoption_receipts.len(), 2);
+        let aborted = kernel
+            .state
+            .browser_adoption_receipts
+            .values()
+            .find(|receipt| receipt.receipt_id == prepared.receipt_id)
+            .unwrap();
+        assert_eq!(aborted.state, LeaseAuthorityBrowserAdoptionState::Aborted);
+        assert_eq!(
+            aborted.completed_at.as_deref(),
+            Some("2026-09-01T13:02:00Z")
+        );
+        assert!(kernel
+            .state
+            .authority
+            .events
+            .iter()
+            .any(|event| event.kind == super::super::LeaseEventKind::OwnerAdoptionAborted));
+    }
+
+    #[test]
+    fn expired_uncertain_adoption_without_effect_custody_cannot_block_a_fresh_candidate() {
+        let (mut kernel, prepared, original_owner, mut candidate, executor_observation, physical) =
+            protected_kernel_with_prepared_browser_adoption();
+        kernel
+            .complete_browser_adoption(
+                CompleteBrowserAdoptionPayload {
+                    receipt_id: prepared.receipt_id.clone(),
+                    result: CompleteBrowserAdoptionResult::Uncertain,
+                    completion_idempotency_key: "uncertain:adoption-profile:1".to_string(),
+                },
+                &candidate,
+                &executor_observation,
+                &BrowserAdoptionPhysicalObservation::Uncertain {
+                    evidence_digest:
+                        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            .to_string(),
+                },
+                &BrowserAdoptionAttachmentObservation::Uncertain {
+                    evidence_digest:
+                        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                            .to_string(),
+                },
+                "2026-09-01T13:00:05Z",
+            )
+            .unwrap();
+        candidate.pid = 5200;
+        candidate.start_token = "candidate-start-2".to_string();
+        candidate.identity_digest = effect_executor_identity_digest(&candidate);
+
+        let fresh = kernel
+            .prepare_browser_adoption(
+                PrepareBrowserAdoptionPayload {
+                    raw_capability: LeaseAuthoritySecret(
+                        b"adoption-profile-capability-secret-v1".to_vec(),
+                    ),
+                    resource: LeaseResourceKey::profile("adoption-profile"),
+                    expected_owner_id: original_owner.owner_id,
+                    expected_owner_generation: original_owner.owner_generation,
+                    candidate_daemon_session_route: "adoption-candidate-2".to_string(),
+                    idempotency_key: "adopt:adoption-profile:2".to_string(),
+                },
+                &candidate,
+                &executor_observation,
+                &physical,
+                &absent_effect_channel_observation(),
+                "2026-09-01T13:02:00Z",
+            )
+            .unwrap();
+
+        assert_eq!(
+            fresh.receipt.state,
+            LeaseAuthorityBrowserAdoptionState::Prepared
+        );
+        let aborted = kernel
+            .state
+            .browser_adoption_receipts
+            .values()
+            .find(|receipt| receipt.receipt_id == prepared.receipt_id)
+            .unwrap();
+        assert_eq!(aborted.state, LeaseAuthorityBrowserAdoptionState::Aborted);
     }
 
     #[test]

@@ -3190,6 +3190,8 @@ The JSON response from `service browsers` includes `protectedBrowserOwnerObserva
 
 On Linux, effect-channel custody is derived from the established loopback TCP connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. A vanished executor with no remaining holder is absent, while inherited, additional, or unresolved holders remain uncertain. Adoption rechecks that the selected candidate is the sole holder before committing the new owner generation.
 
+An expired prepared or uncertain adoption cannot remain an operational blocker after the exact listener has no effect-channel holder. The next serialized prepare terminalizes it as aborted and may admit a fresh idempotency key. Aborted and superseded terminal receipts are compactable history; only a receipt backing the current owner remains protected from operational compaction.
+
 Trust material is stored as immutable generations under
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json` and public

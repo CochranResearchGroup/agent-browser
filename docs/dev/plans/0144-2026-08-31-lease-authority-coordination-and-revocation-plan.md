@@ -3028,3 +3028,30 @@ that surviving effect custody cannot prepare an adoption. Deadline-driven
 prepared and uncertain receipt reconciliation is the next and only remaining
 implementation packet before the broader recurrence and installed acceptance
 gates.
+
+## Slice H Deadline Reconciliation And Historical Compaction | 2026-09-01
+
+Prepared and uncertain adoption receipts now have an executable deadline
+reconciliation path in the same serialized mutation used for the next prepare.
+After the transition deadline, a root-derived absent effect channel plus an
+exact current or stale physical observation terminalizes the old receipt as
+aborted without changing the owner. The authority revision and immutable
+history advance together before a fresh candidate can be admitted. A current,
+inherited, additional, unresolved, or physically uncertain effect remains
+non-retriable.
+
+Same-key replay remains idempotent before the deadline. An expired same-key
+request receives a typed safe-retry result after abort; the high-level
+acquisition coordinator then uses one fresh key because absence was proven and
+the previous intent is terminal. It does not retry a live or uncertain effect.
+Terminal aborted receipts and completed receipts that no longer back the
+current owner are compactable from protected operational state at capacity.
+Their immutable authority events remain history. A receipt proving the current
+owner is never compacted.
+
+Focused validation passes the prepared and uncertain expiry regressions, the
+same-key replay regression, the eleven-test adoption suite, strict Clippy, and
+format checks. This removes expired adoption receipts as a permanent ordinary
+work blocker. Integration must still preserve the already-merged workstation
+upgrade self-admission branch, then run development publication and installed
+acquisition acceptance before main installation.

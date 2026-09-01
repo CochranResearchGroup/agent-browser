@@ -1574,6 +1574,8 @@ An acquired Linux response contains `leaseAuthority.kind=protected` with the cur
 
 On Linux, the protected root derives effect custody from established connections to the exact observed CDP listener and the user-owned processes holding those socket inodes. It may report `absent` only when no holder remains. Inherited, additional, or unresolved holders remain `uncertain`. Adoption completion requires the selected candidate to be the sole observed holder.
 
+An expired `prepared` or `uncertain` adoption with no remaining effect holder is terminalized as `aborted` inside the next serialized prepare transaction. A safe retry uses a fresh idempotency key. Terminal adoption receipts that do not back the current owner are compactable history and must not deny ordinary acquisition.
+
 Trust material lives in immutable generations below
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json`, public

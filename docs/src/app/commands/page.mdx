@@ -794,6 +794,10 @@ derives that custody from established connections to the exact CDP listener
 and the user-owned processes holding their socket inodes. Inherited,
 additional, or unresolved holders remain uncertain, and adoption completion
 requires the selected candidate to be the sole holder. The response
+also terminalizes an expired prepared or uncertain adoption as aborted when
+the listener has no remaining holder, before admitting a fresh candidate.
+Terminal receipts that do not back the current owner are compactable history,
+not operational blockers. The response
 never returns an executable authorization. Launch or adoption and owner
 registration finish through the protected authority before the response is
 emitted. Completion uncertainty never triggers a blind retry. A confirmed

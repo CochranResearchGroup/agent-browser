@@ -1132,16 +1132,28 @@ async fn acquire_profile_command(
             inspection.requester_is_holder,
         ) {
             ProtectedExistingOwnerDisposition::Adopt => {
-                let adoption_key = format!("{idempotency_key}:browser-adoption");
-                let preparation =
-                    prepare_protected_browser_adoption(&ProtectedBrowserAdoptionRequest {
-                        raw_capability: raw_capability.clone(),
-                        profile_id: profile_id.to_string(),
-                        expected_owner_id: observed_owner.owner_id,
-                        expected_owner_generation: observed_owner.owner_generation,
-                        candidate_daemon_session_route: daemon_session_route.clone(),
-                        idempotency_key: adoption_key.clone(),
-                    })?;
+                let mut adoption_key = format!("{idempotency_key}:browser-adoption");
+                let mut adoption_request = ProtectedBrowserAdoptionRequest {
+                    raw_capability: raw_capability.clone(),
+                    profile_id: profile_id.to_string(),
+                    expected_owner_id: observed_owner.owner_id,
+                    expected_owner_generation: observed_owner.owner_generation,
+                    candidate_daemon_session_route: daemon_session_route.clone(),
+                    idempotency_key: adoption_key.clone(),
+                };
+                let preparation = match prepare_protected_browser_adoption(&adoption_request) {
+                    Ok(preparation) => preparation,
+                    Err(error)
+                        if error
+                            == "lease_authority_protocol_browser_adoption_aborted_retry_safe" =>
+                    {
+                        adoption_key =
+                            format!("{adoption_key}:after-abort:{}", uuid::Uuid::new_v4());
+                        adoption_request.idempotency_key = adoption_key.clone();
+                        prepare_protected_browser_adoption(&adoption_request)?
+                    }
+                    Err(error) => return Err(error),
+                };
                 let profile_path = profile.user_data_dir.as_deref().ok_or_else(|| {
                     "profile_acquisition_profile_identity_unavailable".to_string()
                 })?;

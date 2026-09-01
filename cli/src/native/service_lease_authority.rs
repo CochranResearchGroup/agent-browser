@@ -1172,6 +1172,7 @@ pub(crate) enum LeaseEventKind {
     OwnerAdoptionPrepared,
     OwnerAdopted,
     OwnerAdoptionUncertain,
+    OwnerAdoptionAborted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
