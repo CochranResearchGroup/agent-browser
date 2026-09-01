@@ -1681,6 +1681,49 @@ pub(crate) struct LeaseAuthorityState {
 }
 
 impl LeaseAuthorityState {
+    fn bootstrap_administrator(
+        &mut self,
+        administrator_id: &str,
+        raw_capability: &[u8],
+    ) -> Result<LeaseAdministratorAuthority, LeaseAuthorityError> {
+        if !self.is_empty() || administrator_id.trim().is_empty() || raw_capability.len() < 32 {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let administrator = LeaseAdministratorAuthority {
+            administrator_id: administrator_id.to_string(),
+            capability_digest: administrator_capability_digest(raw_capability),
+            revision: 1,
+            state: LeaseAdministratorState::Active,
+        };
+        self.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+        self.revision = 1;
+        self.administrators
+            .insert(administrator_id.to_string(), administrator.clone());
+        Ok(administrator)
+    }
+
+    fn authenticate_administrator(
+        &self,
+        administrator_id: &str,
+        administrator_revision: u64,
+        raw_capability: &[u8],
+    ) -> Result<&LeaseAdministratorAuthority, LeaseAuthorityError> {
+        if raw_capability.len() < 32 {
+            return Err(LeaseAuthorityError::AdministrativeAuthorityMismatch);
+        }
+        let administrator = self
+            .administrators
+            .get(administrator_id)
+            .ok_or(LeaseAuthorityError::AdministrativeAuthorityMismatch)?;
+        if administrator.state != LeaseAdministratorState::Active
+            || administrator.revision != administrator_revision
+            || administrator.capability_digest != administrator_capability_digest(raw_capability)
+        {
+            return Err(LeaseAuthorityError::AdministrativeAuthorityMismatch);
+        }
+        Ok(administrator)
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.active_claims.is_empty()
             && self.next_fencing_tokens.is_empty()
@@ -3035,21 +3078,14 @@ pub(crate) fn issue_lease_administrative_authorization_for_state(
     intent: &LeaseAdministrativeIntent,
     raw_administrator_capability: &[u8],
 ) -> Result<LeaseAdministrativeAuthorization, String> {
-    if raw_administrator_capability.len() < 32 {
-        return Err("lease_authority_administrative_authority_mismatch".to_string());
-    }
-    let administrator = state
+    state
         .lease_authority()
-        .administrators
-        .get(&intent.administrator_id)
-        .ok_or_else(|| "lease_authority_administrative_authority_mismatch".to_string())?;
-    if administrator.state != LeaseAdministratorState::Active
-        || administrator.revision != intent.administrator_revision
-        || administrator.capability_digest
-            != administrator_capability_digest(raw_administrator_capability)
-    {
-        return Err("lease_authority_administrative_authority_mismatch".to_string());
-    }
+        .authenticate_administrator(
+            &intent.administrator_id,
+            intent.administrator_revision,
+            raw_administrator_capability,
+        )
+        .map_err(|error| format!("lease_authority_{}", error.as_str()))?;
     let signing_key = load_or_create_lease_authority_signing_key()?;
     issue_lease_administrative_authorization_for_state_with_signing_key(
         state,

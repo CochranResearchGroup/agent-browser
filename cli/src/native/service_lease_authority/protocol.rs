@@ -786,6 +786,21 @@ impl LeaseAuthorityProtocolKernel {
         Ok(())
     }
 
+    fn validate_administrator_capability(
+        &self,
+        administrator_id: &str,
+        administrator_revision: u64,
+        raw_capability: &[u8],
+    ) -> Result<(), LeaseAuthorityProtocolError> {
+        self.state
+            .authority
+            .authenticate_administrator(administrator_id, administrator_revision, raw_capability)
+            .map(|_| ())
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_administrator_identity_invalid",
+            })
+    }
+
     fn issue_service_identity_challenge(
         &self,
         request: &LeaseAuthorityServiceChallengeRequest,
@@ -1031,6 +1046,23 @@ fn validate_protected_state(
         || state.resources.schema_version != LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION
     {
         return Err(invalid());
+    }
+
+    if !state.authority.is_empty()
+        && (state.authority.schema_version != super::LEASE_AUTHORITY_SCHEMA_VERSION
+            || state.authority.revision == 0)
+    {
+        return Err(invalid());
+    }
+    for (administrator_id, administrator) in &state.authority.administrators {
+        if administrator_id != &administrator.administrator_id
+            || administrator_id.trim().is_empty()
+            || !valid_sha256_digest(&administrator.capability_digest)
+            || administrator.revision == 0
+            || administrator.revision > state.authority.revision
+        {
+            return Err(invalid());
+        }
     }
 
     let mut physical_identities = BTreeSet::new();

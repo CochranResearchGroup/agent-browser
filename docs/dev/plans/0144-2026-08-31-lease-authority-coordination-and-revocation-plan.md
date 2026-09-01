@@ -1874,3 +1874,33 @@ authority still exposes only its signed identity challenge. Peer workload
 authentication, concurrency budgets, online mutation dispatch, public
 administration, independent external epoch recovery, doctor coverage, and the
 final exact binary installation remain open.
+
+## Slice E Root Administrator Bootstrap Checkpoint | 2026-08-31
+
+Fresh authority bootstrap now creates the first administrative identity in the
+same atomic staged generation as trust, protected state, and service
+configuration. The raw 256-bit administrator capability is written only to a
+root-private administrator directory. Protected authority state stores its
+digest, stable administrator id, revision, and active lifecycle state. The
+root-private service configuration binds the same id and revision without
+containing the capability.
+
+Administrator enrollment is permitted only while the authority is completely
+empty. It initializes authority revision one and cannot be replayed over an
+existing claim, receipt, event, fence, or administrator. The shared
+administrator authenticator now enforces id, revision, active state, minimum
+secret strength, and exact capability digest; the older Service State helper
+uses the same check rather than maintaining parallel authentication logic.
+Protected-state loading also validates administrator map keys, digests, and
+revision bounds.
+
+Focused bootstrap tests prove that protected state and the root capability load
+as one identity, that debug output redacts the raw capability, that a replaced
+capability no longer authenticates, and that bootstrap remains single-use.
+Formatting, focused tests, and strict Clippy pass.
+
+This checkpoint does not yet expose administrator authority over IPC. The next
+packet must add root-peer-authenticated, authority-timed revoke planning and
+revision-bound apply, load the root capability only for that operation, publish
+the resulting protected generation before success, and keep ordinary challenge
+and lease operations independent of administrator-credential availability.

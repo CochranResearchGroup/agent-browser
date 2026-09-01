@@ -25,6 +25,11 @@ const LEASE_AUTHORITY_SERVICE_EXECUTABLE_NAME: &str = "agent-browser";
 const LEASE_AUTHORITY_SERVICE_CONFIG_FILE: &str = "service-config.v1.json";
 const LEASE_AUTHORITY_SERVICE_CONFIG_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-service-config.v1";
+const LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-administrator-capability.v1";
+const LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY: &str = "administrator";
+const LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE: &str = "active-capability.v1.json";
+const LEASE_AUTHORITY_BOOTSTRAP_ADMINISTRATOR_ID: &str = "administrator:local-root";
 const LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY: &str = "store";
 const LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY: &str = "trust";
 const LEASE_AUTHORITY_SYSTEMD_LISTEN_FD: i32 = 3;
@@ -37,12 +42,61 @@ struct LeaseAuthorityServiceConfig {
     authority_domain_id: String,
     minimum_authority_epoch: u64,
     operator_group_id: u32,
+    administrator_id: String,
+    administrator_revision: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityAdministratorCapabilityFile {
+    schema_version: String,
+    administrator_id: String,
+    administrator_revision: u64,
+    capability_hex: String,
+}
+
+impl std::fmt::Debug for LeaseAuthorityAdministratorCapabilityFile {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LeaseAuthorityAdministratorCapabilityFile")
+            .field("schema_version", &self.schema_version)
+            .field("administrator_id", &self.administrator_id)
+            .field("administrator_revision", &self.administrator_revision)
+            .field("capability_hex", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 struct LeaseAuthorityBootstrapReceipt {
     authority_domain_id: String,
     authority_epoch: u64,
+    administrator_id: String,
+    administrator_revision: u64,
+}
+
+struct LeaseAuthorityBootstrapSecret([u8; 32]);
+
+impl LeaseAuthorityBootstrapSecret {
+    fn expose(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn expose_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl std::fmt::Debug for LeaseAuthorityBootstrapSecret {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("[REDACTED]")
+    }
+}
+
+impl Drop for LeaseAuthorityBootstrapSecret {
+    fn drop(&mut self) {
+        self.0.fill(0);
+    }
 }
 
 pub(super) fn validate_linux_service_launch(
@@ -239,9 +293,11 @@ fn bootstrap_state_root(
         let mut domain_seed = [0u8; 32];
         let mut boot_seed = [0u8; 32];
         let mut private_key = [0u8; 32];
+        let mut administrator_capability = LeaseAuthorityBootstrapSecret([0u8; 32]);
         getrandom::getrandom(&mut domain_seed)
             .and_then(|_| getrandom::getrandom(&mut boot_seed))
             .and_then(|_| getrandom::getrandom(&mut private_key))
+            .and_then(|_| getrandom::getrandom(administrator_capability.expose_mut()))
             .map_err(|_| service_error("lease_authority_bootstrap_entropy_unavailable"))?;
         let authority_domain_id = format!("sha256:{}", hex::encode(domain_seed));
         let boot_epoch = format!("sha256:{}", hex::encode(boot_seed));
@@ -260,14 +316,38 @@ fn bootstrap_state_root(
         )
         .map_err(|_| service_error("lease_authority_bootstrap_trust_failed"))?;
 
+        let administrator_root = staging.join(LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY);
+        std::fs::create_dir(&administrator_root)
+            .map_err(|_| service_error("lease_authority_bootstrap_administrator_failed"))?;
+        super::super::set_private_directory_permissions(&administrator_root)
+            .map_err(|_| service_error("lease_authority_bootstrap_administrator_failed"))?;
+        let administrator_document = LeaseAuthorityAdministratorCapabilityFile {
+            schema_version: LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_SCHEMA_VERSION.to_string(),
+            administrator_id: LEASE_AUTHORITY_BOOTSTRAP_ADMINISTRATOR_ID.to_string(),
+            administrator_revision: 1,
+            capability_hex: hex::encode(administrator_capability.expose()),
+        };
+        super::super::write_private_json_atomic_replace(
+            &administrator_root.join(LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE),
+            &administrator_document,
+        )
+        .map_err(|_| service_error("lease_authority_bootstrap_administrator_failed"))?;
+
         let store = LeaseAuthorityDurableStore::initialize(
             &staging.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
         )?;
+        let mut authority = super::super::LeaseAuthorityState::default();
+        authority
+            .bootstrap_administrator(
+                LEASE_AUTHORITY_BOOTSTRAP_ADMINISTRATOR_ID,
+                administrator_capability.expose(),
+            )
+            .map_err(|_| service_error("lease_authority_bootstrap_administrator_failed"))?;
         let kernel = super::LeaseAuthorityProtocolKernel::bootstrap(
             &authority_domain_id,
             authority_epoch,
             &boot_epoch,
-            super::super::LeaseAuthorityState::default(),
+            authority,
             crate::native::service_principal::ServicePrincipalRegistry::default(),
         )?;
         store.publish(&kernel, None)?;
@@ -277,6 +357,8 @@ fn bootstrap_state_root(
             authority_domain_id: authority_domain_id.clone(),
             minimum_authority_epoch: authority_epoch,
             operator_group_id,
+            administrator_id: LEASE_AUTHORITY_BOOTSTRAP_ADMINISTRATOR_ID.to_string(),
+            administrator_revision: 1,
         };
         super::super::write_private_json_atomic_replace(
             &staging.join(LEASE_AUTHORITY_SERVICE_CONFIG_FILE),
@@ -292,6 +374,8 @@ fn bootstrap_state_root(
         Ok(LeaseAuthorityBootstrapReceipt {
             authority_domain_id,
             authority_epoch,
+            administrator_id: LEASE_AUTHORITY_BOOTSTRAP_ADMINISTRATOR_ID.to_string(),
+            administrator_revision: 1,
         })
     })();
     if initialized.is_err() && staging.exists() {
@@ -320,10 +404,55 @@ fn load_service_config(
         || !super::valid_sha256_digest(&config.authority_domain_id)
         || config.minimum_authority_epoch == 0
         || config.operator_group_id == 0
+        || config.administrator_id.trim().is_empty()
+        || config.administrator_revision == 0
     {
         return Err(service_error("lease_authority_service_config_invalid"));
     }
     Ok(config)
+}
+
+#[cfg(test)]
+fn load_administrator_capability(
+    state_root: &Path,
+    config: &LeaseAuthorityServiceConfig,
+    kernel: &super::LeaseAuthorityProtocolKernel,
+) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+    let path = state_root
+        .join(LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY)
+        .join(LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE);
+    let metadata = std::fs::symlink_metadata(&path)
+        .map_err(|_| service_error("lease_authority_administrator_identity_unavailable"))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(service_error(
+            "lease_authority_administrator_identity_unprotected",
+        ));
+    }
+    super::super::ensure_private_file_permissions(&path, &metadata)
+        .map_err(|_| service_error("lease_authority_administrator_identity_unprotected"))?;
+    let document: LeaseAuthorityAdministratorCapabilityFile = super::super::load_private_json_file(
+        &path,
+        "lease_authority_administrator_identity_decode_failed",
+    )
+    .map_err(|_| service_error("lease_authority_administrator_identity_invalid"))?;
+    let mut capability = hex::decode(&document.capability_hex)
+        .map_err(|_| service_error("lease_authority_administrator_identity_invalid"))?;
+    if document.schema_version != LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_SCHEMA_VERSION
+        || document.administrator_id != config.administrator_id
+        || document.administrator_revision != config.administrator_revision
+        || capability.len() < 32
+    {
+        capability.fill(0);
+        return Err(service_error(
+            "lease_authority_administrator_identity_invalid",
+        ));
+    }
+    kernel.validate_administrator_capability(
+        &document.administrator_id,
+        document.administrator_revision,
+        &capability,
+    )?;
+    Ok(capability)
 }
 
 fn service_error(code: &'static str) -> LeaseAuthorityProtocolError {
@@ -356,11 +485,13 @@ mod tests {
         assert_eq!(config.authority_domain_id, receipt.authority_domain_id);
         assert_eq!(config.minimum_authority_epoch, 1);
         assert_eq!(config.operator_group_id, 991);
+        assert_eq!(config.administrator_id, "administrator:local-root");
+        assert_eq!(config.administrator_revision, 1);
         super::super::super::load_selected_lease_authority_signing_key_in(
             &state_root.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY),
         )
         .unwrap();
-        LeaseAuthorityDurableStore::open_existing(
+        let kernel = LeaseAuthorityDurableStore::open_existing(
             &state_root.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
         )
         .unwrap()
@@ -369,6 +500,37 @@ mod tests {
             minimum_authority_epoch: 1,
         })
         .unwrap();
+        let administrator_capability =
+            load_administrator_capability(&state_root, &config, &kernel).unwrap();
+        assert_eq!(administrator_capability.len(), 32);
+        let administrator_document: LeaseAuthorityAdministratorCapabilityFile =
+            super::super::super::load_private_json_file(
+                &state_root
+                    .join(LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY)
+                    .join(LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE),
+                "fixture_decode_failed",
+            )
+            .unwrap();
+        let debug = format!("{administrator_document:?}");
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains(&administrator_document.capability_hex));
+
+        let mismatched_document = LeaseAuthorityAdministratorCapabilityFile {
+            capability_hex: hex::encode([0x5a; 32]),
+            ..administrator_document
+        };
+        super::super::super::write_private_json_atomic_replace(
+            &state_root
+                .join(LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY)
+                .join(LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE),
+            &mismatched_document,
+        )
+        .unwrap();
+        let error = load_administrator_capability(&state_root, &config, &kernel).unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_administrator_identity_invalid"
+        );
 
         let error = bootstrap_state_root(&state_root, 991).unwrap_err();
         assert_eq!(error.code(), "lease_authority_bootstrap_state_exists");
