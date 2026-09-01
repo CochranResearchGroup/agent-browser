@@ -1750,32 +1750,15 @@ impl LeaseAuthorityState {
         signing_key: &LeaseAuthoritySigningKey,
     ) -> Result<LeaseAdministrativePlanOutcome, LeaseAuthorityError> {
         self.ensure_supported_schema()?;
-        self.authenticate_administrator(
-            &intent.administrator_id,
-            intent.administrator_revision,
+        if let Some(replayed) = self.replay_administrative_revocation_plan(
+            &claim.resource,
+            &claim.claim_id,
+            claim.revision,
+            claim.fencing_token,
+            intent,
             raw_administrator_capability,
-        )?;
-        if let Some(existing) = self
-            .administrative_authorizations
-            .get(&intent.idempotency_key)
-        {
-            if existing.administrator_id != intent.administrator_id
-                || existing.administrator_revision != intent.administrator_revision
-                || existing.resource != claim.resource
-                || existing.claim_id != claim.claim_id
-                || existing.principal_id != claim.principal_id
-                || existing.claim_revision != claim.revision
-                || existing.fencing_token != claim.fencing_token
-                || existing.reason_code != intent.reason_code
-                || existing.issued_at != intent.issued_at
-                || existing.authorization_expires_at != intent.authorization_expires_at
-            {
-                return Err(LeaseAuthorityError::IdempotencyConflict);
-            }
-            return Ok(LeaseAdministrativePlanOutcome {
-                authorization: existing.clone(),
-                replayed: true,
-            });
+        )? {
+            return Ok(replayed);
         }
         let authorization = issue_lease_administrative_authorization_with_signing_key(
             self,
@@ -1812,6 +1795,57 @@ impl LeaseAuthorityState {
             authorization,
             replayed: false,
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn replay_administrative_revocation_plan(
+        &self,
+        resource: &LeaseResourceKey,
+        claim_id: &str,
+        claim_revision: u64,
+        fencing_token: u64,
+        intent: &LeaseAdministrativeIntent,
+        raw_administrator_capability: &[u8],
+    ) -> Result<Option<LeaseAdministrativePlanOutcome>, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        self.authenticate_administrator(
+            &intent.administrator_id,
+            intent.administrator_revision,
+            raw_administrator_capability,
+        )?;
+        let Some(existing) = self
+            .administrative_authorizations
+            .get(&intent.idempotency_key)
+        else {
+            return Ok(None);
+        };
+        if existing.administrator_id != intent.administrator_id
+            || existing.administrator_revision != intent.administrator_revision
+            || existing.resource != *resource
+            || existing.claim_id != claim_id
+            || existing.claim_revision != claim_revision
+            || existing.fencing_token != fencing_token
+            || existing.reason_code != intent.reason_code
+        {
+            return Err(LeaseAuthorityError::IdempotencyConflict);
+        }
+        Ok(Some(LeaseAdministrativePlanOutcome {
+            authorization: existing.clone(),
+            replayed: true,
+        }))
+    }
+
+    fn administrative_authorization_by_plan_id(
+        &self,
+        plan_id: &str,
+    ) -> Result<&LeaseAdministrativeAuthorization, LeaseAuthorityError> {
+        if plan_id.trim().is_empty() {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        self.administrative_authorizations
+            .values()
+            .find(|authorization| authorization.plan_id() == plan_id)
+            .ok_or(LeaseAuthorityError::InvalidAdministrativeProof)
     }
 
     pub(crate) fn is_empty(&self) -> bool {

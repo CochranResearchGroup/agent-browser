@@ -9,10 +9,11 @@ use std::path::{Path, PathBuf};
 
 use super::{
     AcquireLeaseClaimRequest, ActiveLeaseClaim, LeaseAdministrativeAuthorization,
-    LeaseAdministratorAuthority, LeaseAuthorityEvent, LeaseAuthoritySigningKey,
-    LeaseAuthorityState, LeaseAuthorityVerificationKeyring, LeaseClaimAcquisitionOutcome,
-    LeaseClaimAcquisitionReceipt, LeaseClaimMode, LeaseClaimRecoveryReceipt,
-    LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
+    LeaseAdministrativeIntent, LeaseAdministratorAuthority, LeaseAuthorityEvent,
+    LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
+    LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
+    LeaseClaimRecoveryReceipt, LeaseClaimTerminalReceipt, LeaseResourceKey, LeaseResourceKind,
+    RevokeLeaseClaimRequest,
 };
 use crate::native::service_principal::{authenticate_profile_capability, ServicePrincipalRegistry};
 
@@ -115,6 +116,63 @@ struct AcquireLeaseAuthorityPayload {
     owner_generation: Option<u64>,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RevokeLeasePlanPayload {
+    resource: LeaseResourceKey,
+    claim_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
+    idempotency_key: String,
+    reason_code: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RevokeLeaseApplyPayload {
+    plan_id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct RevokeLeasePlanProjection {
+    plan_id: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
+    reason_code: String,
+    issued_at: String,
+    authorization_expires_at: String,
+    replayed: bool,
+}
+
+impl RevokeLeasePlanProjection {
+    fn from_outcome(outcome: super::LeaseAdministrativePlanOutcome) -> Self {
+        let authorization = outcome.authorization;
+        Self {
+            plan_id: authorization.plan_id(),
+            resource: authorization.resource.clone(),
+            claim_id: authorization.claim_id.clone(),
+            principal_id: authorization.principal_id.clone(),
+            claim_revision: authorization.claim_revision,
+            fencing_token: authorization.fencing_token,
+            reason_code: authorization.reason_code.clone(),
+            issued_at: authorization.issued_at.clone(),
+            authorization_expires_at: authorization.authorization_expires_at.clone(),
+            replayed: outcome.replayed,
+        }
+    }
+}
+
+struct LeaseAuthorityAdministrativeDispatchContext<'a> {
+    administrator_id: &'a str,
+    administrator_revision: u64,
+    raw_administrator_capability: &'a [u8],
+    authority_observed_at: &'a str,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityServiceChallengeRequest {
@@ -145,8 +203,8 @@ enum LeaseAuthorityProtocolRequest {
     AuthorizeEffect(Value),
     Release(Value),
     Recover(Value),
-    RevokePlan(Value),
-    Revoke(Value),
+    RevokePlan(RevokeLeasePlanPayload),
+    Revoke(RevokeLeaseApplyPayload),
     Inspect(Value),
 }
 
@@ -173,6 +231,7 @@ struct LeaseAuthorityDomainState {
     authority_domain_id: String,
     authority_epoch: u64,
     boot_epoch: String,
+    authority_time_floor: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -715,6 +774,7 @@ impl LeaseAuthorityProtocolKernel {
                     authority_domain_id: authority_domain_id.to_string(),
                     authority_epoch,
                     boot_epoch: boot_epoch.to_string(),
+                    authority_time_floor: "1970-01-01T00:00:00Z".to_string(),
                 },
                 authority,
                 principals,
@@ -801,6 +861,116 @@ impl LeaseAuthorityProtocolKernel {
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_administrator_identity_invalid",
             })
+    }
+
+    fn observe_authority_time(
+        &mut self,
+        observed_at: &str,
+    ) -> Result<String, LeaseAuthorityProtocolError> {
+        let observed = chrono::DateTime::parse_from_rfc3339(observed_at).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_invalid",
+            }
+        })?;
+        let floor = chrono::DateTime::parse_from_rfc3339(&self.state.domain.authority_time_floor)
+            .map_err(|_| LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_clock_state_invalid",
+        })?;
+        if observed > floor {
+            self.state.domain.authority_time_floor = observed_at.to_string();
+        }
+        Ok(self.state.domain.authority_time_floor.clone())
+    }
+
+    fn plan_administrative_revocation(
+        &mut self,
+        request: RevokeLeasePlanPayload,
+        context: &LeaseAuthorityAdministrativeDispatchContext<'_>,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<RevokeLeasePlanProjection, LeaseAuthorityProtocolError> {
+        let now = self.observe_authority_time(context.authority_observed_at)?;
+        let issued_at = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_state_invalid",
+            }
+        })?;
+        let authorization_expires_at = (issued_at
+            + chrono::Duration::seconds(super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS))
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let intent = LeaseAdministrativeIntent {
+            administrator_id: context.administrator_id.to_string(),
+            administrator_revision: context.administrator_revision,
+            idempotency_key: request.idempotency_key,
+            reason_code: request.reason_code,
+            issued_at: now.clone(),
+            authorization_expires_at,
+        };
+        if let Some(replayed) = self
+            .state
+            .authority
+            .replay_administrative_revocation_plan(
+                &request.resource,
+                &request.claim_id,
+                request.claim_revision,
+                request.fencing_token,
+                &intent,
+                context.raw_administrator_capability,
+            )
+            .map_err(lease_authority_protocol_error)?
+        {
+            return Ok(RevokeLeasePlanProjection::from_outcome(replayed));
+        }
+        let claim = self
+            .state
+            .authority
+            .current_claim(&request.resource, &now)
+            .filter(|claim| {
+                claim.claim_id == request.claim_id
+                    && claim.revision == request.claim_revision
+                    && claim.fencing_token == request.fencing_token
+            })
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_stale_claim",
+            })?;
+        let outcome = self
+            .state
+            .authority
+            .plan_administrative_revocation(
+                &claim,
+                &intent,
+                context.raw_administrator_capability,
+                signing_key,
+            )
+            .map_err(lease_authority_protocol_error)?;
+        Ok(RevokeLeasePlanProjection::from_outcome(outcome))
+    }
+
+    fn apply_administrative_revocation(
+        &mut self,
+        request: RevokeLeaseApplyPayload,
+        context: &LeaseAuthorityAdministrativeDispatchContext<'_>,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<super::LeaseClaimRevocationOutcome, LeaseAuthorityProtocolError> {
+        let now = self.observe_authority_time(context.authority_observed_at)?;
+        self.validate_administrator_capability(
+            context.administrator_id,
+            context.administrator_revision,
+            context.raw_administrator_capability,
+        )?;
+        let authorization = self
+            .state
+            .authority
+            .administrative_authorization_by_plan_id(&request.plan_id)
+            .map_err(lease_authority_protocol_error)?
+            .clone();
+        self.state
+            .authority
+            .revoke_with_receipt(
+                RevokeLeaseClaimRequest { authorization, now },
+                &LeaseAuthorityVerificationKeyring::from_active(signing_key),
+            )
+            .map_err(lease_authority_protocol_error)
     }
 
     fn issue_service_identity_challenge(
@@ -1050,6 +1220,7 @@ fn validate_protected_state(
         || !valid_sha256_digest(&state.domain.authority_domain_id)
         || state.domain.authority_epoch == 0
         || state.domain.boot_epoch.trim().is_empty()
+        || chrono::DateTime::parse_from_rfc3339(&state.domain.authority_time_floor).is_err()
         || state.resources.schema_version != LEASE_AUTHORITY_RESOURCE_REGISTRY_SCHEMA_VERSION
     {
         return Err(invalid());
@@ -1071,6 +1242,7 @@ fn validate_protected_state(
             return Err(invalid());
         }
     }
+    let mut administrative_plan_ids = BTreeSet::new();
     for (idempotency_key, authorization) in &state.authority.administrative_authorizations {
         let administrator = state
             .authority
@@ -1089,6 +1261,7 @@ fn validate_protected_state(
             || authorization.fencing_token == 0
             || authorization.reason_code.trim().is_empty()
             || authorization.proof.trim().is_empty()
+            || !administrative_plan_ids.insert(authorization.plan_id())
             || !super::timestamp_precedes(
                 &authorization.issued_at,
                 &authorization.authorization_expires_at,
@@ -1295,6 +1468,14 @@ impl LeaseAuthorityProtocolError {
     }
 }
 
+fn lease_authority_protocol_error(
+    error: super::LeaseAuthorityError,
+) -> LeaseAuthorityProtocolError {
+    LeaseAuthorityProtocolError {
+        code: error.as_str(),
+    }
+}
+
 fn decode_lease_authority_request(
     encoded: &[u8],
 ) -> Result<LeaseAuthorityProtocolRequest, LeaseAuthorityProtocolError> {
@@ -1324,8 +1505,16 @@ fn decode_lease_authority_request(
         )),
         "release" => Ok(LeaseAuthorityProtocolRequest::Release(envelope.payload)),
         "recover" => Ok(LeaseAuthorityProtocolRequest::Recover(envelope.payload)),
-        "revoke_plan" => Ok(LeaseAuthorityProtocolRequest::RevokePlan(envelope.payload)),
-        "revoke" => Ok(LeaseAuthorityProtocolRequest::Revoke(envelope.payload)),
+        "revoke_plan" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::RevokePlan)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
+        "revoke" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::Revoke)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "inspect" => Ok(LeaseAuthorityProtocolRequest::Inspect(envelope.payload)),
         _ => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_unsupported",
@@ -1397,6 +1586,7 @@ fn dispatch_lease_authority_request(
     custody: &custody::LeaseAuthorityCustodyIdentity,
     peer: custody::LeaseAuthorityRequestPeerIdentity,
     signing_key: &LeaseAuthoritySigningKey,
+    administrative_context: Option<&LeaseAuthorityAdministrativeDispatchContext<'_>>,
 ) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
     if encoded.len() > LEASE_AUTHORITY_SERVICE_MAX_FRAME_BYTES {
         return Err(LeaseAuthorityProtocolError {
@@ -1422,18 +1612,48 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_administrator_peer_required",
             })
         }
+        LeaseAuthorityProtocolRequest::RevokePlan(request) => {
+            let context = administrative_context.ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_administrator_context_required",
+            })?;
+            let plan = kernel.plan_administrative_revocation(request, context, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "revocation_planned",
+                "payload": plan,
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::Revoke(request) => {
+            let context = administrative_context.ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_administrator_context_required",
+            })?;
+            let outcome = kernel.apply_administrative_revocation(request, context, signing_key)?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "revoked",
+                "payload": {
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
         LeaseAuthorityProtocolRequest::Acquire(_)
         | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
         | LeaseAuthorityProtocolRequest::Release(_)
         | LeaseAuthorityProtocolRequest::Recover(_)
-        | LeaseAuthorityProtocolRequest::RevokePlan(_)
-        | LeaseAuthorityProtocolRequest::Revoke(_)
         | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
         }),
     }
 }
 
+#[cfg(test)]
 fn serve_lease_authority_connection<R: Read, W: Write>(
     kernel: &mut LeaseAuthorityProtocolKernel,
     reader: &mut R,
@@ -1443,7 +1663,7 @@ fn serve_lease_authority_connection<R: Read, W: Write>(
     signing_key: &LeaseAuthoritySigningKey,
 ) -> Result<(), LeaseAuthorityProtocolError> {
     let response = match read_lease_authority_frame(reader).and_then(|request| {
-        dispatch_lease_authority_request(kernel, &request, custody, peer, signing_key)
+        dispatch_lease_authority_request(kernel, &request, custody, peer, signing_key, None)
     }) {
         Ok(response) => response,
         Err(error) => serde_json::to_vec(&serde_json::json!({
@@ -1546,6 +1766,7 @@ mod tests {
             &custody,
             test_peer(1000),
             &signing_key,
+            None,
         )
         .unwrap();
         let response: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
@@ -1618,7 +1839,14 @@ mod tests {
         let request = br#"{
             "schemaVersion":"agent-browser.lease-authority-request.v1",
             "operation":"revoke_plan",
-            "payload":{}
+            "payload":{
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "claimId":"claim:last30days",
+                "claimRevision":1,
+                "fencingToken":1,
+                "idempotencyKey":"revoke:last30days:1",
+                "reasonCode":"abandoned_strict_holder"
+            }
         }"#;
 
         let mut unprivileged_kernel = test_kernel(
@@ -1631,6 +1859,7 @@ mod tests {
             &custody,
             test_peer(1000),
             &signing_key,
+            None,
         )
         .unwrap_err();
         assert_eq!(
@@ -1648,12 +1877,332 @@ mod tests {
             &custody,
             test_peer(0),
             &signing_key,
+            None,
         )
         .unwrap_err();
         assert_eq!(
             error.code(),
-            "lease_authority_protocol_operation_not_implemented"
+            "lease_authority_protocol_administrator_context_required"
         );
+    }
+
+    #[test]
+    fn administrative_revoke_plan_and_apply_are_authority_timed_durable_and_replayable() {
+        let administrator_capability = b"root-administrator-capability-material-v1";
+        let mut authority = super::super::LeaseAuthorityState::default();
+        authority
+            .bootstrap_administrator("administrator:local-root", administrator_capability)
+            .unwrap();
+        let claim = authority
+            .acquire(super::super::AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days-social".to_string(),
+                capability_revision: 1,
+                mode: LeaseClaimMode::Strict,
+                expected_authority_revision: 1,
+                idempotency_key: "acquire:last30days:strict-1".to_string(),
+                now: "2026-08-31T12:00:00Z".to_string(),
+                expires_at: "2026-08-31T12:05:00Z".to_string(),
+                transition_deadline: Some("2026-08-31T12:01:00Z".to_string()),
+                recovery_controller_id: Some("capability:last30days-social".to_string()),
+                boot_epoch: Some("boot-1".to_string()),
+                owner_generation: Some(57),
+            })
+            .unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-lease-authority-admin-dispatch-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = LeaseAuthorityDurableStore::initialize(&root).unwrap();
+        store
+            .publish(
+                &test_kernel(
+                    authority,
+                    crate::native::service_principal::ServicePrincipalRegistry::default(),
+                ),
+                None,
+            )
+            .unwrap();
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let plan_request = format!(
+            r#"{{
+                "schemaVersion":"agent-browser.lease-authority-request.v1",
+                "operation":"revoke_plan",
+                "payload":{{
+                    "resource":{{"kind":"profile","id":"last30days-social"}},
+                    "claimId":"{}",
+                    "claimRevision":{},
+                    "fencingToken":{},
+                    "idempotencyKey":"revoke:last30days:strict-1",
+                    "reasonCode":"abandoned_strict_holder"
+                }}
+            }}"#,
+            claim.claim_id, claim.revision, claim.fencing_token
+        );
+
+        let mut planning = store.load_for_mutation(test_load_context()).unwrap();
+        let plan_context = LeaseAuthorityAdministrativeDispatchContext {
+            administrator_id: "administrator:local-root",
+            administrator_revision: 1,
+            raw_administrator_capability: administrator_capability,
+            authority_observed_at: "2026-08-31T12:01:00Z",
+        };
+        let planned = dispatch_lease_authority_request(
+            &mut planning,
+            plan_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&plan_context),
+        )
+        .unwrap();
+        let planned: serde_json::Value = serde_json::from_slice(&planned).unwrap();
+        assert_eq!(planned["outcome"], "revocation_planned");
+        assert_eq!(planned["payload"]["issuedAt"], "2026-08-31T12:01:00Z");
+        assert_eq!(
+            planned["payload"]["authorizationExpiresAt"],
+            "2026-08-31T12:03:00.000000000Z"
+        );
+        assert_eq!(planned["payload"]["replayed"], false);
+        assert!(planned.to_string().find("proof").is_none());
+        let plan_id = planned["payload"]["planId"].as_str().unwrap().to_string();
+        store.publish(&planning, None).unwrap();
+
+        let mut replaying_plan = store.load_for_mutation(test_load_context()).unwrap();
+        let replay_context = LeaseAuthorityAdministrativeDispatchContext {
+            authority_observed_at: "2026-08-31T12:01:15Z",
+            ..plan_context
+        };
+        let replayed = dispatch_lease_authority_request(
+            &mut replaying_plan,
+            plan_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&replay_context),
+        )
+        .unwrap();
+        let replayed: serde_json::Value = serde_json::from_slice(&replayed).unwrap();
+        assert_eq!(replayed["payload"]["planId"], plan_id);
+        assert_eq!(replayed["payload"]["issuedAt"], "2026-08-31T12:01:00Z");
+        assert_eq!(replayed["payload"]["replayed"], true);
+        store.publish(&replaying_plan, None).unwrap();
+
+        let apply_request = format!(
+            r#"{{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"revoke","payload":{{"planId":"{plan_id}"}}}}"#
+        );
+        let mut applying = store.load_for_mutation(test_load_context()).unwrap();
+        let apply_context = LeaseAuthorityAdministrativeDispatchContext {
+            authority_observed_at: "2026-08-31T12:01:30Z",
+            ..plan_context
+        };
+        let applied = dispatch_lease_authority_request(
+            &mut applying,
+            apply_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&apply_context),
+        )
+        .unwrap();
+        let applied: serde_json::Value = serde_json::from_slice(&applied).unwrap();
+        assert_eq!(applied["outcome"], "revoked");
+        assert_eq!(applied["payload"]["replayed"], false);
+        assert_eq!(applied["payload"]["receipt"]["terminalResult"], "revoked");
+        let receipt = applied["payload"]["receipt"].clone();
+        store.publish(&applying, None).unwrap();
+
+        let restarted = store.load(test_load_context()).unwrap();
+        assert!(restarted
+            .state
+            .authority
+            .current_claim(
+                &LeaseResourceKey::profile("last30days-social"),
+                "2026-08-31T12:02:00Z"
+            )
+            .is_none());
+        assert_eq!(
+            restarted.state.domain.authority_time_floor,
+            "2026-08-31T12:01:30Z"
+        );
+
+        let mut replaying_terminal_plan = store.load_for_mutation(test_load_context()).unwrap();
+        let terminal_plan_context = LeaseAuthorityAdministrativeDispatchContext {
+            authority_observed_at: "2026-08-31T12:01:45Z",
+            ..plan_context
+        };
+        let replayed_terminal_plan = dispatch_lease_authority_request(
+            &mut replaying_terminal_plan,
+            plan_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&terminal_plan_context),
+        )
+        .unwrap();
+        let replayed_terminal_plan: serde_json::Value =
+            serde_json::from_slice(&replayed_terminal_plan).unwrap();
+        assert_eq!(replayed_terminal_plan["payload"]["planId"], plan_id);
+        assert_eq!(replayed_terminal_plan["payload"]["replayed"], true);
+        store.publish(&replaying_terminal_plan, None).unwrap();
+
+        let mut replaying_apply = store.load_for_mutation(test_load_context()).unwrap();
+        let late_context = LeaseAuthorityAdministrativeDispatchContext {
+            authority_observed_at: "2026-08-31T13:00:00Z",
+            ..plan_context
+        };
+        let replayed = dispatch_lease_authority_request(
+            &mut replaying_apply,
+            apply_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&late_context),
+        )
+        .unwrap();
+        let replayed: serde_json::Value = serde_json::from_slice(&replayed).unwrap();
+        assert_eq!(replayed["payload"]["replayed"], true);
+        assert_eq!(replayed["payload"]["receipt"], receipt);
+        store.publish(&replaying_apply, None).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn authority_time_floor_survives_restart_and_cannot_move_backward() {
+        let mut kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        assert_eq!(
+            kernel
+                .observe_authority_time("2026-08-31T12:00:00Z")
+                .unwrap(),
+            "2026-08-31T12:00:00Z"
+        );
+        let restarted = LeaseAuthorityProtocolKernel::from_protected_state(
+            &kernel.encode_protected_state().unwrap(),
+            test_load_context(),
+        )
+        .unwrap();
+        let mut restarted = restarted;
+        assert_eq!(
+            restarted
+                .observe_authority_time("2026-08-31T11:00:00Z")
+                .unwrap(),
+            "2026-08-31T12:00:00Z"
+        );
+    }
+
+    #[test]
+    fn caller_time_and_stale_claim_revision_cannot_drive_administrative_revoke() {
+        let caller_timed = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"revoke_plan",
+            "payload":{
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "claimId":"claim:last30days",
+                "claimRevision":1,
+                "fencingToken":1,
+                "idempotencyKey":"revoke:last30days:1",
+                "reasonCode":"abandoned_strict_holder",
+                "issuedAt":"2099-01-01T00:00:00Z"
+            }
+        }"#;
+        let error = match decode_lease_authority_request(caller_timed) {
+            Ok(_) => panic!("caller-supplied administrative time must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "lease_authority_protocol_request_invalid");
+
+        let administrator_capability = b"root-administrator-capability-material-v1";
+        let mut authority = super::super::LeaseAuthorityState::default();
+        authority
+            .bootstrap_administrator("administrator:local-root", administrator_capability)
+            .unwrap();
+        let claim = authority
+            .acquire(super::super::AcquireLeaseClaimRequest {
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days-social".to_string(),
+                capability_revision: 1,
+                mode: LeaseClaimMode::Strict,
+                expected_authority_revision: 1,
+                idempotency_key: "acquire:last30days:strict-stale".to_string(),
+                now: "2026-08-31T12:00:00Z".to_string(),
+                expires_at: "2026-08-31T12:05:00Z".to_string(),
+                transition_deadline: Some("2026-08-31T12:01:00Z".to_string()),
+                recovery_controller_id: Some("capability:last30days-social".to_string()),
+                boot_epoch: Some("boot-1".to_string()),
+                owner_generation: Some(57),
+            })
+            .unwrap();
+        let mut kernel = test_kernel(
+            authority,
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]);
+        let context = LeaseAuthorityAdministrativeDispatchContext {
+            administrator_id: "administrator:local-root",
+            administrator_revision: 1,
+            raw_administrator_capability: administrator_capability,
+            authority_observed_at: "2026-08-31T12:01:00Z",
+        };
+        let plan_request = format!(
+            r#"{{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"revoke_plan","payload":{{"resource":{{"kind":"profile","id":"last30days-social"}},"claimId":"{}","claimRevision":{},"fencingToken":{},"idempotencyKey":"revoke:last30days:stale","reasonCode":"abandoned_strict_holder"}}}}"#,
+            claim.claim_id, claim.revision, claim.fencing_token
+        );
+        let planned = dispatch_lease_authority_request(
+            &mut kernel,
+            plan_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&context),
+        )
+        .unwrap();
+        let planned: serde_json::Value = serde_json::from_slice(&planned).unwrap();
+        let plan_id = planned["payload"]["planId"].as_str().unwrap();
+        kernel
+            .state
+            .authority
+            .active_claims
+            .get_mut(&LeaseResourceKey::profile("last30days-social").storage_key())
+            .unwrap()
+            .revision += 1;
+        let apply_request = format!(
+            r#"{{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"revoke","payload":{{"planId":"{plan_id}"}}}}"#
+        );
+        let stale_context = LeaseAuthorityAdministrativeDispatchContext {
+            authority_observed_at: "2026-08-31T12:01:30Z",
+            ..context
+        };
+        let error = dispatch_lease_authority_request(
+            &mut kernel,
+            apply_request.as_bytes(),
+            &custody,
+            test_peer(0),
+            &signing_key,
+            Some(&stale_context),
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "stale_claim");
+        assert!(kernel
+            .state
+            .authority
+            .current_claim(
+                &LeaseResourceKey::profile("last30days-social"),
+                "2026-08-31T12:02:00Z"
+            )
+            .is_some());
     }
 
     #[cfg(target_os = "linux")]

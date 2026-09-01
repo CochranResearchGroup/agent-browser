@@ -5,8 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{
-    custody, serve_lease_authority_connection, LeaseAuthorityDurableStore,
-    LeaseAuthorityProtectedLoadContext, LeaseAuthorityProtocolError,
+    custody, decode_lease_authority_request, dispatch_lease_authority_request,
+    read_lease_authority_frame, write_lease_authority_frame,
+    LeaseAuthorityAdministrativeDispatchContext, LeaseAuthorityDurableStore,
+    LeaseAuthorityProtectedLoadContext, LeaseAuthorityProtocolError, LeaseAuthorityProtocolRequest,
+    LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
 };
 
 pub(super) const LEASE_AUTHORITY_SERVICE_PROCESS_ENV: &str =
@@ -208,15 +211,17 @@ pub(super) fn run_linux_service() -> Result<(), LeaseAuthorityProtocolError> {
         let signing_key =
             super::super::load_selected_lease_authority_signing_key_in(&trust_root)
                 .map_err(|_| service_error("lease_authority_service_trust_unavailable"))?;
-        let mut kernel = store.load(LeaseAuthorityProtectedLoadContext {
-            expected_authority_domain_id: &config.authority_domain_id,
-            minimum_authority_epoch: config.minimum_authority_epoch,
-        })?;
         let mut writer = stream
             .try_clone()
             .map_err(|_| service_error("lease_authority_service_connection_clone_failed"))?;
-        serve_lease_authority_connection(
-            &mut kernel,
+        serve_protected_lease_authority_connection(
+            &store,
+            LeaseAuthorityProtectedLoadContext {
+                expected_authority_domain_id: &config.authority_domain_id,
+                minimum_authority_epoch: config.minimum_authority_epoch,
+            },
+            &state_root,
+            &config,
             &mut stream,
             &mut writer,
             &custody,
@@ -225,6 +230,108 @@ pub(super) fn run_linux_service() -> Result<(), LeaseAuthorityProtocolError> {
         )?;
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn serve_protected_lease_authority_connection<R: std::io::Read, W: std::io::Write>(
+    store: &LeaseAuthorityDurableStore,
+    load_context: LeaseAuthorityProtectedLoadContext<'_>,
+    state_root: &Path,
+    config: &LeaseAuthorityServiceConfig,
+    reader: &mut R,
+    writer: &mut W,
+    custody: &custody::LeaseAuthorityCustodyIdentity,
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    signing_key: &super::super::LeaseAuthoritySigningKey,
+) -> Result<(), LeaseAuthorityProtocolError> {
+    let response = match handle_protected_lease_authority_request(
+        store,
+        load_context,
+        state_root,
+        config,
+        reader,
+        custody,
+        peer,
+        signing_key,
+    ) {
+        Ok(response) => response,
+        Err(error) => encode_protocol_error(error)?,
+    };
+    write_lease_authority_frame(writer, &response)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_protected_lease_authority_request<R: std::io::Read>(
+    store: &LeaseAuthorityDurableStore,
+    load_context: LeaseAuthorityProtectedLoadContext<'_>,
+    state_root: &Path,
+    config: &LeaseAuthorityServiceConfig,
+    reader: &mut R,
+    custody: &custody::LeaseAuthorityCustodyIdentity,
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+    signing_key: &super::super::LeaseAuthoritySigningKey,
+) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+    let encoded = read_lease_authority_frame(reader)?;
+    let decoded = decode_lease_authority_request(&encoded)?;
+    let administrative = matches!(
+        decoded,
+        LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
+    );
+    if administrative && !peer.is_root_administrator() {
+        return Err(service_error(
+            "lease_authority_protocol_administrator_peer_required",
+        ));
+    }
+    let mut kernel = if administrative {
+        store.load_for_mutation(load_context)?
+    } else {
+        store.load(load_context)?
+    };
+    if !administrative {
+        return dispatch_lease_authority_request(
+            &mut kernel,
+            &encoded,
+            custody,
+            peer,
+            signing_key,
+            None,
+        );
+    }
+
+    let mut capability = load_administrator_capability(state_root, config, &kernel)?;
+    let observed_at = authority_observed_at();
+    let context = LeaseAuthorityAdministrativeDispatchContext {
+        administrator_id: &config.administrator_id,
+        administrator_revision: config.administrator_revision,
+        raw_administrator_capability: &capability,
+        authority_observed_at: &observed_at,
+    };
+    let dispatched = dispatch_lease_authority_request(
+        &mut kernel,
+        &encoded,
+        custody,
+        peer,
+        signing_key,
+        Some(&context),
+    );
+    capability.fill(0);
+    store.publish(&kernel, None)?;
+    dispatched
+}
+
+fn encode_protocol_error(
+    error: LeaseAuthorityProtocolError,
+) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+        "outcome": "error",
+        "error": {"code": error.code()},
+    }))
+    .map_err(|_| service_error("lease_authority_protocol_response_encode_failed"))
+}
+
+fn authority_observed_at() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
 }
 
 pub(super) fn run_linux_bootstrap() -> Result<(), LeaseAuthorityProtocolError> {
@@ -415,7 +522,6 @@ fn load_service_config(
     Ok(config)
 }
 
-#[cfg(test)]
 fn load_administrator_capability(
     state_root: &Path,
     config: &LeaseAuthorityServiceConfig,
@@ -537,6 +643,295 @@ mod tests {
 
         let error = bootstrap_state_root(&state_root, 991).unwrap_err();
         assert_eq!(error.code(), "lease_authority_bootstrap_state_exists");
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn ordinary_challenge_is_independent_of_administrator_credential_availability() {
+        let parent = temp_parent("challenge-without-administrator");
+        let state_root = parent.join("lease-authority");
+        let receipt = bootstrap_state_root(&state_root, 991).unwrap();
+        let config = load_service_config(&state_root).unwrap();
+        let store = LeaseAuthorityDurableStore::open_existing(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
+        )
+        .unwrap();
+        let signing_key = super::super::super::load_selected_lease_authority_signing_key_in(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY),
+        )
+        .unwrap();
+        let administrator_path = state_root
+            .join(LEASE_AUTHORITY_ADMINISTRATOR_DIRECTORY)
+            .join(LEASE_AUTHORITY_ADMINISTRATOR_CAPABILITY_FILE);
+        std::fs::remove_file(&administrator_path).unwrap();
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let load_context = LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id: &receipt.authority_domain_id,
+            minimum_authority_epoch: 1,
+        };
+        let challenge = format!(
+            r#"{{
+                "schemaVersion":"agent-browser.lease-authority-request.v1",
+                "operation":"service_challenge",
+                "payload":{{
+                    "nonce":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "expectedAuthorityDomainId":"{}",
+                    "minimumAuthorityEpoch":1
+                }}
+            }}"#,
+            receipt.authority_domain_id
+        );
+        let mut framed_challenge = Vec::new();
+        write_lease_authority_frame(&mut framed_challenge, challenge.as_bytes()).unwrap();
+        let mut challenge_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_challenge),
+            &mut challenge_response,
+            &custody,
+            custody::LeaseAuthorityRequestPeerIdentity {
+                uid: 1000,
+                gid: 991,
+                pid: 4101,
+            },
+            &signing_key,
+        )
+        .unwrap();
+        let mut challenge_response = std::io::Cursor::new(challenge_response);
+        let challenge_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut challenge_response).unwrap())
+                .unwrap();
+        assert_eq!(challenge_response["outcome"], "service_identity");
+
+        let administrative_request = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"revoke_plan",
+            "payload":{
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "claimId":"claim:last30days",
+                "claimRevision":1,
+                "fencingToken":1,
+                "idempotencyKey":"revoke:last30days:1",
+                "reasonCode":"abandoned_strict_holder"
+            }
+        }"#;
+        let mut framed_administrative_request = Vec::new();
+        write_lease_authority_frame(&mut framed_administrative_request, administrative_request)
+            .unwrap();
+        let mut administrative_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_administrative_request),
+            &mut administrative_response,
+            &custody,
+            custody::LeaseAuthorityRequestPeerIdentity {
+                uid: 0,
+                gid: 0,
+                pid: 4102,
+            },
+            &signing_key,
+        )
+        .unwrap();
+        let mut administrative_response = std::io::Cursor::new(administrative_response);
+        let administrative_response: serde_json::Value = serde_json::from_slice(
+            &read_lease_authority_frame(&mut administrative_response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(administrative_response["outcome"], "error");
+        assert_eq!(
+            administrative_response["error"]["code"],
+            "lease_authority_administrator_identity_unavailable"
+        );
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn non_root_administrative_request_is_rejected_before_authority_state_load() {
+        let parent = temp_parent("non-root-before-state");
+        let store_root = parent.join("empty-store");
+        let store = LeaseAuthorityDurableStore::initialize(&store_root).unwrap();
+        let config = LeaseAuthorityServiceConfig {
+            schema_version: LEASE_AUTHORITY_SERVICE_CONFIG_SCHEMA_VERSION.to_string(),
+            authority_domain_id:
+                "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+            minimum_authority_epoch: 1,
+            operator_group_id: 991,
+            administrator_id: "administrator:local-root".to_string(),
+            administrator_revision: 1,
+        };
+        let request = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"revoke",
+            "payload":{"planId":"plan:unavailable"}
+        }"#;
+        let mut framed_request = Vec::new();
+        write_lease_authority_frame(&mut framed_request, request).unwrap();
+        let mut response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            LeaseAuthorityProtectedLoadContext {
+                expected_authority_domain_id: &config.authority_domain_id,
+                minimum_authority_epoch: 1,
+            },
+            &parent.join("missing-state-root"),
+            &config,
+            &mut std::io::Cursor::new(framed_request),
+            &mut response,
+            &custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+                .validate(991)
+                .unwrap(),
+            custody::LeaseAuthorityRequestPeerIdentity {
+                uid: 1000,
+                gid: 991,
+                pid: 4101,
+            },
+            &super::super::super::LeaseAuthoritySigningKey::from_private_bytes([0x5a; 32]),
+        )
+        .unwrap();
+        let mut response = std::io::Cursor::new(response);
+        let response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut response).unwrap()).unwrap();
+        assert_eq!(
+            response["error"]["code"],
+            "lease_authority_protocol_administrator_peer_required"
+        );
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn root_revoke_plan_and_apply_are_published_before_the_service_replies() {
+        let parent = temp_parent("durable-administrative-revoke");
+        let state_root = parent.join("lease-authority");
+        let receipt = bootstrap_state_root(&state_root, 991).unwrap();
+        let config = load_service_config(&state_root).unwrap();
+        let store = LeaseAuthorityDurableStore::open_existing(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
+        )
+        .unwrap();
+        let signing_key = super::super::super::load_selected_lease_authority_signing_key_in(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY),
+        )
+        .unwrap();
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let load_context = LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id: &receipt.authority_domain_id,
+            minimum_authority_epoch: 1,
+        };
+        let started = chrono::Utc::now();
+        let acquired_at = (started - chrono::Duration::seconds(1))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let transition_deadline = (started + chrono::Duration::seconds(60))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let expires_at = (started + chrono::Duration::seconds(299))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let mut prepared = store.load_for_mutation(load_context).unwrap();
+        let claim = prepared
+            .state
+            .authority
+            .acquire(super::super::super::AcquireLeaseClaimRequest {
+                resource: super::super::super::LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                principal_id: "principal:last30days".to_string(),
+                capability_id: "capability:last30days-social".to_string(),
+                capability_revision: 1,
+                mode: super::super::super::LeaseClaimMode::Strict,
+                expected_authority_revision: 1,
+                idempotency_key: "acquire:last30days:service-revoke".to_string(),
+                now: acquired_at,
+                expires_at,
+                transition_deadline: Some(transition_deadline),
+                recovery_controller_id: Some("capability:last30days-social".to_string()),
+                boot_epoch: Some("boot-1".to_string()),
+                owner_generation: Some(57),
+            })
+            .unwrap();
+        store.publish(&prepared, None).unwrap();
+
+        let plan_request = format!(
+            r#"{{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"revoke_plan","payload":{{"resource":{{"kind":"profile","id":"last30days-social"}},"claimId":"{}","claimRevision":{},"fencingToken":{},"idempotencyKey":"revoke:last30days:service-revoke","reasonCode":"abandoned_strict_holder"}}}}"#,
+            claim.claim_id, claim.revision, claim.fencing_token
+        );
+        let mut framed_plan = Vec::new();
+        write_lease_authority_frame(&mut framed_plan, plan_request.as_bytes()).unwrap();
+        let mut plan_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_plan),
+            &mut plan_response,
+            &custody,
+            custody::LeaseAuthorityRequestPeerIdentity {
+                uid: 0,
+                gid: 0,
+                pid: 4102,
+            },
+            &signing_key,
+        )
+        .unwrap();
+        let mut plan_response = std::io::Cursor::new(plan_response);
+        let plan_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut plan_response).unwrap())
+                .unwrap();
+        assert_eq!(plan_response["outcome"], "revocation_planned");
+        let plan_id = plan_response["payload"]["planId"].as_str().unwrap();
+        let after_plan = store.load(load_context).unwrap();
+        assert!(after_plan
+            .state
+            .authority
+            .administrative_authorization_by_plan_id(plan_id)
+            .is_ok());
+
+        let apply_request = format!(
+            r#"{{"schemaVersion":"agent-browser.lease-authority-request.v1","operation":"revoke","payload":{{"planId":"{plan_id}"}}}}"#
+        );
+        let mut framed_apply = Vec::new();
+        write_lease_authority_frame(&mut framed_apply, apply_request.as_bytes()).unwrap();
+        let mut apply_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_apply),
+            &mut apply_response,
+            &custody,
+            custody::LeaseAuthorityRequestPeerIdentity {
+                uid: 0,
+                gid: 0,
+                pid: 4102,
+            },
+            &signing_key,
+        )
+        .unwrap();
+        let mut apply_response = std::io::Cursor::new(apply_response);
+        let apply_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut apply_response).unwrap())
+                .unwrap();
+        assert_eq!(apply_response["outcome"], "revoked");
+        assert_eq!(apply_response["payload"]["replayed"], false);
+        let after_apply = store.load(load_context).unwrap();
+        let observed_at = authority_observed_at();
+        assert!(after_apply
+            .state
+            .authority
+            .current_claim(
+                &super::super::super::LeaseResourceKey::profile("last30days-social"),
+                &observed_at,
+            )
+            .is_none());
         let _ = std::fs::remove_dir_all(parent);
     }
 

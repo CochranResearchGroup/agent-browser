@@ -2026,3 +2026,44 @@ Until all six gates pass against one exact installed candidate, the correct
 claim is that the design closes the known failure taxonomy and the kernel is
 being built toward structural prevention. It is not yet correct to claim that
 the bugs cannot recur.
+
+## Slice E Protected Revoke Plan And Apply Checkpoint | 2026-08-31
+
+The root authority service now implements typed `revoke_plan` and `revoke`
+dispatch instead of returning the administrative placeholder. A plan request
+contains only the canonical resource, claim id, claim revision, fencing token,
+idempotency key, and reviewed reason. Caller-supplied issue or expiry time is
+rejected by the closed request schema. The protected service observes current
+time, advances a durable nondecreasing authority-time floor, chooses the
+bounded 120-second authorization lifetime, authenticates the current root
+administrator capability, and persists the exact signed intent before it
+returns a proof-redacted plan id.
+
+Apply accepts only that plan id. The kernel resolves the exact protected
+authorization, revalidates administrator authority, signature, expiry, current
+claim revision, and fencing token, advances the resource fence, removes the
+active claim, and durably publishes the terminal receipt before replying.
+Exact plan replay returns the original plan even after the target claim has
+become terminal. Exact apply replay returns the original terminal receipt after
+restart and after the short plan lifetime has elapsed. A changed claim revision
+fails before fencing with `stale_claim`.
+
+The service reads the root administrator credential only after the connected
+Unix peer is proven root and the decoded operation is administrative. A normal
+group-member service challenge neither reads nor depends on that credential.
+Missing or invalid administrative custody returns a typed per-request error
+instead of terminating the protected service. Administrative business errors
+still publish an advanced authority-time floor before their response, so an
+observed clock advance cannot be forgotten and later lengthen an authorization.
+
+Focused tests prove root peer gating, caller-time rejection, nondecreasing time
+across protected restart, exact plan replay, terminal plan replay, durable plan
+and apply publication through the production service wrapper, stale-plan
+rejection, proof redaction, late apply replay, and challenge independence from
+administrator-credential availability.
+
+This checkpoint exposes the protected IPC semantics only. CLI, HTTP, MCP,
+generated client, dashboard, documentation, and shared-skill parity remain in
+Slice G. Full suspend and reboot fencing, signer and administrator rotation,
+loss recovery, bounded intent compaction, and the strict recovery-controller
+plan and apply path also remain. Production installation is still withheld.
