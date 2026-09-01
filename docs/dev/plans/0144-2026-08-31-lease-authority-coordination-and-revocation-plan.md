@@ -80,7 +80,7 @@ states without inventing authority or indefinitely blocking ordinary work.
 ## Audited Failure Inventory
 
 The hotfix history and Plans 0128, 0134, 0137, 0142, and 0143 show recurring
-failures in six families:
+failures in seven families:
 
 1. **History promoted to authority.** Retained sessions and legacy principal
    evidence produce lease warnings or blockers after work is terminal.
@@ -98,6 +98,10 @@ failures in six families:
 6. **Effect and installation ambiguity.** A mutation may succeed before its
    caller observes a receipt, or a candidate runtime may inherit only part of
    the authority model and block its own transaction.
+7. **Deadline and outcome erasure.** A broker wait can consume the caller's
+   entire transport or subprocess budget, causing a typed conflict, queue, or
+   recovery outcome to be replaced by a generic client timeout and unsafe
+   retry ambiguity.
 
 No individual hotfix closes these families. This plan closes them through one
 shared authority model and public recovery plane.
@@ -632,6 +636,24 @@ Every active claim contains at least:
     may describe what was observed, but cannot label itself current after its
     bound, authorize an effect, or feed a denial without a fresh kernel
     decision. Historical and stale projections remain visibly observational.
+111. Every potentially waiting operation has one end-to-end deadline budget
+    with a mandatory response reserve. The broker either completes before that
+    reserve or returns a durable queue, deferral, or recovery receipt. An
+    internal lease wait cannot run until the HTTP, MCP, CLI subprocess, or
+    generated-client timeout, and an abandoned caller cannot leave an
+    unbounded waiter behind.
+112. A public access plan is either an explicitly observational snapshot or a
+    kernel-reserved executable offer. An observational plan cannot call itself
+    executable, available, or unblocked without publishing its revision and
+    validity bound. A reserved offer is created by the same atomic acquisition
+    used by execution and carries no inferred session, owner, or runtime
+    identity. Execution may return a typed stale-offer or current-conflict
+    outcome, but cannot reinterpret the plan through a second legacy gate.
+113. CLI, HTTP, MCP, generated clients, skills, and consumer brokers preserve
+    the canonical structured outcome and retry posture through cancellation,
+    timeout, and process boundaries. A typed conflict, queued result,
+    uncertainty receipt, or recovery offer cannot be collapsed into a generic
+    timeout or automatically retried as though no effect occurred.
 
 ## Claim Modes
 
@@ -1131,6 +1153,20 @@ and the current protected store remains a single validation and availability
 unit. Structural source acceptance now also requires fault injection proving
 that one corrupt resource cannot deny another, public readbacks proving stale
 status is observational, and a zero-lease-choreography client acceptance case.
+
+A twelfth recurrence pass returned to the original Last30Days failure at the
+consumer boundary. That incident did not merely expose a false lease conflict:
+the broker's roughly thirty-second wait exhausted the consumer's equal
+subprocess timeout, so the useful typed broker result was replaced by
+`unexpected_timeout_expired`. A truthful authority kernel could still recreate
+that operator experience if each layer owns an unrelated timeout or if an
+observational access plan is described as an executable promise. Invariants
+111 through 113 therefore add end-to-end deadline dominance, distinguish
+observational plans from atomically reserved executable offers, and require
+typed outcome fidelity through every public adapter and consumer broker. These
+contracts are not implemented. Structural acceptance now requires a deadline
+matrix and fault tests proving that waits, caller disappearance, cancellation,
+and response loss cannot erase recourse or trigger blind duplicate execution.
 
 ## Validation Contract
 
@@ -2034,6 +2070,8 @@ The historical incident families map to the following mandatory invariants:
 | Retried requests create duplicate daemons, browsers, routes, or external effects | 18, 19, 28, 39, 44, 54, 55, 76, 77, 78, and 79 | Authority receipts exist in part; single-flight spawn and every effect sink remain |
 | Logical lease records are mistaken for live process, lock, route, display, or socket evidence | 11, 17, 37, 43, 56, 63, 71, 72, 96, 105, and 107 | Modelled; fresh physical-evidence permits and bounded resolution remain |
 | Concurrent or stale Service State writers lose a mutation or manufacture a blocker | 35, 44, 51, 52, 79, 94, 98, 99, and 103 | Protected generation compare-and-swap exists; all production writers remain to converge |
+| A broker wait is hidden by an equal or shorter client timeout, erasing typed recourse | 39, 78, 89, 106, 109, 111, and 113 | Historical failure identified; unified deadline budget, waiter abandonment, and adapter outcome fidelity remain |
+| An observational access plan is presented as an executable promise and then reinterpreted by a second gate | 12, 13, 35, 38, 41, 47, 73, 95, 110, and 112 | Snapshot semantics exist in the model; reserved offers and public wording or schema separation remain |
 
 No historical incident family identified in Plans 0128, 0134, 0137, 0142, or
 0143 requires a second authority model or an exception to these invariants.
@@ -2067,9 +2105,13 @@ tests for the examples above:
    recovery, transferring-deadline recovery, candidate rollback, duplicate
    retry suppression, zero process residue, historical-warning isolation, and
    an ordinary authenticated client using its own profile without a retained
-   session or runtime-owner prerequisite.
+   session or runtime-owner prerequisite; and
+7. public-adapter and consumer tests prove one end-to-end deadline budget,
+   mandatory response reserve, abandoned-waiter expiry, observational-plan
+   labeling, reserved-offer execution, and lossless structured recourse across
+   CLI, HTTP, MCP, generated-client, skill, and subprocess boundaries.
 
-Until all six gates pass against one exact installed candidate, the correct
+Until all seven gates pass against one exact installed candidate, the correct
 claim is that the design closes the known failure taxonomy and the kernel is
 being built toward structural prevention. It is not yet correct to claim that
 the bugs cannot recur.
@@ -2389,3 +2431,31 @@ Legacy callers still construct authorizations without an executor digest and
 must be removed from effectful paths. Capability custody, receipt compaction,
 the exhaustive effect manifest, and broker-managed ordinary acquisition also
 remain before production installation.
+
+## Slice F Protected Effect Terminalization Checkpoint | 2026-09-01
+
+Protected `complete_effect` now moves an exact consumed effect intent to either
+`completed` or `uncertain` inside the selected authority generation. The
+closed request contains only the receipt id, terminal result, bounded evidence
+digest, and completion idempotency key. The service derives the executor from
+the connected peer and selects completion time and terminal authority revision
+inside the kernel. Caller-provided executor identity, UID, time, or
+authorization bearer is rejected.
+
+The first terminal transition requires the exact executor UID and process
+identity bound by authorization. It commits the result, evidence digest,
+completion key, completion time, and terminal authority revision before reply.
+It also scrubs the executable authorization from protected state. Exact replay
+returns the same bearer-free receipt without advancing authority revision;
+changed result, evidence, or completion key conflicts. Re-authorizing the
+original operation after terminalization returns only its terminal receipt and
+no executable authorization, preventing a completed or uncertain effect from
+being launched again after response loss or restart.
+
+The focused 78-test protected-authority partition, strict Clippy, Rust format,
+docs build, and diff hygiene pass. This establishes the protected IPC and state
+transition required by invariant 39, but no browser-launch sink consumes it
+yet. Compensation, bounded uncertainty reconciliation, selected sink
+integration, the exhaustive sink manifest, and the newly identified
+end-to-end deadline and outcome-fidelity invariants 111 through 113 remain.
+Production installation is still withheld.

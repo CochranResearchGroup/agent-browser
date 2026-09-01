@@ -155,6 +155,30 @@ struct AuthorizeLeaseEffectPayload {
     idempotency_key: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum LeaseAuthorityEffectState {
+    Consumed,
+    Completed,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CompleteLeaseEffectResult {
+    Completed,
+    Uncertain,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompleteLeaseEffectPayload {
+    receipt_id: String,
+    result: CompleteLeaseEffectResult,
+    completion_evidence_digest: String,
+    completion_idempotency_key: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityEffectReceipt {
@@ -176,19 +200,30 @@ struct LeaseAuthorityEffectReceipt {
     authority_revision: u64,
     occurred_at: String,
     authorization_expires_at: String,
+    state: LeaseAuthorityEffectState,
+    completion_idempotency_key: Option<String>,
+    completion_evidence_digest: Option<String>,
+    completed_at: Option<String>,
+    terminal_authority_revision: Option<u64>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityEffectRecord {
     receipt: LeaseAuthorityEffectReceipt,
-    authorization: LeaseEffectAuthorization,
+    authorization: Option<LeaseEffectAuthorization>,
 }
 
 #[derive(Debug)]
 struct LeaseAuthorityEffectOutcome {
     receipt: LeaseAuthorityEffectReceipt,
-    authorization: LeaseEffectAuthorization,
+    authorization: Option<LeaseEffectAuthorization>,
+    replayed: bool,
+}
+
+#[derive(Debug)]
+struct LeaseAuthorityEffectCompletionOutcome {
+    receipt: LeaseAuthorityEffectReceipt,
     replayed: bool,
 }
 
@@ -361,6 +396,7 @@ enum LeaseAuthorityProtocolRequest {
     EnrollProfile(EnrollProfileLeaseAuthorityPayload),
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(AuthorizeLeaseEffectPayload),
+    CompleteEffect(CompleteLeaseEffectPayload),
     Release(ReleaseLeaseAuthorityPayload),
     RecoverPlan(RecoverLeasePlanPayload),
     Recover(RecoverLeaseApplyPayload),
@@ -1565,6 +1601,7 @@ impl LeaseAuthorityProtocolKernel {
             LeaseAuthorityProtocolRequest::ServiceChallenge(_)
             | LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -1832,19 +1869,117 @@ impl LeaseAuthorityProtocolKernel {
             authority_revision: next_authority_revision,
             occurred_at: now,
             authorization_expires_at,
+            state: LeaseAuthorityEffectState::Consumed,
+            completion_idempotency_key: None,
+            completion_evidence_digest: None,
+            completed_at: None,
+            terminal_authority_revision: None,
         };
         self.state.authority.revision = next_authority_revision;
         self.state.effect_receipts.insert(
             storage_key,
             LeaseAuthorityEffectRecord {
                 receipt: receipt.clone(),
-                authorization: authorization.clone(),
+                authorization: Some(authorization.clone()),
             },
         );
         validate_protected_state(&self.state)?;
         Ok(LeaseAuthorityEffectOutcome {
             receipt,
-            authorization,
+            authorization: Some(authorization),
+            replayed: false,
+        })
+    }
+
+    fn complete_effect(
+        &mut self,
+        request: CompleteLeaseEffectPayload,
+        executor_uid: u32,
+        executor_identity_digest: &str,
+        authority_observed_at: &str,
+    ) -> Result<LeaseAuthorityEffectCompletionOutcome, LeaseAuthorityProtocolError> {
+        if executor_uid == 0
+            || request.receipt_id.trim().is_empty()
+            || request.completion_idempotency_key.trim().is_empty()
+            || !valid_sha256_digest(&request.completion_evidence_digest)
+            || !valid_sha256_digest(executor_identity_digest)
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_completion_invalid",
+            });
+        }
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let storage_key = self
+            .state
+            .effect_receipts
+            .iter()
+            .find_map(|(storage_key, record)| {
+                (record.receipt.receipt_id == request.receipt_id).then(|| storage_key.clone())
+            })
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_receipt_unavailable",
+            })?;
+        let record = self
+            .state
+            .effect_receipts
+            .get(&storage_key)
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_receipt_unavailable",
+            })?;
+        let terminal_state = match request.result {
+            CompleteLeaseEffectResult::Completed => LeaseAuthorityEffectState::Completed,
+            CompleteLeaseEffectResult::Uncertain => LeaseAuthorityEffectState::Uncertain,
+        };
+        if record.receipt.state != LeaseAuthorityEffectState::Consumed {
+            if record.receipt.state == terminal_state
+                && record.receipt.completion_idempotency_key.as_deref()
+                    == Some(request.completion_idempotency_key.as_str())
+                && record.receipt.completion_evidence_digest.as_deref()
+                    == Some(request.completion_evidence_digest.as_str())
+            {
+                return Ok(LeaseAuthorityEffectCompletionOutcome {
+                    receipt: record.receipt,
+                    replayed: true,
+                });
+            }
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_idempotency_conflict",
+            });
+        }
+        if record.receipt.executor_uid != executor_uid
+            || record.receipt.executor_identity_digest != executor_identity_digest
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_executor_mismatch",
+            });
+        }
+        let next_authority_revision = self
+            .state
+            .authority
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_counter_exhausted",
+            })?;
+        let mut receipt = record.receipt;
+        receipt.state = terminal_state;
+        receipt.completion_idempotency_key = Some(request.completion_idempotency_key);
+        receipt.completion_evidence_digest = Some(request.completion_evidence_digest);
+        receipt.completed_at = Some(now);
+        receipt.terminal_authority_revision = Some(next_authority_revision);
+        self.state.authority.revision = next_authority_revision;
+        self.state.effect_receipts.insert(
+            storage_key,
+            LeaseAuthorityEffectRecord {
+                receipt: receipt.clone(),
+                authorization: None,
+            },
+        );
+        validate_protected_state(&self.state)?;
+        Ok(LeaseAuthorityEffectCompletionOutcome {
+            receipt,
             replayed: false,
         })
     }
@@ -2209,7 +2344,6 @@ fn validate_protected_state(
     let mut effect_receipt_ids = BTreeSet::new();
     for (storage_key, record) in &state.effect_receipts {
         let receipt = &record.receipt;
-        let authorization = &record.authorization;
         let expected_request_digest = effect_request_digest_parts(
             &state.domain.authority_domain_id,
             state.domain.authority_epoch,
@@ -2226,8 +2360,52 @@ fn validate_protected_state(
             receipt.executor_uid,
             &receipt.executor_identity_digest,
         );
-        let proof_is_valid_shape =
-            hex::decode(&authorization.proof).is_ok_and(|proof| proof.len() == 64);
+        let authorization_is_valid = match (receipt.state, record.authorization.as_ref()) {
+            (LeaseAuthorityEffectState::Consumed, Some(authorization)) => {
+                receipt.completion_idempotency_key.is_none()
+                    && receipt.completion_evidence_digest.is_none()
+                    && receipt.completed_at.is_none()
+                    && receipt.terminal_authority_revision.is_none()
+                    && authorization.schema_version
+                        == super::LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION
+                    && authorization.resource == receipt.resource
+                    && authorization.claim_id == receipt.claim_id
+                    && authorization.principal_id == receipt.principal_id
+                    && authorization.capability_id == receipt.capability_id
+                    && authorization.capability_revision == receipt.capability_revision
+                    && authorization.claim_revision == receipt.claim_revision
+                    && authorization.fencing_token == receipt.fencing_token
+                    && authorization.action_class == receipt.action_class
+                    && authorization.audience == receipt.audience
+                    && authorization.operation_idempotency_key == receipt.idempotency_key
+                    && authorization.executor_identity_digest.as_deref()
+                        == Some(receipt.executor_identity_digest.as_str())
+                    && authorization.issued_at == receipt.occurred_at
+                    && authorization.authorization_expires_at == receipt.authorization_expires_at
+                    && hex::decode(&authorization.proof).is_ok_and(|proof| proof.len() == 64)
+            }
+            (LeaseAuthorityEffectState::Completed | LeaseAuthorityEffectState::Uncertain, None) => {
+                let occurred_at = chrono::DateTime::parse_from_rfc3339(&receipt.occurred_at);
+                let completed_at = receipt
+                    .completed_at
+                    .as_deref()
+                    .map(chrono::DateTime::parse_from_rfc3339);
+                receipt
+                    .completion_idempotency_key
+                    .as_deref()
+                    .is_some_and(|key| !key.trim().is_empty())
+                    && receipt
+                        .completion_evidence_digest
+                        .as_deref()
+                        .is_some_and(valid_sha256_digest)
+                    && receipt.terminal_authority_revision.is_some_and(|revision| {
+                        revision > receipt.authority_revision
+                            && revision <= state.authority.revision
+                    })
+                    && matches!((occurred_at, completed_at), (Ok(start), Some(Ok(end))) if end >= start)
+            }
+            _ => false,
+        };
         if storage_key
             != &effect_receipt_storage_key(
                 &state.domain.authority_domain_id,
@@ -2259,22 +2437,7 @@ fn validate_protected_state(
             || receipt.authority_revision > state.authority.revision
             || chrono::DateTime::parse_from_rfc3339(&receipt.occurred_at).is_err()
             || chrono::DateTime::parse_from_rfc3339(&receipt.authorization_expires_at).is_err()
-            || authorization.schema_version != super::LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION
-            || authorization.resource != receipt.resource
-            || authorization.claim_id != receipt.claim_id
-            || authorization.principal_id != receipt.principal_id
-            || authorization.capability_id != receipt.capability_id
-            || authorization.capability_revision != receipt.capability_revision
-            || authorization.claim_revision != receipt.claim_revision
-            || authorization.fencing_token != receipt.fencing_token
-            || authorization.action_class != receipt.action_class
-            || authorization.audience != receipt.audience
-            || authorization.operation_idempotency_key != receipt.idempotency_key
-            || authorization.executor_identity_digest.as_deref()
-                != Some(receipt.executor_identity_digest.as_str())
-            || authorization.issued_at != receipt.occurred_at
-            || authorization.authorization_expires_at != receipt.authorization_expires_at
-            || !proof_is_valid_shape
+            || !authorization_is_valid
         {
             return Err(invalid());
         }
@@ -2572,6 +2735,11 @@ fn decode_lease_authority_request(
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_request_invalid",
             }),
+        "complete_effect" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::CompleteEffect)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "release" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::Release)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -2847,6 +3015,37 @@ fn dispatch_lease_authority_request(
                 "outcome": "effect_authorized",
                 "payload": {
                     "authorization": outcome.authorization,
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::CompleteEffect(request) => {
+            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.complete_effect(
+                request,
+                peer.uid,
+                &executor_identity_digest,
+                &observed_at,
+            )?;
+            let response_outcome = match outcome.receipt.state {
+                LeaseAuthorityEffectState::Completed => "effect_completed",
+                LeaseAuthorityEffectState::Uncertain => "effect_uncertain",
+                LeaseAuthorityEffectState::Consumed => {
+                    return Err(LeaseAuthorityProtocolError {
+                        code: "lease_authority_protocol_state_invalid",
+                    });
+                }
+            };
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": response_outcome,
+                "payload": {
                     "receipt": outcome.receipt,
                     "replayed": outcome.replayed,
                 },
@@ -3740,6 +3939,33 @@ mod tests {
     }
 
     #[test]
+    fn effect_completion_request_has_no_caller_owned_time_executor_or_authorization() {
+        let encoded = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"complete_effect",
+            "payload":{
+                "receiptId":"effect-receipt:0123456789abcdef01234567",
+                "result":"completed",
+                "completionEvidenceDigest":"sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                "completionIdempotencyKey":"complete:last30days:1"
+            }
+        }"#;
+        assert!(decode_lease_authority_request(encoded).is_ok());
+
+        for forbidden in [
+            r#""executorIdentityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+            r#""executorUid":1000,"#,
+            r#""completedAt":"2099-01-01T00:00:00Z","#,
+            r#""authorization":{"proof":"invented"},"#,
+        ] {
+            let injected = String::from_utf8(encoded.to_vec())
+                .unwrap()
+                .replace("\"receiptId\":", &format!("{forbidden}\"receiptId\":"));
+            assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
     fn protected_profile_enrollment_is_uid_bound_durable_and_acquisition_ready() {
         let raw_capability = "last30days-profile-capability-secret-v1";
         let physical_identity_digest =
@@ -3862,11 +4088,14 @@ mod tests {
             .unwrap();
         assert!(!authorized.replayed);
         assert_eq!(
-            authorized.authorization.executor_identity_digest.as_deref(),
+            authorized
+                .authorization
+                .as_ref()
+                .and_then(|authorization| authorization.executor_identity_digest.as_deref()),
             Some(executor_identity_digest)
         );
         super::super::verify_effect_authorization(
-            &authorized.authorization,
+            authorized.authorization.as_ref().unwrap(),
             &LeaseAuthorityVerificationKeyring::from_active(&signing_key),
         )
         .unwrap();
@@ -3904,7 +4133,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code(), "lease_authority_idempotency_conflict");
 
-        let mut tampered = authorized.authorization;
+        let mut tampered = authorized.authorization.unwrap();
         tampered.executor_identity_digest = Some(different_executor.to_string());
         assert_eq!(
             super::super::verify_effect_authorization(
@@ -3913,6 +4142,40 @@ mod tests {
             ),
             Err(super::super::LeaseAuthorityError::InvalidEffectProof)
         );
+
+        let completion = restarted
+            .complete_effect(
+                CompleteLeaseEffectPayload {
+                    receipt_id: authorized.receipt.receipt_id.clone(),
+                    result: CompleteLeaseEffectResult::Uncertain,
+                    completion_evidence_digest:
+                        "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+                            .to_string(),
+                    completion_idempotency_key: "uncertain:last30days:1".to_string(),
+                },
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:02:00Z",
+            )
+            .unwrap();
+        assert!(!completion.replayed);
+        assert_eq!(
+            completion.receipt.state,
+            LeaseAuthorityEffectState::Uncertain
+        );
+        assert!(
+            restarted
+                .state
+                .effect_receipts
+                .values()
+                .all(|record| record.authorization.is_none()),
+            "terminal effect records must scrub the executable bearer"
+        );
+        LeaseAuthorityProtocolKernel::from_protected_state(
+            &restarted.encode_protected_state().unwrap(),
+            test_load_context(),
+        )
+        .expect("uncertain terminal receipt must remain restart-valid");
     }
 
     #[cfg(unix)]

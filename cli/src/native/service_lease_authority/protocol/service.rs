@@ -278,6 +278,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
         LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::Acquire(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -986,6 +987,113 @@ mod tests {
             store.load(load_context).unwrap().state.authority.revision(),
             effect_authority_revision
         );
+
+        let completion = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "complete_effect",
+            "payload": {
+                "receiptId": effect_response["payload"]["receipt"]["receiptId"],
+                "result": "completed",
+                "completionEvidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                "completionIdempotencyKey": "complete:last30days:service-1"
+            }
+        }))
+        .unwrap();
+        let mut framed_completion = Vec::new();
+        write_lease_authority_frame(&mut framed_completion, &completion).unwrap();
+        let mut completion_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_completion),
+            &mut completion_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut completion_response = std::io::Cursor::new(completion_response);
+        let completion_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut completion_response).unwrap())
+                .unwrap();
+        assert_eq!(
+            completion_response["outcome"], "effect_completed",
+            "{completion_response}"
+        );
+        assert_eq!(
+            completion_response["payload"]["receipt"]["state"],
+            "completed"
+        );
+        assert!(completion_response["payload"]["authorization"].is_null());
+        let completion_authority_revision =
+            store.load(load_context).unwrap().state.authority.revision();
+        let mut framed_completion_replay = Vec::new();
+        write_lease_authority_frame(&mut framed_completion_replay, &completion).unwrap();
+        let mut completion_replay_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_completion_replay),
+            &mut completion_replay_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut completion_replay_response = std::io::Cursor::new(completion_replay_response);
+        let completion_replay_response: serde_json::Value = serde_json::from_slice(
+            &read_lease_authority_frame(&mut completion_replay_response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(completion_replay_response["outcome"], "effect_completed");
+        assert_eq!(completion_replay_response["payload"]["replayed"], true);
+        assert_eq!(
+            completion_replay_response["payload"]["receipt"],
+            completion_response["payload"]["receipt"]
+        );
+        assert_eq!(
+            store.load(load_context).unwrap().state.authority.revision(),
+            completion_authority_revision
+        );
+
+        let mut framed_completed_effect_replay = Vec::new();
+        write_lease_authority_frame(&mut framed_completed_effect_replay, &effect).unwrap();
+        let mut completed_effect_replay_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_completed_effect_replay),
+            &mut completed_effect_replay_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut completed_effect_replay_response =
+            std::io::Cursor::new(completed_effect_replay_response);
+        let completed_effect_replay_response: serde_json::Value = serde_json::from_slice(
+            &read_lease_authority_frame(&mut completed_effect_replay_response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            completed_effect_replay_response["outcome"],
+            "effect_authorized"
+        );
+        assert_eq!(
+            completed_effect_replay_response["payload"]["replayed"],
+            true
+        );
+        assert_eq!(
+            completed_effect_replay_response["payload"]["receipt"]["state"],
+            "completed"
+        );
+        assert!(completed_effect_replay_response["payload"]["authorization"].is_null());
 
         let release = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",
