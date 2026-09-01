@@ -277,6 +277,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
         decoded,
         LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::Acquire(_)
+            | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
@@ -816,7 +817,7 @@ mod tests {
         let peer = custody::LeaseAuthorityRequestPeerIdentity {
             uid: operator_uid,
             gid: 991,
-            pid: 4101,
+            pid: std::process::id(),
         };
         let enrollment = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",
@@ -901,6 +902,91 @@ mod tests {
             acquisition_response["outcome"], "acquired",
             "{acquisition_response}"
         );
+        let effect = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "authorize_effect",
+            "payload": {
+                "rawCapability": raw_capability.as_bytes(),
+                "resource": {"kind": "profile", "id": "last30days-social"},
+                "claimId": acquisition_response["payload"]["claim"]["claimId"],
+                "claimRevision": acquisition_response["payload"]["claim"]["revision"],
+                "fencingToken": acquisition_response["payload"]["claim"]["fencingToken"],
+                "actionClass": "browser_launch",
+                "audience": "daemon-session:last30days",
+                "idempotencyKey": "launch:last30days:service-1"
+            }
+        }))
+        .unwrap();
+        let mut framed_effect = Vec::new();
+        write_lease_authority_frame(&mut framed_effect, &effect).unwrap();
+        let mut effect_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_effect),
+            &mut effect_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut effect_response = std::io::Cursor::new(effect_response);
+        let effect_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut effect_response).unwrap())
+                .unwrap();
+        assert_eq!(
+            effect_response["outcome"], "effect_authorized",
+            "{effect_response}"
+        );
+        assert!(!effect_response.to_string().contains(raw_capability));
+        assert_eq!(
+            store
+                .load(load_context)
+                .unwrap()
+                .state
+                .effect_receipts
+                .len(),
+            1
+        );
+        let effect_authority_revision =
+            store.load(load_context).unwrap().state.authority.revision();
+        let mut framed_effect_replay = Vec::new();
+        write_lease_authority_frame(&mut framed_effect_replay, &effect).unwrap();
+        let mut effect_replay_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_effect_replay),
+            &mut effect_replay_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut effect_replay_response = std::io::Cursor::new(effect_replay_response);
+        let effect_replay_response: serde_json::Value = serde_json::from_slice(
+            &read_lease_authority_frame(&mut effect_replay_response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(effect_replay_response["outcome"], "effect_authorized");
+        assert_eq!(effect_replay_response["payload"]["replayed"], true);
+        assert_eq!(
+            effect_replay_response["payload"]["authorization"],
+            effect_response["payload"]["authorization"]
+        );
+        assert_eq!(
+            effect_replay_response["payload"]["receipt"],
+            effect_response["payload"]["receipt"]
+        );
+        assert_eq!(
+            store.load(load_context).unwrap().state.authority.revision(),
+            effect_authority_revision
+        );
+
         let release = serde_json::to_vec(&serde_json::json!({
             "schemaVersion": "agent-browser.lease-authority-request.v1",
             "operation": "release",

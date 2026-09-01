@@ -4,7 +4,7 @@ Date: 2026-08-31
 
 State: OPEN
 
-Execution state: `slice_f_protected_release_complete_effect_intent_in_progress`
+Execution state: `slice_f_protected_effect_intent_committed_sink_consume_in_progress`
 
 Lane: P144
 
@@ -2347,3 +2347,45 @@ authorization remains intentionally unimplemented because returning the old
 offline bearer would preserve a revocation race. The next slice must persist a
 single-use current-state effect intent and make every selected effect sink
 consume that intent before execution.
+
+## Slice F Protected Durable Effect Intent Checkpoint | 2026-09-01
+
+Protected `authorize_effect` now commits one exact effect intent in the
+selected authority generation before returning its signed authorization. The
+closed request carries only the raw profile capability, canonical resource,
+exact claim id, claim revision, fencing token, action class, audience, and
+operation idempotency key. Caller-provided principal, capability identity,
+executor identity, timestamps, expiry, or proof are rejected. The kernel owns
+time, authenticates the profile capability, revalidates the current claim and
+fence, and derives the executor identity from the connected Linux peer's UID,
+GID, PID, process start time, canonical executable, and executable digest.
+
+The durable effect receipt is namespaced by authority domain, principal,
+canonical resource, action, and operation key. It binds the authority epoch,
+capability revision, exact claim axes, action, audience, executor UID and
+process identity, occurrence time, authorization expiry, and authority
+revision. The executor digest is part of the signed authorization payload. A
+different process cannot replay the operation, and changing the signed
+executor digest invalidates the proof. Exact restart replay returns the same
+receipt and authorization without advancing the authority revision.
+
+This checkpoint deliberately exposes only the currently modeled
+`browser_launch` action with a bounded `daemon-session:` audience. It rejects
+arbitrary action strings instead of becoming a holder-scoped generic signing
+oracle. The protected operational collection is bounded at 4,096 receipts and
+returns a typed capacity outcome before mutation.
+
+The defect was first demonstrated by the protected service regression failing
+to compile because no durable `effect_receipts` collection existed. Focused
+tests now prove closed request fields, durable publication before reply,
+restart replay, principal and executor namespacing, proof tamper rejection,
+scope rejection, capability redaction, and compatibility with the existing
+profile recovery and lease callers.
+
+This is not yet an effect-sink migration or final invariant 101 acceptance.
+The selected browser-launch sink must consume the committed intent and persist
+completion, uncertainty, or compensation through the same operation receipt.
+Legacy callers still construct authorizations without an executor digest and
+must be removed from effectful paths. Capability custody, receipt compaction,
+the exhaustive effect manifest, and broker-managed ordinary acquisition also
+remain before production installation.

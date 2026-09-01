@@ -604,6 +604,7 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
                     action_class: "lease_release".to_string(),
                     audience: "lease_authority_kernel".to_string(),
                     operation_idempotency_key: release_idempotency_key.to_string(),
+                    executor_identity_digest: None,
                     issued_at: now.clone(),
                     authorization_expires_at: std::cmp::min(
                         issued + chrono::Duration::minutes(2),

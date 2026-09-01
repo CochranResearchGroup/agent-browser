@@ -13,8 +13,9 @@ use super::{
     LeaseAuthoritySigningKey, LeaseAuthorityState, LeaseAuthorityVerificationKeyring,
     LeaseClaimAcquisitionOutcome, LeaseClaimAcquisitionReceipt, LeaseClaimMode,
     LeaseClaimRecoveryReceipt, LeaseClaimReleaseOutcome, LeaseClaimTerminalReceipt,
-    LeaseEffectIntent, LeaseRecoveryAuthorization, LeaseRecoveryIntent, LeaseResourceKey,
-    LeaseResourceKind, RecoverLeaseClaimRequest, ReleaseLeaseClaimRequest, RevokeLeaseClaimRequest,
+    LeaseEffectAuthorization, LeaseEffectIntent, LeaseRecoveryAuthorization, LeaseRecoveryIntent,
+    LeaseResourceKey, LeaseResourceKind, RecoverLeaseClaimRequest, ReleaseLeaseClaimRequest,
+    RevokeLeaseClaimRequest,
 };
 use crate::native::service_principal::{
     authenticate_profile_capability, profile_capability_digest, register_profile_capability,
@@ -75,6 +76,9 @@ const LEASE_AUTHORITY_SERVICE_IDENTITY_PROOF_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-service-identity-proof.v1";
 const LEASE_AUTHORITY_PROFILE_ENROLLMENT_RECEIPT_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-profile-enrollment-receipt.v1";
+const LEASE_AUTHORITY_EFFECT_RECEIPT_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-effect-receipt.v1";
+const MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS: usize = 4096;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -136,6 +140,56 @@ struct ReleaseLeaseAuthorityPayload {
     claim_revision: u64,
     fencing_token: u64,
     idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AuthorizeLeaseEffectPayload {
+    raw_capability: LeaseAuthoritySecret,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    claim_revision: u64,
+    fencing_token: u64,
+    action_class: String,
+    audience: String,
+    idempotency_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityEffectReceipt {
+    schema_version: String,
+    receipt_id: String,
+    request_digest: String,
+    idempotency_key: String,
+    resource: LeaseResourceKey,
+    claim_id: String,
+    principal_id: String,
+    capability_id: String,
+    capability_revision: u64,
+    claim_revision: u64,
+    fencing_token: u64,
+    action_class: String,
+    audience: String,
+    executor_identity_digest: String,
+    executor_uid: u32,
+    authority_revision: u64,
+    occurred_at: String,
+    authorization_expires_at: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityEffectRecord {
+    receipt: LeaseAuthorityEffectReceipt,
+    authorization: LeaseEffectAuthorization,
+}
+
+#[derive(Debug)]
+struct LeaseAuthorityEffectOutcome {
+    receipt: LeaseAuthorityEffectReceipt,
+    authorization: LeaseEffectAuthorization,
+    replayed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -306,7 +360,7 @@ enum LeaseAuthorityProtocolRequest {
     ServiceChallenge(LeaseAuthorityServiceChallengeRequest),
     EnrollProfile(EnrollProfileLeaseAuthorityPayload),
     Acquire(Box<AcquireLeaseAuthorityPayload>),
-    AuthorizeEffect(Value),
+    AuthorizeEffect(AuthorizeLeaseEffectPayload),
     Release(ReleaseLeaseAuthorityPayload),
     RecoverPlan(RecoverLeasePlanPayload),
     Recover(RecoverLeaseApplyPayload),
@@ -353,6 +407,8 @@ struct LeaseAuthorityProtectedState {
     owners: LeaseAuthorityOwnerRegistry,
     #[serde(default)]
     profile_enrollment_receipts: BTreeMap<String, LeaseAuthorityProfileEnrollmentReceipt>,
+    #[serde(default)]
+    effect_receipts: BTreeMap<String, LeaseAuthorityEffectRecord>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -899,6 +955,7 @@ impl LeaseAuthorityProtocolKernel {
                     bindings: BTreeMap::new(),
                 },
                 profile_enrollment_receipts: BTreeMap::new(),
+                effect_receipts: BTreeMap::new(),
             },
             selected_generation_id: None,
             publication_authorized: true,
@@ -1597,6 +1654,201 @@ impl LeaseAuthorityProtocolKernel {
         Ok(LeaseAuthorityProtocolResponse::Acquired(outcome))
     }
 
+    fn authorize_effect(
+        &mut self,
+        request: AuthorizeLeaseEffectPayload,
+        executor_uid: u32,
+        executor_identity_digest: &str,
+        authority_observed_at: &str,
+        signing_key: &LeaseAuthoritySigningKey,
+    ) -> Result<LeaseAuthorityEffectOutcome, LeaseAuthorityProtocolError> {
+        if executor_uid == 0
+            || request.resource.kind != LeaseResourceKind::Profile
+            || request.claim_id.trim().is_empty()
+            || request.claim_revision == 0
+            || request.fencing_token == 0
+            || request.action_class != "browser_launch"
+            || request
+                .audience
+                .strip_prefix("daemon-session:")
+                .is_none_or(|audience| {
+                    audience.is_empty()
+                        || audience.len() > 160
+                        || !audience.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric()
+                                || matches!(byte, b'-' | b'_' | b':' | b'.')
+                        })
+                })
+            || request.idempotency_key.trim().is_empty()
+            || !valid_sha256_digest(executor_identity_digest)
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_invalid",
+            });
+        }
+        let registered_operator_uid = self
+            .state
+            .resources
+            .registrations
+            .get(&request.resource.storage_key())
+            .filter(|registration| registration.operator_uid == executor_uid)
+            .map(|registration| registration.operator_uid)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_executor_mismatch",
+            })?;
+        let raw_capability =
+            std::str::from_utf8(request.raw_capability.expose()).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_capability_invalid",
+                }
+            })?;
+        let authenticated = authenticate_profile_capability(
+            &self.state.principals,
+            raw_capability,
+            Some(&request.resource.id),
+        )
+        .map_err(|error| LeaseAuthorityProtocolError {
+            code: error.code.as_str(),
+        })?;
+        let storage_key = effect_receipt_storage_key(
+            &self.state.domain.authority_domain_id,
+            &authenticated.principal_id,
+            &request.resource,
+            &request.action_class,
+            &request.idempotency_key,
+        );
+        let request_digest = effect_request_digest(
+            &self.state.domain.authority_domain_id,
+            self.state.domain.authority_epoch,
+            &authenticated.principal_id,
+            &authenticated.capability_id,
+            authenticated.capability_revision,
+            &request,
+            executor_uid,
+            executor_identity_digest,
+        );
+        let now = self.observe_authority_time(authority_observed_at)?;
+        if let Some(record) = self.state.effect_receipts.get(&storage_key) {
+            if record.receipt.request_digest != request_digest
+                || record.receipt.executor_identity_digest != executor_identity_digest
+            {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_idempotency_conflict",
+                });
+            }
+            return Ok(LeaseAuthorityEffectOutcome {
+                receipt: record.receipt.clone(),
+                authorization: record.authorization.clone(),
+                replayed: true,
+            });
+        }
+        if self.state.effect_receipts.len() >= MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_effect_capacity_exhausted",
+            });
+        }
+        let claim = self
+            .state
+            .authority
+            .current_claim(&request.resource, &now)
+            .filter(|claim| {
+                claim.claim_id == request.claim_id
+                    && claim.revision == request.claim_revision
+                    && claim.fencing_token == request.fencing_token
+                    && claim.principal_id == authenticated.principal_id
+                    && claim.capability_id == authenticated.capability_id
+                    && claim.capability_revision == authenticated.capability_revision
+            })
+            .cloned()
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_stale_claim",
+            })?;
+        let observed = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_clock_state_invalid",
+            }
+        })?;
+        let claim_expires_at =
+            chrono::DateTime::parse_from_rfc3339(&claim.expires_at).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_state_invalid",
+                }
+            })?;
+        let authorization_expires_at = std::cmp::min(
+            observed + chrono::Duration::seconds(super::MAX_EFFECT_AUTHORIZATION_TENURE_SECONDS),
+            claim_expires_at,
+        )
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let capability = self
+            .state
+            .principals
+            .profile_capabilities
+            .get(claim.capability_id())
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_capability_unavailable",
+            })?;
+        let authorization = claim
+            .effect_authorization(
+                capability,
+                &LeaseEffectIntent {
+                    action_class: request.action_class.clone(),
+                    audience: request.audience.clone(),
+                    operation_idempotency_key: request.idempotency_key.clone(),
+                    executor_identity_digest: Some(executor_identity_digest.to_string()),
+                    issued_at: now.clone(),
+                    authorization_expires_at: authorization_expires_at.clone(),
+                },
+                signing_key,
+            )
+            .map_err(lease_authority_protocol_error)?;
+        let next_authority_revision = self
+            .state
+            .authority
+            .revision
+            .checked_add(1)
+            .filter(|revision| *revision > 0)
+            .ok_or(LeaseAuthorityProtocolError {
+                code: "lease_authority_counter_exhausted",
+            })?;
+        let receipt = LeaseAuthorityEffectReceipt {
+            schema_version: LEASE_AUTHORITY_EFFECT_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: format!(
+                "effect-receipt:{}",
+                &request_digest.trim_start_matches("sha256:")[..24]
+            ),
+            request_digest,
+            idempotency_key: request.idempotency_key,
+            resource: request.resource,
+            claim_id: claim.claim_id,
+            principal_id: authenticated.principal_id,
+            capability_id: authenticated.capability_id,
+            capability_revision: authenticated.capability_revision,
+            claim_revision: claim.revision,
+            fencing_token: claim.fencing_token,
+            action_class: request.action_class,
+            audience: request.audience,
+            executor_identity_digest: executor_identity_digest.to_string(),
+            executor_uid: registered_operator_uid,
+            authority_revision: next_authority_revision,
+            occurred_at: now,
+            authorization_expires_at,
+        };
+        self.state.authority.revision = next_authority_revision;
+        self.state.effect_receipts.insert(
+            storage_key,
+            LeaseAuthorityEffectRecord {
+                receipt: receipt.clone(),
+                authorization: authorization.clone(),
+            },
+        );
+        validate_protected_state(&self.state)?;
+        Ok(LeaseAuthorityEffectOutcome {
+            receipt,
+            authorization,
+            replayed: false,
+        })
+    }
+
     fn release(
         &mut self,
         request: ReleaseLeaseAuthorityPayload,
@@ -1697,6 +1949,7 @@ impl LeaseAuthorityProtocolKernel {
                     action_class: "lease_release".to_string(),
                     audience: "lease_authority_kernel".to_string(),
                     operation_idempotency_key: request.idempotency_key.clone(),
+                    executor_identity_digest: None,
                     issued_at: now.clone(),
                     authorization_expires_at,
                 },
@@ -1950,6 +2203,83 @@ fn validate_protected_state(
         }
     }
 
+    if state.effect_receipts.len() > MAX_LEASE_AUTHORITY_EFFECT_RECEIPTS {
+        return Err(invalid());
+    }
+    let mut effect_receipt_ids = BTreeSet::new();
+    for (storage_key, record) in &state.effect_receipts {
+        let receipt = &record.receipt;
+        let authorization = &record.authorization;
+        let expected_request_digest = effect_request_digest_parts(
+            &state.domain.authority_domain_id,
+            state.domain.authority_epoch,
+            &receipt.principal_id,
+            &receipt.capability_id,
+            receipt.capability_revision,
+            &receipt.resource,
+            &receipt.claim_id,
+            receipt.claim_revision,
+            receipt.fencing_token,
+            &receipt.action_class,
+            &receipt.audience,
+            &receipt.idempotency_key,
+            receipt.executor_uid,
+            &receipt.executor_identity_digest,
+        );
+        let proof_is_valid_shape =
+            hex::decode(&authorization.proof).is_ok_and(|proof| proof.len() == 64);
+        if storage_key
+            != &effect_receipt_storage_key(
+                &state.domain.authority_domain_id,
+                &receipt.principal_id,
+                &receipt.resource,
+                &receipt.action_class,
+                &receipt.idempotency_key,
+            )
+            || receipt.schema_version != LEASE_AUTHORITY_EFFECT_RECEIPT_SCHEMA_VERSION
+            || receipt.request_digest != expected_request_digest
+            || receipt.receipt_id
+                != format!(
+                    "effect-receipt:{}",
+                    &receipt.request_digest.trim_start_matches("sha256:")[..24]
+                )
+            || !effect_receipt_ids.insert(&receipt.receipt_id)
+            || receipt.idempotency_key.trim().is_empty()
+            || receipt.claim_id.trim().is_empty()
+            || receipt.principal_id.trim().is_empty()
+            || receipt.capability_id.trim().is_empty()
+            || receipt.capability_revision == 0
+            || receipt.claim_revision == 0
+            || receipt.fencing_token == 0
+            || receipt.action_class.trim().is_empty()
+            || receipt.audience.trim().is_empty()
+            || receipt.executor_uid == 0
+            || !valid_sha256_digest(&receipt.executor_identity_digest)
+            || receipt.authority_revision == 0
+            || receipt.authority_revision > state.authority.revision
+            || chrono::DateTime::parse_from_rfc3339(&receipt.occurred_at).is_err()
+            || chrono::DateTime::parse_from_rfc3339(&receipt.authorization_expires_at).is_err()
+            || authorization.schema_version != super::LEASE_EFFECT_AUTHORIZATION_SCHEMA_VERSION
+            || authorization.resource != receipt.resource
+            || authorization.claim_id != receipt.claim_id
+            || authorization.principal_id != receipt.principal_id
+            || authorization.capability_id != receipt.capability_id
+            || authorization.capability_revision != receipt.capability_revision
+            || authorization.claim_revision != receipt.claim_revision
+            || authorization.fencing_token != receipt.fencing_token
+            || authorization.action_class != receipt.action_class
+            || authorization.audience != receipt.audience
+            || authorization.operation_idempotency_key != receipt.idempotency_key
+            || authorization.executor_identity_digest.as_deref()
+                != Some(receipt.executor_identity_digest.as_str())
+            || authorization.issued_at != receipt.occurred_at
+            || authorization.authorization_expires_at != receipt.authorization_expires_at
+            || !proof_is_valid_shape
+        {
+            return Err(invalid());
+        }
+    }
+
     if state.owners.schema_version != LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION {
         return Err(invalid());
     }
@@ -2011,6 +2341,73 @@ fn profile_enrollment_request_digest(
 ) -> String {
     let payload = format!(
         "agent-browser.lease-authority-profile-enrollment-request.v1\n{profile_id}\n{physical_identity_digest}\n{operator_uid}\n{capability_digest}\n{expected_resource_revision}\n{idempotency_key}"
+    );
+    format!("sha256:{:x}", Sha256::digest(payload.as_bytes()))
+}
+
+fn effect_receipt_storage_key(
+    authority_domain_id: &str,
+    principal_id: &str,
+    resource: &LeaseResourceKey,
+    action_class: &str,
+    idempotency_key: &str,
+) -> String {
+    let payload = format!(
+        "agent-browser.lease-authority-effect-receipt-key.v1\n{authority_domain_id}\n{principal_id}\n{}\n{action_class}\n{idempotency_key}",
+        resource.storage_key()
+    );
+    format!("effect:{:x}", Sha256::digest(payload.as_bytes()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn effect_request_digest(
+    authority_domain_id: &str,
+    authority_epoch: u64,
+    principal_id: &str,
+    capability_id: &str,
+    capability_revision: u64,
+    request: &AuthorizeLeaseEffectPayload,
+    executor_uid: u32,
+    executor_identity_digest: &str,
+) -> String {
+    effect_request_digest_parts(
+        authority_domain_id,
+        authority_epoch,
+        principal_id,
+        capability_id,
+        capability_revision,
+        &request.resource,
+        &request.claim_id,
+        request.claim_revision,
+        request.fencing_token,
+        &request.action_class,
+        &request.audience,
+        &request.idempotency_key,
+        executor_uid,
+        executor_identity_digest,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn effect_request_digest_parts(
+    authority_domain_id: &str,
+    authority_epoch: u64,
+    principal_id: &str,
+    capability_id: &str,
+    capability_revision: u64,
+    resource: &LeaseResourceKey,
+    claim_id: &str,
+    claim_revision: u64,
+    fencing_token: u64,
+    action_class: &str,
+    audience: &str,
+    idempotency_key: &str,
+    executor_uid: u32,
+    executor_identity_digest: &str,
+) -> String {
+    let payload = format!(
+        "agent-browser.lease-authority-effect-request.v1\n{authority_domain_id}\n{authority_epoch}\n{principal_id}\n{capability_id}\n{capability_revision}\n{}\n{claim_id}\n{claim_revision}\n{fencing_token}\n{action_class}\n{audience}\n{idempotency_key}\n{executor_uid}\n{executor_identity_digest}",
+        resource.storage_key()
     );
     format!("sha256:{:x}", Sha256::digest(payload.as_bytes()))
 }
@@ -2170,9 +2567,11 @@ fn decode_lease_authority_request(
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_request_invalid",
             }),
-        "authorize_effect" => Ok(LeaseAuthorityProtocolRequest::AuthorizeEffect(
-            envelope.payload,
-        )),
+        "authorize_effect" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::AuthorizeEffect)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "release" => serde_json::from_value(envelope.payload)
             .map(LeaseAuthorityProtocolRequest::Release)
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -2296,6 +2695,61 @@ fn derive_profile_enrollment_identity(
     Ok(format!("sha256:{digest}"))
 }
 
+#[cfg(target_os = "linux")]
+fn derive_effect_executor_identity(
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+) -> Result<String, LeaseAuthorityProtocolError> {
+    if peer.uid == 0 || peer.pid <= 1 {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_invalid",
+        });
+    }
+    let stat = fs::read_to_string(format!("/proc/{}/stat", peer.pid)).map_err(|_| {
+        LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_unavailable",
+        }
+    })?;
+    let after_comm = stat
+        .rfind(')')
+        .and_then(|index| stat.get(index + 2..))
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_invalid",
+        })?;
+    let start_time = after_comm
+        .split_whitespace()
+        .nth(19)
+        .filter(|value| value.bytes().all(|byte| byte.is_ascii_digit()))
+        .ok_or(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_invalid",
+        })?;
+    let executable_path = fs::canonicalize(format!("/proc/{}/exe", peer.pid)).map_err(|_| {
+        LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_effect_executor_unavailable",
+        }
+    })?;
+    let executable = fs::read(&executable_path).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_effect_executor_unavailable",
+    })?;
+    let executable_digest = format!("sha256:{:x}", Sha256::digest(executable));
+    let payload = format!(
+        "agent-browser.lease-authority-effect-executor.v1\n{}\n{}\n{}\n{start_time}\n{}\n{executable_digest}",
+        peer.uid,
+        peer.gid,
+        peer.pid,
+        executable_path.display()
+    );
+    Ok(format!("sha256:{:x}", Sha256::digest(payload.as_bytes())))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn derive_effect_executor_identity(
+    _peer: custody::LeaseAuthorityRequestPeerIdentity,
+) -> Result<String, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_effect_executor_platform_unsupported",
+    })
+}
+
 #[cfg(not(unix))]
 fn derive_profile_enrollment_identity(
     _profile_path: &str,
@@ -2371,6 +2825,30 @@ fn dispatch_lease_authority_request(
                     "claim": claim,
                     "receipt": receipt,
                     "replayed": replayed,
+                },
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::AuthorizeEffect(request) => {
+            let executor_identity_digest = derive_effect_executor_identity(peer)?;
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.authorize_effect(
+                request,
+                peer.uid,
+                &executor_identity_digest,
+                &observed_at,
+                signing_key,
+            )?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "effect_authorized",
+                "payload": {
+                    "authorization": outcome.authorization,
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
                 },
             }))
             .map_err(|_| LeaseAuthorityProtocolError {
@@ -2461,8 +2939,7 @@ fn dispatch_lease_authority_request(
                 code: "lease_authority_protocol_response_encode_failed",
             })
         }
-        LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
-        | LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
+        LeaseAuthorityProtocolRequest::Inspect(_) => Err(LeaseAuthorityProtocolError {
             code: "lease_authority_protocol_operation_not_implemented",
         }),
     }
@@ -3185,6 +3662,84 @@ mod tests {
     }
 
     #[test]
+    fn effect_request_has_no_caller_owned_time_identity_or_proof() {
+        let encoded = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"authorize_effect",
+            "payload":{
+                "rawCapability":[108,97,115,116,51,48,100,97,121,115,45,115,101,99,114,101,116],
+                "resource":{"kind":"profile","id":"last30days-social"},
+                "claimId":"claim:last30days",
+                "claimRevision":1,
+                "fencingToken":1,
+                "actionClass":"browser_launch",
+                "audience":"daemon-session:last30days",
+                "idempotencyKey":"launch:last30days:1"
+            }
+        }"#;
+        assert!(decode_lease_authority_request(encoded).is_ok());
+
+        for forbidden in [
+            r#""principalId":"principal:invented","#,
+            r#""capabilityId":"capability:invented","#,
+            r#""executorIdentityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+            r#""issuedAt":"2099-01-01T00:00:00Z","#,
+            r#""authorizationExpiresAt":"2099-01-01T00:02:00Z","#,
+            r#""proof":"invented","#,
+        ] {
+            let injected = String::from_utf8(encoded.to_vec())
+                .unwrap()
+                .replace("\"resource\":", &format!("{forbidden}\"resource\":"));
+            assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
+    fn effect_receipt_keys_are_domain_principal_resource_and_action_scoped() {
+        let domain_a = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let domain_b = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let baseline = effect_receipt_storage_key(
+            domain_a,
+            "principal:last30days",
+            &LeaseResourceKey::profile("last30days-social"),
+            "browser_launch",
+            "launch:tick-1",
+        );
+        for distinct in [
+            effect_receipt_storage_key(
+                domain_b,
+                "principal:last30days",
+                &LeaseResourceKey::profile("last30days-social"),
+                "browser_launch",
+                "launch:tick-1",
+            ),
+            effect_receipt_storage_key(
+                domain_a,
+                "principal:foreign",
+                &LeaseResourceKey::profile("last30days-social"),
+                "browser_launch",
+                "launch:tick-1",
+            ),
+            effect_receipt_storage_key(
+                domain_a,
+                "principal:last30days",
+                &LeaseResourceKey::profile("other-profile"),
+                "browser_launch",
+                "launch:tick-1",
+            ),
+            effect_receipt_storage_key(
+                domain_a,
+                "principal:last30days",
+                &LeaseResourceKey::profile("last30days-social"),
+                "tab_mutation",
+                "launch:tick-1",
+            ),
+        ] {
+            assert_ne!(distinct, baseline);
+        }
+    }
+
+    #[test]
     fn protected_profile_enrollment_is_uid_bound_durable_and_acquisition_ready() {
         let raw_capability = "last30days-profile-capability-secret-v1";
         let physical_identity_digest =
@@ -3270,6 +3825,94 @@ mod tests {
         let claim = acquired.claim.unwrap();
         assert_eq!(claim.principal_id(), enrolled.receipt.principal_id);
         assert_eq!(claim.capability_id(), enrolled.receipt.capability_id);
+
+        let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x6b; 32]);
+        let executor_identity_digest =
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+        let effect_request = || AuthorizeLeaseEffectPayload {
+            raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+            resource: LeaseResourceKey::profile("last30days-social"),
+            claim_id: claim.claim_id().to_string(),
+            claim_revision: claim.revision(),
+            fencing_token: claim.fencing_token(),
+            action_class: "browser_launch".to_string(),
+            audience: "daemon-session:last30days".to_string(),
+            idempotency_key: "launch:last30days:after-enrollment".to_string(),
+        };
+        let mut unsupported_scope = effect_request();
+        unsupported_scope.action_class = "arbitrary_signing_oracle".to_string();
+        let error = restarted
+            .authorize_effect(
+                unsupported_scope,
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:20Z",
+                &signing_key,
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), "lease_authority_protocol_effect_invalid");
+        let authorized = restarted
+            .authorize_effect(
+                effect_request(),
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:30Z",
+                &signing_key,
+            )
+            .unwrap();
+        assert!(!authorized.replayed);
+        assert_eq!(
+            authorized.authorization.executor_identity_digest.as_deref(),
+            Some(executor_identity_digest)
+        );
+        super::super::verify_effect_authorization(
+            &authorized.authorization,
+            &LeaseAuthorityVerificationKeyring::from_active(&signing_key),
+        )
+        .unwrap();
+        let authority_revision = restarted.state.authority.revision();
+        let encoded_with_effect = restarted.encode_protected_state().unwrap();
+        let mut restarted = LeaseAuthorityProtocolKernel::from_protected_state(
+            &encoded_with_effect,
+            test_load_context(),
+        )
+        .unwrap();
+        let replayed = restarted
+            .authorize_effect(
+                effect_request(),
+                1000,
+                executor_identity_digest,
+                "2026-09-01T12:01:45Z",
+                &signing_key,
+            )
+            .unwrap();
+        assert!(replayed.replayed);
+        assert_eq!(replayed.receipt, authorized.receipt);
+        assert_eq!(replayed.authorization, authorized.authorization);
+        assert_eq!(restarted.state.authority.revision(), authority_revision);
+
+        let different_executor =
+            "sha256:4444444444444444444444444444444444444444444444444444444444444444";
+        let error = restarted
+            .authorize_effect(
+                effect_request(),
+                1000,
+                different_executor,
+                "2026-09-01T12:01:50Z",
+                &signing_key,
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), "lease_authority_idempotency_conflict");
+
+        let mut tampered = authorized.authorization;
+        tampered.executor_identity_digest = Some(different_executor.to_string());
+        assert_eq!(
+            super::super::verify_effect_authorization(
+                &tampered,
+                &LeaseAuthorityVerificationKeyring::from_active(&signing_key),
+            ),
+            Err(super::super::LeaseAuthorityError::InvalidEffectProof)
+        );
     }
 
     #[cfg(unix)]

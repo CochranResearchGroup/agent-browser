@@ -1281,6 +1281,7 @@ pub(crate) struct LeaseEffectIntent {
     pub(crate) action_class: String,
     pub(crate) audience: String,
     pub(crate) operation_idempotency_key: String,
+    pub(crate) executor_identity_digest: Option<String>,
     pub(crate) issued_at: String,
     pub(crate) authorization_expires_at: String,
 }
@@ -1406,6 +1407,8 @@ pub(crate) struct LeaseEffectAuthorization {
     claim_revision: u64,
     fencing_token: u64,
     owner_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    executor_identity_digest: Option<String>,
     action_class: String,
     audience: String,
     operation_idempotency_key: String,
@@ -1573,6 +1576,7 @@ impl std::fmt::Debug for LeaseEffectAuthorization {
             .field("claim_revision", &self.claim_revision)
             .field("fencing_token", &self.fencing_token)
             .field("owner_generation", &self.owner_generation)
+            .field("executor_identity_digest", &self.executor_identity_digest)
             .field("action_class", &self.action_class)
             .field("audience", &self.audience)
             .field("operation_idempotency_key", &self.operation_idempotency_key)
@@ -1677,6 +1681,7 @@ impl ActiveLeaseClaim {
             claim_revision: self.revision,
             fencing_token: self.fencing_token,
             owner_generation: self.owner_generation,
+            executor_identity_digest: intent.executor_identity_digest.clone(),
             action_class: intent.action_class.clone(),
             audience: intent.audience.clone(),
             operation_idempotency_key: intent.operation_idempotency_key.clone(),
@@ -3484,6 +3489,14 @@ fn validate_effect_intent(intent: &LeaseEffectIntent) -> Result<(), LeaseAuthori
     if intent.action_class.trim().is_empty()
         || intent.audience.trim().is_empty()
         || intent.operation_idempotency_key.trim().is_empty()
+        || intent
+            .executor_identity_digest
+            .as_deref()
+            .is_some_and(|digest| {
+                digest.strip_prefix("sha256:").is_none_or(|hex| {
+                    hex.len() != 64 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+            })
         || !timestamp_precedes(&intent.issued_at, &intent.authorization_expires_at)
         || !timestamp_span_within(
             &intent.issued_at,
@@ -3726,7 +3739,7 @@ fn verify_administrative_authorization(
 
 fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> String {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authorization.schema_version,
         authorization.signing_key_id,
         authorization.signing_key_epoch,
@@ -3738,6 +3751,10 @@ fn effect_authorization_payload(authorization: &LeaseEffectAuthorization) -> Str
         authorization.claim_revision,
         authorization.fencing_token,
         authorization.owner_generation.unwrap_or_default(),
+        authorization
+            .executor_identity_digest
+            .as_deref()
+            .unwrap_or_default(),
         authorization.action_class,
         authorization.audience,
         authorization.operation_idempotency_key,
@@ -3899,6 +3916,7 @@ mod tests {
             action_class: action_class.to_string(),
             audience: audience.to_string(),
             operation_idempotency_key: operation_idempotency_key.to_string(),
+            executor_identity_digest: None,
             issued_at: NOW.to_string(),
             authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
         }
@@ -4868,6 +4886,7 @@ mod tests {
                     action_class: "browser_launch".to_string(),
                     audience: "session:last30days".to_string(),
                     operation_idempotency_key: "launch:expired".to_string(),
+                    executor_identity_digest: None,
                     issued_at: "2026-08-31T12:05:01Z".to_string(),
                     authorization_expires_at: "2026-08-31T12:06:00Z".to_string(),
                 },
@@ -4879,6 +4898,7 @@ mod tests {
             action_class: "browser_launch".to_string(),
             audience: "session:last30days".to_string(),
             operation_idempotency_key: "launch:strict-recovery".to_string(),
+            executor_identity_digest: None,
             issued_at: "2026-08-31T12:00:30Z".to_string(),
             authorization_expires_at: "2026-08-31T12:02:00Z".to_string(),
         };

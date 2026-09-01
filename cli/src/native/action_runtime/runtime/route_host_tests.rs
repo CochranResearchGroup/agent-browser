@@ -2713,6 +2713,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
             action_class: "browser_launch".to_string(),
             audience: "journal-session".to_string(),
             operation_idempotency_key: "journal-launch-1".to_string(),
+            executor_identity_digest: None,
             issued_at: now.to_rfc3339(),
             authorization_expires_at: (now + chrono::Duration::minutes(2)).to_rfc3339(),
         },

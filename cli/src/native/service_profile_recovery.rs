@@ -1193,6 +1193,7 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         action_class: "browser_launch".to_string(),
         audience: daemon_session_route.to_string(),
         operation_idempotency_key: operation_idempotency_key.to_string(),
+        executor_identity_digest: None,
         issued_at,
         authorization_expires_at,
     };
