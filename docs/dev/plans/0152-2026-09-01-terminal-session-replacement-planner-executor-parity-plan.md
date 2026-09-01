@@ -219,3 +219,50 @@ Progress classification: `outcome_progress`.
 
 Next action: checkpoint this evidence, merge P152 to `main`, build the exact
 integrated production candidate, and run the workstation dry-run before apply.
+
+## Production Acceptance And Capability Gate
+
+State transition: `development_qualified -> installed_acceptance_blocked`.
+
+Agent Browser generation `0.28.0-390ee922ae7b-e2f4b5e5d874` and Last30days
+service 0.3.93/schema 17 were installed transactionally. Agent Browser source,
+installed binary, and protected-authority digests agree; doctor succeeds with
+one current runtime host and zero legacy daemons. Last30days is ready and
+compatible with MCP 4.0.4, SQLite quick-check succeeds, and the schema admits
+retry ordinals zero through two.
+
+The single authorized X and LinkedIn tick `tick-5dc9aa4fdac60025dddb7ea283713b00`
+terminalized `complete_degraded`. Both providers executed and persisted all
+three attempts, proving the schema repair and removing the old cross-provider
+insertion blocker. All tick, provider-attempt, and lease residue returned to
+zero.
+
+The six browser attempts retained `existing_session_profile_identity_unproven`.
+Readback proved Last30days copied the fresh planned `terminal-profile-*` lane;
+it did not supply a profile capability to either `service_access_plan` or
+`service_request`. The executor correctly requires that capability before it
+can attach authenticated route authority. The remaining parity defect was the
+unauthenticated planner advertising `serviceRequest.available=true` despite
+that executor requirement.
+
+The follow-up repair makes an exact terminal owner with satisfied cleanup and
+no authenticated principal return `available=false`, null request, and
+`acquisitionBlocker=profile_capability_required`. Request normalization now
+returns `service_access_plan_request_unavailable:profile_capability_required`
+before daemon relay for both fresh and historical terminal session hints. The
+authenticated terminal replacement path remains executable. All 61 focused
+service-access tests, the Plan 0137 regression, formatting, and strict
+production-target Clippy pass.
+
+Acceptance state: retry persistence is production-proven; truthful planning is
+source-qualified; successful Last30days acquisition remains blocked on a new
+private capability registration and client wiring. That work is an
+authentication and identity-authority mutation excluded by the frozen P152
+scope and requires explicit operator authorization. The one permitted
+acceptance tick is consumed.
+
+Progress classification: `blocker_reduction`.
+
+Next action: merge and install the truthful-planning candidate without another
+provider tick, then request explicit authority for Last30days capability
+registration and private configuration wiring.

@@ -883,11 +883,16 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     );
     let acquisition_blocked_by_explicit_session =
         profile_reuse["recommendedAction"].as_str() == Some("blocked_by_explicit_session_route");
+    let terminal_replacement_requires_capability = input.authenticated_principal.is_none()
+        && profile_reuse["recommendedAction"].as_str() == Some("launch_new_browser")
+        && lifecycle_replacement["replacementEligible"].as_bool() == Some(true)
+        && lifecycle_replacement["reason"].as_str() == Some("terminal_cleanup_satisfied");
     let acquisition_blocker = if acquisition_blocked_by_explicit_session {
         Some("explicit_session_route_invalid")
     } else if profile_reuse["recommendedAction"].as_str() == Some("wait_for_foreign_principal") {
         Some("foreign_principal_profile_lease")
     } else if profile_reuse["recommendedAction"].as_str() == Some("authenticate_for_profile_reuse")
+        || terminal_replacement_requires_capability
     {
         Some("profile_capability_required")
     } else if profile_reuse["recommendedAction"].as_str()
@@ -6440,12 +6445,13 @@ mod tests {
         );
         assert_eq!(
             explicit_plan["decision"]["serviceRequest"]["available"],
-            true
+            false
         );
         assert_eq!(
-            explicit_plan["decision"]["serviceRequest"]["request"]["sessionName"],
-            "terminal-lane"
+            explicit_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "profile_capability_required"
         );
+        assert!(explicit_plan["decision"]["serviceRequest"]["request"].is_null());
 
         let mut copied_request = json!({
             "action": "tab_new",
@@ -6471,22 +6477,30 @@ mod tests {
                 ..ServiceAccessPlanRequest::default()
             },
         );
-        let mut copied_unattributed_request =
-            unattributed_plan["decision"]["serviceRequest"]["request"].clone();
-        let copied_launch_session = copied_unattributed_request["sessionName"]
-            .as_str()
-            .expect("unattributed plan should expose the same fresh launch session")
-            .to_string();
-        assert_eq!(copied_launch_session, launch_session);
-        apply_shared_profile_route_hints_for_service_request_with_principal(
+        assert_eq!(
+            unattributed_plan["decision"]["serviceRequest"]["available"],
+            false
+        );
+        assert_eq!(
+            unattributed_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "profile_capability_required"
+        );
+        assert!(unattributed_plan["decision"]["serviceRequest"]["request"].is_null());
+
+        let mut copied_unattributed_request = json!({
+            "action": "tab_new",
+            "runtimeProfile": "bill-soylei",
+            "targetServiceIds": ["bill"],
+            "sessionName": launch_session,
+        });
+        let error = apply_shared_profile_route_hints_for_service_request(
             &state,
             &mut copied_unattributed_request,
-            Some(&authority),
         )
-        .expect("the copied access-plan request must remain admissible");
+        .expect_err("the unauthenticated terminal launch must fail before daemon relay");
         assert_eq!(
-            copied_unattributed_request["serviceProfileRouteAuthorization"]["kind"],
-            "authenticated_cold"
+            error,
+            "service_access_plan_request_unavailable:profile_capability_required"
         );
 
         let mut exact_explicit_request = json!({
@@ -6495,8 +6509,15 @@ mod tests {
             "targetServiceIds": ["bill"],
             "sessionName": "terminal-lane",
         });
-        apply_shared_profile_route_hints_for_service_request(&state, &mut exact_explicit_request)
-            .unwrap();
+        let error = apply_shared_profile_route_hints_for_service_request(
+            &state,
+            &mut exact_explicit_request,
+        )
+        .expect_err("the historical terminal route cannot bypass principal authentication");
+        assert_eq!(
+            error,
+            "service_access_plan_request_unavailable:profile_capability_required"
+        );
         assert!(exact_explicit_request.get("browserId").is_none());
     }
 
