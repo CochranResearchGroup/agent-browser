@@ -2695,7 +2695,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
             capability_id: registered.capability.capability_id.clone(),
             capability_revision: registered.capability.revision,
             mode: LeaseClaimMode::Ephemeral,
-            expected_authority_revision: 0,
+            expected_claim_revision: 0,
             idempotency_key: "journal-acquire-1".to_string(),
             now: now.to_rfc3339(),
             expires_at: (now + chrono::Duration::minutes(5)).to_rfc3339(),

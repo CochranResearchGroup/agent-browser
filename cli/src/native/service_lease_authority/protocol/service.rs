@@ -275,7 +275,8 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
     let decoded = decode_lease_authority_request(&encoded)?;
     let mutation = matches!(
         decoded,
-        LeaseAuthorityProtocolRequest::Acquire(_)
+        LeaseAuthorityProtocolRequest::EnrollProfile(_)
+            | LeaseAuthorityProtocolRequest::Acquire(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
             | LeaseAuthorityProtocolRequest::Recover(_)
             | LeaseAuthorityProtocolRequest::RevokePlan(_)
@@ -584,6 +585,7 @@ fn service_error(code: &'static str) -> LeaseAuthorityProtocolError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_lease_authority::LeaseResourceKey;
 
     fn temp_parent(label: &str) -> PathBuf {
         let parent = std::env::temp_dir().join(format!(
@@ -592,6 +594,26 @@ mod tests {
         ));
         std::fs::create_dir(&parent).unwrap();
         parent
+    }
+
+    #[cfg(unix)]
+    fn peer_owned_profile_path(parent: &Path) -> (PathBuf, u32) {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::PermissionsExt;
+
+        let profile = parent.join("profile-user-data");
+        std::fs::create_dir(&profile).unwrap();
+        std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let current_uid = unsafe { libc::geteuid() };
+        let operator_uid = if current_uid == 0 { 1000 } else { current_uid };
+        if current_uid == 0 {
+            let path = std::ffi::CString::new(profile.as_os_str().as_bytes()).unwrap();
+            assert_eq!(
+                unsafe { libc::chown(path.as_ptr(), operator_uid, u32::MAX) },
+                0
+            );
+        }
+        (profile, operator_uid)
     }
 
     #[test]
@@ -766,6 +788,130 @@ mod tests {
         let _ = std::fs::remove_dir_all(parent);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn profile_enrollment_and_acquisition_are_published_before_reply() {
+        let parent = temp_parent("durable-profile-enrollment");
+        let state_root = parent.join("lease-authority");
+        let bootstrap = bootstrap_state_root(&state_root, 991).unwrap();
+        let config = load_service_config(&state_root).unwrap();
+        let store = LeaseAuthorityDurableStore::open_existing(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_STORE_DIRECTORY),
+        )
+        .unwrap();
+        let signing_key = super::super::super::load_selected_lease_authority_signing_key_in(
+            &state_root.join(LEASE_AUTHORITY_SERVICE_TRUST_DIRECTORY),
+        )
+        .unwrap();
+        let custody = custody::LeaseAuthorityCustodySnapshot::root_owned_fixture()
+            .validate(991)
+            .unwrap();
+        let load_context = LeaseAuthorityProtectedLoadContext {
+            expected_authority_domain_id: &bootstrap.authority_domain_id,
+            minimum_authority_epoch: 1,
+        };
+        let (profile_path, operator_uid) = peer_owned_profile_path(&parent);
+        let raw_capability = "last30days-profile-capability-secret-v1";
+        let peer = custody::LeaseAuthorityRequestPeerIdentity {
+            uid: operator_uid,
+            gid: 991,
+            pid: 4101,
+        };
+        let enrollment = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "enroll_profile",
+            "payload": {
+                "rawCapability": raw_capability.as_bytes(),
+                "profileId": "last30days-social",
+                "profilePath": profile_path,
+                "expectedResourceRevision": 0,
+                "idempotencyKey": "enroll:last30days:service-1"
+            }
+        }))
+        .unwrap();
+        let mut framed_enrollment = Vec::new();
+        write_lease_authority_frame(&mut framed_enrollment, &enrollment).unwrap();
+        let mut enrollment_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_enrollment),
+            &mut enrollment_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut enrollment_response = std::io::Cursor::new(enrollment_response);
+        let enrollment_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut enrollment_response).unwrap())
+                .unwrap();
+        assert_eq!(enrollment_response["outcome"], "profile_enrolled");
+        assert_eq!(
+            enrollment_response["payload"]["receipt"]["operatorUid"],
+            operator_uid
+        );
+        assert!(!enrollment_response.to_string().contains(raw_capability));
+
+        let loaded = store.load(load_context).unwrap();
+        assert_eq!(loaded.state.profile_enrollment_receipts.len(), 1);
+        assert!(loaded
+            .state
+            .resources
+            .registrations
+            .contains_key(&LeaseResourceKey::profile("last30days-social").storage_key()));
+
+        let acquisition = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-request.v1",
+            "operation": "acquire",
+            "payload": {
+                "rawCapability": raw_capability.as_bytes(),
+                "resource": {"kind": "profile", "id": "last30days-social"},
+                "parentClaimId": null,
+                "mode": "ephemeral",
+                "expectedClaimRevision": 0,
+                "idempotencyKey": "acquire:last30days:service-1",
+                "recoveryControllerId": null
+            }
+        }))
+        .unwrap();
+        let mut framed_acquisition = Vec::new();
+        write_lease_authority_frame(&mut framed_acquisition, &acquisition).unwrap();
+        let mut acquisition_response = Vec::new();
+        serve_protected_lease_authority_connection(
+            &store,
+            load_context,
+            &state_root,
+            &config,
+            &mut std::io::Cursor::new(framed_acquisition),
+            &mut acquisition_response,
+            &custody,
+            peer,
+            &signing_key,
+        )
+        .unwrap();
+        let mut acquisition_response = std::io::Cursor::new(acquisition_response);
+        let acquisition_response: serde_json::Value =
+            serde_json::from_slice(&read_lease_authority_frame(&mut acquisition_response).unwrap())
+                .unwrap();
+        assert_eq!(
+            acquisition_response["outcome"], "acquired",
+            "{acquisition_response}"
+        );
+        let loaded = store.load(load_context).unwrap();
+        assert!(loaded
+            .state
+            .authority
+            .current_claim(
+                &LeaseResourceKey::profile("last30days-social"),
+                &authority_observed_at(),
+            )
+            .is_some());
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
     #[test]
     fn non_root_administrative_request_is_rejected_before_authority_state_load() {
         let parent = temp_parent("non-root-before-state");
@@ -859,7 +1005,7 @@ mod tests {
                 capability_id: "capability:last30days-social".to_string(),
                 capability_revision: 1,
                 mode: super::super::super::LeaseClaimMode::Strict,
-                expected_authority_revision: 1,
+                expected_claim_revision: 0,
                 idempotency_key: "acquire:last30days:service-revoke".to_string(),
                 now: acquired_at,
                 expires_at,

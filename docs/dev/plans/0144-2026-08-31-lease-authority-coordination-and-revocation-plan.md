@@ -2268,9 +2268,53 @@ prove rejection of caller-owned authority evidence, authenticated identity
 derivation, unregistered-resource rejection, durable replay, framed response
 encoding, capability redaction, and the complete 34-test protocol partition.
 
-This is a prerequisite, not a public acquisition path. No ordinary client can
-yet acquire through protected IPC because protected principal and physical
-resource registration are not implemented. Effect authorization, exact-holder
-release, inspection, resource-scoped fault containment, freshness-bound public
-readbacks, and broker-managed zero-choreography ephemeral acquisition also
-remain. Production installation is still withheld.
+This is a prerequisite, not a public acquisition path. Effect authorization,
+exact-holder release, inspection, resource-scoped fault containment,
+freshness-bound public readbacks, and broker-managed zero-choreography
+ephemeral acquisition remain. Production installation is still withheld.
+
+## Slice F Protected Profile Enrollment Checkpoint | 2026-09-01
+
+The protected service now owns first-time profile principal and physical
+resource enrollment. A group-authorized peer supplies only the profile name,
+absolute profile path, raw capability, expected per-resource revision, and
+idempotency key. The service derives the principal from the kernel-observed
+peer UID, canonicalizes the path, verifies that the target is a directory owned
+by that UID and is not group- or world-writable, derives the canonical physical
+identity digest, and selects registration time from the durable authority
+clock. Caller-supplied principal ids, physical digests, UIDs, and timestamps
+are rejected by the closed protocol schema.
+
+Enrollment atomically stages the protected principal registry, one-to-one
+physical resource registration, and a durable replay receipt. The raw
+capability and private profile path are absent from protected state and framed
+responses. A lost response replays only for the exact operation, capability,
+UID, canonical physical identity, and expected resource revision. Path aliases
+resolve to one digest, a different UID cannot enroll the directory, and an
+unregistered profile still cannot acquire authority.
+
+The receipt validator deliberately does not require its historical capability
+or physical binding to remain current. Later capability rotation or an
+administrator-authorized resource rebind cannot turn a completed enrollment
+receipt into an authority-store outage. The receipt remains self-contained,
+content-bound replay evidence while current registration remains a separate
+operational collection.
+
+Service-level enrollment testing exposed a remaining global compare-and-swap
+axis in acquisition. Bootstrap administration advanced the authority revision
+and made the first acquisition of an unrelated new profile fail with
+`stale_authority_revision`. Acquisition now compares the caller's exact
+`expectedClaimRevision` with only the current unexpired claim for that canonical
+resource. An empty resource expects zero regardless of unrelated administrator,
+profile, receipt, or claim activity. Same-resource contenders still admit one
+winner and return `stale_claim_revision` to the stale contender.
+
+Focused evidence covers closed enrollment request fields, UID and permission
+binding, canonical alias identity, atomic state and receipt persistence,
+capability and path redaction, restart replay, later rotation and rebinding
+compatibility, enrollment followed by acquisition through the protected
+service, same-resource contention, and unrelated-authority noninterference.
+Public CLI, HTTP, MCP, generated-client, dashboard, and shared-skill enrollment
+are intentionally absent. The next step is protected effect authorization and
+exact-holder release, followed by a broker that makes enrollment and ephemeral
+acquisition internal to ordinary Agent Browser work.

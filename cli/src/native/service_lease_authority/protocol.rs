@@ -17,7 +17,8 @@ use super::{
     RevokeLeaseClaimRequest,
 };
 use crate::native::service_principal::{
-    authenticate_profile_capability, profile_capability_digest, ServicePrincipalRegistry,
+    authenticate_profile_capability, profile_capability_digest, register_profile_capability,
+    ServicePrincipalRegistrationRequest, ServicePrincipalRegistry,
 };
 
 mod custody;
@@ -72,6 +73,8 @@ const LEASE_AUTHORITY_STORE_MANIFEST_FILE: &str = "manifest.v1.json";
 const LEASE_AUTHORITY_STORE_SELECTOR_FILE: &str = "selected-generation.v1.json";
 const LEASE_AUTHORITY_SERVICE_IDENTITY_PROOF_SCHEMA_VERSION: &str =
     "agent-browser.lease-authority-service-identity-proof.v1";
+const LEASE_AUTHORITY_PROFILE_ENROLLMENT_RECEIPT_SCHEMA_VERSION: &str =
+    "agent-browser.lease-authority-profile-enrollment-receipt.v1";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -109,9 +112,42 @@ struct AcquireLeaseAuthorityPayload {
     resource: LeaseResourceKey,
     parent_claim_id: Option<String>,
     mode: LeaseClaimMode,
-    expected_authority_revision: u64,
+    expected_claim_revision: u64,
     idempotency_key: String,
     recovery_controller_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnrollProfileLeaseAuthorityPayload {
+    raw_capability: LeaseAuthoritySecret,
+    profile_id: String,
+    profile_path: String,
+    expected_resource_revision: u64,
+    idempotency_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LeaseAuthorityProfileEnrollmentReceipt {
+    schema_version: String,
+    enrollment_id: String,
+    request_digest: String,
+    idempotency_key: String,
+    principal_id: String,
+    capability_id: String,
+    capability_revision: u64,
+    profile_id: String,
+    physical_identity_digest: String,
+    resource_revision: u64,
+    operator_uid: u32,
+    occurred_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LeaseAuthorityProfileEnrollmentOutcome {
+    receipt: LeaseAuthorityProfileEnrollmentReceipt,
+    replayed: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -257,6 +293,7 @@ struct LeaseAuthorityServiceIdentityProof {
 #[derive(PartialEq, Eq)]
 enum LeaseAuthorityProtocolRequest {
     ServiceChallenge(LeaseAuthorityServiceChallengeRequest),
+    EnrollProfile(EnrollProfileLeaseAuthorityPayload),
     Acquire(Box<AcquireLeaseAuthorityPayload>),
     AuthorizeEffect(Value),
     Release(Value),
@@ -303,14 +340,17 @@ struct LeaseAuthorityProtectedState {
     principals: ServicePrincipalRegistry,
     resources: LeaseAuthorityResourceRegistry,
     owners: LeaseAuthorityOwnerRegistry,
+    #[serde(default)]
+    profile_enrollment_receipts: BTreeMap<String, LeaseAuthorityProfileEnrollmentReceipt>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseAuthorityResourceRegistration {
     resource: LeaseResourceKey,
     physical_identity_digest: String,
     revision: u64,
+    operator_uid: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -847,6 +887,7 @@ impl LeaseAuthorityProtocolKernel {
                     revision: 0,
                     bindings: BTreeMap::new(),
                 },
+                profile_enrollment_receipts: BTreeMap::new(),
             },
             selected_generation_id: None,
             publication_authorized: true,
@@ -901,10 +942,171 @@ impl LeaseAuthorityProtocolKernel {
                 resource,
                 physical_identity_digest: physical_identity_digest.to_string(),
                 revision,
+                operator_uid: 1,
             },
         );
         self.state.resources.revision = revision;
         Ok(())
+    }
+
+    fn enroll_profile(
+        &mut self,
+        request: EnrollProfileLeaseAuthorityPayload,
+        operator_uid: u32,
+        physical_identity_digest: &str,
+        authority_observed_at: &str,
+    ) -> Result<LeaseAuthorityProfileEnrollmentOutcome, LeaseAuthorityProtocolError> {
+        if operator_uid == 0
+            || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+            || request.idempotency_key.trim().is_empty()
+            || !valid_sha256_digest(physical_identity_digest)
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_profile_enrollment_invalid",
+            });
+        }
+        let raw_capability =
+            std::str::from_utf8(request.raw_capability.expose()).map_err(|_| {
+                LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_capability_invalid",
+                }
+            })?;
+        let capability_digest = profile_capability_digest(raw_capability);
+        let principal_id = format!(
+            "principal:local-uid:{operator_uid}:profile:{}",
+            request.profile_id
+        );
+        let request_digest = profile_enrollment_request_digest(
+            &request.profile_id,
+            physical_identity_digest,
+            operator_uid,
+            &capability_digest,
+            request.expected_resource_revision,
+            &request.idempotency_key,
+        );
+        if let Some(receipt) = self
+            .state
+            .profile_enrollment_receipts
+            .get(&request.idempotency_key)
+        {
+            if receipt.request_digest != request_digest {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_profile_enrollment_idempotency_conflict",
+                });
+            }
+            return Ok(LeaseAuthorityProfileEnrollmentOutcome {
+                receipt: receipt.clone(),
+                replayed: true,
+            });
+        }
+
+        let resource = LeaseResourceKey::profile(&request.profile_id);
+        let storage_key = resource.storage_key();
+        let current_registration = self
+            .state
+            .resources
+            .registrations
+            .get(&storage_key)
+            .cloned();
+        let current_revision = current_registration
+            .as_ref()
+            .map_or(0, |registration| registration.revision);
+        if current_revision != request.expected_resource_revision {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_profile_enrollment_stale_revision",
+            });
+        }
+        if current_registration.as_ref().is_some_and(|registration| {
+            registration.resource != resource
+                || registration.physical_identity_digest != physical_identity_digest
+                || registration.operator_uid != operator_uid
+        }) || self
+            .state
+            .resources
+            .registrations
+            .values()
+            .any(|registration| {
+                registration.physical_identity_digest == physical_identity_digest
+                    && registration.resource != resource
+            })
+        {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_resource_registration_conflict",
+            });
+        }
+
+        let now = self.observe_authority_time(authority_observed_at)?;
+        let mut principals = self.state.principals.clone();
+        if principals.revision == u64::MAX {
+            return Err(LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_principal_revision_exhausted",
+            });
+        }
+        let registered = register_profile_capability(
+            &mut principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: principal_id.clone(),
+                display_name: None,
+                profile_id: request.profile_id.clone(),
+                registered_at: Some(now.clone()),
+                registered_by: Some(format!("lease-authority-peer-uid:{operator_uid}")),
+            },
+            raw_capability,
+        )
+        .map_err(|error| LeaseAuthorityProtocolError {
+            code: error.code.as_str(),
+        })?;
+
+        let mut resources = self.state.resources.registrations.clone();
+        let resource_revision = if let Some(existing) = current_registration.as_ref() {
+            existing.revision
+        } else {
+            self.state
+                .resources
+                .revision
+                .checked_add(1)
+                .filter(|revision| *revision > 0)
+                .ok_or(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_resource_revision_exhausted",
+                })?
+        };
+        resources
+            .entry(storage_key)
+            .or_insert_with(|| LeaseAuthorityResourceRegistration {
+                resource,
+                physical_identity_digest: physical_identity_digest.to_string(),
+                revision: resource_revision,
+                operator_uid,
+            });
+        let enrollment_id = format!(
+            "profile-enrollment:{}",
+            &request_digest.trim_start_matches("sha256:")[..24]
+        );
+        let receipt = LeaseAuthorityProfileEnrollmentReceipt {
+            schema_version: LEASE_AUTHORITY_PROFILE_ENROLLMENT_RECEIPT_SCHEMA_VERSION.to_string(),
+            enrollment_id,
+            request_digest,
+            idempotency_key: request.idempotency_key.clone(),
+            principal_id,
+            capability_id: registered.capability.capability_id,
+            capability_revision: registered.capability.revision,
+            profile_id: request.profile_id,
+            physical_identity_digest: physical_identity_digest.to_string(),
+            resource_revision,
+            operator_uid,
+            occurred_at: now,
+        };
+        self.state.principals = principals;
+        self.state.resources.registrations = resources;
+        self.state.resources.revision = self.state.resources.revision.max(resource_revision);
+        self.state
+            .profile_enrollment_receipts
+            .insert(request.idempotency_key, receipt.clone());
+        validate_protected_state(&self.state)?;
+        Ok(LeaseAuthorityProfileEnrollmentOutcome {
+            receipt,
+            replayed: false,
+        })
     }
 
     fn validate_administrator_capability(
@@ -1293,6 +1495,7 @@ impl LeaseAuthorityProtocolKernel {
                 self.acquire(*request, authority_observed_at)
             }
             LeaseAuthorityProtocolRequest::ServiceChallenge(_)
+            | LeaseAuthorityProtocolRequest::EnrollProfile(_)
             | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
             | LeaseAuthorityProtocolRequest::Release(_)
             | LeaseAuthorityProtocolRequest::RecoverPlan(_)
@@ -1368,7 +1571,7 @@ impl LeaseAuthorityProtocolKernel {
                 capability_id: authenticated.capability_id,
                 capability_revision: authenticated.capability_revision,
                 mode: request.mode,
-                expected_authority_revision: request.expected_authority_revision,
+                expected_claim_revision: request.expected_claim_revision,
                 idempotency_key: request.idempotency_key,
                 now,
                 expires_at,
@@ -1578,6 +1781,7 @@ fn validate_protected_state(
             || storage_key != &registration.resource.storage_key()
             || !valid_sha256_digest(&registration.physical_identity_digest)
             || registration.revision == 0
+            || registration.operator_uid == 0
             || registration.revision > state.resources.revision
             || !physical_identities.insert(&registration.physical_identity_digest)
         {
@@ -1588,6 +1792,32 @@ fn validate_protected_state(
 
     if highest_revision != state.resources.revision {
         return Err(invalid());
+    }
+
+    let mut enrollment_ids = BTreeSet::new();
+    for (idempotency_key, receipt) in &state.profile_enrollment_receipts {
+        if idempotency_key != &receipt.idempotency_key
+            || idempotency_key.trim().is_empty()
+            || receipt.schema_version != LEASE_AUTHORITY_PROFILE_ENROLLMENT_RECEIPT_SCHEMA_VERSION
+            || !valid_sha256_digest(&receipt.request_digest)
+            || receipt.enrollment_id
+                != format!(
+                    "profile-enrollment:{}",
+                    &receipt.request_digest.trim_start_matches("sha256:")[..24]
+                )
+            || !enrollment_ids.insert(&receipt.enrollment_id)
+            || !valid_sha256_digest(&receipt.physical_identity_digest)
+            || crate::runtime_profile::validate_runtime_profile_name(&receipt.profile_id).is_err()
+            || receipt.principal_id.trim().is_empty()
+            || receipt.capability_id.trim().is_empty()
+            || receipt.operator_uid == 0
+            || receipt.resource_revision == 0
+            || receipt.resource_revision > state.resources.revision
+            || receipt.capability_revision == 0
+            || chrono::DateTime::parse_from_rfc3339(&receipt.occurred_at).is_err()
+        {
+            return Err(invalid());
+        }
     }
 
     if state.owners.schema_version != LEASE_AUTHORITY_OWNER_REGISTRY_SCHEMA_VERSION {
@@ -1639,6 +1869,20 @@ fn valid_sha256_digest(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
+}
+
+fn profile_enrollment_request_digest(
+    profile_id: &str,
+    physical_identity_digest: &str,
+    operator_uid: u32,
+    capability_digest: &str,
+    expected_resource_revision: u64,
+    idempotency_key: &str,
+) -> String {
+    let payload = format!(
+        "agent-browser.lease-authority-profile-enrollment-request.v1\n{profile_id}\n{physical_identity_digest}\n{operator_uid}\n{capability_digest}\n{expected_resource_revision}\n{idempotency_key}"
+    );
+    format!("sha256:{:x}", Sha256::digest(payload.as_bytes()))
 }
 
 fn verify_service_identity_challenge(
@@ -1785,6 +2029,11 @@ fn decode_lease_authority_request(
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_request_invalid",
             }),
+        "enroll_profile" => serde_json::from_value(envelope.payload)
+            .map(LeaseAuthorityProtocolRequest::EnrollProfile)
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_request_invalid",
+            }),
         "acquire" => serde_json::from_value(envelope.payload)
             .map(Box::new)
             .map(LeaseAuthorityProtocolRequest::Acquire)
@@ -1880,6 +2129,49 @@ fn write_lease_authority_frame<W: Write>(
         })
 }
 
+#[cfg(unix)]
+fn derive_profile_enrollment_identity(
+    profile_path: &str,
+    peer: custody::LeaseAuthorityRequestPeerIdentity,
+) -> Result<String, LeaseAuthorityProtocolError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let requested = Path::new(profile_path);
+    if peer.uid == 0 || profile_path.trim().is_empty() || !requested.is_absolute() {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_profile_enrollment_path_invalid",
+        });
+    }
+    let canonical = fs::canonicalize(requested).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_profile_enrollment_path_unavailable",
+    })?;
+    let metadata = fs::metadata(&canonical).map_err(|_| LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_profile_enrollment_path_unavailable",
+    })?;
+    if !metadata.is_dir() || metadata.uid() != peer.uid || metadata.mode() & 0o022 != 0 {
+        return Err(LeaseAuthorityProtocolError {
+            code: "lease_authority_protocol_profile_enrollment_path_unprotected",
+        });
+    }
+    let digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&canonical).map_err(|_| {
+            LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_profile_enrollment_path_invalid",
+            }
+        })?;
+    Ok(format!("sha256:{digest}"))
+}
+
+#[cfg(not(unix))]
+fn derive_profile_enrollment_identity(
+    _profile_path: &str,
+    _peer: custody::LeaseAuthorityRequestPeerIdentity,
+) -> Result<String, LeaseAuthorityProtocolError> {
+    Err(LeaseAuthorityProtocolError {
+        code: "lease_authority_protocol_profile_enrollment_platform_unsupported",
+    })
+}
+
 fn dispatch_lease_authority_request(
     kernel: &mut LeaseAuthorityProtocolKernel,
     encoded: &[u8],
@@ -1900,6 +2192,29 @@ fn dispatch_lease_authority_request(
                 "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
                 "outcome": "service_identity",
                 "payload": proof,
+            }))
+            .map_err(|_| LeaseAuthorityProtocolError {
+                code: "lease_authority_protocol_response_encode_failed",
+            })
+        }
+        LeaseAuthorityProtocolRequest::EnrollProfile(request) => {
+            let physical_identity_digest =
+                derive_profile_enrollment_identity(&request.profile_path, peer)?;
+            let observed_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+            let outcome = kernel.enroll_profile(
+                request,
+                peer.uid,
+                &physical_identity_digest,
+                &observed_at,
+            )?;
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+                "outcome": "profile_enrolled",
+                "payload": {
+                    "receipt": outcome.receipt,
+                    "replayed": outcome.replayed,
+                },
             }))
             .map_err(|_| LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_response_encode_failed",
@@ -2252,7 +2567,7 @@ mod tests {
                 capability_id: "capability:last30days-social".to_string(),
                 capability_revision: 1,
                 mode: LeaseClaimMode::Strict,
-                expected_authority_revision: 1,
+                expected_claim_revision: 0,
                 idempotency_key: "acquire:last30days:strict-1".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
                 expires_at: "2026-08-31T12:05:00Z".to_string(),
@@ -2483,7 +2798,7 @@ mod tests {
                 capability_id: "capability:last30days-social".to_string(),
                 capability_revision: 1,
                 mode: LeaseClaimMode::Strict,
-                expected_authority_revision: 1,
+                expected_claim_revision: 0,
                 idempotency_key: "acquire:last30days:strict-stale".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
                 expires_at: "2026-08-31T12:05:00Z".to_string(),
@@ -2642,7 +2957,7 @@ mod tests {
                 "resource":{"kind":"profile","id":"last30days-social"},
                 "parentClaimId":null,
                 "mode":"ephemeral",
-                "expectedAuthorityRevision":0,
+                "expectedClaimRevision":0,
                 "idempotencyKey":"acquire:last30days:tick-1",
                 "recoveryControllerId":null
             }
@@ -2664,6 +2979,168 @@ mod tests {
     }
 
     #[test]
+    fn profile_enrollment_request_has_no_caller_owned_principal_or_physical_identity() {
+        let encoded = br#"{
+            "schemaVersion":"agent-browser.lease-authority-request.v1",
+            "operation":"enroll_profile",
+            "payload":{
+                "rawCapability":[108,97,115,116,51,48,100,97,121,115,45,115,101,99,114,101,116],
+                "profileId":"last30days-social",
+                "profilePath":"/home/operator/.agent-browser/runtime-profiles/last30days-social/user-data",
+                "expectedResourceRevision":0,
+                "idempotencyKey":"enroll:last30days:1"
+            }
+        }"#;
+        assert!(decode_lease_authority_request(encoded).is_ok());
+
+        for forbidden in [
+            r#""principalId":"principal:invented","#,
+            r#""physicalIdentityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+            r#""operatorUid":1000,"#,
+            r#""registeredAt":"2099-01-01T00:00:00Z","#,
+        ] {
+            let injected = String::from_utf8(encoded.to_vec())
+                .unwrap()
+                .replace("\"profileId\":", &format!("{forbidden}\"profileId\":"));
+            assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
+    fn protected_profile_enrollment_is_uid_bound_durable_and_acquisition_ready() {
+        let raw_capability = "last30days-profile-capability-secret-v1";
+        let physical_identity_digest =
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        let request = || EnrollProfileLeaseAuthorityPayload {
+            raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+            profile_id: "last30days-social".to_string(),
+            profile_path: "/private/path/never-persisted".to_string(),
+            expected_resource_revision: 0,
+            idempotency_key: "enroll:last30days:1".to_string(),
+        };
+        let mut kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            crate::native::service_principal::ServicePrincipalRegistry::default(),
+        );
+
+        let enrolled = kernel
+            .enroll_profile(
+                request(),
+                1000,
+                physical_identity_digest,
+                "2026-09-01T12:00:00Z",
+            )
+            .unwrap();
+        assert!(!enrolled.replayed);
+        assert_eq!(
+            enrolled.receipt.principal_id,
+            "principal:local-uid:1000:profile:last30days-social"
+        );
+        assert_eq!(enrolled.receipt.operator_uid, 1000);
+        assert_eq!(enrolled.receipt.resource_revision, 1);
+        assert_eq!(enrolled.receipt.occurred_at, "2026-09-01T12:00:00Z");
+
+        let encoded = kernel.encode_protected_state().unwrap();
+        let encoded_text = String::from_utf8(encoded.clone()).unwrap();
+        assert!(!encoded_text.contains(raw_capability));
+        assert!(!encoded_text.contains("/private/path/never-persisted"));
+        let mut restarted =
+            LeaseAuthorityProtocolKernel::from_protected_state(&encoded, test_load_context())
+                .unwrap();
+        let replayed = restarted
+            .enroll_profile(
+                request(),
+                1000,
+                physical_identity_digest,
+                "2026-09-01T12:00:30Z",
+            )
+            .unwrap();
+        assert!(replayed.replayed);
+        assert_eq!(replayed.receipt, enrolled.receipt);
+
+        let mut rebound =
+            LeaseAuthorityProtocolKernel::from_protected_state(&encoded, test_load_context())
+                .unwrap();
+        rebound.state.principals = ServicePrincipalRegistry::default();
+        let registration = rebound
+            .state
+            .resources
+            .registrations
+            .get_mut(&LeaseResourceKey::profile("last30days-social").storage_key())
+            .unwrap();
+        registration.physical_identity_digest =
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222".to_string();
+        registration.revision = 2;
+        rebound.state.resources.revision = 2;
+        LeaseAuthorityProtocolKernel::from_protected_state(
+            &rebound.encode_protected_state().unwrap(),
+            test_load_context(),
+        )
+        .expect("historical enrollment receipt must not invalidate later rotation or rebinding");
+
+        let acquire = AcquireLeaseAuthorityPayload {
+            raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+            resource: LeaseResourceKey::profile("last30days-social"),
+            parent_claim_id: None,
+            mode: LeaseClaimMode::Ephemeral,
+            expected_claim_revision: 0,
+            idempotency_key: "acquire:last30days:after-enrollment".to_string(),
+            recovery_controller_id: None,
+        };
+        let LeaseAuthorityProtocolResponse::Acquired(acquired) =
+            restarted.acquire(acquire, "2026-09-01T12:01:00Z").unwrap();
+        let claim = acquired.claim.unwrap();
+        assert_eq!(claim.principal_id(), enrolled.receipt.principal_id);
+        assert_eq!(claim.capability_id(), enrolled.receipt.capability_id);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn profile_enrollment_path_identity_is_peer_owned_and_alias_canonical() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-profile-enrollment-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let profile = root.join("profile");
+        fs::create_dir_all(&profile).unwrap();
+        fs::set_permissions(&profile, fs::Permissions::from_mode(0o700)).unwrap();
+        let current_uid = unsafe { libc::geteuid() };
+        let operator_uid = if current_uid == 0 { 1000 } else { current_uid };
+        if current_uid == 0 {
+            let path = std::ffi::CString::new(profile.as_os_str().as_bytes()).unwrap();
+            let result = unsafe { libc::chown(path.as_ptr(), operator_uid, u32::MAX) };
+            assert_eq!(result, 0);
+        }
+        let peer = custody::LeaseAuthorityRequestPeerIdentity {
+            uid: operator_uid,
+            gid: 991,
+            pid: 4101,
+        };
+        let direct = derive_profile_enrollment_identity(profile.to_str().unwrap(), peer).unwrap();
+        let alias = root.join("profile-alias");
+        std::os::unix::fs::symlink(&profile, &alias).unwrap();
+        let through_alias =
+            derive_profile_enrollment_identity(alias.to_str().unwrap(), peer).unwrap();
+        assert_eq!(direct, through_alias);
+
+        let wrong_peer = custody::LeaseAuthorityRequestPeerIdentity {
+            uid: operator_uid.saturating_add(1),
+            gid: 991,
+            pid: 4102,
+        };
+        let error =
+            derive_profile_enrollment_identity(profile.to_str().unwrap(), wrong_peer).unwrap_err();
+        assert_eq!(
+            error.code(),
+            "lease_authority_protocol_profile_enrollment_path_unprotected"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn acquire_request_rejects_caller_owned_time_and_owner_evidence() {
         let encoded = br#"{
             "schemaVersion":"agent-browser.lease-authority-request.v1",
@@ -2673,7 +3150,7 @@ mod tests {
                 "resource":{"kind":"profile","id":"last30days-social"},
                 "parentClaimId":null,
                 "mode":"ephemeral",
-                "expectedAuthorityRevision":0,
+                "expectedClaimRevision":0,
                 "idempotencyKey":"acquire:last30days:caller-authority",
                 "recoveryControllerId":null,
                 "now":"2099-01-01T00:00:00Z",
@@ -2715,7 +3192,7 @@ mod tests {
                 capability_id: registered.capability.capability_id.clone(),
                 capability_revision: registered.capability.revision,
                 mode: LeaseClaimMode::Strict,
-                expected_authority_revision: 0,
+                expected_claim_revision: 0,
                 idempotency_key: "acquire:last30days:strict-recovery-protocol".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
                 expires_at: "2026-08-31T12:05:00Z".to_string(),
@@ -2874,7 +3351,7 @@ mod tests {
                 "resource": {"kind": "profile", "id": "last30days-social"},
                 "parentClaimId": null,
                 "mode": "ephemeral",
-                "expectedAuthorityRevision": 0,
+                "expectedClaimRevision": 0,
                 "idempotencyKey": "acquire:last30days:tick-1",
                 "recoveryControllerId": null
             }
@@ -2954,7 +3431,7 @@ mod tests {
                     "resource": {"kind": "profile", "id": "last30days-social"},
                     "parentClaimId": null,
                     "mode": "ephemeral",
-                    "expectedAuthorityRevision": 0,
+                    "expectedClaimRevision": 0,
                     "idempotencyKey": "acquire:last30days:tick-1",
                     "recoveryControllerId": null
                 }
@@ -3018,7 +3495,7 @@ mod tests {
                 capability_id: "capability:last30days-social".to_string(),
                 capability_revision: 1,
                 mode: super::super::LeaseClaimMode::Strict,
-                expected_authority_revision: 1,
+                expected_claim_revision: 0,
                 idempotency_key: "acquire:last30days:strict-1".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
                 expires_at: "2026-08-31T12:05:00Z".to_string(),
@@ -3110,7 +3587,7 @@ mod tests {
                 "resource": {"kind": "profile", "id": "unregistered-profile"},
                 "parentClaimId": null,
                 "mode": "ephemeral",
-                "expectedAuthorityRevision": 0,
+                "expectedClaimRevision": 0,
                 "idempotencyKey": "acquire:unregistered:tick-1",
                 "recoveryControllerId": null
             }

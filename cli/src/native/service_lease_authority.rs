@@ -1968,8 +1968,9 @@ impl LeaseAuthorityState {
         }
         let request_digest = acquisition_request_digest(&request);
         validate_request(&request)?;
-        if request.expected_authority_revision != self.revision {
-            return Err(LeaseAuthorityError::StaleAuthorityRevision);
+        let current_claim_revision = self.current_claim_revision(&request.resource, &request.now);
+        if request.expected_claim_revision != current_claim_revision {
+            return Err(LeaseAuthorityError::StaleClaimRevision);
         }
 
         let resource_key = request.resource.storage_key();
@@ -2079,10 +2080,11 @@ impl LeaseAuthorityState {
                 return Err(LeaseAuthorityError::IdempotencyConflict);
             }
         }
-        if request.expected_authority_revision != self.revision {
-            return Err(LeaseAuthorityError::StaleAuthorityRevision);
-        }
         validate_request(&request)?;
+        let current_claim_revision = self.current_claim_revision(&request.resource, &request.now);
+        if request.expected_claim_revision != current_claim_revision {
+            return Err(LeaseAuthorityError::StaleClaimRevision);
+        }
         if let Some(parent_claim_id) = request.parent_claim_id.as_deref() {
             let parent_is_active = self.active_claims.values().any(|claim| {
                 claim.claim_id == parent_claim_id
@@ -2622,6 +2624,13 @@ impl LeaseAuthorityState {
             .filter(|claim| timestamp_precedes(now, &claim.expires_at))
     }
 
+    pub(crate) fn current_claim_revision(&self, resource: &LeaseResourceKey, now: &str) -> u64 {
+        self.active_claims
+            .get(&resource.storage_key())
+            .filter(|claim| timestamp_precedes(now, &claim.expires_at))
+            .map_or(0, |claim| claim.revision)
+    }
+
     pub(crate) fn current_claim_by_id(
         &self,
         claim_id: &str,
@@ -2719,7 +2728,7 @@ pub(crate) struct AcquireLeaseClaimRequest {
     pub(crate) capability_id: String,
     pub(crate) capability_revision: u64,
     pub(crate) mode: LeaseClaimMode,
-    pub(crate) expected_authority_revision: u64,
+    pub(crate) expected_claim_revision: u64,
     pub(crate) idempotency_key: String,
     pub(crate) now: String,
     pub(crate) expires_at: String,
@@ -2732,7 +2741,7 @@ pub(crate) struct AcquireLeaseClaimRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LeaseAuthorityError {
     InvalidRequest,
-    StaleAuthorityRevision,
+    StaleClaimRevision,
     ClaimConflict,
     IdempotencyConflict,
     ParentClaimUnavailable,
@@ -2760,7 +2769,7 @@ impl LeaseAuthorityError {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::InvalidRequest => "invalid_request",
-            Self::StaleAuthorityRevision => "stale_authority_revision",
+            Self::StaleClaimRevision => "stale_claim_revision",
             Self::ClaimConflict => "claim_conflict",
             Self::IdempotencyConflict => "idempotency_conflict",
             Self::ParentClaimUnavailable => "parent_claim_unavailable",
@@ -3821,7 +3830,7 @@ mod tests {
             capability_id: "capability:last30days-social".to_string(),
             capability_revision: 1,
             mode: LeaseClaimMode::Ephemeral,
-            expected_authority_revision: 0,
+            expected_claim_revision: 0,
             idempotency_key: "acquire:last30days:tick-1".to_string(),
             now: NOW.to_string(),
             expires_at: "2026-08-31T12:05:00Z".to_string(),
@@ -4200,7 +4209,7 @@ mod tests {
     }
 
     #[test]
-    fn acquisition_revision_compare_and_swap_has_one_winner() {
+    fn acquisition_claim_revision_compare_and_swap_has_one_winner() {
         let mut authority = LeaseAuthorityState::default();
         let first = authority.acquire(request()).unwrap();
         let mut contender = request();
@@ -4210,7 +4219,7 @@ mod tests {
 
         assert_eq!(
             authority.acquire(contender),
-            Err(LeaseAuthorityError::StaleAuthorityRevision)
+            Err(LeaseAuthorityError::StaleClaimRevision)
         );
         assert_eq!(authority.active_claims.len(), 1);
         assert_eq!(
@@ -4219,6 +4228,31 @@ mod tests {
                 .map(|claim| claim.claim_id.as_str()),
             Some(first.claim_id.as_str())
         );
+    }
+
+    #[test]
+    fn unrelated_authority_activity_cannot_create_a_profile_acquisition_conflict() {
+        let mut authority = LeaseAuthorityState::default();
+        authority
+            .bootstrap_administrator(
+                "administrator:local-root",
+                b"root-administrator-capability-material-v1",
+            )
+            .unwrap();
+        assert_eq!(authority.revision(), 1);
+
+        let first = authority.acquire(request()).unwrap();
+        assert_eq!(first.revision(), 1);
+        let mut unrelated = request();
+        unrelated.resource = LeaseResourceKey::profile("unrelated-profile");
+        unrelated.principal_id = "principal:unrelated".to_string();
+        unrelated.capability_id = "capability:unrelated".to_string();
+        unrelated.idempotency_key = "acquire:unrelated:tick-1".to_string();
+        unrelated.expected_claim_revision = 0;
+
+        let unrelated = authority.acquire(unrelated).unwrap();
+        assert_eq!(unrelated.revision(), 1);
+        assert_eq!(authority.active_claims.len(), 2);
     }
 
     #[test]
@@ -4312,7 +4346,7 @@ mod tests {
         replay.expires_at = "2026-08-31T12:15:00Z".to_string();
         replay.boot_epoch = Some("boot-2".to_string());
         replay.owner_generation = Some(9);
-        replay.expected_authority_revision = authority.revision;
+        replay.expected_claim_revision = 0;
 
         let replayed = authority.acquire_with_receipt(replay).unwrap();
 
@@ -4360,7 +4394,7 @@ mod tests {
         let first = authority.acquire_with_receipt(request()).unwrap();
         let first_claim = first.claim.unwrap();
         let mut rejoin = request();
-        rejoin.expected_authority_revision = authority.revision;
+        rejoin.expected_claim_revision = first_claim.revision();
         rejoin.idempotency_key = "acquire:last30days:tick-2".to_string();
 
         let joined = authority.acquire_with_receipt(rejoin).unwrap();
@@ -4383,7 +4417,7 @@ mod tests {
         strict.transition_deadline = Some("2026-08-31T12:04:00Z".to_string());
         let first = authority.acquire_with_receipt(strict.clone()).unwrap();
         let mut rejoin = strict;
-        rejoin.expected_authority_revision = authority.revision;
+        rejoin.expected_claim_revision = first.claim.as_ref().unwrap().revision();
         rejoin.idempotency_key = "acquire:last30days:strict-tick-2".to_string();
 
         assert_eq!(
@@ -4719,7 +4753,7 @@ mod tests {
             kind: LeaseResourceKind::ServiceSession,
             id: "unrelated-session".to_string(),
         };
-        unrelated.expected_authority_revision = 1;
+        unrelated.expected_claim_revision = 0;
         unrelated.idempotency_key = "acquire:unrelated-session".to_string();
         state.acquire_lease_claim_with_receipt(unrelated).unwrap();
         let repository = MemoryRepository {
@@ -4777,7 +4811,7 @@ mod tests {
         assert_eq!(replayed.receipt, first.receipt);
 
         let mut next = request();
-        next.expected_authority_revision = 3;
+        next.expected_claim_revision = 0;
         next.idempotency_key = "acquire:last30days:tick-2".to_string();
         next.now = "2026-08-31T12:02:00Z".to_string();
         next.expires_at = "2026-08-31T12:07:00Z".to_string();
@@ -4864,7 +4898,7 @@ mod tests {
         let mut unrelated = request();
         unrelated.resource = LeaseResourceKey::profile("unrelated-profile");
         unrelated.idempotency_key = "acquire:unrelated:strict-recovery".to_string();
-        unrelated.expected_authority_revision = state.lease_authority().revision();
+        unrelated.expected_claim_revision = 0;
         state.acquire_lease_claim_with_receipt(unrelated).unwrap();
 
         let intent = LeaseRecoveryIntent {

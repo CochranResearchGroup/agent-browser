@@ -6017,7 +6017,7 @@ mod tests {
                 capability_id: "capability:last30days".to_string(),
                 capability_revision: 1,
                 mode: LeaseClaimMode::Ephemeral,
-                expected_authority_revision: 0,
+                expected_claim_revision: 0,
                 idempotency_key: "access-plan-claim".to_string(),
                 now: "2026-08-31T12:00:00Z".to_string(),
                 expires_at: "2026-08-31T12:05:00Z".to_string(),

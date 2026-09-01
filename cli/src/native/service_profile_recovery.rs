@@ -811,7 +811,9 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
             capability_id: authority.capability_id,
             capability_revision: authority.capability_revision,
             mode: LeaseClaimMode::Ephemeral,
-            expected_authority_revision: state.lease_authority().revision(),
+            expected_claim_revision: state
+                .lease_authority()
+                .current_claim_revision(&LeaseResourceKey::profile(&intent.profile_id), created_at),
             idempotency_key: idempotency_key.to_string(),
             now: created_at.to_string(),
             expires_at: claim_expires_at.to_string(),
@@ -886,7 +888,9 @@ fn replay_profile_claim_for_intent<R: ServiceStateRepository>(
         capability_id: authority.capability_id,
         capability_revision: authority.capability_revision,
         mode: LeaseClaimMode::Ephemeral,
-        expected_authority_revision: state.lease_authority().revision(),
+        expected_claim_revision: state
+            .lease_authority()
+            .current_claim_revision(&LeaseResourceKey::profile(&intent.profile_id), created_at),
         idempotency_key: idempotency_key.to_string(),
         now: created_at.to_string(),
         expires_at: claim_expires_at.to_string(),
