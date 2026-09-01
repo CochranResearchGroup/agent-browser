@@ -12,12 +12,9 @@ lanes:
     remote_ref: refs/remotes/origin/fix/service-state-stale-revision-recovery-20260831
     integration_receipt: f1029320ff93641388325d38c77af8c18d997e3f
     integration: merge
-    dependencies:
-      - P142 Service State Concurrency And Client Recourse Reliability
-    overlaps:
-      - plan/lease-authority-coordination
-    reconciled_overlaps:
-      - plan/lease-authority-coordination
+    dependencies: [P142 Service State Concurrency And Client Recourse Reliability]
+    overlaps: [plan/lease-authority-coordination]
+    reconciled_overlaps: [plan/lease-authority-coordination]
     updated_at: 2026-08-31
   - id: P145 Emergency Profile Lease Fail-Open
     objective: Keep ordinary browser acquisition available through isolated profile fallback
@@ -31,8 +28,7 @@ lanes:
     remote_ref: null
     integration: merge
     dependencies: []
-    overlaps:
-      - plan/lease-authority-coordination
+    overlaps: [plan/lease-authority-coordination]
     updated_at: 2026-08-31
   - id: P110 Authentication Run Slice A
     objective: Authentication Run provider-free foundation
