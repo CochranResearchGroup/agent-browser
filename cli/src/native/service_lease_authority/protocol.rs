@@ -118,7 +118,8 @@ struct AcquireLeaseAuthorityPayload {
     resource: LeaseResourceKey,
     parent_claim_id: Option<String>,
     mode: LeaseClaimMode,
-    expected_claim_revision: u64,
+    #[serde(default)]
+    expected_claim_revision: Option<u64>,
     idempotency_key: String,
     recovery_controller_id: Option<String>,
 }
@@ -1662,6 +1663,18 @@ impl LeaseAuthorityProtocolKernel {
             (observed + chrono::Duration::seconds(60))
                 .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
         });
+        let expected_claim_revision = match (request.mode, request.expected_claim_revision) {
+            (LeaseClaimMode::Ephemeral, None) => self
+                .state
+                .authority
+                .current_claim_revision(&request.resource, &now),
+            (LeaseClaimMode::Strict, None) => {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_strict_expected_revision_required",
+                });
+            }
+            (_, Some(revision)) => revision,
+        };
         let owner_generation = self
             .state
             .owners
@@ -1678,7 +1691,7 @@ impl LeaseAuthorityProtocolKernel {
                 capability_id: authenticated.capability_id,
                 capability_revision: authenticated.capability_revision,
                 mode: request.mode,
-                expected_claim_revision: request.expected_claim_revision,
+                expected_claim_revision,
                 idempotency_key: request.idempotency_key,
                 now,
                 expires_at,
@@ -4049,7 +4062,7 @@ mod tests {
             resource: LeaseResourceKey::profile("last30days-social"),
             parent_claim_id: None,
             mode: LeaseClaimMode::Ephemeral,
-            expected_claim_revision: 0,
+            expected_claim_revision: Some(0),
             idempotency_key: "acquire:last30days:after-enrollment".to_string(),
             recovery_controller_id: None,
         };
@@ -4058,6 +4071,47 @@ mod tests {
         let claim = acquired.claim.unwrap();
         assert_eq!(claim.principal_id(), enrolled.receipt.principal_id);
         assert_eq!(claim.capability_id(), enrolled.receipt.capability_id);
+
+        let LeaseAuthorityProtocolResponse::Acquired(rejoined) = restarted
+            .acquire(
+                AcquireLeaseAuthorityPayload {
+                    raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+                    resource: LeaseResourceKey::profile("last30days-social"),
+                    parent_claim_id: None,
+                    mode: LeaseClaimMode::Ephemeral,
+                    expected_claim_revision: None,
+                    idempotency_key: "acquire:last30days:new-worker".to_string(),
+                    recovery_controller_id: None,
+                },
+                "2026-09-01T12:01:10Z",
+            )
+            .unwrap();
+        let rejoined_claim = rejoined.claim.unwrap();
+        assert!(!rejoined.replayed);
+        assert_eq!(rejoined_claim.claim_id(), claim.claim_id());
+        assert_eq!(rejoined_claim.revision(), claim.revision());
+        assert_eq!(rejoined_claim.fencing_token(), claim.fencing_token());
+        assert_eq!(rejoined_claim.expires_at(), claim.expires_at());
+
+        let strict_error = match restarted.acquire(
+            AcquireLeaseAuthorityPayload {
+                raw_capability: LeaseAuthoritySecret(raw_capability.as_bytes().to_vec()),
+                resource: LeaseResourceKey::profile("last30days-social"),
+                parent_claim_id: None,
+                mode: LeaseClaimMode::Strict,
+                expected_claim_revision: None,
+                idempotency_key: "acquire:last30days:strict-without-cas".to_string(),
+                recovery_controller_id: Some(enrolled.receipt.capability_id.clone()),
+            },
+            "2026-09-01T12:01:20Z",
+        ) {
+            Ok(_) => panic!("strict acquisition without an explicit revision must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            strict_error.code(),
+            "lease_authority_protocol_strict_expected_revision_required"
+        );
 
         let signing_key = LeaseAuthoritySigningKey::from_private_bytes([0x6b; 32]);
         let executor_identity_digest =

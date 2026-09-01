@@ -2,7 +2,9 @@ use super::{
     LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
     LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
 };
-use crate::native::service_lease_authority::{LeaseEffectAuthorization, LeaseResourceKey};
+use crate::native::service_lease_authority::{
+    ActiveLeaseClaim, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
+};
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
@@ -10,6 +12,62 @@ use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
 const PROTECTED_LEASE_AUTHORITY_CLIENT_TIMEOUT: Duration = Duration::from_secs(2);
+
+pub(crate) struct ProtectedProfileEnrollmentRequest {
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) profile_path: String,
+    pub(crate) idempotency_key: String,
+}
+
+impl std::fmt::Debug for ProtectedProfileEnrollmentRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedProfileEnrollmentRequest")
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field("profile_path", &"[REDACTED]")
+            .field("idempotency_key", &self.idempotency_key)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedProfileEnrollment {
+    pub(crate) principal_id: String,
+    pub(crate) capability_id: String,
+    pub(crate) capability_revision: u64,
+    pub(crate) resource_revision: u64,
+}
+
+pub(crate) struct ProtectedEphemeralProfileClaimRequest {
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) idempotency_key: String,
+}
+
+impl std::fmt::Debug for ProtectedEphemeralProfileClaimRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedEphemeralProfileClaimRequest")
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field("idempotency_key", &self.idempotency_key)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedEphemeralProfileClaim {
+    pub(crate) resource: LeaseResourceKey,
+    pub(crate) claim_id: String,
+    pub(crate) principal_id: String,
+    pub(crate) capability_id: String,
+    pub(crate) capability_revision: u64,
+    pub(crate) claim_revision: u64,
+    pub(crate) fencing_token: u64,
+    pub(crate) expires_at: String,
+}
 
 pub(crate) struct ProtectedBrowserLaunchRequest {
     pub(crate) raw_capability: String,
@@ -54,6 +112,22 @@ impl ProtectedEffectCompletion {
             Self::Uncertain => "uncertain",
         }
     }
+}
+
+pub(crate) fn enroll_protected_profile(
+    request: &ProtectedProfileEnrollmentRequest,
+) -> Result<ProtectedProfileEnrollment, String> {
+    let encoded = encode_protected_profile_enrollment_request(request)?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_profile_enrollment_response(&response, request)
+}
+
+pub(crate) fn acquire_protected_ephemeral_profile_claim(
+    request: &ProtectedEphemeralProfileClaimRequest,
+) -> Result<ProtectedEphemeralProfileClaim, String> {
+    let encoded = encode_protected_ephemeral_profile_claim_request(request)?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_ephemeral_profile_claim_response(&response, request)
 }
 
 pub(crate) fn authorize_protected_browser_launch(
@@ -123,6 +197,171 @@ fn exchange_framed<S: Read + Write>(stream: &mut S, encoded: &[u8]) -> Result<Ve
     super::write_lease_authority_frame(stream, encoded)
         .map_err(|error| error.code().to_string())?;
     super::read_lease_authority_frame(stream).map_err(|error| error.code().to_string())
+}
+
+fn encode_protected_profile_enrollment_request(
+    request: &ProtectedProfileEnrollmentRequest,
+) -> Result<Vec<u8>, String> {
+    if request.raw_capability.trim().is_empty()
+        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || request.profile_path.trim().is_empty()
+        || request.idempotency_key.trim().is_empty()
+    {
+        return Err("lease_authority_profile_enrollment_request_invalid".to_string());
+    }
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "enroll_profile",
+        "payload": {
+            "rawCapability": request.raw_capability.as_bytes(),
+            "profileId": request.profile_id,
+            "profilePath": request.profile_path,
+            "expectedResourceRevision": 0,
+            "idempotencyKey": request.idempotency_key,
+        }
+    }))
+    .map_err(|_| "lease_authority_profile_enrollment_request_encode_failed".to_string())
+}
+
+fn decode_protected_profile_enrollment_response(
+    encoded: &[u8],
+    request: &ProtectedProfileEnrollmentRequest,
+) -> Result<ProtectedProfileEnrollment, String> {
+    let response = decode_success_response(
+        encoded,
+        "profile_enrolled",
+        "lease_authority_profile_enrollment",
+    )?;
+    let receipt = response
+        .pointer("/payload/receipt")
+        .ok_or_else(|| "lease_authority_profile_enrollment_receipt_invalid".to_string())?;
+    let profile_id = required_response_string(
+        receipt,
+        "profileId",
+        "lease_authority_profile_enrollment_receipt_invalid",
+    )?;
+    let principal_id = required_response_string(
+        receipt,
+        "principalId",
+        "lease_authority_profile_enrollment_receipt_invalid",
+    )?;
+    let capability_id = required_response_string(
+        receipt,
+        "capabilityId",
+        "lease_authority_profile_enrollment_receipt_invalid",
+    )?;
+    let capability_revision = required_response_u64(
+        receipt,
+        "capabilityRevision",
+        "lease_authority_profile_enrollment_receipt_invalid",
+    )?;
+    let resource_revision = required_response_u64(
+        receipt,
+        "resourceRevision",
+        "lease_authority_profile_enrollment_receipt_invalid",
+    )?;
+    if profile_id != request.profile_id {
+        return Err("lease_authority_profile_enrollment_receipt_mismatch".to_string());
+    }
+    Ok(ProtectedProfileEnrollment {
+        principal_id,
+        capability_id,
+        capability_revision,
+        resource_revision,
+    })
+}
+
+fn encode_protected_ephemeral_profile_claim_request(
+    request: &ProtectedEphemeralProfileClaimRequest,
+) -> Result<Vec<u8>, String> {
+    if request.raw_capability.trim().is_empty()
+        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || request.idempotency_key.trim().is_empty()
+    {
+        return Err("lease_authority_acquire_request_invalid".to_string());
+    }
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "acquire",
+        "payload": {
+            "rawCapability": request.raw_capability.as_bytes(),
+            "resource": LeaseResourceKey::profile(&request.profile_id),
+            "parentClaimId": null,
+            "mode": "ephemeral",
+            "idempotencyKey": request.idempotency_key,
+            "recoveryControllerId": null,
+        }
+    }))
+    .map_err(|_| "lease_authority_acquire_request_encode_failed".to_string())
+}
+
+fn decode_protected_ephemeral_profile_claim_response(
+    encoded: &[u8],
+    request: &ProtectedEphemeralProfileClaimRequest,
+) -> Result<ProtectedEphemeralProfileClaim, String> {
+    let response = decode_success_response(encoded, "acquired", "lease_authority_acquire")?;
+    let claim_value = response
+        .pointer("/payload/claim")
+        .filter(|value| !value.is_null())
+        .ok_or_else(|| "lease_authority_acquisition_replay_without_current_claim".to_string())?;
+    let claim: ActiveLeaseClaim = serde_json::from_value(claim_value.clone())
+        .map_err(|_| "lease_authority_acquire_claim_invalid".to_string())?;
+    let expected_resource = LeaseResourceKey::profile(&request.profile_id);
+    if claim.resource != expected_resource || claim.mode() != LeaseClaimMode::Ephemeral {
+        return Err("lease_authority_acquire_claim_mismatch".to_string());
+    }
+    Ok(ProtectedEphemeralProfileClaim {
+        resource: claim.resource.clone(),
+        claim_id: claim.claim_id().to_string(),
+        principal_id: claim.principal_id().to_string(),
+        capability_id: claim.capability_id().to_string(),
+        capability_revision: claim.capability_revision,
+        claim_revision: claim.revision(),
+        fencing_token: claim.fencing_token(),
+        expires_at: claim.expires_at().to_string(),
+    })
+}
+
+fn decode_success_response(
+    encoded: &[u8],
+    expected_outcome: &str,
+    error_prefix: &str,
+) -> Result<Value, String> {
+    let response: Value =
+        serde_json::from_slice(encoded).map_err(|_| format!("{error_prefix}_response_invalid"))?;
+    if response.get("schemaVersion").and_then(Value::as_str)
+        != Some(LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION)
+    {
+        return Err(format!("{error_prefix}_response_schema_invalid"));
+    }
+    if response.get("outcome").and_then(Value::as_str) == Some("error") {
+        return Err(response
+            .pointer("/error/code")
+            .and_then(Value::as_str)
+            .unwrap_or("lease_authority_request_failed")
+            .to_string());
+    }
+    if response.get("outcome").and_then(Value::as_str) != Some(expected_outcome) {
+        return Err(format!("{error_prefix}_response_outcome_invalid"));
+    }
+    Ok(response)
+}
+
+fn required_response_string(value: &Value, field: &str, code: &str) -> Result<String, String> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| code.to_string())
+}
+
+fn required_response_u64(value: &Value, field: &str, code: &str) -> Result<u64, String> {
+    value
+        .get(field)
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| code.to_string())
 }
 
 fn encode_protected_browser_launch_request(
@@ -267,6 +506,112 @@ mod tests {
             audience: "daemon-session:last30days".to_string(),
             idempotency_key: "launch:last30days:tick-1".to_string(),
         }
+    }
+
+    #[test]
+    fn ordinary_profile_enrollment_and_acquisition_require_no_lease_choreography() {
+        let enrollment_request = ProtectedProfileEnrollmentRequest {
+            raw_capability: "capability-secret".to_string(),
+            profile_id: "last30days-social".to_string(),
+            profile_path: "/private/profile/path".to_string(),
+            idempotency_key: "enroll:last30days:v1".to_string(),
+        };
+        let encoded = encode_protected_profile_enrollment_request(&enrollment_request).unwrap();
+        let encoded: Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(encoded["operation"], "enroll_profile");
+        assert_eq!(encoded["payload"]["expectedResourceRevision"], 0);
+        assert!(encoded["payload"].get("principalId").is_none());
+        assert!(encoded["payload"].get("physicalIdentityDigest").is_none());
+        assert!(encoded["payload"].get("operatorUid").is_none());
+        assert!(encoded["payload"].get("occurredAt").is_none());
+        let debug = format!("{enrollment_request:?}");
+        assert!(!debug.contains("capability-secret"));
+        assert!(!debug.contains("/private/profile/path"));
+
+        let enrollment_response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "profile_enrolled",
+            "payload": {
+                "receipt": {
+                    "profileId": "last30days-social",
+                    "principalId": "principal:local-uid:1000:profile:last30days-social",
+                    "capabilityId": "capability:last30days-social",
+                    "capabilityRevision": 1,
+                    "resourceRevision": 1
+                },
+                "replayed": false
+            }
+        });
+        let enrollment = decode_protected_profile_enrollment_response(
+            &serde_json::to_vec(&enrollment_response).unwrap(),
+            &enrollment_request,
+        )
+        .unwrap();
+        assert_eq!(enrollment.resource_revision, 1);
+
+        let acquire_request = ProtectedEphemeralProfileClaimRequest {
+            raw_capability: "capability-secret".to_string(),
+            profile_id: "last30days-social".to_string(),
+            idempotency_key: "acquire:last30days:worker-2".to_string(),
+        };
+        let encoded = encode_protected_ephemeral_profile_claim_request(&acquire_request).unwrap();
+        let encoded: Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(encoded["operation"], "acquire");
+        assert_eq!(encoded["payload"]["mode"], "ephemeral");
+        assert!(encoded["payload"].get("expectedClaimRevision").is_none());
+        assert!(encoded["payload"].get("expiresAt").is_none());
+        assert!(encoded["payload"].get("ownerGeneration").is_none());
+        assert!(encoded["payload"].get("sessionName").is_none());
+        assert!(!format!("{acquire_request:?}").contains("capability-secret"));
+
+        let acquired_response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "acquired",
+            "payload": {
+                "claim": {
+                    "schemaVersion": "agent-browser.lease-authority.v1",
+                    "claimId": "lease-claim-v1:abc",
+                    "resource": {"kind": "profile", "id": "last30days-social"},
+                    "parentClaimId": null,
+                    "principalId": "principal:local-uid:1000:profile:last30days-social",
+                    "capabilityId": "capability:last30days-social",
+                    "capabilityRevision": 1,
+                    "mode": "ephemeral",
+                    "revision": 1,
+                    "fencingToken": 7,
+                    "idempotencyKey": "acquire:last30days:worker-1",
+                    "acquiredAt": "2026-09-01T12:00:00Z",
+                    "heartbeatAt": "2026-09-01T12:00:00Z",
+                    "expiresAt": "2026-09-01T12:05:00Z",
+                    "transitionDeadline": null,
+                    "recoveryControllerId": null,
+                    "bootEpoch": "boot-1",
+                    "ownerGeneration": null
+                },
+                "receipt": {},
+                "replayed": false
+            }
+        });
+        let claim = decode_protected_ephemeral_profile_claim_response(
+            &serde_json::to_vec(&acquired_response).unwrap(),
+            &acquire_request,
+        )
+        .unwrap();
+        assert_eq!(claim.fencing_token, 7);
+        assert_eq!(claim.expires_at, "2026-09-01T12:05:00Z");
+
+        let expired_replay = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "acquired",
+            "payload": {"claim": null, "receipt": {}, "replayed": true}
+        });
+        assert_eq!(
+            decode_protected_ephemeral_profile_claim_response(
+                &serde_json::to_vec(&expired_replay).unwrap(),
+                &acquire_request,
+            ),
+            Err("lease_authority_acquisition_replay_without_current_claim".to_string())
+        );
     }
 
     #[test]

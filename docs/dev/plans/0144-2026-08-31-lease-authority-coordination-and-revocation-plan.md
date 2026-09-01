@@ -2546,6 +2546,39 @@ Receipt-only replay returns
 uncertain terminal responses must match the original receipt and requested
 state.
 
+## Slice F Broker-Managed Ephemeral Acquisition Checkpoint | 2026-09-01
+
+The protected acquisition protocol no longer requires an ordinary ephemeral
+caller to discover or submit the current claim revision. When
+`expectedClaimRevision` is omitted for an ephemeral request, the protected
+kernel selects the current revision at authority-owned time inside the same
+serialized mutation that acquires or rejoins the claim. A same-capability new
+operation rejoins the exact current claim without advancing its fence,
+revision, or expiry. An expired claim is ignored and terminalized by normal
+acquisition. A current foreign claim still returns the canonical conflict.
+
+Strict acquisition deliberately retains explicit compare-and-swap semantics.
+Omitting `expectedClaimRevision` for a strict request fails before mutation
+with `lease_authority_protocol_strict_expected_revision_required`; strict
+software remains responsible for its recovery controller and revision-aware
+workflow.
+
+The Linux protected client adapter now supports exact profile enrollment and
+broker-managed ephemeral acquisition. Its closed ordinary acquisition request
+contains no session identity, daemon route, owner generation, caller expiry,
+heartbeat, recovery controller, or expected claim revision. Profile enrollment
+lets the root service derive operator UID and canonical physical identity from
+the connected peer and exact path. Client debug output redacts both capability
+and profile path, and acquisition replay after expiry returns a typed
+no-current-claim outcome rather than reviving authority.
+
+This is not yet the public acquisition cutover. The current
+`acquire_profile_command` still creates a legacy Service State claim and issues
+a legacy effect authorization. The protected enrollment, acquisition, effect
+consume, browser launch, and terminal completion must replace that entire
+sequence in one slice; passing the legacy claim into the protected adapter is
+forbidden because it would preserve two authority implementations.
+
 Two focused client tests cover request closure, secret-safe debug output,
 first-delivery matching, replay uncertainty, and exact terminal response
 matching. The adapter is deliberately not exported to legacy profile
