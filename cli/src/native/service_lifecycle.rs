@@ -29,6 +29,8 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
     pub(crate) browser_stderr_log_path: Option<String>,
     pub(crate) browser_capability_launch: Option<serde_json::Value>,
+    pub(crate) protected_browser_owner_observation:
+        Option<super::service_model::ProtectedBrowserOwnerObservation>,
     pub(crate) view_streams: Vec<ViewStream>,
     pub(crate) display_isolation: Option<String>,
     pub(crate) display_name: Option<String>,

@@ -3186,6 +3186,8 @@ A strict claim may advertise `recover_plan`, but the legacy CLI, HTTP, MCP, gene
 
 An acquired Linux response contains `leaseAuthority.kind=protected` with the current claim and committed process-backed owner. It never returns an executable authorization. Browser launch and owner registration complete through the protected authority before the response is emitted. If completion fails, Agent Browser closes the launched browser and records the consumed intent as uncertain before any retry. A confirmed close reconciles the exact owner ID and generation. A failed or unproven shutdown retains that owner for later reconciliation. Non-Linux builds retain the compatibility acquisition path until the protected authority service is ported.
 
+The JSON response from `service browsers` includes `protectedBrowserOwnerObservations` keyed by browser ID for protected launches. Each entry is linked to the launch receipt, carries exact owner and process axes, has a bounded freshness interval, and always reports `operationalAuthority: false`. It is a candidate locator for inspection only. Adoption, cleanup, transfer, or denial must revalidate current state through the protected root authority.
+
 Trust material is stored as immutable generations under
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
 `lease-authority-signing-key.v3.json` and public

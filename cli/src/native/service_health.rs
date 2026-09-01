@@ -919,6 +919,30 @@ pub fn persist_service_browser_record_in_repository(
                 .as_ref()
                 .and_then(|browser| browser.record_provenance.clone()),
         };
+        if pid.is_none() {
+            service_state
+                .protected_browser_owner_observations
+                .remove(&id);
+        } else if let Some(metadata) = metadata.as_ref() {
+            match metadata.protected_browser_owner_observation.as_ref() {
+                Some(observation) => {
+                    validate_protected_browser_owner_observation(
+                        observation,
+                        &id,
+                        session_id,
+                        pid,
+                    )?;
+                    service_state
+                        .protected_browser_owner_observations
+                        .insert(id.clone(), observation.clone());
+                }
+                None => {
+                    service_state
+                        .protected_browser_owner_observations
+                        .remove(&id);
+                }
+            }
+        }
         upsert_browser_display_allocation(
             service_state,
             session_id,
@@ -969,6 +993,46 @@ pub fn persist_service_browser_record_in_repository(
     })
 }
 
+pub(crate) fn validate_protected_browser_owner_observation(
+    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
+    browser_id: &str,
+    session_id: &str,
+    pid: Option<u32>,
+) -> Result<(), String> {
+    let observed_at = chrono::DateTime::parse_from_rfc3339(&observation.observed_at)
+        .map_err(|_| "protected_browser_owner_observation_invalid".to_string())?;
+    let freshness_expires_at =
+        chrono::DateTime::parse_from_rfc3339(&observation.freshness_expires_at)
+            .map_err(|_| "protected_browser_owner_observation_invalid".to_string())?;
+    let valid_digest = |value: &str| {
+        value.strip_prefix("sha256:").is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+    };
+    if observation.schema_version != "agent-browser.protected-browser-owner-observation.v1"
+        || observation.source != "protected_lease_authority_receipt"
+        || observation.operational_authority
+        || observation.launch_receipt_id.trim().is_empty()
+        || observation.owner_id.trim().is_empty()
+        || observation.owner_generation == 0
+        || observation.logical_browser_id.trim().is_empty()
+        || browser_id != service_browser_id_for_session(session_id)
+        || observation.daemon_session_route != session_id
+        || !valid_digest(&observation.process_instance_digest)
+        || observation.process_pid <= 1
+        || Some(observation.process_pid) != pid
+        || observation.owner_revision == 0
+        || freshness_expires_at <= observed_at
+        || freshness_expires_at - observed_at > chrono::Duration::seconds(60)
+    {
+        return Err("protected_browser_owner_observation_invalid".to_string());
+    }
+    Ok(())
+}
+
 pub(crate) fn remove_browser_operational_record(
     service_state: &mut ServiceState,
     browser_id: &str,
@@ -976,6 +1040,9 @@ pub(crate) fn remove_browser_operational_record(
 ) -> usize {
     let removed_browser = service_state.browsers.remove(browser_id);
     service_state.browser_process_identities.remove(browser_id);
+    service_state
+        .protected_browser_owner_observations
+        .remove(browser_id);
     let mut related_session_ids = BTreeSet::new();
     if let Some(session_id) = explicit_session_id {
         related_session_ids.insert(session_id.to_string());
@@ -4985,6 +5052,106 @@ mod tests {
             serde_json::json!(1234)
         );
 
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn protected_owner_projection_is_receipt_linked_observational_and_cleared_with_process() {
+        let home = temp_home("service-health-protected-owner-projection");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let projection = crate::native::service_model::ProtectedBrowserOwnerObservation {
+            schema_version: "agent-browser.protected-browser-owner-observation.v1".to_string(),
+            source: "protected_lease_authority_receipt".to_string(),
+            operational_authority: false,
+            launch_receipt_id: "effect-receipt:launch-1".to_string(),
+            owner_id: "owner:protected-1".to_string(),
+            owner_generation: 7,
+            logical_browser_id: "browser:protected-1".to_string(),
+            daemon_session_route: "protected-session".to_string(),
+            process_instance_digest: format!("sha256:{}", "7".repeat(64)),
+            process_pid: 43210,
+            owner_revision: 9,
+            observed_at: "2026-09-01T12:00:00Z".to_string(),
+            freshness_expires_at: "2026-09-01T12:00:30Z".to_string(),
+        };
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "protected-session",
+            BrowserHost::LocalHeaded,
+            BrowserHealth::Ready,
+            Some(43210),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("protected-profile".to_string()),
+                protected_browser_owner_observation: Some(projection.clone()),
+                ..ServiceLaunchMetadata::default()
+            }),
+            None,
+        )
+        .unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.protected_browser_owner_observations["session:protected-session"],
+            projection
+        );
+        assert!(
+            !persisted.protected_browser_owner_observations["session:protected-session"]
+                .operational_authority
+        );
+        let mut removed = persisted.clone();
+        remove_browser_operational_record(
+            &mut removed,
+            "session:protected-session",
+            Some("protected-session"),
+        );
+        assert!(removed.protected_browser_owner_observations.is_empty());
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "protected-session",
+            BrowserHost::LocalHeaded,
+            BrowserHealth::ProcessExited,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(store
+            .load()
+            .unwrap()
+            .protected_browser_owner_observations
+            .is_empty());
+
+        let mut invalid_projection = projection;
+        invalid_projection.process_instance_digest = format!("sha256:{}", "A".repeat(64));
+        let error = persist_service_browser_record_in_repository(
+            &repository,
+            "protected-session",
+            BrowserHost::LocalHeaded,
+            BrowserHealth::Ready,
+            Some(43210),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("protected-profile".to_string()),
+                protected_browser_owner_observation: Some(invalid_projection),
+                ..ServiceLaunchMetadata::default()
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error, "protected_browser_owner_observation_invalid");
+        assert!(store
+            .load()
+            .unwrap()
+            .protected_browser_owner_observations
+            .is_empty());
         let _ = fs::remove_dir_all(&home);
     }
 

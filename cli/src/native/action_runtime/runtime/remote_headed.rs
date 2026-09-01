@@ -34,10 +34,11 @@ use crate::native::service_model::{
     BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
-    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
-    ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
-    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    ProfileOrigin, ProfileSelectionReason, ProtectedBrowserOwnerObservation,
+    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry,
+    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
+    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -494,7 +495,25 @@ pub(crate) fn persist_protected_current_browser_health(
     if owner.process_pid != observed_pid || owner.daemon_session_route != state.session_id {
         return Err("protected_browser_projection_owner_mismatch".to_string());
     }
-    persist_current_browser_projection(state, host, health, metadata)
+    let observed_at = chrono::Utc::now();
+    let mut metadata = metadata.unwrap_or_default();
+    metadata.protected_browser_owner_observation = Some(ProtectedBrowserOwnerObservation {
+        schema_version: "agent-browser.protected-browser-owner-observation.v1".to_string(),
+        source: "protected_lease_authority_receipt".to_string(),
+        operational_authority: false,
+        launch_receipt_id: owner.launch_receipt_id.clone(),
+        owner_id: owner.owner_id.clone(),
+        owner_generation: owner.owner_generation,
+        logical_browser_id: owner.logical_browser_id.clone(),
+        daemon_session_route: owner.daemon_session_route.clone(),
+        process_instance_digest: owner.process_instance_digest.clone(),
+        process_pid: owner.process_pid,
+        owner_revision: owner.revision,
+        observed_at: observed_at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        freshness_expires_at: (observed_at + chrono::Duration::seconds(30))
+            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+    });
+    persist_current_browser_projection(state, host, health, Some(metadata))
 }
 
 fn persist_current_browser_projection(

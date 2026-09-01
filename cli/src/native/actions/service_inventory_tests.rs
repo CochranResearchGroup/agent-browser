@@ -289,20 +289,53 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
     let mut state = DaemonState::new();
     let cmd = json!(
         { "action" : "service_browsers", "id" : "svc-browsers-1", "serviceState" : {
-        "browsers" : { "browser-1" : { "id" : "browser-1", "health" : "degraded",
+        "browsers" : { "session:protected-session" : { "id" : "session:protected-session",
+        "pid" : 43210, "health" : "degraded",
         "lastHealthObservation" : { "observedAt" : "2026-04-25T00:00:00Z", "failureClass"
         : "browser_shutdown_degraded", "processExitCause" : "operator_requested_close" }
-        } } } }
+        } }, "protectedBrowserOwnerObservations" : { "session:protected-session" : {
+        "schemaVersion" : "agent-browser.protected-browser-owner-observation.v1",
+        "source" : "protected_lease_authority_receipt", "operationalAuthority" : false,
+        "launchReceiptId" : "effect-receipt:launch-1", "ownerId" : "owner:protected-1",
+        "ownerGeneration" : 7, "logicalBrowserId" : "browser:protected-1",
+        "daemonSessionRoute" : "protected-session", "processInstanceDigest" :
+        "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "processPid" : 43210, "ownerRevision" : 9, "observedAt" :
+        "2026-09-01T12:00:00Z", "freshnessExpiresAt" : "2026-09-01T12:00:30Z" } } } }
     );
     let result = execute_command(&cmd, &mut state).await;
     assert_eq!(result["success"], true);
     assert_service_collection_response_contract(&result["data"], "browsers", "browsers response");
     assert_eq!(result["data"]["count"], 1);
-    assert_eq!(result["data"]["browsers"][0]["id"], "browser-1");
+    assert_eq!(
+        result["data"]["browsers"][0]["id"],
+        "session:protected-session"
+    );
     assert_eq!(
         result["data"]["browsers"][0]["lastHealthObservation"]["failureClass"],
         "browser_shutdown_degraded"
     );
+    assert_eq!(
+        result["data"]["protectedBrowserOwnerObservations"]["session:protected-session"]
+            ["launchReceiptId"],
+        "effect-receipt:launch-1"
+    );
+    assert_eq!(
+        result["data"]["protectedBrowserOwnerObservations"]["session:protected-session"]
+            ["operationalAuthority"],
+        false
+    );
+
+    let mut forged = cmd;
+    forged["id"] = json!("svc-browsers-forged-owner");
+    forged["serviceState"]["protectedBrowserOwnerObservations"]["session:protected-session"]
+        ["operationalAuthority"] = json!(true);
+    let rejected = execute_command(&forged, &mut state).await;
+    assert_eq!(rejected["success"], false);
+    assert!(rejected["error"]
+        .as_str()
+        .unwrap()
+        .contains("protected_browser_owner_observation_invalid"));
     assert!(state.browser.is_none());
 }
 #[tokio::test]

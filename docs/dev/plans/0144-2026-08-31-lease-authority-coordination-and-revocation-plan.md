@@ -2782,3 +2782,60 @@ synchronization. This is not installed-runtime acceptance. A development
 publication must still prove the root socket service, public broker request,
 real Chrome launch, exact owner readback, close reconciliation, daemon-crash
 reacquisition, and zero production drift before candidate installation.
+
+## Slice F Receipt-Only Protected Owner Projection | 2026-09-01
+
+Protected browser-owner state now projects into Service State through a
+separate `protectedBrowserOwnerObservations` collection rather than by
+promoting browser or runtime-owner rows. Each observation is linked to the
+completed launch receipt and carries the exact owner id and generation,
+logical browser id, daemon route, lowercase process-instance digest, PID,
+owner revision, observation time, and a freshness bound of no more than sixty
+seconds. The schema requires `operationalAuthority=false`.
+
+Projection persistence validates every axis against the browser record being
+written. A missing protected projection removes an older observation when a
+nonprotected launch replaces the row, and a processless health update removes
+the observation. Removing the browser operational row also removes its
+observation. Invalid or noncanonical input aborts the projection without
+leaving an observation, and the public inventory rejects caller-supplied
+observations that do not match the exact persisted browser key and PID or that
+claim operational authority. `service browsers` returns the collection
+separately, and the generated client, CLI help, README, docs site, and agent
+skill all state that it is a candidate locator only. No planner, admission
+gate, effect sink, or denial path consumes it as authority.
+
+Source validation passes the projection lifecycle regression, the public
+`service_browsers` action regression, 28 protected-path tests, 35 service-model
+tests, 83 service-health tests, strict formatting and Clippy, API and MCP
+parity, the full generated service-client suite, the docs build, remote-view
+documentation checks, and every selector-requested workstation fixture run
+serially. The source skill intentionally differs from the shared user-scoped
+production skill. Development publication must use
+`development-runtime:skill-sync`; this source checkpoint does not overwrite
+production guidance.
+
+## Seventh Hotfix Recurrence Gap Audit | 2026-09-01
+
+The receipt-only projection audit found one adoption requirement that must be
+made explicit before a live orphan can be reused. A protected owner proves the
+browser process selected by the original launch, but it does not by itself
+prove that the original daemon or executor has relinquished effect custody. A
+replacement daemon must not adopt from Service State merely because the
+observation is fresh, and two same-user daemons must not both rejoin the same
+browser.
+
+Protected orphan adoption therefore requires a kernel-owned executor-custody
+transition. The root authority must prove the original executor absent or
+replaced, reobserve the exact process, profile, executable, CDP endpoint, and
+profile lock, issue one single-use adoption intent to the selected replacement
+executor, and atomically commit or terminalize that intent. A current original
+executor, mismatched endpoint, changed process instance, or uncertain attach
+returns typed bounded recourse without transferring authority or extending the
+claim. Service State remains a locator and never supplies a rejoin permit.
+
+The audit also confirms that product-wide structural closure cannot be claimed
+while non-Linux acquisition and legacy runtime-owner transfer retain competing
+authority paths. Platform ports may fail with an explicit unsupported protected
+authority outcome during migration, but they cannot silently preserve a second
+effect-capable lease implementation in an accepted candidate.

@@ -1133,6 +1133,7 @@ fn protected_profile_acquisition_response(
                 "expiresAt": claim.expires_at,
             },
             "owner": {
+                "launchReceiptId": owner.launch_receipt_id,
                 "ownerId": owner.owner_id,
                 "ownerGeneration": owner.owner_generation,
                 "logicalBrowserId": owner.logical_browser_id,
@@ -2358,6 +2359,7 @@ mod tests {
             expires_at: "2026-09-01T18:00:00Z".to_string(),
         };
         let owner = ProtectedBrowserOwner {
+            launch_receipt_id: "effect-receipt:protected".to_string(),
             owner_id: "owner:protected".to_string(),
             owner_generation: 11,
             logical_browser_id: "browser:principal-profile-protected".to_string(),

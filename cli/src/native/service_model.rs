@@ -2455,6 +2455,11 @@ pub struct ServiceState {
     pub(crate) crash_regeneration_transactions:
         BTreeMap<String, super::service_crash_regeneration::CrashRegenerationTransaction>,
     pub browsers: BTreeMap<String, BrowserProcess>,
+    /// Non-authoritative protected-owner observations keyed by Service State
+    /// browser id. The root authority remains the only mutation gate.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) protected_browser_owner_observations:
+        BTreeMap<String, ProtectedBrowserOwnerObservation>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,
     /// Cross-generation profile-owner authority used by transactional runtime
@@ -5227,6 +5232,41 @@ pub struct BrowserProcess {
     pub last_health_observation: Option<BrowserHealthObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record_provenance: Option<BrowserRecordProvenance>,
+}
+
+/// Receipt-linked observation of a browser owner committed by the protected
+/// lease authority. This projection is never operational authority: callers
+/// must revalidate every axis with the protected service before any effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProtectedBrowserOwnerObservation {
+    pub schema_version: String,
+    pub source: String,
+    #[serde(deserialize_with = "deserialize_protected_observation_authority")]
+    pub operational_authority: bool,
+    pub launch_receipt_id: String,
+    pub owner_id: String,
+    pub owner_generation: u64,
+    pub logical_browser_id: String,
+    pub daemon_session_route: String,
+    pub process_instance_digest: String,
+    pub process_pid: u32,
+    pub owner_revision: u64,
+    pub observed_at: String,
+    pub freshness_expires_at: String,
+}
+
+fn deserialize_protected_observation_authority<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = bool::deserialize(deserializer)?;
+    if value {
+        return Err(<D::Error as serde::de::Error>::custom(
+            "protected_browser_owner_observation_invalid",
+        ));
+    }
+    Ok(false)
 }
 
 /// Durable process-instance evidence for a service browser.

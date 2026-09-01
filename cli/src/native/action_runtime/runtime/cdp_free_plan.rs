@@ -89,6 +89,7 @@ impl ServiceLaunchMetadata {
             }),
             browser_stderr_log_path: None,
             browser_capability_launch: None,
+            protected_browser_owner_observation: None,
             view_streams: command
                 .map(remote_headed_view_streams_from_command)
                 .unwrap_or_default(),

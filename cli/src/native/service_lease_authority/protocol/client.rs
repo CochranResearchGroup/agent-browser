@@ -106,6 +106,7 @@ pub(crate) struct ProtectedBrowserLaunchPermit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProtectedBrowserOwner {
+    pub(crate) launch_receipt_id: String,
     pub(crate) owner_id: String,
     pub(crate) owner_generation: u64,
     pub(crate) logical_browser_id: String,
@@ -643,6 +644,7 @@ fn decode_protected_browser_launch_success(
         return Err("lease_authority_browser_launch_owner_mismatch".to_string());
     }
     Ok(ProtectedBrowserOwner {
+        launch_receipt_id: permit.receipt_id.clone(),
         owner_id: required_response_string(
             owner,
             "ownerId",

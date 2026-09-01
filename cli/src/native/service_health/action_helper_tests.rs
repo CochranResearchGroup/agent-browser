@@ -152,6 +152,7 @@ fn test_persist_service_browser_record_round_trips() {
                 { "applied" : true, "bindingId" : "test-binding", "reason" :
                 "validated_binding_applied" }
             )),
+            protected_browser_owner_observation: None,
             view_streams: Vec::new(),
             display_isolation: Some("shared_display".to_string()),
             display_name: Some(":93".to_string()),

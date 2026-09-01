@@ -114,10 +114,28 @@ pub(crate) mod service_commands {
             .map_err(|err| format!("Invalid serviceState: {}", err))?
             .unwrap_or_default();
         service_state.refresh_service_tab_handles();
+        for (browser_id, observation) in &service_state.protected_browser_owner_observations {
+            let browser = service_state
+                .browsers
+                .get(browser_id)
+                .ok_or_else(|| "protected_browser_owner_observation_invalid".to_string())?;
+            crate::native::service_health::validate_protected_browser_owner_observation(
+                observation,
+                browser_id,
+                &observation.daemon_session_route,
+                browser.pid,
+            )?;
+        }
+        let protected_browser_owner_observations =
+            service_state.protected_browser_owner_observations.clone();
         let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
         browsers.sort_by(|left, right| left.id.cmp(&right.id));
         let count = browsers.len();
-        Ok(json!({ "browsers" : browsers, "count" : count, }))
+        Ok(json!({
+            "browsers": browsers,
+            "count": count,
+            "protectedBrowserOwnerObservations": protected_browser_owner_observations,
+        }))
     }
     /// Return the service-owned tab collection without the full status payload.
     pub(crate) async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {

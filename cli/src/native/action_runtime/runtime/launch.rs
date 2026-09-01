@@ -1593,6 +1593,7 @@ pub(crate) async fn handle_external_byop_adopt(
         profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
         browser_stderr_log_path: None,
         browser_capability_launch: None,
+        protected_browser_owner_observation: None,
         view_streams: Vec::new(),
         display_isolation: None,
         display_name: None,

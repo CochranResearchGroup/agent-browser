@@ -276,6 +276,7 @@ fn confirmed_protected_close_reconciles_exact_owner_and_clears_custody() {
         raw_capability: "capability-secret".to_string(),
         profile_id: "last30days-facebook".to_string(),
         owner: ProtectedBrowserOwner {
+            launch_receipt_id: "effect-receipt:protected-close".to_string(),
             owner_id: "owner:protected-close".to_string(),
             owner_generation: 7,
             logical_browser_id: "browser:session:protected-close".to_string(),
@@ -318,6 +319,7 @@ fn protected_owner_custody_survives_projection_failure() {
         raw_capability: "profile-capability".to_string(),
         profile_id: "profile-a".to_string(),
         owner: ProtectedBrowserOwner {
+            launch_receipt_id: "effect-receipt:projection-failure".to_string(),
             owner_id: "owner-a".to_string(),
             owner_generation: 7,
             logical_browser_id: "browser-a".to_string(),
