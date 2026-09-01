@@ -5,6 +5,7 @@ use super::{
 use crate::native::service_lease_authority::{
     ActiveLeaseClaim, LeaseClaimMode, LeaseEffectAuthorization, LeaseResourceKey,
 };
+use serde::Deserialize;
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
@@ -106,7 +107,7 @@ pub(crate) struct ProtectedBrowserLaunchPermit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProtectedBrowserOwner {
-    pub(crate) launch_receipt_id: String,
+    pub(crate) authority_receipt_id: String,
     pub(crate) owner_id: String,
     pub(crate) owner_generation: u64,
     pub(crate) logical_browser_id: String,
@@ -164,6 +165,107 @@ pub(crate) struct ProtectedBrowserOwnerReconciliation {
     pub(crate) authority_revision: u64,
     pub(crate) owner_revision: u64,
     pub(crate) replayed: bool,
+}
+
+pub(crate) struct ProtectedBrowserAdoptionRequest {
+    pub(crate) raw_capability: String,
+    pub(crate) profile_id: String,
+    pub(crate) expected_owner_id: String,
+    pub(crate) expected_owner_generation: u64,
+    pub(crate) candidate_daemon_session_route: String,
+    pub(crate) idempotency_key: String,
+}
+
+impl std::fmt::Debug for ProtectedBrowserAdoptionRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedBrowserAdoptionRequest")
+            .field("raw_capability", &"[REDACTED]")
+            .field("profile_id", &self.profile_id)
+            .field("expected_owner_id", &self.expected_owner_id)
+            .field("expected_owner_generation", &self.expected_owner_generation)
+            .field(
+                "candidate_daemon_session_route",
+                &self.candidate_daemon_session_route,
+            )
+            .field("idempotency_key", &self.idempotency_key)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ProtectedBrowserAdoptionState {
+    Prepared,
+    Completed,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProtectedBrowserAdoptionReceipt {
+    pub(crate) schema_version: String,
+    pub(crate) receipt_id: String,
+    pub(crate) resource: LeaseResourceKey,
+    pub(crate) owner_id: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) logical_browser_id: String,
+    pub(crate) candidate_daemon_session_route: String,
+    pub(crate) browser_process_instance_digest: String,
+    pub(crate) state: ProtectedBrowserAdoptionState,
+    pub(crate) prepared_at: String,
+    pub(crate) transition_deadline: String,
+    pub(crate) authority_revision: u64,
+    pub(crate) owner_revision: u64,
+    pub(crate) completed_at: Option<String>,
+    pub(crate) terminal_authority_revision: Option<u64>,
+    pub(crate) terminal_owner_revision: Option<u64>,
+    pub(crate) completed_owner_id: Option<String>,
+    pub(crate) completed_owner_generation: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserAdoptionPreparation {
+    pub(crate) receipt: ProtectedBrowserAdoptionReceipt,
+    pub(crate) replayed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserAuthorityOwner {
+    pub(crate) authority_receipt_id: String,
+    pub(crate) owner_id: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) logical_browser_id: String,
+    pub(crate) daemon_session_route: String,
+    pub(crate) process_instance_digest: String,
+    pub(crate) process_pid: u32,
+    pub(crate) revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedBrowserAdoptionCompletion {
+    pub(crate) receipt: ProtectedBrowserAdoptionReceipt,
+    pub(crate) owner: Option<ProtectedBrowserAuthorityOwner>,
+    pub(crate) replayed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProtectedAuthorityObservationState {
+    Absent,
+    Current,
+    Stale,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProtectedProfileAuthorityInspection {
+    pub(crate) observed_at: String,
+    pub(crate) reservation: Option<ProtectedEphemeralProfileClaim>,
+    pub(crate) owner: Option<ProtectedBrowserAuthorityOwner>,
+    pub(crate) holder_observation: ProtectedAuthorityObservationState,
+    pub(crate) physical_occupancy: ProtectedAuthorityObservationState,
+    pub(crate) effect_channel_observation: ProtectedAuthorityObservationState,
+    pub(crate) requester_is_holder: bool,
 }
 
 pub(crate) fn enroll_protected_profile(
@@ -252,6 +354,396 @@ pub(crate) fn reconcile_protected_browser_owner(
     let encoded = encode_protected_browser_owner_reconciliation_request(request)?;
     let response = exchange_with_protected_lease_authority(&encoded)?;
     decode_protected_browser_owner_reconciliation_response(&response, request)
+}
+
+pub(crate) fn prepare_protected_browser_adoption(
+    request: &ProtectedBrowserAdoptionRequest,
+) -> Result<ProtectedBrowserAdoptionPreparation, String> {
+    let encoded = encode_protected_browser_adoption_request(request)?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_browser_adoption_preparation(&response, request)
+}
+
+pub(crate) fn inspect_protected_profile_authority(
+    raw_capability: &str,
+    profile_id: &str,
+) -> Result<ProtectedProfileAuthorityInspection, String> {
+    let encoded = encode_protected_profile_authority_inspection(raw_capability, profile_id)?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_profile_authority_inspection(&response, profile_id)
+}
+
+pub(crate) fn complete_protected_browser_adoption_success(
+    preparation: &ProtectedBrowserAdoptionPreparation,
+    completion_idempotency_key: &str,
+) -> Result<ProtectedBrowserAdoptionCompletion, String> {
+    complete_protected_browser_adoption(
+        preparation,
+        "completed",
+        completion_idempotency_key,
+        "browser_adoption_completed",
+    )
+}
+
+pub(crate) fn mark_protected_browser_adoption_uncertain(
+    preparation: &ProtectedBrowserAdoptionPreparation,
+    completion_idempotency_key: &str,
+) -> Result<ProtectedBrowserAdoptionCompletion, String> {
+    complete_protected_browser_adoption(
+        preparation,
+        "uncertain",
+        completion_idempotency_key,
+        "browser_adoption_uncertain",
+    )
+}
+
+fn encode_protected_browser_adoption_request(
+    request: &ProtectedBrowserAdoptionRequest,
+) -> Result<Vec<u8>, String> {
+    if request.raw_capability.trim().is_empty()
+        || crate::runtime_profile::validate_runtime_profile_name(&request.profile_id).is_err()
+        || request.expected_owner_id.trim().is_empty()
+        || request.expected_owner_generation == 0
+        || request.candidate_daemon_session_route.trim().is_empty()
+        || request.idempotency_key.trim().is_empty()
+    {
+        return Err("lease_authority_browser_adoption_request_invalid".to_string());
+    }
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "prepare_browser_adoption",
+        "payload": {
+            "rawCapability": request.raw_capability.as_bytes(),
+            "resource": LeaseResourceKey::profile(&request.profile_id),
+            "expectedOwnerId": request.expected_owner_id,
+            "expectedOwnerGeneration": request.expected_owner_generation,
+            "candidateDaemonSessionRoute": request.candidate_daemon_session_route,
+            "idempotencyKey": request.idempotency_key,
+        }
+    }))
+    .map_err(|_| "lease_authority_browser_adoption_request_encode_failed".to_string())
+}
+
+fn encode_protected_profile_authority_inspection(
+    raw_capability: &str,
+    profile_id: &str,
+) -> Result<Vec<u8>, String> {
+    if raw_capability.trim().is_empty()
+        || crate::runtime_profile::validate_runtime_profile_name(profile_id).is_err()
+    {
+        return Err("lease_authority_profile_inspection_request_invalid".to_string());
+    }
+    serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "inspect_profile_authority",
+        "payload": {
+            "rawCapability": raw_capability.as_bytes(),
+            "resource": LeaseResourceKey::profile(profile_id),
+        }
+    }))
+    .map_err(|_| "lease_authority_profile_inspection_request_encode_failed".to_string())
+}
+
+fn decode_protected_profile_authority_inspection(
+    encoded: &[u8],
+    profile_id: &str,
+) -> Result<ProtectedProfileAuthorityInspection, String> {
+    let response = decode_success_response(
+        encoded,
+        "profile_authority_inspected",
+        "lease_authority_profile_inspection",
+    )?;
+    let payload = response
+        .get("payload")
+        .ok_or_else(|| "lease_authority_profile_inspection_response_invalid".to_string())?;
+    let reservation = match payload.get("reservation") {
+        Some(value) if !value.is_null() => {
+            let claim: ActiveLeaseClaim = serde_json::from_value(value.clone()).map_err(|_| {
+                "lease_authority_profile_inspection_reservation_invalid".to_string()
+            })?;
+            if claim.resource != LeaseResourceKey::profile(profile_id)
+                || claim.mode() != LeaseClaimMode::Ephemeral
+            {
+                return Err("lease_authority_profile_inspection_reservation_mismatch".to_string());
+            }
+            Some(ProtectedEphemeralProfileClaim {
+                resource: claim.resource.clone(),
+                claim_id: claim.claim_id().to_string(),
+                principal_id: claim.principal_id().to_string(),
+                capability_id: claim.capability_id().to_string(),
+                capability_revision: claim.capability_revision,
+                claim_revision: claim.revision(),
+                fencing_token: claim.fencing_token(),
+                expires_at: claim.expires_at().to_string(),
+            })
+        }
+        Some(_) => None,
+        None => return Err("lease_authority_profile_inspection_response_invalid".to_string()),
+    };
+    let owner = match payload.get("owner") {
+        Some(value) if !value.is_null() => {
+            Some(decode_protected_browser_authority_owner_projection(
+                Some(value),
+                "lease_authority_profile_inspection_owner_invalid",
+            )?)
+        }
+        Some(_) => None,
+        None => return Err("lease_authority_profile_inspection_response_invalid".to_string()),
+    };
+    let holder_observation = decode_protected_authority_observation(
+        payload.get("holderObservation"),
+        "lease_authority_profile_inspection_holder_observation_invalid",
+    )?;
+    let physical_occupancy = decode_protected_authority_observation(
+        payload.get("physicalOccupancy"),
+        "lease_authority_profile_inspection_physical_occupancy_invalid",
+    )?;
+    let effect_channel_observation = decode_protected_authority_observation(
+        payload.get("effectChannelObservation"),
+        "lease_authority_profile_inspection_effect_channel_invalid",
+    )?;
+    let requester_is_holder = payload
+        .get("requesterIsHolder")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| "lease_authority_profile_inspection_response_invalid".to_string())?;
+    if owner.is_none()
+        && (holder_observation != ProtectedAuthorityObservationState::Absent
+            || physical_occupancy != ProtectedAuthorityObservationState::Absent
+            || effect_channel_observation != ProtectedAuthorityObservationState::Absent
+            || requester_is_holder)
+        || owner.is_some()
+            && (holder_observation == ProtectedAuthorityObservationState::Absent
+                || physical_occupancy == ProtectedAuthorityObservationState::Absent)
+    {
+        return Err("lease_authority_profile_inspection_axes_mismatch".to_string());
+    }
+    Ok(ProtectedProfileAuthorityInspection {
+        observed_at: required_response_string(
+            payload,
+            "observedAt",
+            "lease_authority_profile_inspection_response_invalid",
+        )?,
+        reservation,
+        owner,
+        holder_observation,
+        physical_occupancy,
+        effect_channel_observation,
+        requester_is_holder,
+    })
+}
+
+fn decode_protected_authority_observation(
+    value: Option<&Value>,
+    error_code: &str,
+) -> Result<ProtectedAuthorityObservationState, String> {
+    match value.and_then(Value::as_str) {
+        Some("absent") => Ok(ProtectedAuthorityObservationState::Absent),
+        Some("current") => Ok(ProtectedAuthorityObservationState::Current),
+        Some("stale") => Ok(ProtectedAuthorityObservationState::Stale),
+        Some("uncertain") => Ok(ProtectedAuthorityObservationState::Uncertain),
+        _ => Err(error_code.to_string()),
+    }
+}
+
+fn decode_protected_browser_adoption_preparation(
+    encoded: &[u8],
+    request: &ProtectedBrowserAdoptionRequest,
+) -> Result<ProtectedBrowserAdoptionPreparation, String> {
+    let response = decode_success_response(
+        encoded,
+        "browser_adoption_prepared",
+        "lease_authority_browser_adoption_prepare",
+    )?;
+    let receipt = decode_protected_browser_adoption_receipt(
+        response.pointer("/payload/receipt"),
+        "lease_authority_browser_adoption_prepare_receipt_invalid",
+    )?;
+    if receipt.resource != LeaseResourceKey::profile(&request.profile_id)
+        || receipt.owner_id != request.expected_owner_id
+        || receipt.owner_generation != request.expected_owner_generation
+        || receipt.candidate_daemon_session_route != request.candidate_daemon_session_route
+        || receipt.state != ProtectedBrowserAdoptionState::Prepared
+        || receipt.completed_at.is_some()
+        || receipt.terminal_authority_revision.is_some()
+        || receipt.terminal_owner_revision.is_some()
+        || receipt.completed_owner_id.is_some()
+        || receipt.completed_owner_generation.is_some()
+    {
+        return Err("lease_authority_browser_adoption_prepare_receipt_mismatch".to_string());
+    }
+    Ok(ProtectedBrowserAdoptionPreparation {
+        receipt,
+        replayed: response
+            .pointer("/payload/replayed")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| {
+                "lease_authority_browser_adoption_prepare_receipt_invalid".to_string()
+            })?,
+    })
+}
+
+fn complete_protected_browser_adoption(
+    preparation: &ProtectedBrowserAdoptionPreparation,
+    result: &str,
+    completion_idempotency_key: &str,
+    expected_outcome: &str,
+) -> Result<ProtectedBrowserAdoptionCompletion, String> {
+    if preparation.receipt.receipt_id.trim().is_empty()
+        || preparation.receipt.state != ProtectedBrowserAdoptionState::Prepared
+        || completion_idempotency_key.trim().is_empty()
+        || !matches!(result, "completed" | "uncertain")
+    {
+        return Err("lease_authority_browser_adoption_completion_invalid".to_string());
+    }
+    let encoded = serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+        "operation": "complete_browser_adoption",
+        "payload": {
+            "receiptId": preparation.receipt.receipt_id,
+            "result": result,
+            "completionIdempotencyKey": completion_idempotency_key,
+        }
+    }))
+    .map_err(|_| "lease_authority_browser_adoption_completion_encode_failed".to_string())?;
+    let response = exchange_with_protected_lease_authority(&encoded)?;
+    decode_protected_browser_adoption_completion(&response, preparation, expected_outcome)
+}
+
+fn decode_protected_browser_adoption_completion(
+    encoded: &[u8],
+    preparation: &ProtectedBrowserAdoptionPreparation,
+    expected_outcome: &str,
+) -> Result<ProtectedBrowserAdoptionCompletion, String> {
+    let response = decode_success_response(
+        encoded,
+        expected_outcome,
+        "lease_authority_browser_adoption_completion",
+    )?;
+    let receipt = decode_protected_browser_adoption_receipt(
+        response.pointer("/payload/receipt"),
+        "lease_authority_browser_adoption_completion_receipt_invalid",
+    )?;
+    let expected_state = match expected_outcome {
+        "browser_adoption_completed" => ProtectedBrowserAdoptionState::Completed,
+        "browser_adoption_uncertain" => ProtectedBrowserAdoptionState::Uncertain,
+        _ => return Err("lease_authority_browser_adoption_completion_invalid".to_string()),
+    };
+    let original = &preparation.receipt;
+    if receipt.receipt_id != original.receipt_id
+        || receipt.resource != original.resource
+        || receipt.owner_id != original.owner_id
+        || receipt.owner_generation != original.owner_generation
+        || receipt.logical_browser_id != original.logical_browser_id
+        || receipt.candidate_daemon_session_route != original.candidate_daemon_session_route
+        || receipt.browser_process_instance_digest != original.browser_process_instance_digest
+        || receipt.prepared_at != original.prepared_at
+        || receipt.transition_deadline != original.transition_deadline
+        || receipt.state != expected_state
+        || receipt.completed_at.is_none()
+        || receipt.terminal_authority_revision.is_none()
+    {
+        return Err("lease_authority_browser_adoption_completion_receipt_mismatch".to_string());
+    }
+    let owner = match expected_state {
+        ProtectedBrowserAdoptionState::Completed => {
+            let owner = decode_protected_browser_authority_owner_projection(
+                response.pointer("/payload/owner"),
+                "lease_authority_browser_adoption_owner_invalid",
+            )?;
+            if receipt.completed_owner_id.as_deref() != Some(owner.owner_id.as_str())
+                || receipt.completed_owner_generation != Some(owner.owner_generation)
+                || receipt.terminal_owner_revision != Some(owner.revision)
+                || owner.authority_receipt_id != receipt.receipt_id
+                || owner.logical_browser_id != receipt.logical_browser_id
+                || owner.daemon_session_route != receipt.candidate_daemon_session_route
+                || owner.process_instance_digest != receipt.browser_process_instance_digest
+            {
+                return Err("lease_authority_browser_adoption_owner_mismatch".to_string());
+            }
+            Some(owner)
+        }
+        ProtectedBrowserAdoptionState::Uncertain => {
+            if response
+                .pointer("/payload/owner")
+                .is_some_and(|value| !value.is_null())
+                || receipt.completed_owner_id.is_some()
+                || receipt.completed_owner_generation.is_some()
+                || receipt.terminal_owner_revision.is_some()
+            {
+                return Err(
+                    "lease_authority_browser_adoption_completion_receipt_mismatch".to_string(),
+                );
+            }
+            None
+        }
+        ProtectedBrowserAdoptionState::Prepared => unreachable!(),
+    };
+    Ok(ProtectedBrowserAdoptionCompletion {
+        receipt,
+        owner,
+        replayed: response
+            .pointer("/payload/replayed")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| {
+                "lease_authority_browser_adoption_completion_receipt_invalid".to_string()
+            })?,
+    })
+}
+
+fn decode_protected_browser_adoption_receipt(
+    value: Option<&Value>,
+    error_code: &str,
+) -> Result<ProtectedBrowserAdoptionReceipt, String> {
+    let receipt: ProtectedBrowserAdoptionReceipt =
+        serde_json::from_value(value.cloned().ok_or_else(|| error_code.to_string())?)
+            .map_err(|_| error_code.to_string())?;
+    if receipt.schema_version != "agent-browser.lease-authority-browser-adoption-receipt.v1"
+        || receipt.resource.kind
+            != crate::native::service_lease_authority::LeaseResourceKind::Profile
+        || receipt.receipt_id.trim().is_empty()
+        || receipt.owner_id.trim().is_empty()
+        || receipt.owner_generation == 0
+        || receipt.logical_browser_id.trim().is_empty()
+        || receipt.candidate_daemon_session_route.trim().is_empty()
+        || !super::valid_sha256_digest(&receipt.browser_process_instance_digest)
+        || receipt.prepared_at.trim().is_empty()
+        || receipt.transition_deadline.trim().is_empty()
+        || receipt.authority_revision == 0
+        || receipt.owner_revision == 0
+    {
+        return Err(error_code.to_string());
+    }
+    Ok(receipt)
+}
+
+fn decode_protected_browser_authority_owner_projection(
+    value: Option<&Value>,
+    error_code: &str,
+) -> Result<ProtectedBrowserAuthorityOwner, String> {
+    let owner = value
+        .filter(|value| !value.is_null())
+        .ok_or_else(|| error_code.to_string())?;
+    let process_pid = owner
+        .get("processPid")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 1)
+        .ok_or_else(|| error_code.to_string())?;
+    let process_instance_digest =
+        required_response_string(owner, "processInstanceDigest", error_code)?;
+    if !super::valid_sha256_digest(&process_instance_digest) {
+        return Err(error_code.to_string());
+    }
+    Ok(ProtectedBrowserAuthorityOwner {
+        authority_receipt_id: required_response_string(owner, "authorityReceiptId", error_code)?,
+        owner_id: required_response_string(owner, "ownerId", error_code)?,
+        owner_generation: required_response_u64(owner, "ownerGeneration", error_code)?,
+        logical_browser_id: required_response_string(owner, "logicalBrowserId", error_code)?,
+        daemon_session_route: required_response_string(owner, "daemonSessionRoute", error_code)?,
+        process_instance_digest,
+        process_pid,
+        revision: required_response_u64(owner, "revision", error_code)?,
+    })
 }
 
 fn exchange_with_protected_lease_authority(encoded: &[u8]) -> Result<Vec<u8>, String> {
@@ -644,7 +1136,7 @@ fn decode_protected_browser_launch_success(
         return Err("lease_authority_browser_launch_owner_mismatch".to_string());
     }
     Ok(ProtectedBrowserOwner {
-        launch_receipt_id: permit.receipt_id.clone(),
+        authority_receipt_id: permit.receipt_id.clone(),
         owner_id: required_response_string(
             owner,
             "ownerId",
@@ -966,6 +1458,219 @@ mod tests {
         .unwrap();
         assert!(!outcome.replayed);
         assert_eq!(outcome.owner_generation, 7);
+    }
+
+    #[test]
+    fn browser_adoption_client_exposes_only_claims_and_redacted_authority_projections() {
+        let request = ProtectedBrowserAdoptionRequest {
+            raw_capability: "capability-secret".to_string(),
+            profile_id: "last30days-social".to_string(),
+            expected_owner_id: "owner:old".to_string(),
+            expected_owner_generation: 7,
+            candidate_daemon_session_route: "last30days-recovery".to_string(),
+            idempotency_key: "adopt:last30days:tick-1".to_string(),
+        };
+        let encoded = encode_protected_browser_adoption_request(&request).unwrap();
+        let encoded: Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(encoded["operation"], "prepare_browser_adoption");
+        for forbidden in [
+            "candidateExecutorPid",
+            "candidateExecutorIdentityDigest",
+            "browserPid",
+            "processInstanceDigest",
+            "cdpPort",
+            "cdpEndpoint",
+            "profileLockIdentityDigest",
+            "originalExecutorStale",
+            "observedAt",
+            "transitionDeadline",
+        ] {
+            assert!(encoded["payload"].get(forbidden).is_none(), "{forbidden}");
+        }
+        assert!(!format!("{request:?}").contains("capability-secret"));
+
+        let projected_receipt = serde_json::json!({
+            "schemaVersion": "agent-browser.lease-authority-browser-adoption-receipt.v1",
+            "receiptId": "browser-adoption:abc",
+            "resource": {"kind": "profile", "id": "last30days-social"},
+            "ownerId": "owner:old",
+            "ownerGeneration": 7,
+            "logicalBrowserId": "browser:stable",
+            "candidateDaemonSessionRoute": "last30days-recovery",
+            "browserProcessInstanceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "state": "prepared",
+            "preparedAt": "2026-09-01T12:00:00.000000000Z",
+            "transitionDeadline": "2026-09-01T12:01:00.000000000Z",
+            "authorityRevision": 11,
+            "ownerRevision": 7
+        });
+        let prepared_response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "browser_adoption_prepared",
+            "payload": {"receipt": projected_receipt, "replayed": false}
+        });
+        let preparation = decode_protected_browser_adoption_preparation(
+            &serde_json::to_vec(&prepared_response).unwrap(),
+            &request,
+        )
+        .unwrap();
+        assert_eq!(
+            preparation.receipt.state,
+            ProtectedBrowserAdoptionState::Prepared
+        );
+
+        let completion_request = serde_json::to_value(serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_REQUEST_SCHEMA_VERSION,
+            "operation": "complete_browser_adoption",
+            "payload": {
+                "receiptId": preparation.receipt.receipt_id,
+                "result": "completed",
+                "completionIdempotencyKey": "complete:adopt:last30days:tick-1"
+            }
+        }))
+        .unwrap();
+        for forbidden in [
+            "candidateExecutorPid",
+            "attachmentEvidenceDigest",
+            "cdpEndpoint",
+            "profileLockIdentityDigest",
+            "observedAt",
+        ] {
+            assert!(
+                completion_request["payload"].get(forbidden).is_none(),
+                "{forbidden}"
+            );
+        }
+
+        let mut completed_receipt = prepared_response["payload"]["receipt"].clone();
+        completed_receipt["state"] = serde_json::json!("completed");
+        completed_receipt["completedAt"] = serde_json::json!("2026-09-01T12:00:01.000000000Z");
+        completed_receipt["terminalAuthorityRevision"] = serde_json::json!(12);
+        completed_receipt["terminalOwnerRevision"] = serde_json::json!(8);
+        completed_receipt["completedOwnerId"] = serde_json::json!("owner:new");
+        completed_receipt["completedOwnerGeneration"] = serde_json::json!(8);
+        let completed_response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "browser_adoption_completed",
+            "payload": {
+                "receipt": completed_receipt,
+                "owner": {
+                    "authorityReceiptId": "browser-adoption:abc",
+                    "ownerId": "owner:new",
+                    "ownerGeneration": 8,
+                    "logicalBrowserId": "browser:stable",
+                    "daemonSessionRoute": "last30days-recovery",
+                    "processInstanceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "processPid": 4242,
+                    "revision": 8
+                },
+                "replayed": false
+            }
+        });
+        let completion = decode_protected_browser_adoption_completion(
+            &serde_json::to_vec(&completed_response).unwrap(),
+            &preparation,
+            "browser_adoption_completed",
+        )
+        .unwrap();
+        assert_eq!(completion.owner.unwrap().owner_id, "owner:new");
+
+        let mut leaked = completed_response;
+        leaked["payload"]["receipt"]["candidateExecutorPid"] = serde_json::json!(999);
+        assert_eq!(
+            decode_protected_browser_adoption_completion(
+                &serde_json::to_vec(&leaked).unwrap(),
+                &preparation,
+                "browser_adoption_completed",
+            )
+            .unwrap_err(),
+            "lease_authority_browser_adoption_completion_receipt_invalid"
+        );
+    }
+
+    #[test]
+    fn profile_authority_inspection_keeps_reservation_holder_and_occupancy_independent() {
+        let encoded =
+            encode_protected_profile_authority_inspection("capability-secret", "last30days-social")
+                .unwrap();
+        let encoded: Value = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(encoded["operation"], "inspect_profile_authority");
+        assert!(encoded["payload"].get("sessionName").is_none());
+        assert!(encoded["payload"].get("ownerId").is_none());
+        assert!(encoded["payload"].get("processPid").is_none());
+        assert!(encoded["payload"].get("observedAt").is_none());
+
+        let response = serde_json::json!({
+            "schemaVersion": LEASE_AUTHORITY_PROTOCOL_RESPONSE_SCHEMA_VERSION,
+            "outcome": "profile_authority_inspected",
+            "payload": {
+                "observedAt": "2026-09-01T12:00:00Z",
+                "reservation": {
+                    "schemaVersion": "agent-browser.lease-authority.v1",
+                    "claimId": "lease-claim-v1:abc",
+                    "resource": {"kind": "profile", "id": "last30days-social"},
+                    "parentClaimId": null,
+                    "principalId": "principal:local-uid:1000:profile:last30days-social",
+                    "capabilityId": "capability:last30days-social",
+                    "capabilityRevision": 1,
+                    "mode": "ephemeral",
+                    "revision": 3,
+                    "fencingToken": 9,
+                    "idempotencyKey": "acquire:last30days:1",
+                    "acquiredAt": "2026-09-01T11:59:00Z",
+                    "heartbeatAt": "2026-09-01T11:59:00Z",
+                    "expiresAt": "2026-09-01T12:04:00Z",
+                    "transitionDeadline": null,
+                    "recoveryControllerId": null,
+                    "bootEpoch": "boot-1",
+                    "ownerGeneration": null
+                },
+                "owner": {
+                    "authorityReceiptId": "effect-receipt:launch-1",
+                    "ownerId": "owner:old",
+                    "ownerGeneration": 7,
+                    "logicalBrowserId": "browser:stable",
+                    "daemonSessionRoute": "stable-route",
+                    "processInstanceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "processPid": 4242,
+                    "revision": 7
+                },
+                "holderObservation": "stale",
+                "physicalOccupancy": "current",
+                "effectChannelObservation": "uncertain",
+                "requesterIsHolder": false
+            }
+        });
+        let inspection = decode_protected_profile_authority_inspection(
+            &serde_json::to_vec(&response).unwrap(),
+            "last30days-social",
+        )
+        .unwrap();
+        assert!(inspection.reservation.is_some());
+        assert_eq!(
+            inspection.holder_observation,
+            ProtectedAuthorityObservationState::Stale
+        );
+        assert_eq!(
+            inspection.physical_occupancy,
+            ProtectedAuthorityObservationState::Current
+        );
+        assert_eq!(
+            inspection.effect_channel_observation,
+            ProtectedAuthorityObservationState::Uncertain
+        );
+        assert_eq!(inspection.owner.unwrap().owner_id, "owner:old");
+
+        let mut collapsed = response;
+        collapsed["payload"]["owner"] = Value::Null;
+        assert_eq!(
+            decode_protected_profile_authority_inspection(
+                &serde_json::to_vec(&collapsed).unwrap(),
+                "last30days-social",
+            )
+            .unwrap_err(),
+            "lease_authority_profile_inspection_axes_mismatch"
+        );
     }
 
     #[test]

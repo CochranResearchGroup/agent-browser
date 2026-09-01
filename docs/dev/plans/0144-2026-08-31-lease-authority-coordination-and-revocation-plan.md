@@ -2941,3 +2941,64 @@ only after effect-channel mediation or isolation, two-phase adoption, physical
 identity hardening, the usability bound, exhaustive denial and sink manifests,
 legacy-path deletion, reference-model and fault tests, mixed-version migration,
 and exact installed acceptance all pass for one candidate.
+
+## Ninth Hotfix Recurrence Gap Audit | 2026-09-01
+
+Implementation found three additional cross-layer failures that the abstract
+model did not make visible. First, prepare and complete adoption requests were
+dispatched as kernel mutations but were omitted from the socket service's
+durable-mutation classification. A request could therefore return a successful
+adoption response without publishing the resulting protected generation. The
+service now routes both operations through the durable mutation transaction,
+and a focused decoder-to-transaction regression freezes that requirement.
+
+Second, the initial admission check treated a daemon route name as executor
+identity and rejected a replacement process that reused the same stable route.
+That would recreate the reported invented-session failure by forcing the access
+planner to manufacture a replacement route. Adoption now distinguishes the
+candidate exclusively by root-observed process and executable identity. A
+stable route may survive an executor generation change, while the owner
+generation and executor custody still advance atomically.
+
+Third, executor process death does not prove effect-channel revocation. A child,
+inherited descriptor, reconnectable CDP endpoint, profile writer, or process
+signal capability can outlive the recorded executor. Protected inspection now
+reports reservation, recorded owner, holder observation, physical occupancy,
+effect-channel observation, and requester-holder equality as independent axes.
+Acquisition cannot turn uncertain effect custody into adoption. This means the
+two-phase adoption kernel is implemented, but live orphan adoption remains
+deliberately unavailable until the selected broker or operating-system
+containment proves the old effect channel absent. A bounded exact-browser close
+and cold relaunch is an acceptable ordinary-work fallback; a permanent denial
+is not.
+
+## Slice F Two-Phase Adoption Kernel And Truthful Inspection | 2026-09-01
+
+The protected authority now supports one single-use prepare receipt and an
+atomic completion for an exact live browser. Prepare authenticates the profile
+capability before observation, binds the current claim, owner generation,
+browser process instance, physical profile, CDP listener socket, profile lock,
+candidate peer, and a sixty-second transition deadline, and refuses while the
+original executor remains current. Completion reobserves replaceable axes and
+requires the selected candidate to own an established connection to the exact
+CDP listener before advancing owner generation and executor custody. Uncertain
+completion terminalizes without transferring the owner or issuing a second
+candidate.
+
+The public internal adapter carries only caller claims and redacted authority
+projections. Callers cannot supply PIDs, endpoint identity, attachment,
+absence, time, or lock evidence, and response decoding rejects leaked executor
+or physical evidence. The profile-acquisition entry point now inspects
+protected authority before considering cold launch. A stale exact browser is
+reconciled before relaunch, a genuinely current foreign executor returns an
+exact conflict, and a live orphan is eligible for adoption only after effect
+custody is independently proven absent. Receipt projections use the generic
+`authorityReceiptId` name so launch and adoption receipts are not conflated.
+
+Focused source validation currently passes ten adoption tests, the truthful
+inspection adapter regression, the mutation-transaction regression, and the
+ordinary-acquisition disposition matrix. This is not an installable acceptance
+checkpoint yet. Prepared-deadline and uncertain-receipt reconciliation,
+effect-channel mediation or isolation, current-holder reconstruction, docs and
+contract propagation for the receipt field, full protected service restart
+tests, legacy-path deletion, and installed development acceptance remain.

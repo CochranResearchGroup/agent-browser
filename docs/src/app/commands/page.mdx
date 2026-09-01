@@ -785,21 +785,25 @@ launch. HTTP uses `POST /api/service/profiles/acquire`, MCP uses
 `acquireServiceProfile()`.
 
 An acquired Linux response contains <code>leaseAuthority.kind=protected</code>
-with the current claim and committed process-backed owner. It never returns an
-executable authorization. Launch and owner registration finish through the
-protected authority before the response is emitted. Completion failure closes
-the launched browser and records the consumed intent as uncertain before any
-retry. A confirmed close reconciles the exact owner ID and generation. A failed
-or unproven shutdown retains that owner for later reconciliation. Non-Linux
-builds retain the compatibility path until the protected authority service is
-ported.
+with the current claim and committed process-backed owner. Before choosing an
+effect, the broker inspects reservation, holder, physical occupancy, and
+effect-channel custody as separate facts. A stale browser is reconciled before
+cold launch, a current foreign executor returns an exact conflict, and a live
+orphan is adopted only after old effect custody is proven absent. The response
+never returns an executable authorization. Launch or adoption and owner
+registration finish through the protected authority before the response is
+emitted. Completion uncertainty never triggers a blind retry. A confirmed
+close reconciles the exact owner ID and generation. A failed or unproven
+shutdown retains that owner for later reconciliation. Non-Linux builds retain
+the compatibility path until the protected authority service is ported.
 
 The JSON response from `service browsers` includes
 <code>protectedBrowserOwnerObservations</code> keyed by browser ID when a
-protected launch receipt has been projected. Each entry is receipt-linked,
-freshness-bounded, and reports <code>operationalAuthority: false</code>. It is
-only a candidate locator for inspection. Adoption, cleanup, transfer, and
-denial require a fresh decision from the protected root authority.
+protected launch or adoption receipt has been projected. Each entry is linked
+through <code>authorityReceiptId</code>, freshness-bounded, and reports
+<code>operationalAuthority: false</code>. It is only a candidate locator for
+inspection. Adoption, cleanup, transfer, and denial require a fresh protected
+root decision over the independent authority axes.
 
 Trust material uses immutable, digest-verified selected generations. The
 private signer and public verifier become current together. Standalone legacy

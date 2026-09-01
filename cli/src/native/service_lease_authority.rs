@@ -26,10 +26,13 @@ pub(crate) fn run_linux_lease_authority_bootstrap() -> Result<(), String> {
 #[cfg(target_os = "linux")]
 pub(crate) use protocol::client::{
     acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
-    complete_protected_browser_launch_success, enroll_protected_profile,
-    mark_protected_browser_launch_uncertain, reconcile_protected_browser_owner,
-    ProtectedBrowserLaunchPermit, ProtectedBrowserLaunchRequest, ProtectedBrowserOwner,
-    ProtectedBrowserOwnerLease, ProtectedBrowserOwnerReconciliationRequest,
+    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
+    enroll_protected_profile, inspect_protected_profile_authority,
+    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
+    prepare_protected_browser_adoption, reconcile_protected_browser_owner,
+    ProtectedAuthorityObservationState, ProtectedBrowserAdoptionPreparation,
+    ProtectedBrowserAdoptionRequest, ProtectedBrowserLaunchPermit, ProtectedBrowserLaunchRequest,
+    ProtectedBrowserOwner, ProtectedBrowserOwnerLease, ProtectedBrowserOwnerReconciliationRequest,
     ProtectedEphemeralProfileClaim, ProtectedEphemeralProfileClaimRequest,
     ProtectedProfileEnrollment, ProtectedProfileEnrollmentRequest,
 };
@@ -1166,6 +1169,9 @@ pub(crate) enum LeaseEventKind {
     Superseded,
     OwnerCommitted,
     OwnerReconciled,
+    OwnerAdoptionPrepared,
+    OwnerAdopted,
+    OwnerAdoptionUncertain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

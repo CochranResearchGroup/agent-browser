@@ -296,7 +296,7 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
         } }, "protectedBrowserOwnerObservations" : { "session:protected-session" : {
         "schemaVersion" : "agent-browser.protected-browser-owner-observation.v1",
         "source" : "protected_lease_authority_receipt", "operationalAuthority" : false,
-        "launchReceiptId" : "effect-receipt:launch-1", "ownerId" : "owner:protected-1",
+        "authorityReceiptId" : "effect-receipt:launch-1", "ownerId" : "owner:protected-1",
         "ownerGeneration" : 7, "logicalBrowserId" : "browser:protected-1",
         "daemonSessionRoute" : "protected-session", "processInstanceDigest" :
         "sha256:7777777777777777777777777777777777777777777777777777777777777777",
@@ -317,7 +317,7 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
     );
     assert_eq!(
         result["data"]["protectedBrowserOwnerObservations"]["session:protected-session"]
-            ["launchReceiptId"],
+            ["authorityReceiptId"],
         "effect-receipt:launch-1"
     );
     assert_eq!(

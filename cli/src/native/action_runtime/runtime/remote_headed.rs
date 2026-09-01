@@ -501,7 +501,7 @@ pub(crate) fn persist_protected_current_browser_health(
         schema_version: "agent-browser.protected-browser-owner-observation.v1".to_string(),
         source: "protected_lease_authority_receipt".to_string(),
         operational_authority: false,
-        launch_receipt_id: owner.launch_receipt_id.clone(),
+        authority_receipt_id: owner.authority_receipt_id.clone(),
         owner_id: owner.owner_id.clone(),
         owner_generation: owner.owner_generation,
         logical_browser_id: owner.logical_browser_id.clone(),

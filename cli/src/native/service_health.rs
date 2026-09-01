@@ -1015,7 +1015,7 @@ pub(crate) fn validate_protected_browser_owner_observation(
     if observation.schema_version != "agent-browser.protected-browser-owner-observation.v1"
         || observation.source != "protected_lease_authority_receipt"
         || observation.operational_authority
-        || observation.launch_receipt_id.trim().is_empty()
+        || observation.authority_receipt_id.trim().is_empty()
         || observation.owner_id.trim().is_empty()
         || observation.owner_generation == 0
         || observation.logical_browser_id.trim().is_empty()
@@ -5064,7 +5064,7 @@ mod tests {
             schema_version: "agent-browser.protected-browser-owner-observation.v1".to_string(),
             source: "protected_lease_authority_receipt".to_string(),
             operational_authority: false,
-            launch_receipt_id: "effect-receipt:launch-1".to_string(),
+            authority_receipt_id: "effect-receipt:launch-1".to_string(),
             owner_id: "owner:protected-1".to_string(),
             owner_generation: 7,
             logical_browser_id: "browser:protected-1".to_string(),

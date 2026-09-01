@@ -5244,7 +5244,7 @@ pub struct ProtectedBrowserOwnerObservation {
     pub source: String,
     #[serde(deserialize_with = "deserialize_protected_observation_authority")]
     pub operational_authority: bool,
-    pub launch_receipt_id: String,
+    pub authority_receipt_id: String,
     pub owner_id: String,
     pub owner_generation: u64,
     pub logical_browser_id: String,

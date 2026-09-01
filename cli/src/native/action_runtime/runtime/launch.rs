@@ -77,8 +77,10 @@ use crate::native::service_health::{
 };
 #[cfg(target_os = "linux")]
 use crate::native::service_lease_authority::{
-    complete_protected_browser_launch_success, mark_protected_browser_launch_uncertain,
-    ProtectedBrowserLaunchPermit, ProtectedBrowserOwner, ProtectedBrowserOwnerLease,
+    complete_protected_browser_adoption_success, complete_protected_browser_launch_success,
+    mark_protected_browser_adoption_uncertain, mark_protected_browser_launch_uncertain,
+    ProtectedBrowserAdoptionPreparation, ProtectedBrowserLaunchPermit, ProtectedBrowserOwner,
+    ProtectedBrowserOwnerLease,
 };
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
@@ -688,6 +690,102 @@ pub(crate) async fn auto_launch_protected_profile(
     context: ProtectedProfileLaunchContext,
 ) -> Result<(), String> {
     auto_launch_with_authority(state, command, AutoLaunchAuthority::Protected(context)).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn adopt_protected_profile_browser(
+    state: &mut DaemonState,
+    profile_id: &str,
+    profile_path: &Path,
+    raw_capability: String,
+    preparation: ProtectedBrowserAdoptionPreparation,
+    completion_idempotency_key: &str,
+) -> Result<(), String> {
+    let deadline = chrono::DateTime::parse_from_rfc3339(&preparation.receipt.transition_deadline)
+        .map_err(|_| "protected_browser_adoption_deadline_invalid".to_string())?
+        .with_timezone(&chrono::Utc);
+    let remaining = (deadline - chrono::Utc::now())
+        .to_std()
+        .map_err(|_| "protected_browser_adoption_deadline_expired".to_string())?;
+    let port = read_devtools_port(profile_path)
+        .ok_or_else(|| "protected_browser_adoption_endpoint_unavailable".to_string())?;
+    let manager =
+        match tokio::time::timeout(remaining, BrowserManager::connect_cdp(&port.to_string())).await
+        {
+            Ok(Ok(manager)) => manager,
+            Ok(Err(error)) => {
+                let _ = mark_protected_browser_adoption_uncertain(
+                    &preparation,
+                    &format!("{completion_idempotency_key}:attach-uncertain"),
+                );
+                return Err(format!("protected_browser_adoption_attach_failed: {error}"));
+            }
+            Err(_) => {
+                let _ = mark_protected_browser_adoption_uncertain(
+                    &preparation,
+                    &format!("{completion_idempotency_key}:attach-timeout"),
+                );
+                return Err("protected_browser_adoption_deadline_expired".to_string());
+            }
+        };
+    state.reset_input_state();
+    state.attached_runtime_profile = None;
+    state.attached_browser_pid = None;
+    state.browser = Some(manager);
+    let completion =
+        match complete_protected_browser_adoption_success(&preparation, completion_idempotency_key)
+        {
+            Ok(completion) => completion,
+            Err(error) => {
+                let _ = mark_protected_browser_adoption_uncertain(
+                    &preparation,
+                    &format!("{completion_idempotency_key}:commit-uncertain"),
+                );
+                state.browser = None;
+                state.attached_browser_pid = None;
+                return Err(error);
+            }
+        };
+    let adopted = completion
+        .owner
+        .ok_or_else(|| "protected_browser_adoption_owner_missing".to_string())?;
+    state.attached_browser_pid = Some(adopted.process_pid);
+    state.close_behavior = CloseBehavior::CloseBrowser;
+    let owner = ProtectedBrowserOwner {
+        authority_receipt_id: adopted.authority_receipt_id,
+        owner_id: adopted.owner_id,
+        owner_generation: adopted.owner_generation,
+        logical_browser_id: adopted.logical_browser_id,
+        daemon_session_route: adopted.daemon_session_route,
+        process_instance_digest: adopted.process_instance_digest,
+        process_pid: adopted.process_pid,
+        revision: adopted.revision,
+    };
+    retain_protected_browser_owner_before_projection(
+        state,
+        ProtectedBrowserOwnerLease {
+            raw_capability,
+            profile_id: profile_id.to_string(),
+            owner,
+        },
+        |state, owner| {
+            persist_protected_current_browser_health(
+                state,
+                owner,
+                ServiceBrowserHost::AttachedExisting,
+                ServiceBrowserHealth::Ready,
+                Some(ServiceLaunchMetadata {
+                    profile_id: Some(profile_id.to_string()),
+                    ..ServiceLaunchMetadata::default()
+                }),
+            )
+        },
+    )?;
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]

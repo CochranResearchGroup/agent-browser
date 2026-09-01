@@ -14,16 +14,19 @@ use std::path::PathBuf;
 #[cfg(not(target_os = "linux"))]
 use std::sync::{Arc, Mutex};
 
-use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
 #[cfg(target_os = "linux")]
 use super::action_runtime::runtime::{
-    auto_launch_protected_profile, ProtectedProfileLaunchContext,
+    adopt_protected_profile_browser, auto_launch_protected_profile, ProtectedProfileLaunchContext,
 };
+use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
 #[cfg(target_os = "linux")]
 use super::service_lease_authority::{
     acquire_protected_ephemeral_profile_claim, authorize_protected_browser_launch,
-    enroll_protected_profile, ProtectedBrowserLaunchRequest, ProtectedEphemeralProfileClaimRequest,
-    ProtectedProfileEnrollmentRequest,
+    enroll_protected_profile, inspect_protected_profile_authority,
+    prepare_protected_browser_adoption, reconcile_protected_browser_owner,
+    ProtectedAuthorityObservationState, ProtectedBrowserAdoptionRequest,
+    ProtectedBrowserLaunchRequest, ProtectedBrowserOwnerReconciliationRequest,
+    ProtectedEphemeralProfileClaimRequest, ProtectedProfileEnrollmentRequest,
 };
 use super::service_lease_authority::{
     issue_lease_effect_authorization_for_state, AcquireLeaseClaimRequest,
@@ -45,6 +48,59 @@ pub(crate) const PROFILE_RECOVERY_RECEIPT_SCHEMA_V1: &str =
     "agent-browser.profile-recovery-receipt.v1";
 pub(crate) const PROFILE_MITIGATION_ACTION_SCHEMA_V1: &str =
     "agent-browser.profile-mitigation-action.v1";
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProtectedExistingOwnerDisposition {
+    Adopt,
+    ReconcileThenColdLaunch,
+    ReconstructCurrentHolder,
+    ExactCurrentConflict,
+    EffectChannelCustodyUnproven,
+    PhysicalOccupancyUncertain,
+}
+
+#[cfg(target_os = "linux")]
+fn protected_existing_owner_disposition(
+    holder: ProtectedAuthorityObservationState,
+    physical: ProtectedAuthorityObservationState,
+    effect_channel: ProtectedAuthorityObservationState,
+    requester_is_holder: bool,
+) -> ProtectedExistingOwnerDisposition {
+    match (holder, physical, effect_channel, requester_is_holder) {
+        (_, ProtectedAuthorityObservationState::Stale, _, _) => {
+            ProtectedExistingOwnerDisposition::ReconcileThenColdLaunch
+        }
+        (_, ProtectedAuthorityObservationState::Uncertain, _, _) => {
+            ProtectedExistingOwnerDisposition::PhysicalOccupancyUncertain
+        }
+        (
+            ProtectedAuthorityObservationState::Stale,
+            ProtectedAuthorityObservationState::Current,
+            ProtectedAuthorityObservationState::Absent,
+            false,
+        ) => ProtectedExistingOwnerDisposition::Adopt,
+        (
+            ProtectedAuthorityObservationState::Stale,
+            ProtectedAuthorityObservationState::Current,
+            _,
+            false,
+        ) => ProtectedExistingOwnerDisposition::EffectChannelCustodyUnproven,
+        (
+            ProtectedAuthorityObservationState::Current,
+            ProtectedAuthorityObservationState::Current,
+            _,
+            true,
+        ) => ProtectedExistingOwnerDisposition::ReconstructCurrentHolder,
+        (
+            ProtectedAuthorityObservationState::Current,
+            ProtectedAuthorityObservationState::Current,
+            _,
+            false,
+        ) => ProtectedExistingOwnerDisposition::ExactCurrentConflict,
+        _ => ProtectedExistingOwnerDisposition::PhysicalOccupancyUncertain,
+    }
+}
 
 fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Result<String, String> {
     let profile_hint = profile
@@ -1057,6 +1113,85 @@ async fn acquire_profile_command(
         }
     }
 
+    let inspection = inspect_protected_profile_authority(&raw_capability, profile_id)?;
+    if inspection.reservation.as_ref().is_some_and(|reservation| {
+        reservation.claim_id != claim.claim_id
+            || reservation.claim_revision != claim.claim_revision
+            || reservation.fencing_token != claim.fencing_token
+            || reservation.principal_id != claim.principal_id
+            || reservation.capability_id != claim.capability_id
+            || reservation.capability_revision != claim.capability_revision
+    }) {
+        return Err("profile_acquisition_protected_reservation_mismatch".to_string());
+    }
+    if let Some(observed_owner) = inspection.owner {
+        match protected_existing_owner_disposition(
+            inspection.holder_observation,
+            inspection.physical_occupancy,
+            inspection.effect_channel_observation,
+            inspection.requester_is_holder,
+        ) {
+            ProtectedExistingOwnerDisposition::Adopt => {
+                let adoption_key = format!("{idempotency_key}:browser-adoption");
+                let preparation =
+                    prepare_protected_browser_adoption(&ProtectedBrowserAdoptionRequest {
+                        raw_capability: raw_capability.clone(),
+                        profile_id: profile_id.to_string(),
+                        expected_owner_id: observed_owner.owner_id,
+                        expected_owner_generation: observed_owner.owner_generation,
+                        candidate_daemon_session_route: daemon_session_route.clone(),
+                        idempotency_key: adoption_key.clone(),
+                    })?;
+                let profile_path = profile.user_data_dir.as_deref().ok_or_else(|| {
+                    "profile_acquisition_profile_identity_unavailable".to_string()
+                })?;
+                adopt_protected_profile_browser(
+                    daemon_state,
+                    profile_id,
+                    std::path::Path::new(profile_path),
+                    raw_capability,
+                    preparation,
+                    &format!("{adoption_key}:complete"),
+                )
+                .await?;
+                let owner = daemon_state
+                    .protected_browser_owner
+                    .as_ref()
+                    .map(|lease| lease.owner.clone())
+                    .ok_or_else(|| "profile_acquisition_protected_owner_missing".to_string())?;
+                return Ok(protected_profile_acquisition_response(
+                    &claim, &owner, false,
+                ));
+            }
+            ProtectedExistingOwnerDisposition::ReconcileThenColdLaunch => {
+                reconcile_protected_browser_owner(&ProtectedBrowserOwnerReconciliationRequest {
+                    raw_capability: raw_capability.clone(),
+                    profile_id: profile_id.to_string(),
+                    expected_owner_id: observed_owner.owner_id,
+                    expected_owner_generation: observed_owner.owner_generation,
+                    idempotency_key: format!("{idempotency_key}:owner-reconcile"),
+                })?;
+            }
+            ProtectedExistingOwnerDisposition::ReconstructCurrentHolder => {
+                return Err(
+                    "profile_acquisition_protected_holder_reconstruction_required".to_string(),
+                );
+            }
+            ProtectedExistingOwnerDisposition::ExactCurrentConflict => {
+                return Err(format!(
+                    "profile_acquisition_exact_current_conflict:{}:{}",
+                    observed_owner.owner_id, observed_owner.daemon_session_route
+                ));
+            }
+            ProtectedExistingOwnerDisposition::EffectChannelCustodyUnproven => {
+                return Err("profile_acquisition_effect_channel_custody_unproven".to_string());
+            }
+            ProtectedExistingOwnerDisposition::PhysicalOccupancyUncertain => {
+                return Err("profile_acquisition_physical_occupancy_uncertain".to_string());
+            }
+        }
+    }
+
     let operation_idempotency_key = format!("{idempotency_key}:browser-launch");
     let permit = authorize_protected_browser_launch(&ProtectedBrowserLaunchRequest {
         raw_capability: raw_capability.clone(),
@@ -1133,7 +1268,7 @@ fn protected_profile_acquisition_response(
                 "expiresAt": claim.expires_at,
             },
             "owner": {
-                "launchReceiptId": owner.launch_receipt_id,
+                "authorityReceiptId": owner.authority_receipt_id,
                 "ownerId": owner.owner_id,
                 "ownerGeneration": owner.owner_generation,
                 "logicalBrowserId": owner.logical_browser_id,
@@ -2230,6 +2365,37 @@ mod tests {
         ProfileOwner, ProfileOwnerState, RuntimeLifecycleRecord, RuntimeOwnerRegistry,
     };
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protected_owner_disposition_never_turns_uncertain_custody_into_adoption() {
+        use ProtectedAuthorityObservationState::{Absent, Current, Stale, Uncertain};
+
+        assert_eq!(
+            protected_existing_owner_disposition(Stale, Current, Absent, false),
+            ProtectedExistingOwnerDisposition::Adopt
+        );
+        assert_eq!(
+            protected_existing_owner_disposition(Stale, Current, Uncertain, false),
+            ProtectedExistingOwnerDisposition::EffectChannelCustodyUnproven
+        );
+        assert_eq!(
+            protected_existing_owner_disposition(Current, Stale, Current, false),
+            ProtectedExistingOwnerDisposition::ReconcileThenColdLaunch
+        );
+        assert_eq!(
+            protected_existing_owner_disposition(Current, Current, Current, true),
+            ProtectedExistingOwnerDisposition::ReconstructCurrentHolder
+        );
+        assert_eq!(
+            protected_existing_owner_disposition(Current, Current, Current, false),
+            ProtectedExistingOwnerDisposition::ExactCurrentConflict
+        );
+        assert_eq!(
+            protected_existing_owner_disposition(Stale, Uncertain, Uncertain, false),
+            ProtectedExistingOwnerDisposition::PhysicalOccupancyUncertain
+        );
+    }
+
     fn state() -> ServiceState {
         let profile_path = "/tmp/agent-browser-p137/recovery-contract";
         let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
@@ -2359,7 +2525,7 @@ mod tests {
             expires_at: "2026-09-01T18:00:00Z".to_string(),
         };
         let owner = ProtectedBrowserOwner {
-            launch_receipt_id: "effect-receipt:protected".to_string(),
+            authority_receipt_id: "effect-receipt:protected".to_string(),
             owner_id: "owner:protected".to_string(),
             owner_generation: 11,
             logical_browser_id: "browser:principal-profile-protected".to_string(),

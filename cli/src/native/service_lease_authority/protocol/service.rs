@@ -273,20 +273,7 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
 ) -> Result<Vec<u8>, LeaseAuthorityProtocolError> {
     let encoded = read_lease_authority_frame(reader)?;
     let decoded = decode_lease_authority_request(&encoded)?;
-    let mutation = matches!(
-        decoded,
-        LeaseAuthorityProtocolRequest::EnrollProfile(_)
-            | LeaseAuthorityProtocolRequest::Acquire(_)
-            | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
-            | LeaseAuthorityProtocolRequest::CompleteEffect(_)
-            | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
-            | LeaseAuthorityProtocolRequest::ReconcileBrowserOwner(_)
-            | LeaseAuthorityProtocolRequest::Release(_)
-            | LeaseAuthorityProtocolRequest::RecoverPlan(_)
-            | LeaseAuthorityProtocolRequest::Recover(_)
-            | LeaseAuthorityProtocolRequest::RevokePlan(_)
-            | LeaseAuthorityProtocolRequest::Revoke(_)
-    );
+    let mutation = protected_request_mutates_state(&decoded);
     let administrative = matches!(
         decoded,
         LeaseAuthorityProtocolRequest::RevokePlan(_) | LeaseAuthorityProtocolRequest::Revoke(_)
@@ -336,6 +323,26 @@ fn handle_protected_lease_authority_request<R: std::io::Read>(
     };
     store.publish(&kernel, None)?;
     dispatched
+}
+
+fn protected_request_mutates_state(request: &LeaseAuthorityProtocolRequest) -> bool {
+    matches!(
+        request,
+        LeaseAuthorityProtocolRequest::EnrollProfile(_)
+            | LeaseAuthorityProtocolRequest::Acquire(_)
+            | LeaseAuthorityProtocolRequest::AuthorizeEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteEffect(_)
+            | LeaseAuthorityProtocolRequest::CompleteBrowserLaunch(_)
+            | LeaseAuthorityProtocolRequest::PrepareBrowserAdoption(_)
+            | LeaseAuthorityProtocolRequest::CompleteBrowserAdoption(_)
+            | LeaseAuthorityProtocolRequest::InspectProfileAuthority(_)
+            | LeaseAuthorityProtocolRequest::ReconcileBrowserOwner(_)
+            | LeaseAuthorityProtocolRequest::Release(_)
+            | LeaseAuthorityProtocolRequest::RecoverPlan(_)
+            | LeaseAuthorityProtocolRequest::Recover(_)
+            | LeaseAuthorityProtocolRequest::RevokePlan(_)
+            | LeaseAuthorityProtocolRequest::Revoke(_)
+    )
 }
 
 fn encode_protocol_error(
@@ -619,6 +626,37 @@ mod tests {
             );
         }
         (profile, operator_uid)
+    }
+
+    #[test]
+    fn browser_adoption_requests_always_enter_the_durable_mutation_transaction() {
+        for encoded in [
+            serde_json::json!({
+                "schemaVersion": "agent-browser.lease-authority-request.v1",
+                "operation": "prepare_browser_adoption",
+                "payload": {
+                    "rawCapability": b"capability-secret",
+                    "resource": {"kind": "profile", "id": "last30days-social"},
+                    "expectedOwnerId": "owner:old",
+                    "expectedOwnerGeneration": 7,
+                    "candidateDaemonSessionRoute": "candidate-route",
+                    "idempotencyKey": "adopt:last30days:1"
+                }
+            }),
+            serde_json::json!({
+                "schemaVersion": "agent-browser.lease-authority-request.v1",
+                "operation": "complete_browser_adoption",
+                "payload": {
+                    "receiptId": "browser-adoption:receipt-1",
+                    "result": "completed",
+                    "completionIdempotencyKey": "complete:adopt:last30days:1"
+                }
+            }),
+        ] {
+            let request = decode_lease_authority_request(&serde_json::to_vec(&encoded).unwrap())
+                .expect("adoption request should decode");
+            assert!(protected_request_mutates_state(&request));
+        }
     }
 
     #[test]

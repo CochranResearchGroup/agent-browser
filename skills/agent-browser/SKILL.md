@@ -1570,7 +1570,7 @@ Use `service recovery acquire --profile-id <id> --capability-file <path>` as the
 
 An acquired Linux response contains `leaseAuthority.kind=protected` with the current claim and committed process-backed owner. It never returns or serializes an executable authorization. Completion failure closes the browser and records the consumed effect as uncertain before any retry. A confirmed close reconciles the exact owner ID and generation. A failed or unproven shutdown retains the owner. Non-Linux builds retain the compatibility acquisition path until the protected authority service is ported.
 
-`agent-browser --json service browsers` returns `protectedBrowserOwnerObservations` keyed by browser ID when protected launch receipts have been projected. Treat every entry as a freshness-bounded candidate locator with `operationalAuthority: false`. Never use it to authorize, deny, adopt, transfer, or clean up a browser without a fresh protected-root decision.
+`agent-browser --json service browsers` returns `protectedBrowserOwnerObservations` keyed by browser ID when protected launch or adoption receipts have been projected. `authorityReceiptId` identifies the protected receipt without implying that it was a launch. Treat every entry as a freshness-bounded candidate locator with `operationalAuthority: false`. Never use it to authorize, deny, adopt, transfer, or clean up a browser without a fresh protected-root decision that keeps reservation, holder, physical occupancy, and effect-channel custody separate.
 
 Trust material lives in immutable generations below
 `~/.agent-browser/service/lease-authority-trust/generations/`. The private
