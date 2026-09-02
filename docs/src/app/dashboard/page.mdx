@@ -232,6 +232,15 @@ workstation reconciliation and install doctor.
 <code>dashboardRuntime</code> manifest, so CLI and dashboard readbacks describe
 the same installed binary and embedded UI bundle.
 
+The health contract keeps four independent axes: runtime, workstation
+convergence, profile access, and request-scoped acquisition. Only blocking
+runtime or convergence findings produce the dashboard convergence warning.
+Legacy profile identity ambiguity appears as an access advisory. The profile
+editor exposes shared-local, restricted, and exclusive modes plus
+administrator, participant, and observer presets. A profile-config save
+preserves the current access policy; policy changes use their own
+revision-fenced service request.
+
 An available profile tile provides <strong>Open browser</strong>, which opens
 the guided launcher with that exact profile selected and runs its no-launch
 access-plan preflight. Every live service-owned browser provides

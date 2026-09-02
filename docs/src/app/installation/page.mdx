@@ -422,6 +422,13 @@ report does not authorize cleanup by itself. During a bounded upgrade, each
 accepted runtime host must match its recorded PID, process start token, binary
 hash, generation, and socket identity.
 
+Runtime health keeps profile access separate from installation convergence.
+Missing legacy profile policies are materialized deterministically. Ambiguous
+identity maps to nonblocking <code>shared-local</code> access and appears on the
+access axis; it does not make install doctor or the dashboard runtime warning
+fail. Runtime and convergence blockers still fail closed and provide one
+executable next action.
+
 The authenticated runtime-health and Service Status responses project the same
 <code>runtimeLifecycle</code> contract. It distinguishes steady state from a
 transaction-bound convergence window and reports lifecycle ownership,

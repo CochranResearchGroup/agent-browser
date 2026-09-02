@@ -106,6 +106,13 @@ Successful requests return typed takeover metadata and retain a
 `viewer_takeover_requested` service event for later dashboard, HTTP, MCP, and
 service trace inspection.
 
+Profile policy changes use `service_profile_policy_mutate` with a current
+`expectedRevision` and either a human-facing mode and preset or an exact target
+policy. Exact physical cleanup uses `service_profile_tab_evict` with a
+persisted authorization and tab ID. Legacy profiles missing a policy are
+reported through `service-profile-policy-migration.v1.schema.json`; ambiguous
+identity maps to nonblocking shared-local access.
+
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 

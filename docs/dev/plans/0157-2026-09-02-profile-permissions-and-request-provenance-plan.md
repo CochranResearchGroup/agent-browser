@@ -660,6 +660,43 @@ Validation evidence:
 - the P157 oracle passes with six schemas, five green cases, and no remaining
   reproducible red case.
 
+## Execution Checkpoint W10
+
+Source checkpoint: `2a930e0eab0ee92a6739a8bca348cdd8858833d9`.
+
+State transition: `w9_complete -> w10_complete`.
+
+Completed in W10 attempt 1:
+
+- materialized missing legacy policies deterministically, retaining a
+  subject-bound administrator grant only for positively proven exclusive
+  occupancy and mapping all ambiguity to nonblocking shared-local access;
+- compiled administrator, participant, and observer presets into granular
+  permissions while retaining exact policy targets for advanced clients;
+- exposed revision-fenced policy mutation and exact authorized tab eviction
+  through the service-request contract, HTTP, MCP, and generated clients;
+- added a separate dashboard access editor and preserved existing ACL state
+  across unrelated Profile configuration saves;
+- placed legacy identity ambiguity exclusively on the nonblocking access-health
+  axis, leaving runtime and convergence readiness coherent; and
+- aligned doctor, CLI help, README, agent skill, contract guidance, and docs
+  with frictionless shared-local use and executable narrowing recourse.
+
+W10 is complete without production Profile, browser, runtime, ACL, eviction,
+or shutdown effects. W11 is open for isolated installed acceptance and
+adversarial concurrency scenarios.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,919 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the source-free workstation and host-provision fixtures plus every
+  Guacamole durability and route-specific fixture pass;
+- dashboard, docs, API/MCP parity, generated-client, client-type, and focused
+  access-policy contracts pass; and
+- the P157 oracle passes with six schemas, five green cases, and no red case.
+
 ## Execution Checkpoint W2
 
 Source checkpoint: `cd0bdb1d`.

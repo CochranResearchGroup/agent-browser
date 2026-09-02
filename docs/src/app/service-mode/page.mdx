@@ -1567,9 +1567,16 @@ terminal owner whose cleanup, process exit, profile lock release, and lease
 absence are all proven. Apply derives its daemon route from the sealed plan,
 rechecks the Service State revision and identity joins, retries acquisition
 once, and persists a receipt. CLI, HTTP, MCP, and generated client plan,
-apply, and status surfaces share this authority. An
-<code>existing_session_profile_identity_unproven</code> result remains blocked
-for principal/profile reconciliation and cannot authorize a duplicate launch.
+apply, and status surfaces share this authority.
+
+Profiles without an explicit access policy migrate deterministically. Ordinary
+and ambiguous legacy profiles become <code>shared-local</code>; ambiguity stays
+visible as a nonblocking access advisory and cannot degrade runtime or
+workstation convergence. Proven strict legacy ownership retains an exclusive
+compatibility policy. Human-facing changes use the administrator, participant,
+or observer preset with revision fencing. Narrowing first drains incompatible
+occupancy, and exact tab eviction requires a persisted authorization.
+
 Authenticated access-plan execution carries an internal route authorization
 receipt from the broker to the daemon. The daemon revalidates the capability ID
 and revision, exact profile and planned session, current owner generation when

@@ -82,6 +82,12 @@ listener is authoritative without the retired default socket. ACL ambiguity
 remains observable only on the access axis, while the dashboard warns solely
 from typed runtime or convergence blockers. The privileged shell adapter must
 execute the Rust-sealed action set and return verified postconditions.
+W10 is source complete at `2a930e0e`. Missing legacy policies now migrate
+deterministically: proven exclusive ownership remains subject-bound, while
+ambiguous identity becomes nonblocking shared-local access and appears only on
+the access-health axis. HTTP, MCP, generated clients, dashboard, doctor, help,
+README, agent skill, contracts, and docs now expose human presets,
+revision-fenced policy edits, and exact authorized tab eviction.
 
 ### Plan
 
@@ -89,9 +95,9 @@ execute the Rust-sealed action set and return verified postconditions.
 
 ### Next Recommendation
 
-Execute W10: align legacy migration, CLI, HTTP, MCP, generated clients,
-dashboard, doctor, help, README, agent skill, and docs site with the completed
-permission, provenance, lifecycle, and convergence contracts.
+Execute W11: install the candidate only in the isolated development runtime,
+then validate doctor, multi-client sharing, live policy edits, exact eviction,
+crash recovery, causal logging, warning taxonomy, and disposable full shutdown.
 
 ## P156 | Full Runtime Shutdown Replacement
 

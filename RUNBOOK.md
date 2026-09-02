@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 212 | 2026-09-02
+
+Scope: complete P157 W10 migration and public-surface alignment without
+production Profile, browser, runtime, ACL, eviction, or shutdown effects.
+
+Actions:
+
+- materialized missing legacy policies deterministically, preserving proven
+  exclusive ownership and mapping ambiguity to nonblocking shared-local use;
+- added human-facing access presets plus revision-fenced policy mutation and
+  exact authorized tab-eviction helpers across HTTP, MCP, and generated clients;
+- added a separate dashboard access editor that preserves ACL state during
+  ordinary Profile configuration saves;
+- projected legacy ambiguity exclusively onto the dashboard access-health axis;
+  and
+- aligned doctor, help, README, agent skill, contracts, and docs guidance with
+  executable recourse and the permission model.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,919 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- workstation and Guacamole fixture chains, dashboard and docs builds,
+  API/MCP parity, generated-client, type, and dashboard contracts pass; and
+- the P157 oracle passes with all five implementation cases green.
+
+Result:
+
+- W10 is source complete at `2a930e0e` without production effects; and
+- W11 isolated installed acceptance and adversarial concurrency validation is
+  next.
+
 ## Turn 211 | 2026-09-02
 
 Scope: complete P157 W9 single-owner workstation convergence without
