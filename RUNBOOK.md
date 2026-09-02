@@ -46,6 +46,53 @@ Result:
 - the single authorized acceptance tick is consumed and must not be retried
   without new authority.
 
+## Turn 191 | 2026-09-01
+
+Scope: make terminal route quarantine recovery self-converging during live
+Research.gov fieldwork without weakening active acquisition ownership.
+
+Actions:
+
+- installed production generation `0.28.0-2d1c34415875-1aa980055f30` after a
+  browserless-upgrade census and confirmed the exact August 31 Research.gov
+  lease reached `failed/rollback_complete` with inactive cleanup proof;
+- identified and reconciled restored prior owners, stale ready handoffs,
+  detached historical pending leases, completed historical receipts, and the
+  missing compare-and-swap persistence of reconciled acquisition rows;
+- observed a fresh-acquisition race where background reconciliation rolled back
+  a seconds-old pending lease before the foreground `DisplayReady` transition;
+- recovered the surviving ready browser through a no-launch reattach and
+  created durable handoff `r580584`; and
+- added a 15-minute minimum age plus ownership-identity matching before
+  detached pending acquisition convergence.
+
+Validation:
+
+- 66 service-health tests and 19 quarantine tests pass;
+- strict Clippy and formatting pass;
+- development generation `0.28.0-4d2c8ce7ecba` passed doctor, isolated provider
+  checks, and three disposable browser launches with the age fence installed;
+- production candidate
+  `672d311dd3542e9f58551ce8f97a4f3fa10de0a92dfff48a60b8d4f95e2fdd97`
+  was built from the same source, while its handoff-safe activation correctly
+  preserved the old generation when candidate presentation was not proven;
+- a separate coordinated upgrade accepted generation
+  `0.28.0-e2244cd2447c-c25a91eb0d2b` after an authenticated candidate
+  presentation receipt, finalized the Research.gov lane at owner generation 6,
+  and restored a fully green install doctor;
+- installed hash `2d1c3441587521bc75a5fc2115bdae3f05e50dc770bc0761cbd5f636cfd60d13`
+  matched the accepted production candidate; and
+- the live Research.gov browser, route, display, target URL, and operator
+  presentation all read ready after reattach.
+
+Result:
+
+- the operator can use the durable Research.gov handoff without another browser
+  launch;
+- the age-fence source amendment is development-qualified but is not part of
+  the accepted `e2244cd2447c` production generation; its later installation
+  must use the same handoff-safe path and must not disrupt the ready handoff.
+
 ## Turn 190 | 2026-09-01
 
 Scope: reconcile P152 with P150/P151 and qualify the exact integrated terminal

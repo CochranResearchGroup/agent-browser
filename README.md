@@ -3008,7 +3008,12 @@ and pool are terminal. Normal reconciliation and the next matching route-bound
 acquisition automatically advance safely orphaned route and display records to
 released and promote the lease to `failed/rollback_complete`. The transition
 also requires viewer, controller, handoff, presentation-slot, and conflicting
-acquisition evidence to be inactive. Apply remains the explicit recovery path
+acquisition evidence to be inactive. A detached `pending` acquisition is not
+eligible for automatic convergence until its recorded creation time is at least
+15 minutes old. This age fence prevents background reconciliation from rolling
+back a foreground route acquisition while it is still starting. Reused route or
+display IDs are compared with browser, session, and allocation identity rather
+than treated as ownership by themselves. Apply remains the explicit recovery path
 for retained state that does not converge automatically. A skipped repair
 reports `repaired=false`, preserves quarantine, and returns the typed reason
 instead of recommending an unsafe apply.

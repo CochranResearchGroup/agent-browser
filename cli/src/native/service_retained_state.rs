@@ -627,6 +627,182 @@ pub(crate) mod service_commands {
         None
     }
 
+    fn detached_pending_acquisition_is_inactive(
+        state: &ServiceState,
+        lease: &RemoteViewAcquisitionLease,
+        observed_at: &str,
+    ) -> bool {
+        const DETACHED_PENDING_MINIMUM_AGE_MINUTES: i64 = 15;
+        let old_enough = lease
+            .created_at
+            .as_deref()
+            .and_then(|created_at| DateTime::parse_from_rfc3339(created_at).ok())
+            .zip(DateTime::parse_from_rfc3339(observed_at).ok())
+            .is_some_and(|(created_at, observed_at)| {
+                observed_at.signed_duration_since(created_at)
+                    >= chrono::Duration::minutes(DETACHED_PENDING_MINIMUM_AGE_MINUTES)
+            });
+        if lease.state != "pending"
+            || !old_enough
+            || state.browsers.contains_key(&lease.browser_id)
+            || state
+                .browser_process_identities
+                .contains_key(&lease.browser_id)
+            || state
+                .sessions
+                .get(&lease.session_id)
+                .is_some_and(|session| {
+                    !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                })
+        {
+            return false;
+        }
+        let route_belongs_to_lease =
+            state
+                .remote_view_routes
+                .get(&lease.route_id)
+                .is_some_and(|route| {
+                    route.display_allocation_id.as_deref()
+                        == Some(lease.display_allocation_id.as_str())
+                        && (route.browser_id.as_deref() == Some(lease.browser_id.as_str())
+                            || route.session_id.as_deref() == Some(lease.session_id.as_str())
+                            || (route.browser_id.is_none() && route.session_id.is_none()))
+                });
+        let route_inactive = state
+            .remote_view_routes
+            .get(&lease.route_id)
+            .is_none_or(|route| {
+                if !route_belongs_to_lease {
+                    return true;
+                }
+                matches!(route.state.as_str(), "released" | "orphaned")
+                    && route.display_allocation_id.as_deref()
+                        == Some(lease.display_allocation_id.as_str())
+                    && route.viewer_lease_ids.is_empty()
+                    && route.controller_lease_id.is_none()
+                    && route.browser_id.as_ref().is_none_or(|browser_id| {
+                        !state.browsers.contains_key(browser_id)
+                            && !state.browser_process_identities.contains_key(browser_id)
+                    })
+                    && route.session_id.as_ref().is_none_or(|session_id| {
+                        state.sessions.get(session_id).is_none_or(|session| {
+                            matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                        })
+                    })
+            });
+        let display_belongs_to_lease = state
+            .display_allocations
+            .get(&lease.display_allocation_id)
+            .is_some_and(|allocation| {
+                allocation
+                    .route_ids
+                    .iter()
+                    .any(|route_id| route_id == &lease.route_id)
+                    || allocation.owner_browser_id.as_deref() == Some(lease.browser_id.as_str())
+                    || allocation.owner_session_id.as_deref() == Some(lease.session_id.as_str())
+            });
+        let display_inactive = state
+            .display_allocations
+            .get(&lease.display_allocation_id)
+            .is_none_or(|allocation| {
+                if !display_belongs_to_lease {
+                    return true;
+                }
+                matches!(allocation.state.as_str(), "released" | "orphaned")
+                    && allocation
+                        .route_ids
+                        .iter()
+                        .all(|route_id| route_id == &lease.route_id)
+                    && allocation
+                        .owner_browser_id
+                        .as_ref()
+                        .is_none_or(|browser_id| {
+                            !state.browsers.contains_key(browser_id)
+                                && !state.browser_process_identities.contains_key(browser_id)
+                        })
+                    && allocation
+                        .owner_session_id
+                        .as_ref()
+                        .is_none_or(|session_id| {
+                            state.sessions.get(session_id).is_none_or(|session| {
+                                matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                            })
+                        })
+            });
+        let pool_inactive = lease.route_pool_entry_id.as_ref().is_none_or(|entry_id| {
+            state.route_pool.get(entry_id).is_none_or(|entry| {
+                entry.route_id == lease.route_id
+                    && matches!(entry.state.as_str(), "available" | "unavailable")
+                    && entry.current_route_allocation_id.is_none()
+            })
+        });
+        let viewer_inactive = !state.viewer_leases.values().any(|viewer| {
+            viewer_lease_is_active(viewer)
+                && (viewer.browser_id.as_deref() == Some(lease.browser_id.as_str())
+                    || (viewer.browser_id.is_none()
+                        && route_belongs_to_lease
+                        && viewer.route_id.as_deref() == Some(lease.route_id.as_str())))
+        });
+        let handoff_inactive = !state.remote_view_handoffs.values().any(|handoff| {
+            !matches!(handoff.state.as_str(), "closed" | "failed" | "released")
+                && remote_view_handoff_has_live_owner(state, handoff)
+                && (handoff.browser_id.as_deref() == Some(lease.browser_id.as_str())
+                    || handoff.session_name.as_deref() == Some(lease.session_id.as_str())
+                    || (route_belongs_to_lease
+                        && handoff.last_route_id.as_deref() == Some(lease.route_id.as_str()))
+                    || (display_belongs_to_lease
+                        && handoff.last_display_allocation_id.as_deref()
+                            == Some(lease.display_allocation_id.as_str())))
+        });
+        let presentation_inactive = !state
+            .presentation_capacity
+            .as_ref()
+            .is_some_and(|capacity| {
+                capacity.slots.iter().any(|slot| {
+                    slot.browser_id.as_deref() == Some(lease.browser_id.as_str())
+                        || (slot.browser_id.is_none()
+                            && ((route_belongs_to_lease
+                                && slot.route_id.as_deref() == Some(lease.route_id.as_str()))
+                                || (display_belongs_to_lease
+                                    && slot.display_allocation_id.as_deref()
+                                        == Some(lease.display_allocation_id.as_str()))))
+                })
+            });
+        route_inactive
+            && display_inactive
+            && pool_inactive
+            && viewer_inactive
+            && handoff_inactive
+            && presentation_inactive
+    }
+
+    fn complete_detached_pending_acquisition(
+        state: &mut ServiceState,
+        lease_id: &str,
+        observed_at: &str,
+    ) {
+        if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+            lease.state = "failed".to_string();
+            lease.phase = "rollback_complete".to_string();
+            lease.updated_at = Some(observed_at.to_string());
+            lease.failed_at = Some(observed_at.to_string());
+            lease.failure_reason = Some("detached_pending_acquisition_reconciled".to_string());
+            lease.cleanup = Some(json!({
+                "state": "rolled_back",
+                "leaseId": lease_id,
+                "phase": "detached_pending_acquisition_repair",
+                "routeId": lease.route_id,
+                "displayAllocationId": lease.display_allocation_id,
+                "routePoolEntryId": lease.route_pool_entry_id,
+                "cleanup": {
+                    "state": "confirmed_inactive_retained_state",
+                    "reason": "detached_pending_acquisition_reconciled",
+                },
+                "updatedAt": observed_at,
+            }));
+        }
+    }
+
     /// Completes every terminal acquisition quarantine whose retained route,
     /// display, and ownership graph is already provably inactive.
     pub(crate) fn reconcile_inactive_terminal_route_quarantines(
@@ -665,20 +841,32 @@ pub(crate) mod service_commands {
         observed_at: &str,
         scope: Option<(&str, &str, &str, &str)>,
     ) -> usize {
+        let scope_matches = |lease: &RemoteViewAcquisitionLease| {
+            scope.is_none_or(
+                |(browser_id, session_id, route_id, display_allocation_id)| {
+                    lease.browser_id == browser_id
+                        || lease.session_id == session_id
+                        || lease.route_id == route_id
+                        || lease.display_allocation_id == display_allocation_id
+                },
+            )
+        };
+        let mut detached_pending_ids = state
+            .remote_view_acquisition_leases
+            .values()
+            .filter(|lease| scope_matches(lease))
+            .filter(|lease| detached_pending_acquisition_is_inactive(state, lease, observed_at))
+            .map(|lease| lease.id.clone())
+            .collect::<Vec<_>>();
+        detached_pending_ids.sort();
+        for lease_id in &detached_pending_ids {
+            complete_detached_pending_acquisition(state, lease_id, observed_at);
+        }
         let mut lease_ids = state
             .remote_view_acquisition_leases
             .values()
             .filter(|lease| lease.state == "failed" && lease.phase == "rollback_incomplete")
-            .filter(|lease| {
-                scope.is_none_or(
-                    |(browser_id, session_id, route_id, display_allocation_id)| {
-                        lease.browser_id == browser_id
-                            || lease.session_id == session_id
-                            || lease.route_id == route_id
-                            || lease.display_allocation_id == display_allocation_id
-                    },
-                )
-            })
+            .filter(|lease| scope_matches(lease))
             .filter(|lease| {
                 rollback_incomplete_acquisition_repair_reason(state, lease).is_ok()
                     && prior_active_acquisition_owner_reason(prior_state, lease).is_none()
@@ -689,7 +877,7 @@ pub(crate) mod service_commands {
         for lease_id in &lease_ids {
             complete_inactive_terminal_acquisition(state, lease_id, observed_at);
         }
-        lease_ids.len()
+        detached_pending_ids.len() + lease_ids.len()
     }
 
     fn prior_active_acquisition_owner_reason(
@@ -714,6 +902,7 @@ pub(crate) mod service_commands {
         }
         if state.remote_view_handoffs.values().any(|handoff| {
             !matches!(handoff.state.as_str(), "closed" | "failed" | "released")
+                && remote_view_handoff_has_live_owner(state, handoff)
                 && (handoff.last_route_id.as_deref() == Some(lease.route_id.as_str())
                     || handoff.last_display_allocation_id.as_deref()
                         == Some(lease.display_allocation_id.as_str()))
@@ -808,6 +997,97 @@ pub(crate) mod service_commands {
         )
     }
 
+    fn remote_view_handoff_has_live_owner(
+        state: &ServiceState,
+        handoff: &RemoteViewHandoff,
+    ) -> bool {
+        handoff.browser_id.as_ref().is_some_and(|browser_id| {
+            state.browsers.contains_key(browser_id)
+                || state.browser_process_identities.contains_key(browser_id)
+        }) || handoff.session_name.as_ref().is_some_and(|session_id| {
+            state.sessions.get(session_id).is_some_and(|session| {
+                !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+            })
+        })
+    }
+
+    fn cleanup_confirms_restoration(lease: &RemoteViewAcquisitionLease, field: &str) -> bool {
+        lease
+            .cleanup
+            .as_ref()
+            .and_then(|cleanup| cleanup.get(field))
+            .and_then(Value::as_bool)
+            == Some(true)
+    }
+
+    fn route_matches_inactive_restored_prior(
+        state: &ServiceState,
+        lease: &RemoteViewAcquisitionLease,
+        route: &RemoteViewRoute,
+    ) -> bool {
+        let Some(previous) = lease.previous_remote_view_route.as_ref() else {
+            return false;
+        };
+        cleanup_confirms_restoration(lease, "restoredRemoteViewRoute")
+            && previous.id == route.id
+            && previous.provider == route.provider
+            && previous.display_allocation_id == route.display_allocation_id
+            && previous.browser_id == route.browser_id
+            && previous.session_id == route.session_id
+            && previous.route_source == route.route_source
+            && previous.connection_id == route.connection_id
+            && previous.connection_name == route.connection_name
+            && previous.route_template == route.route_template
+            && previous.frame_url == route.frame_url
+            && previous.external_url == route.external_url
+            && previous.route_descriptor == route.route_descriptor
+            && previous.read_only == route.read_only
+            && previous.control_input == route.control_input
+            && previous.provider_mode == route.provider_mode
+            && previous.controller_epoch == route.controller_epoch
+            && route.browser_id.as_ref().is_none_or(|browser_id| {
+                !state.browsers.contains_key(browser_id)
+                    && !state.browser_process_identities.contains_key(browser_id)
+            })
+            && route
+                .session_id
+                .as_ref()
+                .is_none_or(|session_id| !state.sessions.contains_key(session_id))
+    }
+
+    fn display_matches_inactive_restored_prior(
+        state: &ServiceState,
+        lease: &RemoteViewAcquisitionLease,
+        allocation: &DisplayAllocation,
+    ) -> bool {
+        let Some(previous) = lease.previous_display_allocation.as_ref() else {
+            return false;
+        };
+        cleanup_confirms_restoration(lease, "restoredDisplayAllocation")
+            && previous.id == allocation.id
+            && previous.boot_epoch == allocation.boot_epoch
+            && previous.display_name == allocation.display_name
+            && previous.display_isolation == allocation.display_isolation
+            && previous.owner_browser_id == allocation.owner_browser_id
+            && previous.owner_session_id == allocation.owner_session_id
+            && previous.profile_id == allocation.profile_id
+            && previous.browser_build == allocation.browser_build
+            && previous.host == allocation.host
+            && previous.pid_hints == allocation.pid_hints
+            && previous.route_ids == allocation.route_ids
+            && allocation
+                .owner_browser_id
+                .as_ref()
+                .is_none_or(|browser_id| {
+                    !state.browsers.contains_key(browser_id)
+                        && !state.browser_process_identities.contains_key(browser_id)
+                })
+            && allocation
+                .owner_session_id
+                .as_ref()
+                .is_none_or(|session_id| !state.sessions.contains_key(session_id))
+    }
+
     /// Returns a repairable reason only when retained state proves that a
     /// terminal acquisition quarantine no longer protects a possible effect.
     fn rollback_incomplete_acquisition_repair_reason(
@@ -838,6 +1118,7 @@ pub(crate) mod service_commands {
                 .browser_id
                 .as_deref()
                 .is_some_and(|browser_id| browser_id != lease.browser_id)
+                && !route_matches_inactive_restored_prior(state, lease, route)
             {
                 return Err("route_browser_owner_mismatch");
             }
@@ -845,6 +1126,7 @@ pub(crate) mod service_commands {
                 .session_id
                 .as_deref()
                 .is_some_and(|session_id| session_id != lease.session_id)
+                && !route_matches_inactive_restored_prior(state, lease, route)
             {
                 return Err("route_session_owner_mismatch");
             }
@@ -863,6 +1145,7 @@ pub(crate) mod service_commands {
                 .owner_browser_id
                 .as_deref()
                 .is_some_and(|browser_id| browser_id != lease.browser_id)
+                && !display_matches_inactive_restored_prior(state, lease, allocation)
             {
                 return Err("display_browser_owner_mismatch");
             }
@@ -870,6 +1153,7 @@ pub(crate) mod service_commands {
                 .owner_session_id
                 .as_deref()
                 .is_some_and(|session_id| session_id != lease.session_id)
+                && !display_matches_inactive_restored_prior(state, lease, allocation)
             {
                 return Err("display_session_owner_mismatch");
             }
@@ -908,6 +1192,7 @@ pub(crate) mod service_commands {
         }
         if state.remote_view_handoffs.values().any(|handoff| {
             !matches!(handoff.state.as_str(), "closed" | "failed" | "released")
+                && remote_view_handoff_has_live_owner(state, handoff)
                 && (handoff.last_route_id.as_deref() == Some(lease.route_id.as_str())
                     || handoff.last_display_allocation_id.as_deref()
                         == Some(lease.display_allocation_id.as_str()))
@@ -936,7 +1221,7 @@ pub(crate) mod service_commands {
                     || candidate.display_allocation_id == lease.display_allocation_id
                     || candidate.browser_id == lease.browser_id
                     || candidate.session_id == lease.session_id)
-                    && !(candidate.state == "failed" && candidate.phase == "rollback_complete")
+                    && candidate.state == "pending"
             })
         {
             return Err("conflicting_acquisition_lease_present");

@@ -30,14 +30,16 @@ capability; the consumed acceptance tick must not be repeated implicitly.
 ## P150 | Automatic Terminal Quarantine Convergence
 
 State: IN PROGRESS
-Current state: the source and isolated development repair are qualified. Normal reconciliation and the
-next matching route-bound acquisition now close a provably inactive quarantine
-inside a retained-state transaction, while the pre-pass snapshot fences active
-viewers, controllers, handoffs, presentation slots, checkouts, and conflicting
-ownership. Skipped explicit repair reports `repaired=false` with a typed next
-step. Development generation `0.28.0-52fde82a55d7` passed doctor and three
-disposable launch cycles. No browser, profile, provider, or retained production
-state has been mutated by this lane.
+Current state: production reconciliation closed the exact Research.gov
+quarantine and a recovered no-launch reattach produced ready durable handoff
+`r580584`. The first fresh acquisition exposed a background-reconcile race in
+which a seconds-old pending lease was mistaken for detached. Source now requires
+a valid 15-minute age plus matching ownership identity before detached pending
+convergence. Development generation `0.28.0-4d2c8ce7ecba` and production
+candidate `672d311dd354` qualify the age fence. A separate coordinated upgrade
+accepted production generation `0.28.0-e2244cd2447c-c25a91eb0d2b`, finalized
+the Research.gov lane at owner generation 6, and preserved the ready browser
+and handoff. That accepted generation does not yet contain the age fence.
 
 ### Plan
 
@@ -45,8 +47,9 @@ state has been mutated by this lane.
 
 ### Next Recommendation
 
-The qualified checkpoint is integrated by `6390528b`. Preserve its automatic
-convergence fences while qualifying P152 against that exact integrated base.
+Merge the qualified age fence, then install it through the same handoff-safe
+runtime transition and prove the durable Research.gov URL reconnects without a
+new browser launch. Do not start an overlapping workstation repair.
 
 ## P144 | Lease Authority Coordination And Revocation
 
