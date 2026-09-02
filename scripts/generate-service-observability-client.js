@@ -630,6 +630,17 @@ export interface ServiceTabHandleTraceFilter {
   taskName?: string | null;
 }
 
+export interface ServiceProfileChildAccess {
+  schemaVersion: 'agent-browser.profile-child-access.v1' | string;
+  parentPolicyRevision: number;
+  accessDecisionId: string;
+  subjectId?: string | null;
+  identityAssurance: 'unknown' | 'self-declared' | 'authenticated-ingress' | 'registered-capability' | 'operator' | string;
+  connectionInstanceId?: string | null;
+  connectionState: 'active' | 'disconnected' | string;
+  permissions: Array<'profile_use' | 'policy_read' | 'policy_write' | 'tab_create' | 'tab_observe' | 'tab_control_own' | 'tab_close_own' | 'tab_control_any' | 'tab_close_any' | 'view_open' | 'view_control' | 'drain' | 'evict' | 'lifecycle_manage' | 'full_shutdown' | string>;
+}
+
 export interface ServiceTabHandle {
   browserId: string;
   sessionName?: string | null;
@@ -644,6 +655,7 @@ export interface ServiceTabHandle {
   cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
   leaseHeartbeatExpected: boolean;
   ownerSessionId?: string | null;
+  profileAccess?: ServiceProfileChildAccess | null;
   jobId?: string | null;
   traceFilter: ServiceTabHandleTraceFilter;
   valid: boolean;

@@ -26,7 +26,7 @@ pub(crate) async fn handle_service_diagnostics(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "diagnostics requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let target_id = handle.get("targetId").and_then(Value::as_str);
     let observed_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)

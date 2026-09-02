@@ -6,9 +6,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 
 pub const PROFILE_ACCESS_POLICY_SCHEMA_V1: &str = "agent-browser.profile-access-policy.v1";
 pub const PROFILE_ACCESS_DECISION_SCHEMA_V1: &str = "agent-browser.profile-access-decision.v1";
+pub const PROFILE_CHILD_ACCESS_SCHEMA_V1: &str = "agent-browser.profile-child-access.v1";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -46,7 +48,7 @@ impl ProfileIdentityAssurance {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProfilePermission {
     ProfileUse,
@@ -64,6 +66,79 @@ pub enum ProfilePermission {
     Evict,
     LifecycleManage,
     FullShutdown,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileConnectionState {
+    #[default]
+    Active,
+    Disconnected,
+}
+
+/// Profile authority inherited by one browser, session, tab, or view child.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileChildAccess {
+    pub schema_version: String,
+    pub parent_policy_revision: u64,
+    pub access_decision_id: String,
+    pub subject_id: Option<String>,
+    pub identity_assurance: ProfileIdentityAssurance,
+    pub connection_instance_id: Option<String>,
+    pub connection_state: ProfileConnectionState,
+    pub permissions: Vec<ProfilePermission>,
+}
+
+impl Default for ProfileChildAccess {
+    fn default() -> Self {
+        Self {
+            schema_version: PROFILE_CHILD_ACCESS_SCHEMA_V1.to_string(),
+            parent_policy_revision: 0,
+            access_decision_id: String::new(),
+            subject_id: None,
+            identity_assurance: ProfileIdentityAssurance::Unknown,
+            connection_instance_id: None,
+            connection_state: ProfileConnectionState::Active,
+            permissions: Vec::new(),
+        }
+    }
+}
+
+impl ProfileChildAccess {
+    pub(crate) fn from_admission(
+        policy: &ServiceProfileAccessPolicy,
+        decision: &ServiceProfileAccessDecision,
+        connection_instance_id: Option<String>,
+    ) -> Self {
+        Self {
+            schema_version: PROFILE_CHILD_ACCESS_SCHEMA_V1.to_string(),
+            parent_policy_revision: policy.revision,
+            access_decision_id: decision.decision_id.clone(),
+            subject_id: decision.subject.subject_id.clone(),
+            identity_assurance: decision.subject.assurance,
+            connection_instance_id,
+            connection_state: ProfileConnectionState::Active,
+            permissions: effective_profile_permissions(
+                policy,
+                decision.subject.subject_id.as_deref(),
+                decision.subject.assurance,
+            ),
+        }
+    }
+
+    pub(crate) fn narrow_to(&self, requested: &[ProfilePermission]) -> Self {
+        let allowed = self.permissions.iter().copied().collect::<BTreeSet<_>>();
+        let mut child = self.clone();
+        child.permissions = requested
+            .iter()
+            .copied()
+            .filter(|permission| allowed.contains(permission))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        child
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -270,6 +345,106 @@ pub(crate) fn evaluate_profile_access(
     )
 }
 
+pub(crate) fn effective_profile_permissions(
+    policy: &ServiceProfileAccessPolicy,
+    subject_id: Option<&str>,
+    assurance: ProfileIdentityAssurance,
+) -> Vec<ProfilePermission> {
+    let mode_assurance_satisfied = match policy.mode {
+        ProfileAccessMode::SharedLocal => true,
+        ProfileAccessMode::Restricted => {
+            assurance.satisfies(ProfileIdentityAssurance::AuthenticatedIngress)
+        }
+        ProfileAccessMode::Exclusive => {
+            assurance.satisfies(ProfileIdentityAssurance::RegisteredCapability)
+        }
+    };
+    if !mode_assurance_satisfied || policy.state != ProfileAccessPolicyState::Active {
+        return Vec::new();
+    }
+    let mut permissions = policy
+        .default_permissions
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if let Some(subject_id) = subject_id {
+        for grant in policy.grants.iter().filter(|grant| {
+            grant.subject_id == subject_id && assurance.satisfies(grant.minimum_assurance)
+        }) {
+            permissions.extend(grant.permissions.iter().copied());
+        }
+    }
+    permissions.into_iter().collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfileChildAccessRequest<'a> {
+    pub(crate) child: &'a ProfileChildAccess,
+    pub(crate) current_policy: &'a ServiceProfileAccessPolicy,
+    pub(crate) subject_id: Option<&'a str>,
+    pub(crate) assurance: ProfileIdentityAssurance,
+    pub(crate) connection_instance_id: &'a str,
+    pub(crate) permission: ProfilePermission,
+    pub(crate) reconnect: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfileChildAccessResult {
+    pub(crate) allowed: bool,
+    pub(crate) reconnected: bool,
+    pub(crate) reason: &'static str,
+    pub(crate) child: ProfileChildAccess,
+}
+
+/// Authorize one child-resource operation without treating labels as a live
+/// connection credential. Reconnect is possible only after the prior
+/// service-generated connection is known disconnected.
+pub(crate) fn evaluate_profile_child_access(
+    input: ProfileChildAccessRequest<'_>,
+) -> ProfileChildAccessResult {
+    let current_permissions =
+        effective_profile_permissions(input.current_policy, input.subject_id, input.assurance);
+    let current_permission_set = current_permissions.into_iter().collect::<BTreeSet<_>>();
+    let inherited_permission = input.child.permissions.contains(&input.permission)
+        && current_permission_set.contains(&input.permission);
+    let same_subject = input.child.subject_id.as_deref() == input.subject_id;
+    let same_connection =
+        input.child.connection_instance_id.as_deref() == Some(input.connection_instance_id);
+    let reconnect_allowed = input.reconnect
+        && same_subject
+        && input.child.connection_state == ProfileConnectionState::Disconnected;
+    let allowed = inherited_permission && same_subject && (same_connection || reconnect_allowed);
+    let reason = if !same_subject {
+        "subject_mismatch"
+    } else if !inherited_permission {
+        "permission_not_inherited"
+    } else if same_connection {
+        "owner_connection"
+    } else if input.child.connection_state == ProfileConnectionState::Active {
+        "owner_connection_still_active"
+    } else if !input.reconnect {
+        "explicit_reconnect_required"
+    } else {
+        "stable_subject_reconnected"
+    };
+    let mut child = input.child.clone();
+    if allowed && reconnect_allowed {
+        child.connection_instance_id = Some(input.connection_instance_id.to_string());
+        child.connection_state = ProfileConnectionState::Active;
+        child.identity_assurance = input.assurance;
+        child.parent_policy_revision = input.current_policy.revision;
+        child.permissions = child
+            .narrow_to(&current_permission_set.iter().copied().collect::<Vec<_>>())
+            .permissions;
+    }
+    ProfileChildAccessResult {
+        allowed,
+        reconnected: allowed && reconnect_allowed,
+        reason,
+        child,
+    }
+}
+
 fn stable_decision_id(
     profile_id: &str,
     policy_revision: u64,
@@ -387,5 +562,77 @@ mod tests {
         assert_eq!(denied.blocking_occupancy, vec!["session:other"]);
         assert_eq!(denied.next_action.action, "inspect_profile_occupancy");
         assert!(allowed.allowed);
+    }
+
+    fn shared_child(connection_state: ProfileConnectionState) -> ProfileChildAccess {
+        let (policy, decision) = evaluate(None, ProfileIdentityAssurance::SelfDeclared, Vec::new());
+        let mut child = ProfileChildAccess::from_admission(
+            &policy,
+            &decision,
+            Some("connection:owner".to_string()),
+        );
+        child.connection_state = connection_state;
+        child
+    }
+
+    #[test]
+    fn live_child_access_belongs_to_the_service_generated_connection() {
+        let policy = ServiceProfileAccessPolicy::shared_local_default("research-gov");
+        let child = shared_child(ProfileConnectionState::Active);
+        let result = evaluate_profile_child_access(ProfileChildAccessRequest {
+            child: &child,
+            current_policy: &policy,
+            subject_id: Some("client:fieldwork"),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: "connection:other",
+            permission: ProfilePermission::TabControlOwn,
+            reconnect: true,
+        });
+
+        assert!(!result.allowed);
+        assert_eq!(result.reason, "owner_connection_still_active");
+    }
+
+    #[test]
+    fn disconnected_child_can_reconnect_only_as_the_same_stable_subject() {
+        let policy = ServiceProfileAccessPolicy::shared_local_default("research-gov");
+        let child = shared_child(ProfileConnectionState::Disconnected);
+        let wrong_subject = evaluate_profile_child_access(ProfileChildAccessRequest {
+            child: &child,
+            current_policy: &policy,
+            subject_id: Some("client:other"),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: "connection:new",
+            permission: ProfilePermission::TabControlOwn,
+            reconnect: true,
+        });
+        let reconnected = evaluate_profile_child_access(ProfileChildAccessRequest {
+            child: &child,
+            current_policy: &policy,
+            subject_id: Some("client:fieldwork"),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: "connection:new",
+            permission: ProfilePermission::TabControlOwn,
+            reconnect: true,
+        });
+
+        assert!(!wrong_subject.allowed);
+        assert_eq!(wrong_subject.reason, "subject_mismatch");
+        assert!(reconnected.allowed);
+        assert!(reconnected.reconnected);
+        assert_eq!(
+            reconnected.child.connection_instance_id.as_deref(),
+            Some("connection:new")
+        );
+    }
+
+    #[test]
+    fn child_narrowing_cannot_add_parent_permissions() {
+        let child = shared_child(ProfileConnectionState::Active).narrow_to(&[
+            ProfilePermission::TabObserve,
+            ProfilePermission::TabCloseAny,
+        ]);
+
+        assert_eq!(child.permissions, vec![ProfilePermission::TabObserve]);
     }
 }

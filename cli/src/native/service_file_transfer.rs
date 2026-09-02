@@ -30,7 +30,7 @@ pub(crate) async fn handle_service_file_transfer(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "file_transfer requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let transfer = cmd
         .get("fileTransfer")
         .and_then(Value::as_object)

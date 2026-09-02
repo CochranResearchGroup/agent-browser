@@ -349,8 +349,15 @@ impl ControlPlaneHandle {
 
     pub async fn submit(&self, command: Value) -> Value {
         let connection_instance_id = format!("connection-{}", uuid::Uuid::new_v4());
-        self.submit_from_connection(command, &connection_instance_id)
-            .await
+        let response = self
+            .submit_from_connection(command, &connection_instance_id)
+            .await;
+        if let Err(error) = persist_profile_connection_disconnected(&connection_instance_id) {
+            eprintln!(
+                "Could not mark service connection {connection_instance_id} disconnected: {error}"
+            );
+        }
+        response
     }
 
     /// Submit a command from one daemon transport connection. The connection
@@ -378,8 +385,19 @@ impl ControlPlaneHandle {
             id.clone()
         };
         let command = command_with_service_job_id(command, &job_id);
-        let (command, timeout_ms) =
+        let (mut command, timeout_ms) =
             command_with_effective_job_timeout(command, self.service_job_timeout_ms);
+        command["connectionInstanceId"] = json!(connection_instance_id);
+        if let Some(child_access) = command
+            .get_mut("profileChildAccess")
+            .and_then(Value::as_object_mut)
+        {
+            child_access.insert(
+                "connectionInstanceId".to_string(),
+                json!(connection_instance_id),
+            );
+            child_access.insert("connectionState".to_string(), json!("active"));
+        }
         let _service_state_lock_timeout_override =
             crate::native::service_store::service_state_lock_timeout_override(
                 command
@@ -552,6 +570,14 @@ impl ControlPlaneHandle {
     fn browser_health(&self) -> BrowserHealth {
         self.status.browser_health()
     }
+}
+
+pub(crate) fn persist_profile_connection_disconnected(
+    connection_instance_id: &str,
+) -> Result<usize, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository
+        .mutate(|state| Ok(state.mark_profile_connection_disconnected(connection_instance_id)))
 }
 
 pub(crate) fn service_status_result_envelope(

@@ -845,6 +845,7 @@ async fn handle_connection<S>(
     let mut buf_reader = BufReader::new(reader);
     let mut line = String::new();
     let connection_instance_id = format!("connection-{}", uuid::Uuid::new_v4());
+    let _disconnect_guard = ProfileConnectionDisconnectGuard(&connection_instance_id);
 
     loop {
         line.clear();
@@ -1013,6 +1014,20 @@ async fn handle_connection<S>(
                 }
             }
             Err(_) => break,
+        }
+    }
+}
+
+struct ProfileConnectionDisconnectGuard<'a>(&'a str);
+
+impl Drop for ProfileConnectionDisconnectGuard<'_> {
+    fn drop(&mut self) {
+        if let Err(error) = super::control_plane::persist_profile_connection_disconnected(self.0) {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Could not mark service connection {} disconnected: {error}",
+                self.0
+            );
         }
     }
 }

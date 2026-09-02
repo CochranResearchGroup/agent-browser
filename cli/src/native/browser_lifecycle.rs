@@ -86,6 +86,7 @@ pub(crate) mod action_commands {
                     url: url.map(str::to_string),
                     title: title.filter(|value| !value.is_empty()).map(str::to_string),
                     owner_session_id: Some(session_id.to_string()),
+                    profile_access: handle.profile_access.clone(),
                     service_tab_handle: Some(handle.clone()),
                     ..BrowserTab::default()
                 },
@@ -127,6 +128,12 @@ pub(crate) mod action_commands {
             }
             Ok(())
         })
+    }
+
+    pub(crate) fn profile_child_access_from_command(cmd: &Value) -> Value {
+        cmd.get("profileChildAccess")
+            .cloned()
+            .unwrap_or(Value::Null)
     }
     pub(crate) fn tab_new_shared_acquisition_evidence(
         cmd: &Value,
@@ -271,9 +278,22 @@ pub(crate) mod action_commands {
             });
         let desired_origin = requested_url.as_deref().and_then(origin_for_url);
         let mut candidates = retained_tab_handle_candidates(handle, requested_url.as_deref());
-        let old_handle_valid = validate_service_tab_handle_for_daemon(handle, state)
-            .map(|_| true)
-            .unwrap_or(false);
+        let authorized_profile_access =
+            match validate_service_tab_handle_for_daemon(handle, cmd, state) {
+                Ok(access) => access,
+                Err(error) if error.contains("profile child access") => return Err(error),
+                Err(_) => None,
+            };
+        let old_handle_valid = handle.get("valid").and_then(Value::as_bool) == Some(true);
+        let mut authorized_handle = handle.clone();
+        if let Some(access) = authorized_profile_access {
+            authorized_handle.insert(
+                "profileAccess".to_string(),
+                serde_json::to_value(access)
+                    .map_err(|error| format!("Invalid profile child access: {error}"))?,
+            );
+        }
+        let handle = &authorized_handle;
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot refresh service tab handle: routed browser session is not running".to_string()
         })?;
@@ -478,7 +498,7 @@ pub(crate) mod action_commands {
             .get("serviceTabHandle")
             .and_then(Value::as_object)
             .ok_or_else(|| "tab_handle_release requires serviceTabHandle".to_string())?;
-        validate_service_tab_handle_route_for_daemon(handle, state)?;
+        validate_service_tab_handle_for_daemon(handle, cmd, state)?;
         let physical_tab_close =
             release_physical_tab_for_handle(handle, state, cmd.get("closePhysicalTab")).await;
         let released_at = OffsetDateTime::now_utc()
@@ -694,7 +714,8 @@ pub(crate) mod action_commands {
             json!("detach")), "leaseHeartbeatExpected" : previous
             .get("leaseHeartbeatExpected").and_then(Value::as_bool).unwrap_or(true),
             "ownerSessionId" : previous.get("ownerSessionId").cloned().unwrap_or_else(||
-            json!(session_id)), "jobId" : previous.get("jobId").cloned()
+            json!(session_id)), "profileAccess" : previous.get("profileAccess").cloned()
+            .unwrap_or(Value::Null), "jobId" : previous.get("jobId").cloned()
             .unwrap_or(Value::Null), "traceFilter" : { "browserId" :
             service_browser_id(session_id), "profileId" : profile_id, "sessionId" :
             session_id, }, "valid" : true, "staleReason" : Value::Null, }

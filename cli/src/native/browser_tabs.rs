@@ -14,7 +14,8 @@ pub(crate) mod action_commands {
         ProcessExitObservation, WaitUntil,
     };
     use crate::native::browser_lifecycle::{
-        persist_service_owned_tab_new, tab_new_shared_acquisition_evidence,
+        persist_service_owned_tab_new, profile_child_access_from_command,
+        tab_new_shared_acquisition_evidence,
     };
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::state;
@@ -97,7 +98,8 @@ pub(crate) mod action_commands {
                 "profileOrigin" : "agent_browser_owned", "leaseId" : state.session_id
                 .clone(), "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
                 "leaseHeartbeatExpected" : true, "ownerSessionId" : state.session_id
-                .clone(), "jobId" : Value::Null, "traceFilter" : { "browserId" :
+                .clone(), "profileAccess" : profile_child_access_from_command(cmd),
+                "jobId" : Value::Null, "traceFilter" : { "browserId" :
                 browser_id, "profileId" : profile_id.clone(),
                 "sessionId" : state.session_id.clone(), "serviceName" :
                 optional_command_string(cmd, "serviceName"), "agentName" :

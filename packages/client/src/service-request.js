@@ -504,12 +504,16 @@ function serviceTabHandleRouting(request, handle) {
   const targetId = request.targetId ?? handle.targetId;
   const runtimeProfile = request.runtimeProfile ?? request.profileId ?? handle.profileId;
   const profileId = request.profileId ?? request.runtimeProfile ?? handle.profileId;
+  const clientSubjectId = request.clientSubjectId ?? handle.profileAccess?.subjectId;
+  const identityAssurance = request.identityAssurance ?? handle.profileAccess?.identityAssurance;
   return {
     ...(browserId !== undefined && browserId !== null ? { browserId } : {}),
     ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
     ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
     ...(runtimeProfile !== undefined && runtimeProfile !== null ? { runtimeProfile } : {}),
     ...(profileId !== undefined && profileId !== null ? { profileId } : {}),
+    ...(clientSubjectId !== undefined && clientSubjectId !== null ? { clientSubjectId } : {}),
+    ...(identityAssurance !== undefined && identityAssurance !== null ? { identityAssurance } : {}),
   };
 }
 

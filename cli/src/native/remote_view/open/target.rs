@@ -6,6 +6,7 @@ use super::runtime::{
     RouteBoundBrowserObservation, RouteBoundOpenRuntime, SwitchTargetRequest,
 };
 use super::shared::*;
+use crate::native::browser_lifecycle::profile_child_access_from_command;
 pub(crate) fn remote_view_open_reusable_live_target(
     pages: &[PageInfo],
     preferred_target_id: Option<&str>,
@@ -284,7 +285,8 @@ pub(crate) fn route_bound_open_reused_target_result(
         format!("target:{target_id}"), "targetId" : target_id, "url" : url, "title" :
         title, "profileId" : profile_id, "profileOrigin" : "agent_browser_owned",
         "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
-        "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id, "jobId" :
+        "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id,
+        "profileAccess" : profile_child_access_from_command(cmd), "jobId" :
         Value::Null, "traceFilter" : { "browserId" : browser_id, "profileId" :
         profile_id, "sessionId" : session_id, "serviceName" :
         optional_command_string(cmd, "serviceName"), "agentName" :

@@ -42,7 +42,7 @@ pub(crate) async fn handle_service_probe(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "probe requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_daemon(handle, state)?;
+    validate_service_tab_handle_for_daemon(handle, cmd, state)?;
     let probe = cmd
         .get("probe")
         .and_then(Value::as_object)
@@ -400,7 +400,7 @@ pub(crate) mod action_commands {
             .get("serviceTabHandle")
             .and_then(Value::as_object)
             .ok_or_else(|| "evaluate requires serviceTabHandle".to_string())?;
-        validate_service_tab_handle_for_daemon(handle, state)?;
+        validate_service_tab_handle_for_daemon(handle, cmd, state)?;
         if cmd.get("returnByValue").and_then(Value::as_bool) == Some(false) {
             return Err(
                 "evaluate requires returnByValue=true so results can be capped".to_string(),

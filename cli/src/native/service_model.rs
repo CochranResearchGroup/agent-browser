@@ -2848,6 +2848,29 @@ impl ServiceState {
         }
     }
 
+    /// Mark only children owned by one closed transport connection as
+    /// reconnectable. Stable subject identity remains attached to each child.
+    pub fn mark_profile_connection_disconnected(&mut self, connection_instance_id: &str) -> usize {
+        let mut changed = 0;
+        for tab in self.tabs.values_mut() {
+            let Some(access) = tab.profile_access.as_mut() else {
+                continue;
+            };
+            if access.connection_instance_id.as_deref() == Some(connection_instance_id)
+                && access.connection_state
+                    == super::service_profile_access_policy::ProfileConnectionState::Active
+            {
+                access.connection_state =
+                    super::service_profile_access_policy::ProfileConnectionState::Disconnected;
+                changed += 1;
+            }
+        }
+        if changed > 0 {
+            self.refresh_service_tab_handles();
+        }
+        changed
+    }
+
     pub fn service_tab_handle(&self, tab_id: &str) -> Option<ServiceTabHandle> {
         let tab = self.tabs.get(tab_id)?;
         let browser = self.browsers.get(&tab.browser_id);
@@ -2891,6 +2914,7 @@ impl ServiceState {
             cleanup_policy,
             lease_heartbeat_expected: lease_state.is_some(),
             owner_session_id: tab.owner_session_id.clone(),
+            profile_access: tab.profile_access.clone(),
             job_id,
             trace_filter: ServiceTabHandleTraceFilter {
                 browser_id: Some(tab.browser_id.clone()),
@@ -5976,6 +6000,8 @@ pub struct BrowserTab {
     pub url: Option<String>,
     pub title: Option<String>,
     pub owner_session_id: Option<String>,
+    /// Profile authority inherited when this tab was admitted.
+    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
     /// Authenticated principal inherited from the owning session work lease.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) principal_id: Option<String>,
@@ -6004,6 +6030,7 @@ impl Default for BrowserTab {
             url: None,
             title: None,
             owner_session_id: None,
+            profile_access: None,
             principal_id: None,
             principal_provenance: None,
             work_lease_id: None,
@@ -6034,6 +6061,7 @@ pub struct ServiceTabHandle {
     pub cleanup_policy: Option<SessionCleanupPolicy>,
     pub lease_heartbeat_expected: bool,
     pub owner_session_id: Option<String>,
+    pub profile_access: Option<super::service_profile_access_policy::ProfileChildAccess>,
     pub job_id: Option<String>,
     pub trace_filter: ServiceTabHandleTraceFilter,
     pub valid: bool,
@@ -10645,6 +10673,63 @@ mod tests {
                 .stale_reason
                 .as_deref(),
             Some("lease_released")
+        );
+    }
+
+    #[test]
+    fn closing_one_connection_marks_only_its_profile_children_disconnected() {
+        use super::super::service_profile_access_policy::{
+            ProfileChildAccess, ProfileConnectionState,
+        };
+
+        let child = |connection: &str| ProfileChildAccess {
+            subject_id: Some("client:fieldwork".to_string()),
+            connection_instance_id: Some(connection.to_string()),
+            ..ProfileChildAccess::default()
+        };
+        let mut state = ServiceState {
+            tabs: BTreeMap::from([
+                (
+                    "tab-owned".to_string(),
+                    BrowserTab {
+                        id: "tab-owned".to_string(),
+                        browser_id: "browser-shared".to_string(),
+                        profile_access: Some(child("connection-closing")),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-independent".to_string(),
+                    BrowserTab {
+                        id: "tab-independent".to_string(),
+                        browser_id: "browser-shared".to_string(),
+                        profile_access: Some(child("connection-surviving")),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            state.mark_profile_connection_disconnected("connection-closing"),
+            1
+        );
+        assert_eq!(
+            state.tabs["tab-owned"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Disconnected
+        );
+        assert_eq!(
+            state.tabs["tab-independent"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Active
         );
     }
 

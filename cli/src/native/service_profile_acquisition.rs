@@ -21,8 +21,9 @@ use super::service_model::{
 };
 use super::service_principal::AuthenticatedServicePrincipal;
 use super::service_profile_access_policy::{
-    evaluate_profile_access, ProfileAccessEvaluation, ProfileAccessMode, ProfileIdentityAssurance,
-    ProfilePermission, ServiceProfileAccessDecision, ServiceProfileAccessPolicy,
+    evaluate_profile_access, ProfileAccessEvaluation, ProfileAccessMode, ProfileChildAccess,
+    ProfileIdentityAssurance, ProfilePermission, ServiceProfileAccessDecision,
+    ServiceProfileAccessPolicy,
 };
 use super::{
     action_runtime, service_lease_authority, service_model, service_principal, service_resources,
@@ -113,6 +114,7 @@ pub(crate) fn decide_profile_acquisition(
     });
     let decision = ProfileAcquisitionDecision::from_components(
         input.selected_profile,
+        &access_policy,
         &access_decision,
         &profile_reuse,
         &lifecycle_replacement,
@@ -1240,6 +1242,7 @@ pub(crate) struct ProfileAcquisitionDecision {
     client_subject_id: Option<String>,
     identity_assurance: ProfileIdentityAssurance,
     connection_instance_id: Option<String>,
+    profile_child_access: ProfileChildAccess,
     service_request_available: bool,
     profile_reuse_action: String,
     profile_reuse_reasons: Vec<String>,
@@ -1254,6 +1257,7 @@ impl ProfileAcquisitionDecision {
     /// Join the owner's compatibility projections into its executable result.
     fn from_components(
         selected_profile: Option<&BrowserProfile>,
+        access_policy: &ServiceProfileAccessPolicy,
         access_decision: &ServiceProfileAccessDecision,
         profile_reuse: &Value,
         lifecycle_replacement: &Value,
@@ -1314,6 +1318,11 @@ impl ProfileAcquisitionDecision {
             client_subject_id: access_decision.subject.subject_id.clone(),
             identity_assurance: access_decision.subject.assurance,
             connection_instance_id: access_decision.subject.connection_instance_id.clone(),
+            profile_child_access: ProfileChildAccess::from_admission(
+                access_policy,
+                access_decision,
+                access_decision.subject.connection_instance_id.clone(),
+            ),
             service_request_available: available,
             profile_reuse_action: recommended_action.to_string(),
             profile_reuse_reasons: profile_reuse
@@ -1438,6 +1447,8 @@ impl ProfileAcquisitionDecision {
         if let Some(connection_instance_id) = self.connection_instance_id.as_ref() {
             command["connectionInstanceId"] = json!(connection_instance_id);
         }
+        command["profileChildAccess"] = serde_json::to_value(&self.profile_child_access)
+            .expect("profile child access must serialize");
         if !self.service_request_available {
             return Err(format!(
                 "service_access_plan_request_unavailable:{}",

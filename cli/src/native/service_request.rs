@@ -502,7 +502,10 @@ pub(crate) fn normalize_service_request(
             )
         })?;
         for (key, value) in params {
-            if key != "id" && key != "action" {
+            if !matches!(
+                key.as_str(),
+                "id" | "action" | "connectionInstanceId" | "profileChildAccess"
+            ) {
                 command[key] = value.clone();
             }
         }
@@ -2236,6 +2239,11 @@ mod tests {
             "params": {
                 "id": "caller-id",
                 "action": "screenshot",
+                "connectionInstanceId": "caller-connection",
+                "profileChildAccess": {
+                    "subjectId": "caller-subject",
+                    "permissions": ["profile-admin"]
+                },
                 "url": "https://params.example",
                 "args": ["--from-params"]
             },
@@ -2243,6 +2251,8 @@ mod tests {
         }))
         .unwrap();
         assert!(normalized.command.get("id").is_none());
+        assert!(normalized.command.get("connectionInstanceId").is_none());
+        assert!(normalized.command.get("profileChildAccess").is_none());
         assert_eq!(normalized.command["action"], "navigate");
         assert_eq!(normalized.command["url"], "https://top.example");
         assert_eq!(normalized.command["args"], json!(["--from-params"]));
