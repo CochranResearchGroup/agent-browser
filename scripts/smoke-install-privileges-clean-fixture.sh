@@ -217,6 +217,12 @@ EOF
 chmod +x "$FAKE_BIN/getent" "$FAKE_BIN/id" "$FAKE_BIN/stat" "$FAKE_BIN/sudo" "$FAKE_BIN/systemctl" "$FAKE_BIN/visudo"
 
 run_installer_mode() {
+  local plan_actions="ensure_lease_authority,ensure_privileged_helper"
+  local arg
+  for arg in "$@"; do
+    [[ "$arg" != "--with-workstation-deps" ]] || plan_actions="$plan_actions,ensure_workstation_dependencies"
+    [[ "$arg" != "--upgrade-lease-authority" ]] || plan_actions="$plan_actions,upgrade_lease_authority"
+  done
   PATH="$FAKE_BIN:$PATH" \
     AGENT_BROWSER_FIXTURE_LOG="$LOG" \
     AGENT_BROWSER_FIXTURE_STATE="$STATE_DIR" \
@@ -232,7 +238,10 @@ run_installer_mode() {
     AGENT_BROWSER_PRIVILEGED_SUDOERS="$SUDOERS_PATH" \
     AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
     AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="${AUTHORITY_RUN_SOURCE:-$AUTHORITY_SOURCE}" \
-    bash "$ROOT/scripts/install-agent-browser-privileges.sh" "$@"
+    bash "$ROOT/scripts/install-agent-browser-privileges.sh" \
+      --sealed-plan-digest "$(printf 'b%.0s' {1..64})" \
+      --sealed-plan-actions "$plan_actions" \
+      "$@"
 }
 
 run_installer() {
@@ -253,8 +262,8 @@ if [[ "$sudo_v_count" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$sudo_n_count" != "18" ]]; then
-  echo "Expected eighteen noninteractive privileged commands after authorization, found $sudo_n_count" >&2
+if [[ "$sudo_n_count" != "20" ]]; then
+  echo "Expected twenty noninteractive privileged commands after authorization, found $sudo_n_count" >&2
   cat "$LOG" >&2
   exit 1
 fi
@@ -308,14 +317,14 @@ if [[ "$sudo_v_count_after" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$sudo_n_count_after" != "20" ]]; then
+if [[ "$sudo_n_count_after" != "22" ]]; then
   echo "Second apply should add exactly two non-interactive helper capability checks." >&2
   cat "$LOG" >&2
   exit 1
 fi
 
-if [[ "$(grep -c "^SUDO -n $HELPER_PATH check$" "$LOG" || true)" != "1" \
-   || "$(grep -c "^SUDO -n $HELPER_PATH status-json$" "$LOG" || true)" != "1" ]]; then
+if [[ "$(grep -c "^SUDO -n $HELPER_PATH check$" "$LOG" || true)" != "2" \
+   || "$(grep -c "^SUDO -n $HELPER_PATH status-json$" "$LOG" || true)" != "2" ]]; then
   echo "Second apply must probe the bounded helper check and status-json contracts." >&2
   cat "$LOG" >&2
   exit 1

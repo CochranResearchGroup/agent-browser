@@ -158,6 +158,35 @@ type RuntimeHealthIssue = {
   recommendedAction?: string;
 };
 
+type DashboardHealthFinding = {
+  code: string;
+  blocking: boolean;
+  message: string;
+};
+
+type DashboardHealthAxes = {
+  schemaVersion: "agent-browser.dashboard-health.v1";
+  runtime: {
+    state: "ready" | "degraded" | "blocked" | "unknown";
+    ready: boolean;
+    findings: DashboardHealthFinding[];
+  };
+  convergence: {
+    state: "ready" | "degraded" | "blocked" | "unknown";
+    ready: boolean;
+    findings: DashboardHealthFinding[];
+  };
+  access: {
+    state: "allowed" | "attention" | "denied" | "unknown";
+    findings: DashboardHealthFinding[];
+  };
+  acquisition: {
+    state: "available" | "waiting" | "denied" | "unknown";
+    requestScoped: true;
+    findings: DashboardHealthFinding[];
+  };
+};
+
 type SessionSupervisorHealth = {
   ready?: boolean;
   count?: number;
@@ -234,6 +263,14 @@ type RuntimeHealth = {
   staleSessions?: string[];
   sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
+  dashboardHealth?: DashboardHealthAxes;
+  workstationConvergence?: {
+    schemaVersion?: string;
+    state?: string;
+    ready?: boolean;
+    executableNextAction?: string | null;
+    dashboardHealth?: DashboardHealthAxes;
+  };
   runtimeMultiplicity?: RuntimeMultiplicityHealth;
   runtimeMonitor?: RuntimeMonitorHealth;
   runtimeLifecycle?: {
@@ -295,18 +332,19 @@ const REQUIRED_RUNTIME_FEATURES = [
 
 const REQUIRED_RUNTIME_CONTRACT = "service-ui-runtime.v1";
 
-function workstationUpgradeIssue(health: RuntimeHealth): string | null {
-  const upgrade = health.workstationUpgrade;
-  const transaction = upgrade?.latestTransaction;
-  if (!transaction?.state) return null;
-  const quietStates = new Set(["accepted", "old_generation_retirable"]);
-  if (!upgrade?.admissionDraining && quietStates.has(transaction.state)) return null;
-  const selected = upgrade?.selectedGenerationId || "none";
-  const candidate = transaction.candidateGenerationId || "unknown";
-  const migrationCount = transaction.runtimeMigrations?.length ?? 0;
-  const rollback = transaction.oldGenerationId ? "old generation retained" : "no prior generation";
-  const blocker = transaction.stopReason ? ` Blocker: ${transaction.stopReason}.` : "";
-  return `Workstation transaction ${transaction.state}: selected ${selected}, candidate ${candidate}, ${migrationCount} runtime dispositions, ${rollback}.${blocker}`;
+function workstationConvergenceIssue(health: RuntimeHealth): string | null {
+  const axes = health.dashboardHealth;
+  if (!axes) return null;
+  const acquisition = health.dashboardHealth?.acquisition;
+  if (acquisition?.requestScoped !== true) {
+    return "The runtime health contract did not preserve request-scoped acquisition state.";
+  }
+  if (axes.runtime.ready && axes.convergence.ready) return null;
+  const finding = axes.runtime.findings.find((candidate) => candidate.blocking)
+    ?? axes.convergence.findings.find((candidate) => candidate.blocking);
+  const message = finding?.message || "The installed runtime has not reached its selected convergence state.";
+  const action = health.workstationConvergence?.executableNextAction;
+  return action ? `${message} Next action: ${action}.` : message;
 }
 
 function dashboardSectionFromPath(pathname: string): DashboardSection {
@@ -751,7 +789,7 @@ function RuntimeHealthNotice({ state }: { state: RuntimeHealthState }) {
     >
       <AlertTriangle className="size-4 shrink-0" />
       <div className="min-w-0">
-        <p>Runtime status out of sync</p>
+        <p>Runtime convergence action required</p>
         <span>
           {state.issue}
           {sessions.length > 0 ? ` Affected sessions: ${sessions.join(", ")}.` : ""}
@@ -905,9 +943,7 @@ function DashboardExperience({
           throw new Error(`HTTP ${response.status}`);
         }
         const health = await response.json() as RuntimeHealth;
-        const issue = workstationUpgradeIssue(health) || (health.ready === false
-          ? health.issues?.[0]?.message || "Active daemon sessions are out of sync with the installed runtime."
-          : null);
+        const issue = workstationConvergenceIssue(health);
         if (!cancelled) {
           setRuntimeHealth({ loading: false, health, issue });
         }

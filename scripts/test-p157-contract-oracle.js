@@ -129,10 +129,13 @@ assert(
 
 const dashboardSource = readFileSync(join(root, 'packages/dashboard/src/app/page.tsx'), 'utf8');
 assert(
-  dashboardSource.includes('health.ready === false') &&
-    dashboardSource.includes('health.issues?.[0]?.message') &&
-    !dashboardSource.includes('health.acquisition'),
-  'dashboard warning-axis red case must be retired or updated',
+  dashboardSource.includes('workstationConvergenceIssue') &&
+    dashboardSource.includes('health.dashboardHealth?.acquisition') &&
+    dashboardSource.includes('axes.runtime.findings') &&
+    dashboardSource.includes('axes.convergence.findings') &&
+    !dashboardSource.includes('health.ready === false') &&
+    !dashboardSource.includes('health.issues?.[0]?.message'),
+  'dashboard warning composition does not consume independent typed health axes',
 );
 
 const expectedCases = new Set([

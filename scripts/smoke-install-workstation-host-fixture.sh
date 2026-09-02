@@ -292,7 +292,9 @@ run_installer() {
     AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" \
       --apply \
-      --with-workstation-deps
+      --with-workstation-deps \
+      --sealed-plan-digest "$(printf 'a%.0s' {1..64})" \
+      --sealed-plan-actions ensure_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies
 }
 
 run_installer >"$WORKDIR/first.out"

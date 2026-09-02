@@ -2300,22 +2300,31 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
     }
     #[cfg(test)]
     {
+        health["dashboardIngress"] = json!({
+            "schemaVersion": "agent-browser.dashboard-ingress.v1",
+            "dashboardIngressReady": true,
+            "operatorJourneyReady": true,
+            "state": "ready",
+        });
         health["workstationUpgrade"] = json!({
             "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
             "success": true,
             "selectedGenerationId": null,
             "admissionDraining": false,
             "latestTransaction": null,
+            "readiness": {
+                "selectedGenerationReady": true,
+            },
         });
         health["runtimeMultiplicity"] = json!({
             "schemaVersion": "agent-browser.runtime-multiplicity.v1",
-            "state": "unknown",
-            "steadyState": false,
+            "state": "steady_current",
+            "steadyState": true,
             "counts": {
                 "dashboardProcesses": 0,
-                "runtimeHosts": 0,
+                "runtimeHosts": 1,
                 "legacyDaemons": 0,
-                "executableGenerations": 0,
+                "executableGenerations": 1,
             },
             "issues": [],
         });
@@ -2325,6 +2334,20 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             "state": "test",
             "fresh": true,
         });
+    }
+    if let Ok(receipt) = crate::workstation_convergence::convergence_receipt_from_runtime_health(
+        &runtime_inventory,
+        health.get("sessionSupervisors").unwrap_or(&Value::Null),
+        health.get("runtimeMultiplicity").unwrap_or(&Value::Null),
+        health.get("runtimeMonitor").unwrap_or(&Value::Null),
+        health.get("workstationUpgrade").unwrap_or(&Value::Null),
+        health.get("dashboardIngress").unwrap_or(&Value::Null),
+    ) {
+        if let Ok(value) = serde_json::to_value(&receipt) {
+            health["dashboardHealth"] =
+                value.get("dashboardHealth").cloned().unwrap_or(Value::Null);
+            health["workstationConvergence"] = value;
+        }
     }
     health["runtimeLifecycle"] =
         runtime_lifecycle_status_from_health(&health, runtime_lifecycle_authority_summary(None));
@@ -2701,16 +2724,7 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
                 is_default_socket && deleted_executable
             })
             .count();
-        let state = if listener_count == 0 {
-            "none"
-        } else if default_socket_listener_count == 1
-            && default_socket_current_match_count == 1
-            && default_socket_deleted_executable_count == 0
-        {
-            "authoritative"
-        } else {
-            "ambiguous"
-        };
+        let state = daemon_listener_inventory_state(&listeners);
         json!({
             "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
             "available": true,
@@ -2741,6 +2755,47 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
             "deletedExecutableCount": 0,
             "defaultSocketDeletedExecutableCount": 0,
         })
+    }
+}
+
+#[cfg(unix)]
+fn daemon_listener_inventory_state(listeners: &[Value]) -> &'static str {
+    if listeners.is_empty() {
+        return "none";
+    }
+    let exact_current = |listener: &&Value| {
+        listener
+            .get("matchesCurrentExecutable")
+            .and_then(Value::as_bool)
+            == Some(true)
+            && listener.get("deletedExecutable").and_then(Value::as_bool) != Some(true)
+    };
+    let default_listeners = listeners
+        .iter()
+        .filter(|listener| {
+            listener
+                .get("socketPath")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path.ends_with("/default.sock"))
+        })
+        .collect::<Vec<_>>();
+    let runtime_host_listeners = listeners
+        .iter()
+        .filter(|listener| {
+            listener
+                .get("socketPath")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path.ends_with("/runtime-host.sock"))
+        })
+        .collect::<Vec<_>>();
+    if listeners.len() == 1
+        && ((default_listeners.len() == 1 && default_listeners.iter().all(exact_current))
+            || (runtime_host_listeners.len() == 1
+                && runtime_host_listeners.iter().all(exact_current)))
+    {
+        "authoritative"
+    } else {
+        "ambiguous"
     }
 }
 
@@ -4213,15 +4268,30 @@ pub(crate) fn install_remote_view_privileges(
         ));
     }
 
+    let helper_sha256 = sha256_bytes(REMOTE_VIEW_PRIVILEGED_HELPER.as_bytes());
+    let lease_authority_sha256 = binary_fingerprint(std::env::current_exe().ok())
+        .get("sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "Could not establish the lease-authority executable identity for the privileged effect plan."
+                .to_string()
+        })?
+        .to_string();
+    let effect_plan = crate::workstation_convergence::PrivilegedHostEffectPlan::seal(
+        with_workstation_deps,
+        &helper_sha256,
+        &lease_authority_sha256,
+    )?;
     let mut command = Command::new("bash");
     command
         .arg(&installer_path)
         .arg("--apply")
+        .arg("--sealed-plan-digest")
+        .arg(&effect_plan.plan_digest)
+        .arg("--sealed-plan-actions")
+        .arg(effect_plan.action_csv())
         .env("AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE", &helper_path)
-        .env(
-            "AGENT_BROWSER_PRIVILEGED_HELPER_SHA256",
-            sha256_bytes(REMOTE_VIEW_PRIVILEGED_HELPER.as_bytes()),
-        );
+        .env("AGENT_BROWSER_PRIVILEGED_HELPER_SHA256", helper_sha256);
     if with_workstation_deps {
         command.arg("--with-workstation-deps");
     }
@@ -4232,8 +4302,12 @@ pub(crate) fn install_remote_view_privileges(
     let _ = fs::remove_dir_all(&temp_root);
 
     if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        crate::workstation_convergence::validate_privileged_effect_adapter_receipt(
+            &effect_plan,
+            &stdout,
+        )?;
         if !quiet {
-            let stdout = String::from_utf8_lossy(&output.stdout);
             if !stdout.is_empty() {
                 print!("{stdout}");
             }
@@ -4309,6 +4383,27 @@ mod tests {
             Path::new("/run/user/1000/agent-browser-dev/runtime-host.sock"),
             production_runtime_dir,
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_listener_inventory_accepts_one_current_selected_runtime_host() {
+        let listeners = vec![json!({
+            "pid": 43905,
+            "socketPath": "/run/user/1000/agent-browser/runtime-hosts/owner/runtime-host.sock",
+            "matchesCurrentExecutable": true,
+            "deletedExecutable": false,
+        })];
+
+        assert_eq!(daemon_listener_inventory_state(&listeners), "authoritative");
+
+        let foreign_named = vec![json!({
+            "pid": 43905,
+            "socketPath": "/run/user/1000/agent-browser/arbitrary.sock",
+            "matchesCurrentExecutable": true,
+            "deletedExecutable": false,
+        })];
+        assert_eq!(daemon_listener_inventory_state(&foreign_named), "ambiguous");
     }
 
     fn http_response(status: u16, reason: &str, body: &[u8]) -> Vec<u8> {
@@ -5472,6 +5567,19 @@ mod tests {
             health["runtimeMonitor"]
         );
         assert_eq!(health["runtimeLifecycle"]["observedAtEpochMs"], Value::Null);
+        assert_eq!(
+            health["dashboardHealth"]["schemaVersion"],
+            "agent-browser.dashboard-health.v1"
+        );
+        assert!(health["dashboardHealth"]["runtime"]["ready"].is_boolean());
+        assert_eq!(
+            health["dashboardHealth"]["acquisition"]["requestScoped"],
+            true
+        );
+        assert_eq!(
+            health["workstationConvergence"]["schemaVersion"],
+            "agent-browser.workstation-convergence-receipt.v1"
+        );
     }
 
     #[test]
@@ -5767,6 +5875,24 @@ mod tests {
             privileges_pos < deps_pos,
             "remote-view privileges must establish the sudo boundary before dependency installation"
         );
+    }
+
+    #[test]
+    fn privileged_install_requires_and_validates_a_rust_sealed_effect_plan() {
+        assert!(REMOTE_VIEW_PRIVILEGE_INSTALLER
+            .contains("Apply requires a Rust-sealed privileged effect plan digest."));
+        assert!(REMOTE_VIEW_PRIVILEGE_INSTALLER
+            .contains("Privileged effect actions do not match the sealed Rust plan."));
+
+        let source = include_str!("install.rs");
+        let install_start = source
+            .find("pub(crate) fn install_remote_view_privileges")
+            .expect("privilege installer entry point should exist");
+        let install_source = &source[install_start..];
+        assert!(install_source.contains("PrivilegedHostEffectPlan::seal"));
+        assert!(install_source.contains("--sealed-plan-digest"));
+        assert!(install_source.contains("--sealed-plan-actions"));
+        assert!(install_source.contains("validate_privileged_effect_adapter_receipt"));
     }
 
     #[test]

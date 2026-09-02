@@ -32,6 +32,7 @@ mod upgrade;
 mod validation;
 mod windows_browser_doctor;
 mod windows_browser_setup;
+mod workstation_convergence;
 mod workstation_install;
 
 use serde_json::json;
