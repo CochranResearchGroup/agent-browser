@@ -4,6 +4,37 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 205 | 2026-09-02
+
+Scope: complete P157 W3 immutable request provenance without changing access
+policy or production runtime state.
+
+Actions:
+
+- added one deny-unknown-fields provenance model containing only the frozen
+  causal identity allowlist;
+- generated one service-owned connection-instance identity per daemon
+  transport and retained the exact per-lane control-plane identity;
+- preserved the same provenance through queued, waiting, running, succeeded,
+  failed, timed-out, cancelled, and failed-to-enqueue ServiceJob records; and
+- added the public ServiceJob contract and generated client type, then turned
+  only the runtime-lane regression case green.
+
+Validation:
+
+- four focused provenance and persistence tests pass, including stable
+  connection identity across two requests and private-field exclusion;
+- the full provider-free Rust gate passes with 1,883 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass; and
+- the P157 oracle, generated-client drift check, complete service-client gate,
+  and client type check pass.
+
+Result:
+
+- W3 is complete and pushed at `79bb71f4` without production effects; and
+- W4 unified terminal outcomes are next.
+
 ## Turn 204 | 2026-09-02
 
 Scope: freeze P157 W2 schemas and source-grounded red provider-free

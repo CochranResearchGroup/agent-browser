@@ -32,6 +32,13 @@ W2 is source complete at `cd0bdb1d`. Six additive v1 schemas freeze profile
 policy, access decisions, request provenance, terminal outcomes, migration, and
 independent dashboard health axes. The service-client gate now carries five
 source-grounded red cases assigned to W3, W4, W5, and W9.
+W3 is source complete at `79bb71f4`. Daemon ingress now generates a stable
+service-owned connection identity per transport, each per-lane control plane
+captures one allowlist-only provenance envelope, and every queued or terminal
+job state preserves the same request, connection, lane, subject, assurance,
+profile, and causal identifiers. Private routing payloads remain outside the
+envelope. The runtime-lane oracle case is green while the four later cases
+remain red.
 
 ### Plan
 
@@ -39,10 +46,10 @@ source-grounded red cases assigned to W3, W4, W5, and W9.
 
 ### Next Recommendation
 
-Execute W3: create the immutable redacted provenance envelope before runtime
-lane routing consumes its selector, preserve it through `ControlRequest` and
-queued job persistence, and turn only the runtime-lane oracle case green. Do
-not change access-policy semantics or production runtime state.
+Execute W4: replace split response and job terminal handling with one typed
+outcome builder, attach the W3 provenance envelope to every terminal response,
+job, event, and trace projection, and turn only the scheduler-rejection oracle
+case green. Do not change access-policy semantics or production runtime state.
 
 ## P156 | Full Runtime Shutdown Replacement
 

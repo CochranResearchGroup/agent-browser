@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w3_request_provenance_in_progress`
+Execution state: `w4_terminal_outcome_in_progress`
 
 Lane: P157
 
