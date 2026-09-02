@@ -6,9 +6,9 @@ lanes:
     plan_ref: refs/heads/architecture/desktop-locator-deep-module
     branch: architecture/desktop-locator-deep-module
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: c664c25bb2dac0daee619b82334d708ffa4e998f
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
+    checkpoint: 79cb48da
     remote_ref: refs/remotes/origin/architecture/desktop-locator-deep-module
     integration_receipt: null
     integration: merge

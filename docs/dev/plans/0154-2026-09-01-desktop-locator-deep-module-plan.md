@@ -2,7 +2,7 @@
 
 Date: 2026-09-01
 
-State: OPEN
+State: CLOSED
 
 Lane: P154
 
@@ -104,5 +104,22 @@ git diff --check
 
 ## Completion Evidence
 
-Open. W4 will record the exact commit and validation results before this plan is
-closed.
+Implementation commit: `79cb48da`
+
+Progress classification: `outcome_progress`
+
+- The locator now has exactly two `pub(crate)` declarations, covering the
+  production action handler and stream redactor.
+- `BoundFrame` and its conversion implementation were deleted. Locator and
+  prompt-perception fixtures now use `DesktopCaptureResult` directly.
+- Focused locator validation passed 10 tests, including the frozen observation
+  and visualization hashes, stale binding, ambiguity, detector failure, request
+  rejection, and stream redaction.
+- Focused prompt-perception validation passed 26 tests with unchanged frozen
+  corpus and privacy outcomes.
+- Workspace formatting and strict workspace Clippy passed through
+  `scripts/ci/cargo-safe.sh`.
+- `pnpm validation:select` selected workspace formatting, workspace Clippy, a
+  focused Rust filter, and patch hygiene. Every selected gate passed.
+- No installed runtime, live browser, desktop provider, lease, service state,
+  runtime host, capability rotation, or output surface was changed.
