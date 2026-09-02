@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w2_contract_freeze_in_progress`
+Execution state: `w3_request_provenance_in_progress`
 
 Lane: P157
 
@@ -438,6 +438,37 @@ Validation evidence:
   tests and every serial environment-mutating partition; and
 - service API/MCP parity, generated-client contract drift, and client type
   checks pass.
+
+## Execution Checkpoint W2
+
+Source checkpoint: `cd0bdb1d`.
+
+State transition: `w1_complete -> w2_complete`.
+
+Completed in W2 attempt 1:
+
+- froze additive v1 schemas for profile access policies, access decisions,
+  immutable request provenance, terminal outcomes, legacy-policy migration,
+  and independent dashboard health axes;
+- made `shared-local` the exact default policy spelling and kept permission,
+  coordination, lifecycle proof, and convergence as separate contracts;
+- added one provider-free P157 oracle with source-backed red cases for missing
+  scheduler recourse, lost runtime-lane provenance, circular identity recourse,
+  shared-profile overblocking, and dashboard warning-axis conflation; and
+- added the oracle to the normal service-client gate so later work units must
+  explicitly retire each red case when its invariant turns green.
+
+W2 is complete without changing runtime behavior or public transport surfaces.
+W3 is open to capture the redacted provenance envelope before runtime routing
+fields are consumed and preserve it through queue admission.
+
+Validation evidence:
+
+- `pnpm test:p157-contract-oracle` passes with six schemas and five red cases;
+- the complete `pnpm test:service-client` gate passes;
+- service API/MCP parity, generated-client contracts, and client types pass;
+- the release-asset verifier fixture and validation selector pass; and
+- patch whitespace and conflict-marker checks pass.
 
 ## Execution Checkpoint W1-B
 

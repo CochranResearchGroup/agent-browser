@@ -4,6 +4,32 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 204 | 2026-09-02
+
+Scope: freeze P157 W2 schemas and source-grounded red provider-free
+regressions without changing runtime behavior.
+
+Actions:
+
+- added v1 contracts for profile policy, access decisions, request provenance,
+  terminal outcomes, migration, and dashboard health axes;
+- froze `shared-local` as the exact default and kept access, coordination,
+  lifecycle proof, and convergence independent;
+- added five source-backed red cases for the Research.gov defects; and
+- included the P157 oracle in the normal service-client test gate.
+
+Validation:
+
+- the P157 oracle passes with six schemas and five bounded red cases;
+- the complete service-client gate, API/MCP parity, generated-client contract
+  checks, and type checks pass; and
+- the release verifier fixture, validation selector, and patch checks pass.
+
+Result:
+
+- W2 is complete and pushed at `cd0bdb1d` without production effects; and
+- W3 immutable ingress provenance is next.
+
 ## Turn 203 | 2026-09-02
 
 Scope: complete P157 W1 attempt 2 by placing current Profile acquisition

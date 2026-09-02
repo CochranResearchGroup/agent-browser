@@ -28,6 +28,10 @@ route names, and the executable request. Service Access projects that result,
 recovery coordination is an internal child, and action runtime consumes the
 typed decision. A projection-consistency oracle covers every current Service
 Access fixture without changing permission or public-contract semantics.
+W2 is source complete at `cd0bdb1d`. Six additive v1 schemas freeze profile
+policy, access decisions, request provenance, terminal outcomes, migration, and
+independent dashboard health axes. The service-client gate now carries five
+source-grounded red cases assigned to W3, W4, W5, and W9.
 
 ### Plan
 
@@ -35,11 +39,10 @@ Access fixture without changing permission or public-contract semantics.
 
 ### Next Recommendation
 
-Execute W2: freeze permission, provenance, failure, migration, and dashboard
-health schemas, then add red provider-free regressions for scheduler recourse,
-lost runtime-lane correlation, circular identity recourse, shared-profile
-overblocking, and warning-axis conflation. Do not mutate production permissions
-or browser state.
+Execute W3: create the immutable redacted provenance envelope before runtime
+lane routing consumes its selector, preserve it through `ControlRequest` and
+queued job persistence, and turn only the runtime-lane oracle case green. Do
+not change access-policy semantics or production runtime state.
 
 ## P156 | Full Runtime Shutdown Replacement
 
