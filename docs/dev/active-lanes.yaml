@@ -22,9 +22,9 @@ lanes:
     plan_ref: refs/heads/fieldwork/research-gov-deterministic-automation
     branch: fieldwork/research-gov-deterministic-automation
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 294b86850f56426c01a10df1158affc7b9917e6d
+    plan_state: CLOSED
+    custody_state: INTEGRATION_READY
+    checkpoint: 804519f0aa2a7d2ced913445ee01c3d58aab045f
     remote_ref: null
     integration_receipt: null
     integration: merge

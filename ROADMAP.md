@@ -1,11 +1,33 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-01
+Updated: 2026-09-02
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P155 | Durable Handoff Resume Intent
+
+State: SOURCE COMPLETE
+Current state: Research.gov fieldwork produced two provider-neutral client
+helpers. A resolved durable handoff now yields the exact retained route,
+managed profile, target, URL, caller attribution, and valid tab handle without
+exposing provider URLs or profile paths. Diagnostics now classify explicitly
+as unavailable, observation-only, or effect-capable; only complete control
+plane attestation admits navigation or input. The source checkpoint is
+`804519f0` and all selected provider-free gates pass.
+
+### Plan
+
+- `docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md`
+
+### Next Recommendation
+
+Integrate the source checkpoint through the normal branch flow. Continue
+Research.gov observation through durable handoff `r580584`; do not navigate or
+enter data until canonical profile-lease proof makes diagnostics
+effect-capable.
 
 ## P153 | Lost Profile Capability Rotation Recovery
 

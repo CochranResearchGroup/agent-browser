@@ -4,6 +4,43 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 195 | 2026-09-02
+
+Scope: productize deterministic Research.gov durable-handoff resume and effect
+authority classification without changing live browser state.
+
+Actions:
+
+- resolved handoff `r580584` without navigation and preserved the exact
+  Research.gov service, agent, task, browser, session, profile, target, and URL
+  tuple from its valid service tab handle;
+- added `deriveServiceRemoteViewHandoffResumeIntent()` so clients no longer
+  reconstruct retained route or caller identity from provider URLs or process
+  inspection;
+- added `classifyServiceControlPlaneAuthority()` so a current handle with
+  incomplete attestation remains explicitly observation-only and only
+  `complete=true` becomes effect-capable; and
+- updated generated declarations, CLI help, README, agent skill guidance, and
+  the remote-view guide with the same resume sequence.
+
+Validation:
+
+- the full service-client gate, package exports, JavaScript type checking,
+  remote-view documentation guard, route-confusion gates, and API/MCP parity
+  pass;
+- the docs production build passes;
+- workspace formatting, strict workspace Clippy, and 45 focused output tests
+  pass through the WSL Cargo safety wrapper; and
+- patch hygiene passes.
+
+Result:
+
+- source checkpoint `804519f0` is integration-ready;
+- the live Research.gov browser, profile, route, lease, and freshness state
+  were not mutated; and
+- live navigation and input remain withheld because the current diagnostics
+  lack canonical profile-lease proof.
+
 ## Turn 194 | 2026-09-02
 
 Scope: stop the exact P152/P153 worktree-owned Chrome trees and complete Git

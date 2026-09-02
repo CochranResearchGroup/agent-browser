@@ -2,7 +2,7 @@
 
 Date: 2026-09-02
 
-State: OPEN
+State: CLOSED
 
 Lane: P155
 
@@ -116,12 +116,15 @@ git diff --check
 - Live navigation, input, profile mutation, route switching, or cleanup
 - Changing P144 authority or resolving the current legacy Research.gov lease
 
-## Current Checkpoint
+## Completion Evidence
 
-State transition: `source_plan_open -> source_qualified`.
+Implementation checkpoint: `804519f0`
+
+State transition: `source_qualified -> source_complete`.
 
 Acceptance state: W1 through W5 are complete. The bounded source slice is
-qualified and awaits its recoverable implementation checkpoint.
+qualified at a recoverable implementation checkpoint and ready for ordinary
+integration review.
 
 Progress classification: `outcome_progress`.
 
@@ -133,7 +136,9 @@ route-confusion, API/MCP parity, Rust formatting, strict Clippy, and patch
 hygiene gates pass. P144 overlap remained read-only; no lease or live browser
 state changed.
 
-Material blocker: none for source implementation.
+Material blocker: none for this source slice. Live Research.gov effects remain
+withheld by the separately owned incomplete profile-lease attestation.
 
-Next action: publish the implementation checkpoint, then close the plan and
-advance its lane to integration-ready custody.
+Next action: integrate the source checkpoint through the normal branch flow,
+then resume read-only Research.gov fieldwork unless canonical lease authority
+becomes effect-capable.
