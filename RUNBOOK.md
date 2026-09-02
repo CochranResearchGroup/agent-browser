@@ -4,6 +4,35 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 196 | 2026-09-02
+
+Scope: reconcile first-time Research.gov authentication with the installed
+desktop observation and interaction boundary.
+
+Actions:
+
+- reran the canonical Research.gov no-launch access plan and confirmed the
+  retained `research-gov-nsf` browser is reusable while target readiness
+  remains unknown and authenticated target evidence is empty;
+- proved the selected posture is headed remote control with manual attached
+  desktop input and an attachable login, so a separate detached seeding browser
+  is not required;
+- ran scoped remote-view doctor and resolved durable handoff `r580584` to ready
+  presentation generation 6 without navigation or relaunch; and
+- reconciled installed contract discovery with current product guidance:
+  password-manager and passkey surfaces are named policy inputs, but real
+  LastPass/passkey recognition and manipulation are not product-accepted.
+
+Result:
+
+- the operator can perform the first sensitive login through the ready durable
+  handoff;
+- LastPass credential selection, master-password entry, passkey approval, PIN,
+  biometric, secure-desktop, and consent steps remain human-controlled; and
+- the next product requirement is a bounded real browser-external credential
+  workflow with paired page evidence, exact scene and controller binding,
+  secret-free receipts, human-continuation gates, and no blind retry.
+
 ## Turn 195 | 2026-09-02
 
 Scope: productize deterministic Research.gov durable-handoff resume and effect

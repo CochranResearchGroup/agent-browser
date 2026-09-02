@@ -93,8 +93,12 @@ legacy daemons.
 
 ### Next Recommendation
 
-Continue Research.gov fieldwork through durable handoff `r580584`. Do not
-cold-launch a replacement browser for route, display, or viewer reconnection.
+Continue Research.gov fieldwork through durable handoff `r580584`. The operator
+must complete the first LastPass credential and passkey flow manually because
+the installed real-prompt desktop workflow is not product-accepted. After the
+authenticated target is visible, run a bounded auth probe and only then record
+profile freshness. Do not cold-launch a replacement browser for route, display,
+or viewer reconnection.
 
 ## P144 | Lease Authority Coordination And Revocation
 

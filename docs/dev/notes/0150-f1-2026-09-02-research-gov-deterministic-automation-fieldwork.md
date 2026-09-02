@@ -125,6 +125,46 @@ Deterministic recipes should distinguish raw attribute identity from resolved
 URL identity. Provider-neutral probe receipts should make that distinction
 explicit when link identity is part of an automation invariant.
 
+### First-time authentication and browser-external credential UI
+
+A fresh no-launch access-plan readback for the canonical Research.gov caller
+tuple selected `research-gov-nsf` and found the retained browser reusable. The
+profile still has no authenticated target evidence: `authenticatedServiceIds`
+is empty and Research.gov readiness is `unknown` with
+`verify_or_seed_profile_before_authenticated_work` as the recommended action.
+
+The selected login posture is a headed `remote_headed` browser with
+`rdp_gateway` presentation and `manual_attached_desktop` input. Its readiness
+contract permits an attachable login (`seedingMode=attachable_ok` and
+`cdpAttachmentAllowedDuringSeeding=true`); it does not require a separate
+detached CDP-free seeding browser. Scoped remote-view doctor reports the exact
+profile, session, display, route, and route pool ready. Resolving handoff
+`r580584` reused browser `session:research-gov-nsf`, session
+`handoff-4447c250dce61136`, and target
+`52E87DBD4EF54B4105F1E0AC6FBCB7A7` at presentation generation 6 without
+navigating or relaunching.
+
+The remaining first-login work crosses a browser-external UI seam. Selecting a
+stored LastPass credential and completing a LastPass passkey flow can involve
+extension UI, a password-manager prompt, a passkey chooser, and human-only
+continuations such as master-password entry, consent, PIN, biometric, or a
+secure desktop. These are not reliably visible or controllable through page
+DOM or CDP input.
+
+The installed contracts advertise desktop capture, locate, prompt observation,
+and interaction surfaces, and service status names password-manager prompts
+and passkey choosers in the desktop-evidence policy. That discovery does not
+prove a usable real-site workflow. Current product guidance limits real
+passkey-chooser triggering to a development runtime, keeps production
+browser-external observation read-only, limits prompt perception to a
+repository-owned synthetic fixture, and explicitly excludes LastPass,
+credentials, passkeys, and general desktop control from `desktop_interact`.
+
+For the current first login, the operator must therefore complete the sensitive
+credential and passkey steps manually through the durable handoff. Agent
+Browser may verify the resulting authenticated page and profile freshness only
+afterward.
+
 ## Productization Candidates
 
 ### 1. Handoff-derived access intent
@@ -161,6 +201,18 @@ Extend generic link probes or UI find evidence to return both the raw `href`
 attribute and the resolved URL. Deterministic recipes can then choose exact raw
 matching, normalized origin matching, or semantic text matching intentionally.
 
+### 6. Governed credential-manager desktop workflow
+
+Add a real browser-external workflow that binds observation and input to the
+exact retained browser, presentation generation, controller lease, process
+identity, display, and geometry epoch. It should pair page evidence with
+browser-external pixels, allow only a bounded LastPass credential-selection
+recipe, never expose or persist credentials, route master password, consent,
+PIN, biometric, secure-desktop, and passkey approval to a human continuation,
+and emit partial-effect or uncertain-effect receipts that prohibit blind
+retry. Provider-neutral page automation may resume only after a bounded auth
+probe proves the expected target state.
+
 ## Current Gate
 
 Browser acquisition is already satisfied through the retained browser.
@@ -172,10 +224,16 @@ Automated navigation and input are blocked by the exact profile lease axis:
 separate bounded productization slice supplies effect-capable principal proof
 or an explicit operator workflow reconciles that identity.
 
+First-time authenticated readiness is also incomplete. The operator-visible
+handoff is ready, but LastPass credential selection and passkey completion must
+remain human-controlled because the installed real-prompt desktop workflow is
+not product-accepted.
+
 ## Next Recommendation
 
-Open one bounded productization plan for handoff-derived access intent and
-legacy retained-profile authority reconciliation. Its first test should prove
-that a resolved handoff can produce the exact canonical caller tuple and a
-truthful read-only versus effect-capable disposition without launching or
-navigating a browser.
+Complete the first Research.gov login manually through durable handoff
+`r580584`, then run a bounded authentication probe and record profile freshness
+only after the expected authenticated target is visible. Use the observed
+LastPass and passkey sequence to open one bounded productization plan for real
+browser-external credential selection with explicit human-continuation gates.
+Keep legacy retained-profile authority reconciliation separate under P144.
