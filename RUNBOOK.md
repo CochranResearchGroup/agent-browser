@@ -4,6 +4,41 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 207 | 2026-09-02
+
+Scope: complete P157 W5 revisioned Profile access policy without production
+profile, browser, runtime, or ACL effects.
+
+Actions:
+
+- added one deterministic access-policy evaluator to the Profile acquisition
+  owner for `shared-local`, `restricted`, and `exclusive` modes;
+- made `shared-local` the missing-policy default and limited strict runtime
+  identity checks to explicit strict modes;
+- prevented caller-supplied metadata from promoting self-declared identity to
+  trusted ingress, registered capability, or operator assurance;
+- propagated the admitted subject, assurance, policy revision, and access
+  decision into executable requests and immutable provenance; and
+- replaced circular identity-error recourse with typed permission context and
+  one executable service-owned recovery action.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,891 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- Service Access, Service Request, MCP, policy, API/MCP parity,
+  route-confusion, no-launch collection, and complete service-client gates
+  pass; and
+- the P157 oracle passes with four green cases and only the W9 convergence case
+  intentionally red.
+
+Result:
+
+- W5 is complete and pushed at `f7166030` without production effects; and
+- W6 attributable tab participation, reconnect, and inherited child policy is
+  next.
+
 ## Turn 206 | 2026-09-02
 
 Scope: complete P157 W4 unified terminal outcomes without changing profile

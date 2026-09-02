@@ -44,6 +44,13 @@ success, failure, cancellation, timeout, and rejection. The exact structured
 failure and immutable provenance are preserved across response, ServiceJob,
 terminal ServiceEvent, and trace projections. Scheduler rejection now uses
 that path, leaving the three W5 and W9 oracle cases intentionally red.
+W5 is source complete at `f7166030`. One revisioned access-policy evaluator in
+the Profile acquisition owner now makes `shared-local` the frictionless
+default and retains `restricted` and `exclusive` as explicit strict modes.
+Self-identification cannot manufacture trusted assurance, admitted policy and
+decision identities flow into request provenance, and identity denials return
+non-circular typed recourse. The two W5 oracle cases are green, leaving only
+the W9 convergence case red.
 
 ### Plan
 
@@ -51,10 +58,9 @@ that path, leaving the three W5 and W9 oracle cases intentionally red.
 
 ### Next Recommendation
 
-Execute W5: add revisioned access-policy evaluation inside the Profile
-acquisition owner, make `shared-local` the frictionless trusted-local default,
-and retire circular identity recourse plus shared-profile overblocking. Turn
-only the two W5 oracle cases green without changing production runtime state.
+Execute W6: add attributable tab participation, reconnect, and inherited child
+policy so concurrent compatible clients reuse one browser, retain independent
+tab authority, and close only resources authorized by the current policy.
 
 ## P156 | Full Runtime Shutdown Replacement
 

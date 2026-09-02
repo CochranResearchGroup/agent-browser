@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w5_profile_access_policy_in_progress`
+Execution state: `w6_attributable_tab_participation_in_progress`
 
 Lane: P157
 
@@ -470,6 +470,43 @@ Validation evidence:
   red cases; and
 - generated-client drift, service-client contracts, client types, and patch
   whitespace checks pass.
+
+## Execution Checkpoint W5
+
+Source checkpoint: `f7166030`.
+
+State transition: `w4_complete -> w5_complete`.
+
+Completed in W5 attempt 1:
+
+- added one revisioned access-policy evaluator inside the Profile acquisition
+  owner with deterministic `shared-local`, `restricted`, and `exclusive`
+  decisions;
+- made a missing explicit policy resolve to the frictionless `shared-local`
+  default while preserving strict identity checks for opt-in strict modes;
+- separated caller self-identification from trusted assurance so request
+  metadata cannot self-promote a client to authenticated, registered, or
+  operator authority;
+- carried the admitted policy revision, access-decision identity, subject, and
+  assurance into the executable service request and immutable provenance; and
+- replaced circular identity-error recourse with typed permission context and
+  one executable service-owned recovery action.
+
+W5 is complete without production profile, browser, runtime, or ACL effects.
+W6 is open to add attributable tab participation, reconnect, and inherited
+child policy.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,891 parallel-safe tests and
+  every serial environment-mutating partition;
+- all 53 Service Access tests, 23 Service Request tests, 129 MCP tests, and the
+  focused access-policy tests pass;
+- formatting and workspace clippy with warnings denied pass;
+- service API/MCP parity, route-confusion, no-launch service collection, and
+  complete service-client gates pass; and
+- the P157 oracle passes with six schemas, four green cases, and the one W9
+  convergence case intentionally red.
 
 ## Execution Checkpoint W2
 
