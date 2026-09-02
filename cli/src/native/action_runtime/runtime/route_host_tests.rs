@@ -49,6 +49,7 @@ use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
 use crate::native::service_lifecycle::upsert_service_profile_and_session;
+use crate::native::service_profile_acquisition::authenticated_cold_session_name;
 
 #[test]
 fn exact_close_skips_launch_only_profile_lease_selection() {

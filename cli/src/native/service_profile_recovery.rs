@@ -328,7 +328,7 @@ fn profile_acquisition_retry_route(
         .runtime_owner_registry
         .owner(&profile_identity_digest)
         .map(|owner| owner.daemon_session_route.clone())
-        .or_else(|| super::service_access::authenticated_cold_session_name(authority, profile))
+        .or_else(|| super::authenticated_cold_session_name(authority, profile))
         .ok_or_else(|| "profile_acquisition_daemon_route_unavailable".to_string())
 }
 
@@ -364,7 +364,7 @@ pub(crate) fn profile_acquisition_daemon_route(command: &Value) -> Result<String
             .profiles
             .get(&authority.profile_id)
             .ok_or_else(|| "profile_acquisition_profile_missing".to_string())?;
-        super::service_access::authenticated_cold_session_name(&authority, profile)
+        super::authenticated_cold_session_name(&authority, profile)
             .ok_or_else(|| "profile_acquisition_daemon_route_unavailable".to_string())
     }
 }
