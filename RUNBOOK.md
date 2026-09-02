@@ -35,8 +35,12 @@ Validation:
 Result:
 
 - the retry-persistence repair is production-proven;
-- the original planner/executor disagreement is repaired in source: an
+- the original planner/executor disagreement is merged and installed as
+  generation `0.28.0-3a090663b346-7118cc148917`: an
   unauthenticated caller is no longer given an executor-inadmissible request;
+- live Last30days planning now returns `available=false`, a null request, and
+  `profile_capability_required` while doctor remains successful with one
+  current runtime host and zero legacy daemons;
 - successful Last30days acquisition still requires an operator-authorized,
   privately stored capability registration and client wiring; and
 - the single authorized acceptance tick is consumed and must not be retried

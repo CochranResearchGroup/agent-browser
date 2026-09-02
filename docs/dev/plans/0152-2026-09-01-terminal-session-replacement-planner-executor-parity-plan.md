@@ -266,3 +266,32 @@ Progress classification: `blocker_reduction`.
 Next action: merge and install the truthful-planning candidate without another
 provider tick, then request explicit authority for Last30days capability
 registration and private configuration wiring.
+
+## Truthful-Planning Installation Checkpoint
+
+State transition: `installed_acceptance_blocked -> truthful_planning_installed`.
+
+Merge `8719b57b` is pushed to `origin/main`. Its exact CI-profile binary SHA-256
+is `3a090663b346fab7e8d2e1d7d3aa2ce707002a2c99e8eefd9d373b8c59c52656`,
+which matches the installed command and selected generation
+`0.28.0-3a090663b346-7118cc148917`. Transaction
+`upgrade-1fb19429-683b-4203-b202-82eed2e37cb5` is accepted. Doctor succeeds in
+steady state with one current runtime host, zero legacy daemons, and one
+executable generation.
+
+A live, no-launch Last30days/X access plan selects `last30days-facebook`, sees
+the exact generation-71 terminal owner with process absence and satisfied
+cleanup, and now returns `serviceRequest.available=false`, null request, and
+`acquisitionBlocker=profile_capability_required`. This proves the public
+planner no longer promises an executor-inadmissible request. No provider tick
+or browser launch was used for this check.
+
+Acceptance state: truthful planner/executor parity is production-accepted for
+the unauthenticated case. End-to-end Last30days browser acquisition remains
+authorization-blocked on capability registration and private client wiring.
+
+Progress classification: `outcome_progress`.
+
+Next action: obtain explicit operator authority for the identity mutation;
+after implementation, obtain separate authority for any additional acceptance
+tick because the P152 tick budget is exhausted.
