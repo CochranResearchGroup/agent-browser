@@ -9,14 +9,16 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P156 | Full Runtime Shutdown Replacement
 
-State: ACTIVE
+State: SOURCE COMPLETE
 Current state: the installation deadlock exposed by Research.gov fieldwork has
-been separated into a provider-neutral product lane. W1 through W5 are source
-qualified. `preserve` remains the default; `full-shutdown` apply requires a
+been separated into a provider-neutral product lane. W1 through W6 are source
+complete. `preserve` remains the default; `full-shutdown` apply requires a
 current reviewed SHA-256 plan digest. The deep replacement module closes only
 digest-bound managed lanes, escalates only through exact process identities,
 preserves profiles and stored credentials, retires the exact source host, and
-resumes forward from durable receipts. No production shutdown was applied.
+resumes forward from durable receipts. The exact candidate is installed in the
+isolated development runtime, doctor is fully green, and the three-cycle launch
+smoke passes. No production shutdown was applied.
 
 ### Plan
 
@@ -24,9 +26,9 @@ resumes forward from durable receipts. No production shutdown was applied.
 
 ### Next Recommendation
 
-Publish the source-qualified commit into the isolated development pseudo-home,
-then run installed doctor and the disposable three-launch smoke. Do not apply
-full shutdown to the retained Research.gov runtime in this lane.
+Integrate checkpoints `e46d9f75` and `3bfb1c49` through the normal branch flow.
+Any production full shutdown requires a new current plan digest and explicit
+operator review outside this completed source lane.
 
 ## P155 | Durable Handoff Resume Intent
 

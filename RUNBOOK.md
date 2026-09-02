@@ -4,6 +4,38 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 199 | 2026-09-02
+
+Scope: qualify and close P156 in the isolated installed development runtime.
+
+Actions:
+
+- built source checkpoint `e46d9f75` with the optimized development profile
+  and installed its byte-identical candidate as generation
+  `0.28.0-fc8bf7e8bb33`;
+- repaired development publication to persist the exact selected runtime-host
+  ingress registry and added that identity to development doctor;
+- reran installed doctor and the three-cycle disposable browser smoke; and
+- exercised the installed full-shutdown dry-run without mutation.
+
+Validation:
+
+- built and installed candidate SHA-256 values both equal
+  `fc8bf7e8bb332aeca599ed099d17104609484b22c54f3e067b2030d54f93536f`;
+- every development doctor check passes, including runtime-host ingress;
+- disposable open, URL-read, close, and residue checks pass for all three
+  iterations; and
+- the installed dry-run rejects one ambiguous historical development owner
+  while leaving it untouched.
+
+Result:
+
+- P156 W1 through W6 are source complete and integration ready at
+  `3bfb1c49`;
+- production remained unchanged; and
+- production full shutdown still requires a new reviewed plan and explicit
+  authority.
+
 ## Turn 198 | 2026-09-02
 
 Scope: implement and source-qualify P156 full-runtime-shutdown replacement

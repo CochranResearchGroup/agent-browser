@@ -2,7 +2,7 @@
 
 Date: 2026-09-02
 
-State: ACTIVE
+State: SOURCE COMPLETE
 
 Lane: P156
 
@@ -195,3 +195,32 @@ full shutdown remains outside this plan's authority.
 Next action: commit the source-qualified checkpoint, publish that exact commit
 as a development candidate, run isolated doctor and launch smoke, then close
 P156 only if installed/source identity and runtime residue checks pass.
+
+## W6 Final Checkpoint
+
+State transition: `source-qualified -> source-complete`.
+
+Acceptance state: W1 through W6 complete.
+
+Progress classification: `acceptance`.
+
+Evidence: source checkpoint `e46d9f75` built as optimized development binary
+SHA-256 `fc8bf7e8bb332aeca599ed099d17104609484b22c54f3e067b2030d54f93536f`
+and was installed byte-identically as development generation
+`0.28.0-fc8bf7e8bb33`. Development publication now also writes the isolated
+selected runtime-host ingress identity and doctor verifies it. Every doctor
+check passes, including the selected executable, single runtime host, isolated
+provider, protected authority, route pool, browser pin, and ingress registry.
+The disposable browser smoke passed three open, URL-read, close, and residue
+cycles.
+
+The installed full-shutdown dry-run executes without mutation. It correctly
+blocks on an accumulated ambiguous development owner record rather than
+signaling it, which proves the foreign and conflicting owner fence remains
+active in the installed candidate. The current production dry-run is ready but
+was not applied. Its reviewed digest was not retained as standing authority.
+
+Final result: P156 is source complete and integration ready at checkpoint
+`3bfb1c49`. Production installation and any full shutdown of Research.gov or
+other live managed lanes require a new current dry-run review and explicit
+operator authority outside this plan.
