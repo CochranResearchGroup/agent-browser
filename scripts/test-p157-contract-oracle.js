@@ -78,11 +78,19 @@ assert(
 );
 
 const controlPlaneSource = readFileSync(join(root, 'cli/src/native/control_plane.rs'), 'utf8');
+const daemonSource = readFileSync(join(root, 'cli/src/native/daemon.rs'), 'utf8');
 const controlRequestSource = controlPlaneSource.slice(
   controlPlaneSource.indexOf('pub struct ControlRequest'),
   controlPlaneSource.indexOf('enum WorkerMessage'),
 );
-assert(!controlRequestSource.includes('provenance'), 'runtime-lane red case must be retired or updated');
+assert(controlRequestSource.includes('provenance'), 'ControlRequest lost immutable provenance');
+assert(
+  controlPlaneSource.includes('runtime_lane_id: String') &&
+    controlPlaneSource.includes('ServiceRequestProvenance::capture') &&
+    controlPlaneSource.includes('provenance: request.provenance.clone()') &&
+    daemonSource.includes('submit_from_connection(cmd, &connection_instance_id)'),
+  'runtime-lane provenance capture or job persistence drifted',
+);
 const schedulerRejectStart = controlPlaneSource.indexOf('SchedulerLeaseDecision::Reject(error) =>');
 const schedulerRejectEnd = controlPlaneSource.indexOf('SchedulerLeaseDecision::Wait {', schedulerRejectStart);
 const schedulerRejectSource = controlPlaneSource.slice(schedulerRejectStart, schedulerRejectEnd);
@@ -127,19 +135,29 @@ assert(oracle.cases.length === expectedCases.size, 'P157 regression case count d
 
 for (const regression of oracle.cases) {
   assert(expectedCases.delete(regression.id), `Unexpected or duplicate P157 case: ${regression.id}`);
-  assert(regression.currentStatus === 'red', `${regression.id} must remain red until its work unit closes`);
+  assert(['red', 'green'].includes(regression.currentStatus), `${regression.id} has an invalid status`);
   assert(/^W[3459]$/.test(regression.implementationWorkUnit), `${regression.id} has no bounded owner`);
   assert(regression.risk?.length > 20, `${regression.id} has no named failure risk`);
   assert(regression.requiredPaths?.length > 0, `${regression.id} has no target invariant`);
   for (const requiredPath of regression.requiredPaths) {
     const currentValue = valueAtPath(regression.currentProjection, requiredPath);
     const targetValue = regression.targetValues?.[requiredPath];
-    assert(
-      targetValue === undefined ? currentValue === undefined : currentValue !== targetValue,
-      `${regression.id} is marked red but already satisfies ${requiredPath}`,
-    );
+    if (regression.currentStatus === 'green') {
+      assert(currentValue !== undefined, `${regression.id} is green but lacks ${requiredPath}`);
+      if (targetValue !== undefined) {
+        assert(currentValue === targetValue, `${regression.id} is green but violates ${requiredPath}`);
+      }
+    } else {
+      assert(
+        targetValue === undefined ? currentValue === undefined : currentValue !== targetValue,
+        `${regression.id} is marked red but already satisfies ${requiredPath}`,
+      );
+    }
   }
 }
 assert(expectedCases.size === 0, `P157 regression cases missing: ${[...expectedCases].join(', ')}`);
 
-console.log('P157 W2 contract oracle passed: 6 frozen schemas and 5 reproducible red cases');
+const greenCases = oracle.cases.filter((regression) => regression.currentStatus === 'green').length;
+console.log(
+  `P157 contract oracle passed: 6 frozen schemas, ${greenCases} green case, and ${oracle.cases.length - greenCases} reproducible red cases`,
+);

@@ -24,12 +24,19 @@
     {
       "id": "runtime-lane-survives-ingress-routing",
       "implementationWorkUnit": "W3",
-      "currentStatus": "red",
+      "currentStatus": "green",
       "risk": "The runtime host consumes the session selector before ControlRequest retains causal provenance.",
       "requiredPaths": ["controlRequest.provenance.runtimeLaneId", "job.provenance.runtimeLaneId"],
+      "targetValues": {
+        "controlRequest.provenance.runtimeLaneId": "runtime-lane-2",
+        "job.provenance.runtimeLaneId": "runtime-lane-2"
+      },
       "currentProjection": {
-        "controlRequest": { "sessionNameConsumed": true, "provenance": null },
-        "job": { "provenance": null }
+        "controlRequest": {
+          "sessionNameConsumed": true,
+          "provenance": { "runtimeLaneId": "runtime-lane-2" }
+        },
+        "job": { "provenance": { "runtimeLaneId": "runtime-lane-2" } }
       }
     },
     {

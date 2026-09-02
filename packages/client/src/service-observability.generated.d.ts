@@ -108,9 +108,41 @@ export interface ServiceFailureRecourse {
   [key: string]: unknown;
 }
 
+export type ServiceIdentityAssurance =
+  | 'self-declared'
+  | 'authenticated-ingress'
+  | 'registered-capability'
+  | 'operator'
+  | 'unknown';
+
+export interface ServiceRequestProvenance {
+  schemaVersion: 'agent-browser.service-request-provenance.v1';
+  requestId: string;
+  jobId: string;
+  traceId: string | null;
+  causedByRequestId: string | null;
+  clientSubjectId: string | null;
+  identityAssurance: ServiceIdentityAssurance;
+  connectionInstanceId: string | null;
+  runtimeEnvironmentId: string | null;
+  runtimeLaneId: string | null;
+  profileId: string | null;
+  profileResourceKey: string | null;
+  browserId: string | null;
+  sessionId: string | null;
+  tabId: string | null;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  action: string;
+  policyRevision: number | null;
+  accessDecisionId: string | null;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
+  provenance: ServiceRequestProvenance;
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;

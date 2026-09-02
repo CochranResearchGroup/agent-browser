@@ -168,6 +168,8 @@ pub mod service_renderer_crash;
 #[allow(dead_code)]
 pub mod service_request;
 #[allow(dead_code)]
+pub(crate) mod service_request_provenance;
+#[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;

@@ -7,6 +7,7 @@
   "required": [
     "id",
     "action",
+    "provenance",
     "serviceName",
     "agentName",
     "taskName",
@@ -31,6 +32,10 @@
     },
     "action": {
       "type": "string"
+    },
+    "provenance": {
+      "$ref": "service-request-provenance.v1.schema.json",
+      "description": "Immutable, redacted causal identity captured at runtime-lane ingress."
     },
     "serviceName": {
       "type": ["string", "null"]

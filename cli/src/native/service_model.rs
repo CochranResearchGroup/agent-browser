@@ -6042,6 +6042,8 @@ pub struct ServiceTabHandleTraceFilter {
 pub struct ServiceJob {
     pub id: String,
     pub action: String,
+    /// Immutable, redacted causal identity captured at runtime-lane ingress.
+    pub provenance: super::service_request_provenance::ServiceRequestProvenance,
     /// Service-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub service_name: Option<String>,
     /// Agent-level caller label supplied by MCP, CLI, HTTP, or API clients.
@@ -6106,6 +6108,7 @@ impl Default for ServiceJob {
         Self {
             id: String::new(),
             action: String::new(),
+            provenance: super::service_request_provenance::ServiceRequestProvenance::default(),
             service_name: None,
             agent_name: None,
             task_name: None,

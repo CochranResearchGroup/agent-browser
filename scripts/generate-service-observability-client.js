@@ -44,6 +44,7 @@ const schemas = {
   challenge: readSchema('service-challenge-record.v1.schema.json'),
   challengesResponse: readSchema('service-challenges-response.v1.schema.json'),
   reconcileResponse: readSchema('service-reconcile-response.v1.schema.json'),
+  requestProvenance: readSchema('service-request-provenance.v1.schema.json'),
   job: readSchema('service-job-record.v1.schema.json'),
   jobsResponse: readSchema('service-jobs-response.v1.schema.json'),
   incident: readSchema('service-incident-record.v1.schema.json'),
@@ -167,9 +168,41 @@ export interface ServiceFailureRecourse {
   [key: string]: unknown;
 }
 
+export type ServiceIdentityAssurance =
+  | 'self-declared'
+  | 'authenticated-ingress'
+  | 'registered-capability'
+  | 'operator'
+  | 'unknown';
+
+export interface ServiceRequestProvenance {
+  schemaVersion: 'agent-browser.service-request-provenance.v1';
+  requestId: string;
+  jobId: string;
+  traceId: string | null;
+  causedByRequestId: string | null;
+  clientSubjectId: string | null;
+  identityAssurance: ServiceIdentityAssurance;
+  connectionInstanceId: string | null;
+  runtimeEnvironmentId: string | null;
+  runtimeLaneId: string | null;
+  profileId: string | null;
+  profileResourceKey: string | null;
+  browserId: string | null;
+  sessionId: string | null;
+  tabId: string | null;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  action: string;
+  policyRevision: number | null;
+  accessDecisionId: string | null;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
+  provenance: ServiceRequestProvenance;
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;

@@ -844,6 +844,7 @@ async fn handle_connection<S>(
     let (reader, mut writer) = tokio::io::split(stream);
     let mut buf_reader = BufReader::new(reader);
     let mut line = String::new();
+    let connection_instance_id = format!("connection-{}", uuid::Uuid::new_v4());
 
     loop {
         line.clear();
@@ -985,7 +986,9 @@ async fn handle_connection<S>(
                         .service_status_response(id, service_state, launch_config, full_tab_history)
                         .await
                 } else {
-                    control_plane.submit(cmd).await
+                    control_plane
+                        .submit_from_connection(cmd, &connection_instance_id)
+                        .await
                 };
 
                 let mut resp = serde_json::to_string(&response).unwrap_or_default();
