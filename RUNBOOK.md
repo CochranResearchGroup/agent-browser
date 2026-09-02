@@ -4,6 +4,43 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 208 | 2026-09-02
+
+Scope: complete P157 W6 attributable tab participation without production
+profile, browser, runtime, or ACL effects.
+
+Actions:
+
+- bound each admitted tab child to one service-generated transport connection
+  and stable subject while preserving shared-browser reuse;
+- persisted inherited child permissions on tab records and handles, then
+  intersected every operation with the current parent policy;
+- allowed the same stable subject to reconnect a disconnected child for
+  one-shot HTTP and MCP work while preventing a live connection from being
+  stolen by repeated labels;
+- authorized observation, control, refresh, and exact own-tab release through
+  the child policy; and
+- protected service-owned connection and child-policy fields from caller
+  injection and exposed the additive child contract through generated clients.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,896 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- complete service-client, generated-client, API/MCP parity, route-confusion,
+  no-launch collection, and close-scope gates pass;
+- focused connection, reconnect, subject isolation, and own-tab close tests
+  pass; and
+- the P157 oracle remains at four green cases with only the W9 convergence
+  case intentionally red.
+
+Result:
+
+- W6 is complete and pushed at `83319369` without production effects; and
+- W7 revision-fenced drain-and-restrict, graceful release, and explicit
+  receipted eviction is next.
+
 ## Turn 207 | 2026-09-02
 
 Scope: complete P157 W5 revisioned Profile access policy without production

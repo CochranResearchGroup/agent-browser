@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_attributable_tab_participation_in_progress`
+Execution state: `w7_drain_restrict_and_eviction_in_progress`
 
 Lane: P157
 
@@ -506,6 +506,41 @@ Validation evidence:
 - service API/MCP parity, route-confusion, no-launch service collection, and
   complete service-client gates pass; and
 - the P157 oracle passes with six schemas, four green cases, and the one W9
+  convergence case intentionally red.
+
+## Execution Checkpoint W6
+
+Source checkpoint: `83319369`.
+
+State transition: `w5_complete -> w6_complete`.
+
+Completed in W6 attempt 1:
+
+- generated one service-owned connection instance per daemon transport and
+  bound each admitted tab child to that connection and stable subject;
+- persisted inherited child permissions on tab records and service-owned tab
+  handles, while intersecting every operation with the current parent policy;
+- made one-shot HTTP and MCP requests reconnect disconnected children for the
+  same subject without allowing matching labels to steal a live connection;
+- authorized refresh, observation, control, and exact tab release through the
+  child policy, with `tab-close-own` limited to the attributed resource; and
+- protected internal connection and child-policy fields from caller injection
+  while preserving the subject route through generated client helpers.
+
+W6 is complete without production profile, browser, runtime, or ACL effects.
+W7 is open to add revision-fenced drain-and-restrict, graceful release, and
+explicit receipted eviction.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,896 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the complete service-client, generated-client, API/MCP parity,
+  route-confusion, no-launch collection, and close-scope gates pass;
+- focused connection, reconnect, subject isolation, inherited-permission, and
+  exact own-tab close tests pass; and
+- the P157 oracle remains at six schemas, four green cases, and the one W9
   convergence case intentionally red.
 
 ## Execution Checkpoint W2

@@ -51,6 +51,14 @@ Self-identification cannot manufacture trusted assurance, admitted policy and
 decision identities flow into request provenance, and identity denials return
 non-circular typed recourse. The two W5 oracle cases are green, leaving only
 the W9 convergence case red.
+W6 is source complete at `83319369`. Each admitted tab now inherits the current
+Profile access decision and belongs to one service-generated connection
+instance. Compatible clients still share one browser, but their tabs remain
+independently attributable. A disconnected child reconnects frictionlessly for
+the same stable subject, active connections cannot be stolen by repeated
+labels, current parent policy always bounds child permission, and tab release
+closes only the authorized owned resource. Internal child and connection fields
+cannot be forged through request parameters.
 
 ### Plan
 
@@ -58,9 +66,9 @@ the W9 convergence case red.
 
 ### Next Recommendation
 
-Execute W6: add attributable tab participation, reconnect, and inherited child
-policy so concurrent compatible clients reuse one browser, retain independent
-tab authority, and close only resources authorized by the current policy.
+Execute W7: add revision-fenced drain-and-restrict, graceful release, and
+explicit receipted eviction so policy narrowing cannot race new admission or
+silently displace incompatible occupants.
 
 ## P156 | Full Runtime Shutdown Replacement
 
