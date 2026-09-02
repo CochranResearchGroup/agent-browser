@@ -10,9 +10,11 @@ Lane: P144
 
 Source baseline: `c21118a30b01eaf23acabdec80e81f5d79a130b3`
 
-Branch: `plan/lease-authority-coordination`
+Branch: plan/lease-authority-coordination
 
-Target: `main`
+Target: main
+
+Integration: merge
 
 Integration model: cohesive validated checkpoints on a short-lived topic
 branch, followed by a merge to `main`.
