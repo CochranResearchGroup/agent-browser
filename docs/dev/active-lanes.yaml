@@ -8,7 +8,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2566592f60235ad6fb27eef3c2f15fe0799ec4b6
+    checkpoint: 5166dabf443edf56ef1c43be6fdd8445c8376a35
     remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
     integration_receipt: null
     integration: merge

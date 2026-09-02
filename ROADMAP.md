@@ -22,11 +22,12 @@ acquisition owner, validates every projection through a semantic contract
 oracle, keeps protected lease exchange behind one cohesive client, and makes
 the Rust install domain the sole owner of convergence truth consumed by the
 dashboard.
-W1 attempt 1 is published at `2566592f`: one typed acquisition artifact now
-drives both access-plan projection and action-runtime route application,
-recovery coordination is internal to the Profile acquisition module, and the
-exact lifecycle-replacement evaluator moved under that owner. Reuse, launch,
-and denial oracle cases preserve current behavior.
+W1 is source complete at `5166dabf`. One typed Profile acquisition owner now
+computes reuse, lifecycle replacement, the dominant blocker, deterministic
+route names, and the executable request. Service Access projects that result,
+recovery coordination is an internal child, and action runtime consumes the
+typed decision. A projection-consistency oracle covers every current Service
+Access fixture without changing permission or public-contract semantics.
 
 ### Plan
 
@@ -34,11 +35,11 @@ and denial oracle cases preserve current behavior.
 
 ### Next Recommendation
 
-Continue W1 only: move profile-reuse evaluation, dominant-blocker selection,
-and executable service-request projection behind the typed acquisition
-interface, then delete the temporary projection parser. Preserve public
-contracts before changing policy. Do not add a new crate or mutate production
-permissions or browser state.
+Execute W2: freeze permission, provenance, failure, migration, and dashboard
+health schemas, then add red provider-free regressions for scheduler recourse,
+lost runtime-lane correlation, circular identity recourse, shared-profile
+overblocking, and warning-axis conflation. Do not mutate production permissions
+or browser state.
 
 ## P156 | Full Runtime Shutdown Replacement
 

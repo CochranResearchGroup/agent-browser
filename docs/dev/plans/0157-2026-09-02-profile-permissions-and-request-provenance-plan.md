@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w1_profile_acquisition_owner_in_progress`
+Execution state: `w2_contract_freeze_in_progress`
 
 Lane: P157
 
@@ -434,6 +434,39 @@ Validation evidence:
 - 87 action-runtime route-host tests pass;
 - 23 Profile acquisition recovery tests pass;
 - workspace clippy passes with warnings denied;
+- the complete provider-free Rust gate passes, including 1,881 parallel-safe
+  tests and every serial environment-mutating partition; and
+- service API/MCP parity, generated-client contract drift, and client type
+  checks pass.
+
+## Execution Checkpoint W1-B
+
+Source checkpoint: `5166dabf`.
+
+State transition: `open -> w1_complete`.
+
+Completed in W1 attempt 2:
+
+- moved profile-reuse evaluation, dominant-blocker selection, deterministic
+  route naming, lifecycle replacement, and executable request projection into
+  one in-process Profile acquisition owner;
+- changed Service Access to consume the owner's typed result and project its
+  compatibility JSON without rebuilding acquisition truth;
+- deleted the temporary `ProfileAcquisitionDecision::from_access_plan` parser;
+- kept recovery coordination as an internal child of the same owner and action
+  runtime as a typed-decision consumer; and
+- established one projection-consistency oracle across every Service Access
+  fixture, with explicit reuse, launch, and foreign-principal denial cases.
+
+W1 is complete without permission, public-contract, installation, or runtime
+behavior changes. W2 is now open to freeze the permission, provenance, failure,
+migration, and dashboard-health schemas with red provider-free regressions.
+
+Validation evidence:
+
+- 51 Service Access tests pass through the semantic projection oracle;
+- 87 action-runtime route-host and 23 acquisition-recovery tests pass;
+- workspace formatting and clippy with warnings denied pass;
 - the complete provider-free Rust gate passes, including 1,881 parallel-safe
   tests and every serial environment-mutating partition; and
 - service API/MCP parity, generated-client contract drift, and client type

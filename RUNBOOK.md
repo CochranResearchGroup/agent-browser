@@ -4,6 +4,37 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 203 | 2026-09-02
+
+Scope: complete P157 W1 attempt 2 by placing current Profile acquisition
+behavior behind one typed owner without changing policy or public contracts.
+
+Actions:
+
+- moved reuse evaluation, lifecycle replacement, dominant-blocker selection,
+  route derivation, and executable request projection into Profile acquisition;
+- changed Service Access to consume the typed acquisition plan and removed the
+  temporary JSON-to-decision parser;
+- preserved recovery as an internal child and action runtime as a typed result
+  consumer; and
+- applied one projection-consistency oracle to every current Service Access
+  fixture.
+
+Validation:
+
+- 51 Service Access, 87 route-host, and 23 acquisition-recovery tests pass;
+- the full provider-free Rust gate passes, including 1,881 parallel-safe tests
+  and all serial environment-mutating partitions;
+- formatting and workspace clippy with warnings denied pass; and
+- service API/MCP parity, generated-client drift, and client type checks pass.
+
+Result:
+
+- W1 is source complete and pushed at `5166dabf` with no production or
+  installed-runtime effects;
+- the deep acquisition seam and initial semantic oracle are established; and
+- W2 schema freezing and red provider-free regressions are next.
+
 ## Turn 202 | 2026-09-02
 
 Scope: execute P157 W1 attempt 1 by establishing behavior-preserving Profile
