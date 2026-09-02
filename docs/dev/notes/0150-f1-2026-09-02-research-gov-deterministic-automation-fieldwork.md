@@ -137,8 +137,8 @@ target identity without asking the consumer to reconstruct them.
 ### 2. Planner and lookup explanation parity
 
 When profile lookup finds a target match but access planning does not select it
-because of per-service allocation, access-plan output should name the excluded profile
-and the exact mismatched identity axis. This would replace a generic-profile
+because of per-service allocation, access-plan output should name the excluded
+profile and the exact mismatched identity axis. This would replace a generic-profile
 selection surprise with deterministic routing evidence.
 
 ### 3. Explicit read-only retained-tab mode

@@ -892,6 +892,27 @@ export interface ServiceRemoteViewHandoffLink {
   handoffUrl: string;
 }
 
+export interface ServiceRemoteViewHandoffResumeIntent {
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+  browserId: string;
+  sessionName: string;
+  runtimeProfile: string;
+  targetId: string;
+  url: string;
+  serviceTabHandle: ServiceTabHandle;
+}
+
+export interface ServiceControlPlaneAuthoritySummary {
+  mode: "unavailable" | "observation_only" | "effect_capable";
+  observationCapable: boolean;
+  effectCapable: boolean;
+  missingProofs: string[];
+  reason: string | null;
+  serviceTabHandle: ServiceTabHandle | null;
+}
+
 export interface ServiceRemoteViewOpenProofSummary {
   ready: boolean;
   state: string | null;
@@ -2236,6 +2257,12 @@ export declare function requestServiceRemoteViewOpen(
 export declare function requestServiceRemoteViewHandoff(
   options: ServiceRemoteViewOpenHttpOptions,
 ): Promise<ServiceRemoteViewHandoffLink>;
+export declare function deriveServiceRemoteViewHandoffResumeIntent(
+  response: unknown,
+): ServiceRemoteViewHandoffResumeIntent;
+export declare function classifyServiceControlPlaneAuthority(
+  response: unknown,
+): ServiceControlPlaneAuthoritySummary;
 export declare function requestServiceRemoteViewBrowserReattach(
   options: ServiceRemoteViewBrowserReattachHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;

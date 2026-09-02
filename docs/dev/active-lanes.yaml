@@ -16,3 +16,19 @@ lanes:
     overlaps: []
     reconciled_overlaps: []
     updated_at: 2026-09-02
+  - id: P155
+    objective: Derive deterministic durable-handoff resume intent and truthful client authority disposition
+    plan: docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md
+    plan_ref: refs/heads/fieldwork/research-gov-deterministic-automation
+    branch: fieldwork/research-gov-deterministic-automation
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 294b86850f56426c01a10df1158affc7b9917e6d
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P150]
+    overlaps: [P144]
+    reconciled_overlaps: [P144_authority_consumed_read_only_no_lease_mutation]
+    updated_at: 2026-09-02

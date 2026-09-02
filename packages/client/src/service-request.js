@@ -368,6 +368,110 @@ export function requireServiceTabHandle(response) {
 }
 
 /**
+ * Derive the complete retained-tab resume intent from a resolved durable
+ * handoff. The handle remains the authority for route and caller identity;
+ * provider URLs and profile paths are intentionally excluded.
+ *
+ * @param {unknown} response
+ * @returns {{
+ *   serviceName: string,
+ *   agentName: string,
+ *   taskName: string,
+ *   browserId: string,
+ *   sessionName: string,
+ *   runtimeProfile: string,
+ *   targetId: string,
+ *   url: string,
+ *   serviceTabHandle: ServiceTabHandle,
+ * }}
+ */
+export function deriveServiceRemoteViewHandoffResumeIntent(response) {
+  const handle = requireServiceTabHandle(response);
+  const traceFilter = recordFromUnknown(handle.traceFilter);
+  const required = {
+    serviceName: stringOrNull(traceFilter?.serviceName),
+    agentName: stringOrNull(traceFilter?.agentName),
+    taskName: stringOrNull(traceFilter?.taskName),
+    browserId: stringOrNull(handle.browserId),
+    sessionName: stringOrNull(handle.sessionName ?? handle.ownerSessionId),
+    runtimeProfile: stringOrNull(handle.profileId),
+    targetId: stringOrNull(handle.targetId),
+    url: stringOrNull(handle.url),
+  };
+  const missingField = Object.entries(required).find(([, value]) => value === null)?.[0];
+  if (missingField) {
+    throw new TypeError(`durable handoff resume intent is missing ${missingField}`);
+  }
+  return {
+    serviceName: /** @type {string} */ (required.serviceName),
+    agentName: /** @type {string} */ (required.agentName),
+    taskName: /** @type {string} */ (required.taskName),
+    browserId: /** @type {string} */ (required.browserId),
+    sessionName: /** @type {string} */ (required.sessionName),
+    runtimeProfile: /** @type {string} */ (required.runtimeProfile),
+    targetId: /** @type {string} */ (required.targetId),
+    url: /** @type {string} */ (required.url),
+    serviceTabHandle: handle,
+  };
+}
+
+/**
+ * Classify the authority available through a diagnostics response. A complete
+ * control-plane attestation is the only effect-capable result. A valid handle
+ * with incomplete proof remains explicitly observation-only.
+ *
+ * @param {unknown} response
+ * @returns {{
+ *   mode: 'unavailable' | 'observation_only' | 'effect_capable',
+ *   observationCapable: boolean,
+ *   effectCapable: boolean,
+ *   missingProofs: string[],
+ *   reason: string | null,
+ *   serviceTabHandle: ServiceTabHandle | null,
+ * }}
+ */
+export function classifyServiceControlPlaneAuthority(response) {
+  const handle = getServiceTabHandle(response);
+  if (!handle || handle.valid === false) {
+    return {
+      mode: 'unavailable',
+      observationCapable: false,
+      effectCapable: false,
+      missingProofs: [],
+      reason: handle?.staleReason
+        ? `service_tab_handle_unavailable:${handle.staleReason}`
+        : 'service_tab_handle_unavailable',
+      serviceTabHandle: handle,
+    };
+  }
+  const record = recordFromUnknown(response);
+  const data = recordFromUnknown(record?.data) ?? record;
+  const attestation = recordFromUnknown(data?.controlPlaneAttestation);
+  const missingProofs = [
+    ...new Set(
+      Array.isArray(attestation?.missingProofs)
+        ? attestation.missingProofs.filter((proof) => typeof proof === 'string' && proof.length > 0)
+        : [],
+    ),
+  ].sort();
+  const effectCapable = attestation?.complete === true;
+  return {
+    mode: effectCapable ? 'effect_capable' : 'observation_only',
+    observationCapable: true,
+    effectCapable,
+    missingProofs,
+    reason: effectCapable
+      ? null
+      : missingProofs.length > 0
+        ? `missing_control_plane_proof:${missingProofs.join(',')}`
+        : attestation
+          ? 'control_plane_attestation_incomplete'
+          : 'control_plane_attestation_missing',
+    serviceTabHandle: handle,
+  };
+}
+
+/**
  * Extract a service-owned tab handle for refresh. Unlike requireServiceTabHandle,
  * this accepts stale handles so the daemon can classify or repair them.
  *

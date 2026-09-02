@@ -102,6 +102,32 @@ The lower-level `requestServiceRemoteViewOpen()` helper also requires a durable
 handoff URL for real opens. Do not set `allowRawProviderUrl: true` outside an
 explicit infrastructure diagnostic.
 
+## Resume software automation from a handoff
+
+Resolve the stored handoff ID first. Then derive the exact retained route and
+caller attribution from that response instead of reconstructing them from
+processes or provider URLs:
+
+```js
+import {
+  classifyServiceControlPlaneAuthority,
+  deriveServiceRemoteViewHandoffResumeIntent,
+  getServiceTabDiagnostics,
+} from "@agent-browser/client/service-request";
+
+const intent = deriveServiceRemoteViewHandoffResumeIntent(resolveResponse);
+const diagnostics = await getServiceTabDiagnostics({
+  baseUrl: "http://127.0.0.1:4849",
+  serviceTabHandle: intent.serviceTabHandle,
+});
+const authority = classifyServiceControlPlaneAuthority(diagnostics);
+```
+
+An `observation_only` result permits bounded reads such as diagnostics, probes,
+and evaluate calls. Navigation and input require `effect_capable`. An
+`unavailable` result means the handoff did not yield a current usable handle.
+The derived intent excludes raw provider URLs and local profile paths.
+
 ## Reconnect without opening another browser
 
 Open the same `handoffUrl` again. The authenticated dashboard resolves the

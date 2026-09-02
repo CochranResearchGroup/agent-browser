@@ -38,6 +38,7 @@ import {
   createServiceViewerLeaseHeartbeatRequest,
   createServiceViewerLeaseReleaseRequest,
   createServiceViewerLeaseRequest,
+  deriveServiceRemoteViewHandoffResumeIntent,
   evaluateServiceTab,
   getServiceFailureRecourse,
   getServiceTabHandle,
@@ -52,6 +53,7 @@ import {
   requestServiceFileTransfer,
   captureServiceNetwork,
   captureServiceDesktopFrame,
+  classifyServiceControlPlaneAuthority,
   observeServiceDesktopEvidence,
   locateServiceDesktopControl,
   observeServiceDesktopPrompt,
@@ -1895,6 +1897,42 @@ async function main() {
   assert.deepEqual(diagnosticsResponse.data.controlPlaneAttestation.missingProofs, [
     'browser_owner',
   ]);
+  assert.deepEqual(classifyServiceControlPlaneAuthority(diagnosticsResponse), {
+    mode: 'observation_only',
+    observationCapable: true,
+    effectCapable: false,
+    missingProofs: ['browser_owner'],
+    reason: 'missing_control_plane_proof:browser_owner',
+    serviceTabHandle: tabHandle,
+  });
+  assert.deepEqual(
+    classifyServiceControlPlaneAuthority({
+      success: true,
+      data: {
+        serviceTabHandle: tabHandle,
+        controlPlaneAttestation: {
+          complete: true,
+          missingProofs: [],
+        },
+      },
+    }),
+    {
+      mode: 'effect_capable',
+      observationCapable: true,
+      effectCapable: true,
+      missingProofs: [],
+      reason: null,
+      serviceTabHandle: tabHandle,
+    },
+  );
+  assert.deepEqual(classifyServiceControlPlaneAuthority({ success: true, data: {} }), {
+    mode: 'unavailable',
+    observationCapable: false,
+    effectCapable: false,
+    missingProofs: [],
+    reason: 'service_tab_handle_unavailable',
+    serviceTabHandle: null,
+  });
   const diagnosticsAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
   await getServiceTabDiagnostics({
     baseUrl: 'http://127.0.0.1:4849',
@@ -3108,6 +3146,92 @@ async function main() {
     handoffId: 'handoff-route-a',
     handoffUrl: 'https://agent-browser.example.test/remote-view/handoff-route-a',
   });
+
+  const researchGovHandle = {
+    browserId: 'session:research-gov-nsf',
+    sessionName: 'handoff-research-gov',
+    tabId: 'target:research-gov',
+    targetId: 'research-gov-target',
+    url: 'https://www.research.gov/research-web/',
+    title: 'Research.gov',
+    profileId: 'research-gov-nsf',
+    profileOrigin: 'agent_browser_owned',
+    leaseId: 'handoff-research-gov',
+    leaseState: 'shared',
+    cleanupPolicy: 'close_tabs',
+    leaseHeartbeatExpected: true,
+    ownerSessionId: 'handoff-research-gov',
+    jobId: null,
+    traceFilter: {
+      browserId: 'session:research-gov-nsf',
+      profileId: 'research-gov-nsf',
+      sessionId: 'handoff-research-gov',
+      serviceName: 'research-gov-operator',
+      agentName: 'codex',
+      taskName: 'prepare-nsf-proposal',
+    },
+    valid: true,
+    staleReason: null,
+  };
+  assert.deepEqual(
+    deriveServiceRemoteViewHandoffResumeIntent({
+      success: true,
+      data: {
+        status: 'ready',
+        handoffId: 'r580584',
+        handoffUrl: 'https://agent-browser.example.test/remote-view/r580584',
+        providerExternalUrl: 'https://guac.example/#/client/research-gov',
+        browserId: 'session:research-gov-nsf',
+        sessionName: 'handoff-research-gov',
+        targetId: 'research-gov-target',
+        tab: {
+          profileId: 'research-gov-nsf',
+          serviceTabHandle: researchGovHandle,
+        },
+      },
+    }),
+    {
+      serviceName: 'research-gov-operator',
+      agentName: 'codex',
+      taskName: 'prepare-nsf-proposal',
+      browserId: 'session:research-gov-nsf',
+      sessionName: 'handoff-research-gov',
+      runtimeProfile: 'research-gov-nsf',
+      targetId: 'research-gov-target',
+      url: 'https://www.research.gov/research-web/',
+      serviceTabHandle: researchGovHandle,
+    },
+  );
+  assert.throws(
+    () =>
+      deriveServiceRemoteViewHandoffResumeIntent({
+        success: true,
+        data: {
+          serviceTabHandle: {
+            ...researchGovHandle,
+            traceFilter: {
+              ...researchGovHandle.traceFilter,
+              taskName: null,
+            },
+          },
+        },
+      }),
+    /durable handoff resume intent is missing taskName/,
+  );
+  assert.throws(
+    () =>
+      deriveServiceRemoteViewHandoffResumeIntent({
+        success: true,
+        data: {
+          serviceTabHandle: {
+            ...researchGovHandle,
+            valid: false,
+            staleReason: 'target_missing',
+          },
+        },
+      }),
+    /service tab handle is stale: target_missing/,
+  );
 
   const rawOnlyRemoteViewOpenWorkflow = createFetchRecorder({
     success: true,

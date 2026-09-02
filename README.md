@@ -592,6 +592,15 @@ expire when the route changes. Software clients should use
 `requestServiceRemoteViewHandoff()`, which returns only `handoffId` and
 `handoffUrl`.
 
+After resolving a stored handoff, pass the response to
+`deriveServiceRemoteViewHandoffResumeIntent()`. It returns the exact caller
+labels, retained browser and session route, runtime profile, target, URL, and
+valid `serviceTabHandle` without exposing provider URLs or profile paths. Run
+diagnostics with that handle, then pass the diagnostics response to
+`classifyServiceControlPlaneAuthority()`. Continue with read-only probes when
+it reports `observation_only`; allow input or navigation only when it reports
+`effect_capable`.
+
 See the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx) for
 the complete agent, operator, reconnect, and troubleshooting workflows.
 
@@ -3672,7 +3681,10 @@ path. Diagnostics also return `controlPlaneAttestation`; callers should allow
 effect-capable input only when `complete` is true and `missingProofs` is empty.
 That proof requires the current owner generation, browser process start
 identity, exclusive profile lease, and current owner-transfer handoff receipt
-to agree in one persisted service snapshot. Use `probeServiceTab()` or
+to agree in one persisted service snapshot. Use
+`classifyServiceControlPlaneAuthority()` to convert that proof and the current
+handle into an explicit `unavailable`, `observation_only`, or `effect_capable`
+decision. Use `probeServiceTab()` or
 `requestServiceProbe()` when a software client
 needs a generic identity, account, readiness, or page-state probe for the same
 leased tab. Probe recipes are provider-neutral and bounded by `timeoutMs` and

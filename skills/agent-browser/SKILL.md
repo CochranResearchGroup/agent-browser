@@ -438,6 +438,13 @@ raw provider connection URLs out of the ordinary client result. The lower-level
 `requestServiceRemoteViewOpen()` helper requires a durable handoff URL for real
 opens by default; use `allowRawProviderUrl: true` only for an explicit provider
 diagnostic or legacy infrastructure workflow.
+After resolving a durable handoff, call
+`deriveServiceRemoteViewHandoffResumeIntent()` on the response to recover the
+exact caller labels, retained browser and session route, profile, target, URL,
+and valid `serviceTabHandle` without copying provider URLs or profile paths.
+Run diagnostics against that handle and pass the response to
+`classifyServiceControlPlaneAuthority()`. Bounded reads may continue for
+`observation_only`; navigation and input require `effect_capable`.
 Pass caller labels and profile identity hints at the top level, and pass route
 selection material such as `provider`, `routePoolEntryId`, `routePoolEntry`,
 or `routePool` in `params` when a client already copied them from the route
