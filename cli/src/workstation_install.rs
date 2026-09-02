@@ -175,11 +175,24 @@ enum InstallMode {
     Apply,
 }
 
+/// Selects whether workstation installation must preserve live browser
+/// continuity or may deliberately end exact owned runtime processes.
+///
+/// `FullShutdown` never authorizes profile deletion or broad process cleanup.
+/// Apply requires a digest from a matching read-only replacement plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeReplacementPolicy {
+    Preserve,
+    FullShutdown,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WorkstationInstallArgs {
     mode: InstallMode,
     json: bool,
     force_browserless_upgrade: bool,
+    runtime_replacement_policy: RuntimeReplacementPolicy,
+    expected_runtime_replacement_plan_digest: Option<String>,
     dashboard_port: u16,
     guacamole_port: u16,
 }
@@ -854,6 +867,8 @@ fn rehydrate_prepared_payload_transaction(
         mode: InstallMode::Apply,
         json: true,
         force_browserless_upgrade: false,
+        runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+        expected_runtime_replacement_plan_digest: None,
         dashboard_port: port("dashboardPort")?,
         guacamole_port: port("guacamolePort")?,
     };
@@ -9606,6 +9621,9 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     let mut mode = None;
     let mut json = false;
     let mut force_browserless_upgrade = false;
+    let mut runtime_replacement_policy = RuntimeReplacementPolicy::Preserve;
+    let mut runtime_replacement_policy_seen = false;
+    let mut expected_runtime_replacement_plan_digest = None;
     let mut dashboard_port = DEFAULT_DASHBOARD_PORT;
     let mut guacamole_port = DEFAULT_GUACAMOLE_PORT;
     let mut index = 0;
@@ -9617,6 +9635,57 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
             "--apply" => set_mode(&mut mode, InstallMode::Apply)?,
             "--json" => json = true,
             "--force-browserless-upgrade" => force_browserless_upgrade = true,
+            "--runtime-replacement-policy" => {
+                if runtime_replacement_policy_seen {
+                    return Err(
+                        "--runtime-replacement-policy may be specified only once".to_string()
+                    );
+                }
+                runtime_replacement_policy_seen = true;
+                index += 1;
+                runtime_replacement_policy = match args.get(index).map(String::as_str) {
+                    Some("preserve") => RuntimeReplacementPolicy::Preserve,
+                    Some("full-shutdown") => RuntimeReplacementPolicy::FullShutdown,
+                    Some(value) => {
+                        return Err(format!(
+                            "Unknown runtime replacement policy: {value}; expected preserve or full-shutdown"
+                        ));
+                    }
+                    None => {
+                        return Err(
+                            "--runtime-replacement-policy requires preserve or full-shutdown"
+                                .to_string(),
+                        );
+                    }
+                };
+            }
+            "--expected-runtime-replacement-plan-digest" => {
+                if expected_runtime_replacement_plan_digest.is_some() {
+                    return Err(
+                        "--expected-runtime-replacement-plan-digest may be specified only once"
+                            .to_string(),
+                    );
+                }
+                index += 1;
+                let digest = args
+                    .get(index)
+                    .ok_or_else(|| {
+                        "--expected-runtime-replacement-plan-digest requires a SHA-256 digest"
+                            .to_string()
+                    })?
+                    .to_ascii_lowercase();
+                if digest.len() != 64
+                    || !digest
+                        .chars()
+                        .all(|character| character.is_ascii_hexdigit())
+                {
+                    return Err(
+                        "--expected-runtime-replacement-plan-digest must be a 64-character SHA-256 digest"
+                            .to_string(),
+                    );
+                }
+                expected_runtime_replacement_plan_digest = Some(digest);
+            }
             "--dashboard-port" => {
                 index += 1;
                 dashboard_port = parse_port(args.get(index), "--dashboard-port")?;
@@ -9636,6 +9705,31 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     let mode = mode.ok_or_else(|| {
         "Choose exactly one of --dry-run or --apply for workstation installation".to_string()
     })?;
+    if runtime_replacement_policy == RuntimeReplacementPolicy::FullShutdown
+        && mode == InstallMode::Apply
+        && expected_runtime_replacement_plan_digest.is_none()
+    {
+        return Err(
+            "full-shutdown apply requires --expected-runtime-replacement-plan-digest from a current dry run"
+                .to_string(),
+        );
+    }
+    if runtime_replacement_policy == RuntimeReplacementPolicy::Preserve
+        && expected_runtime_replacement_plan_digest.is_some()
+    {
+        return Err(
+            "--expected-runtime-replacement-plan-digest is valid only with --runtime-replacement-policy full-shutdown"
+                .to_string(),
+        );
+    }
+    if force_browserless_upgrade
+        && runtime_replacement_policy == RuntimeReplacementPolicy::FullShutdown
+    {
+        return Err(
+            "--force-browserless-upgrade and --runtime-replacement-policy full-shutdown are mutually exclusive"
+                .to_string(),
+        );
+    }
     let dashboard_backend_port = dashboard_port.checked_add(1).ok_or_else(|| {
         "--dashboard-port must leave the next TCP port available for the dashboard backend"
             .to_string()
@@ -9660,6 +9754,8 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
         mode,
         json,
         force_browserless_upgrade,
+        runtime_replacement_policy,
+        expected_runtime_replacement_plan_digest,
         dashboard_port,
         guacamole_port,
     })
@@ -9686,7 +9782,7 @@ fn parse_port(value: Option<&String>, flag: &str) -> Result<u16, String> {
 }
 
 fn workstation_usage() -> &'static str {
-    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
+    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
 }
 
 #[derive(Debug)]
@@ -12463,6 +12559,56 @@ mod tests {
     }
 
     #[test]
+    fn parses_explicit_full_shutdown_runtime_replacement_authority() {
+        let args = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--apply".to_string(),
+            "--runtime-replacement-policy".to_string(),
+            "full-shutdown".to_string(),
+            "--expected-runtime-replacement-plan-digest".to_string(),
+            "a".repeat(64),
+        ];
+        let parsed = parse_workstation_install_args(&args).unwrap();
+        assert_eq!(
+            parsed.runtime_replacement_policy,
+            RuntimeReplacementPolicy::FullShutdown
+        );
+        assert_eq!(
+            parsed.expected_runtime_replacement_plan_digest.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+    }
+
+    #[test]
+    fn full_shutdown_apply_requires_reviewed_plan_digest() {
+        let args = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--apply".to_string(),
+            "--runtime-replacement-policy".to_string(),
+            "full-shutdown".to_string(),
+        ];
+        let error = parse_workstation_install_args(&args).unwrap_err();
+        assert!(error.contains("--expected-runtime-replacement-plan-digest"));
+    }
+
+    #[test]
+    fn preserve_is_the_default_runtime_replacement_policy() {
+        let args = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--dry-run".to_string(),
+        ];
+        let parsed = parse_workstation_install_args(&args).unwrap();
+        assert_eq!(
+            parsed.runtime_replacement_policy,
+            RuntimeReplacementPolicy::Preserve
+        );
+        assert!(parsed.expected_runtime_replacement_plan_digest.is_none());
+    }
+
+    #[test]
     fn recovery_requires_one_exact_transaction_id() {
         let args = vec![
             "install".to_string(),
@@ -12619,6 +12765,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -13279,6 +13427,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -13480,6 +13630,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -13534,6 +13686,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -15915,6 +16069,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -16173,6 +16329,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -16217,6 +16375,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -16258,6 +16418,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };
@@ -16302,6 +16464,8 @@ mod tests {
             mode: InstallMode::Apply,
             json: true,
             force_browserless_upgrade: false,
+            runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
+            expected_runtime_replacement_plan_digest: None,
             dashboard_port: 4848,
             guacamole_port: 8092,
         };

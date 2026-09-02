@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P156 | Full Runtime Shutdown Replacement
+
+State: ACTIVE
+Current state: the installation deadlock exposed by Research.gov fieldwork has
+been separated into a provider-neutral product lane. W1 now gives the installer
+an explicit replacement-policy authority boundary: `preserve` is the default,
+`full-shutdown` apply requires a reviewed SHA-256 plan digest, and the policy
+cannot be combined with the older browserless override. No shutdown executor is
+wired or installed yet.
+
+### Plan
+
+- `docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md`
+
+### Next Recommendation
+
+Add the deterministic effect inventory and durable replacement receipt, then
+implement exact owned-browser closure and old-host retirement. Do not install
+or exercise the incomplete source flag against the retained Research.gov
+runtime.
+
 ## P155 | Durable Handoff Resume Intent
 
 State: SOURCE COMPLETE

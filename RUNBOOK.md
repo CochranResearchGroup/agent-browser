@@ -4,6 +4,37 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 197 | 2026-09-02
+
+Scope: open the provider-neutral full-runtime-shutdown installer escape hatch
+without changing the retained Research.gov runtime.
+
+Actions:
+
+- diagnosed the missing composition between cooperative live-browser transfer
+  and browserless supervisor takeover;
+- opened P156 with an explicit destructive replacement contract that preserves
+  profiles and credential-bearing browser data while ending live runtime state;
+- added the installer replacement-policy parser boundary with `preserve` as the
+  default and `full-shutdown` as an explicit reviewed-plan choice; and
+- made full-shutdown apply require a 64-character plan SHA-256 and reject the
+  older browserless override.
+
+Validation:
+
+- the focused parser regression was red before the new fields existed and is
+  green after implementation;
+- the missing-digest rejection passes; and
+- Rust formatting and patch hygiene pass.
+
+Result:
+
+- W1 is complete on `feature/full-runtime-shutdown`;
+- the dry-run plan, durable receipt, and exact shutdown executor remain to be
+  implemented, so this source must not be installed yet; and
+- no production process, browser, profile, route, handoff, or credential state
+  changed.
+
 ## Turn 196 | 2026-09-02
 
 Scope: reconcile first-time Research.gov authentication with the installed

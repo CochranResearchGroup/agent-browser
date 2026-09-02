@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P156
+    objective: Add explicit full-shutdown runtime replacement so workstation installation can converge after cooperative takeover fails
+    plan: docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md
+    plan_ref: refs/heads/feature/full-runtime-shutdown
+    branch: feature/full-runtime-shutdown
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE
+    checkpoint: 5d35900a555f90fb6731ad8760ccae74e7b729c1
+    remote_ref: null
+    integration_receipt: null
+    integration: merge
+    dependencies: [P148, P150, P155]
+    overlaps: [P144]
+    reconciled_overlaps: [P144_authority_observed_no_lease_mutation]
+    updated_at: 2026-09-02
   - id: P144
     objective: Replace inferred profile lease authority with one canonical fenced authority kernel
     plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
