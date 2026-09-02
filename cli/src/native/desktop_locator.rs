@@ -2,7 +2,9 @@
 //!
 //! The module accepts only a capture produced by `desktop_capture`, validates
 //! every binding before detector work, and returns stable integer-scored
-//! candidates. Source and visualization pixels remain response-only.
+//! candidates. Crate callers use only the action handler and stream redactor;
+//! detector and receipt mechanics remain private. Source and visualization
+//! pixels remain response-only.
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -34,11 +36,11 @@ const MAX_LOCATOR_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_TEMPLATE_EVALUATIONS: u32 = 4_096;
 const MAX_VISUALIZATION_BYTES: usize = 4 * 1024 * 1024;
 
-pub(crate) const DEFAULT_MAX_CANDIDATES: usize = 8;
-pub(crate) const HARD_MAX_CANDIDATES: usize = 32;
+const DEFAULT_MAX_CANDIDATES: usize = 8;
+const HARD_MAX_CANDIDATES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DesktopLocatorError {
+struct DesktopLocatorError {
     code: &'static str,
     message: String,
 }
@@ -51,7 +53,7 @@ impl DesktopLocatorError {
         }
     }
 
-    pub(crate) fn code(&self) -> &'static str {
+    fn code(&self) -> &'static str {
         self.code
     }
 }
@@ -66,11 +68,11 @@ impl std::error::Error for DesktopLocatorError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PixelBounds {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+struct PixelBounds {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
 }
 
 impl PixelBounds {
@@ -84,25 +86,25 @@ impl PixelBounds {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PixelCenter {
-    pub x: u32,
-    pub y: u32,
+struct PixelCenter {
+    x: u32,
+    y: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OcrTokenEvidence {
-    pub token_id: String,
-    pub bounds: PixelBounds,
+struct OcrTokenEvidence {
+    token_id: String,
+    bounds: PixelBounds,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OcrEvidence {
-    pub provider_version: String,
-    pub evidence_hash: String,
-    pub tokens: Vec<OcrTokenEvidence>,
+struct OcrEvidence {
+    provider_version: String,
+    evidence_hash: String,
+    tokens: Vec<OcrTokenEvidence>,
 }
 
-pub(crate) trait OcrEvidenceProvider: Send + Sync {
+trait OcrEvidenceProvider: Send + Sync {
     fn evidence(
         &self,
         image: &RgbaImage,
@@ -110,95 +112,78 @@ pub(crate) trait OcrEvidenceProvider: Send + Sync {
     ) -> Result<OcrEvidence, DesktopLocatorError>;
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct BoundFrame {
-    pub context: DesktopContext,
-    pub frame_receipt: FrameReceipt,
-    pub image_bytes: Vec<u8>,
-}
-
-impl From<DesktopCaptureResult> for BoundFrame {
-    fn from(capture: DesktopCaptureResult) -> Self {
-        Self {
-            context: capture.context,
-            frame_receipt: capture.frame_receipt,
-            image_bytes: capture.image_bytes,
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetectorReceipt {
+    detector_id: &'static str,
+    version: &'static str,
+    evidence_sha256: String,
+    normalization_version: &'static str,
+    integer_parameters: BTreeMap<String, u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DetectorReceipt {
-    pub detector_id: &'static str,
-    pub version: &'static str,
-    pub evidence_sha256: String,
-    pub normalization_version: &'static str,
-    pub integer_parameters: BTreeMap<String, u32>,
+struct CandidateEvidence {
+    detector_id: &'static str,
+    evidence_id: String,
+    score: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CandidateEvidence {
-    pub detector_id: &'static str,
-    pub evidence_id: String,
-    pub score: u32,
+struct LocatorCandidate {
+    candidate_id: String,
+    target_class: &'static str,
+    rank: usize,
+    bounds: PixelBounds,
+    center: PixelCenter,
+    score: u32,
+    supporting_evidence: Vec<CandidateEvidence>,
+    decoy_evidence: Vec<&'static str>,
+    ambiguity_evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LocatorCandidate {
-    pub candidate_id: String,
-    pub target_class: &'static str,
-    pub rank: usize,
-    pub bounds: PixelBounds,
-    pub center: PixelCenter,
-    pub score: u32,
-    pub supporting_evidence: Vec<CandidateEvidence>,
-    pub decoy_evidence: Vec<&'static str>,
-    pub ambiguity_evidence: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct VisualizationReceipt {
-    pub schema_version: &'static str,
-    pub mime_type: &'static str,
-    pub byte_length: usize,
+struct VisualizationReceipt {
+    schema_version: &'static str,
+    mime_type: &'static str,
+    byte_length: usize,
     #[serde(rename = "sha256")]
-    pub content_sha256: String,
-    pub retention: &'static str,
-    pub persisted: bool,
+    content_sha256: String,
+    retention: &'static str,
+    persisted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct Observation {
-    pub observation_id: String,
-    pub schema_version: &'static str,
-    pub context_id: String,
-    pub frame_id: String,
-    pub frame_sha256: String,
-    pub geometry_epoch: String,
-    pub coordinate_space: &'static str,
-    pub locator_id: &'static str,
-    pub profile_version: &'static str,
-    pub profile_sha256: String,
-    pub target_class: &'static str,
-    pub detector_receipts: Vec<DetectorReceipt>,
-    pub status: &'static str,
-    pub selected_candidate_id: Option<String>,
-    pub candidates: Vec<LocatorCandidate>,
+struct Observation {
+    observation_id: String,
+    schema_version: &'static str,
+    context_id: String,
+    frame_id: String,
+    frame_sha256: String,
+    geometry_epoch: String,
+    coordinate_space: &'static str,
+    locator_id: &'static str,
+    profile_version: &'static str,
+    profile_sha256: String,
+    target_class: &'static str,
+    detector_receipts: Vec<DetectorReceipt>,
+    status: &'static str,
+    selected_candidate_id: Option<String>,
+    candidates: Vec<LocatorCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub visualization_receipt: Option<VisualizationReceipt>,
+    visualization_receipt: Option<VisualizationReceipt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct DesktopLocateResult {
-    pub context: DesktopContext,
-    pub frame_receipt: FrameReceipt,
-    pub observation: Observation,
-    pub visualization_bytes: Option<Vec<u8>>,
+struct DesktopLocateResult {
+    context: DesktopContext,
+    frame_receipt: FrameReceipt,
+    observation: Observation,
+    visualization_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,7 +216,7 @@ impl Theme {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LocatorProfile {
+struct LocatorProfile {
     locator_id: &'static str,
     profile_sha256: String,
     required_token_id: &'static str,
@@ -263,8 +248,8 @@ struct LocateRequest {
 }
 
 /// Locate a profile-owned synthetic target in one exactly bound captured frame.
-pub(crate) fn locate_bound_frame(
-    frame: BoundFrame,
+fn locate_bound_frame(
+    frame: DesktopCaptureResult,
     locator_id: &str,
     max_candidates: usize,
     include_visualization: bool,
@@ -447,7 +432,7 @@ pub(crate) async fn handle_desktop_locate(cmd: &Value) -> Result<Value, String> 
         })
         .map_err(|error| error.to_string())?;
         locate_bound_frame(
-            capture.into(),
+            capture,
             &request.locator_id,
             request.max_candidates,
             request.include_visualization,
@@ -593,7 +578,7 @@ fn parse_request(cmd: &Value) -> Result<LocateRequest, DesktopLocatorError> {
     })
 }
 
-fn validate_bound_frame(frame: &BoundFrame) -> Result<RgbaImage, DesktopLocatorError> {
+fn validate_bound_frame(frame: &DesktopCaptureResult) -> Result<RgbaImage, DesktopLocatorError> {
     let mismatch = || {
         DesktopLocatorError::new(
             "desktop_locator_frame_mismatch",
@@ -878,7 +863,7 @@ fn validate_ocr_evidence(
 }
 
 fn detector_receipts(
-    frame: &BoundFrame,
+    frame: &DesktopCaptureResult,
     profile: &LocatorProfile,
     ocr: &OcrEvidence,
     theme: Theme,
@@ -1466,7 +1451,7 @@ mod tests {
         assert_eq!(data["visualizationBase64"], "private-overlay");
     }
 
-    fn render_fixture(fixture: &Fixture) -> (BoundFrame, Vec<OcrTokenEvidence>) {
+    fn render_fixture(fixture: &Fixture) -> (DesktopCaptureResult, Vec<OcrTokenEvidence>) {
         let theme = match fixture.theme.as_str() {
             "light" => Theme::Light,
             "dark" => Theme::Dark,
@@ -1542,7 +1527,7 @@ mod tests {
             readiness: json!({"state": "ready", "displayContentState": "browser_window_visible"}),
         };
         (
-            BoundFrame {
+            DesktopCaptureResult {
                 context,
                 frame_receipt,
                 image_bytes: bytes,
