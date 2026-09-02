@@ -41,10 +41,18 @@ Validation:
 
 Result:
 
-- P153 is development-qualified;
-- production remains fail closed with `profile_capability_required`; and
-- merge and exact installation gates remain before any separately authorized
-  production rotation.
+- P153 topic commit `c09f3e19` was merged by `c664c25b` and pushed to
+  `origin/main`;
+- transaction `upgrade-c65674ff-8d5f-437c-a5e8-d46a7efed92c` installed exact
+  generation `0.28.0-e2244cd2447c-c25a91eb0d2b` with binary SHA-256
+  `e2244cd2447ce0de6239d41b7fbec7e77aad9145e57ca86cd2ad2de7bf3c7d94`;
+- the authenticated presentation receipt resolved successfully without page
+  navigation or credential access, production doctor succeeds with one current
+  host and zero legacy daemons, and installed capability status reports
+  `rotationAllowed=true` with no blockers; and
+- P153 is accepted as installed recovery capability. Production capability
+  rotation, owner-private Last30days wiring, and another provider tick remain
+  unexecuted and require separate operator authority.
 
 ## Turn 191 | 2026-09-01
 
