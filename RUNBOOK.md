@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 211 | 2026-09-02
+
+Scope: complete P157 W9 single-owner workstation convergence without
+production Profile, browser, runtime, ACL, eviction, or shutdown effects.
+
+Actions:
+
+- added one Rust owner for desired workstation state, normalized observations,
+  a sealed convergence plan, one executable action, and the final receipt;
+- split dashboard runtime, convergence, access, and acquisition health so
+  Profile ambiguity cannot create an installation warning;
+- recognized the selected single runtime-host listener as authoritative
+  without requiring the retired default socket;
+- bound the privileged adapter to a Rust-sealed action list and verified its
+  helper, lease-authority, and dependency postconditions; and
+- changed the dashboard warning to consume only typed runtime and convergence
+  blockers.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,915 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- source-free workstation and host-provision fixtures, dashboard build,
+  API/MCP parity, generated-client, type, and dashboard contracts pass; and
+- the P157 oracle passes with all five implementation cases green.
+
+Result:
+
+- W9 is complete and pushed at `d806c74c` without production effects; and
+- W10 public contract, migration, client, doctor, help, skill, and docs
+  alignment is next.
+
 ## Turn 210 | 2026-09-02
 
 Scope: complete P157 W8 cohesive lease authority and exact lifecycle proof

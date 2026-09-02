@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w9_install_convergence_in_progress`
+Execution state: `w10_public_contract_alignment_in_progress`
 
 Lane: P157
 
@@ -621,6 +621,44 @@ Validation evidence:
   pass; and
 - the P157 oracle remains at six schemas, four green cases, and the one W9
   convergence case intentionally red.
+
+## Execution Checkpoint W9
+
+Source checkpoint: `d806c74c`.
+
+State transition: `w8_complete -> w9_complete`.
+
+Completed in W9 attempt 1:
+
+- introduced one Rust convergence owner for desired workstation state,
+  normalized observations, a digest-bound plan, one executable next action,
+  and the final typed receipt;
+- separated dashboard runtime, convergence, access, and request-scoped
+  acquisition health so historical Profile ambiguity cannot create a runtime
+  warning;
+- classified one current selected runtime-host listener as authoritative
+  without requiring the retired default daemon socket;
+- constrained the privileged shell adapter to a Rust-sealed action set and
+  required digest-bound helper, lease-authority, and workstation-dependency
+  postconditions before Rust accepts its receipt; and
+- removed dashboard interpretation of generic install issues and transaction
+  text in favor of the convergence owner's blocking findings and one typed
+  action.
+
+W9 is complete without production Profile, browser, runtime, ACL, eviction, or
+shutdown effects. W10 is open to align migration and every public contract,
+client, doctor, help, skill, and documentation surface.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,915 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the source-free workstation install fixture, host-provision fixture,
+  dashboard build, dashboard action and navigator contracts, API/MCP parity,
+  generated-client contracts, and client type checks pass; and
+- the P157 oracle passes with six schemas, five green cases, and no remaining
+  reproducible red case.
 
 ## Execution Checkpoint W2
 

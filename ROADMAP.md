@@ -75,6 +75,13 @@ browser, tab, and physical CDP-target proof, then persist a minimal idempotency
 receipt. Full-runtime shutdown is similarly bound to Operator assurance, both
 required lifecycle permissions, the reviewed P156 plan digest, and its exact
 managed browser targets.
+W9 is source complete at `d806c74c`. One Rust convergence owner now produces
+the desired state, normalized observations, sealed plan, typed health axes,
+one executable next action, and final receipt. A single current runtime-host
+listener is authoritative without the retired default socket. ACL ambiguity
+remains observable only on the access axis, while the dashboard warns solely
+from typed runtime or convergence blockers. The privileged shell adapter must
+execute the Rust-sealed action set and return verified postconditions.
 
 ### Plan
 
@@ -82,9 +89,9 @@ managed browser targets.
 
 ### Next Recommendation
 
-Execute W9: deepen workstation installation into one Rust convergence owner
-with a privileged effect adapter so ACL ambiguity cannot set runtime readiness
-and shell code no longer owns convergence policy.
+Execute W10: align legacy migration, CLI, HTTP, MCP, generated clients,
+dashboard, doctor, help, README, agent skill, and docs site with the completed
+permission, provenance, lifecycle, and convergence contracts.
 
 ## P156 | Full Runtime Shutdown Replacement
 
