@@ -31,8 +31,9 @@ use super::service_model::{
 use super::service_principal::{
     authenticate_profile_capability, authenticated_authority_is_current, bind_session_work_lease,
     bind_tab_work_lease, generate_profile_capability_token, register_profile_capability,
-    AuthenticatedServicePrincipal, PrincipalContinuityRecourse, ServicePrincipalProvenance,
-    ServicePrincipalRegistrationRequest, ServicePrincipalState, ServiceProfileCapabilityState,
+    rotate_profile_capability, AuthenticatedServicePrincipal, PrincipalContinuityRecourse,
+    ServicePrincipalProvenance, ServicePrincipalRegistrationRequest, ServicePrincipalState,
+    ServiceProfileCapabilityState,
 };
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
@@ -316,7 +317,9 @@ pub(crate) async fn handle_service_profile_lease_command(
             let now = service_now_timestamp();
             Ok(json!({ "doctor": doctor_profile_leases(&state, &now) }))
         }
+        "service_profile_capability_status" => profile_capability_status(command),
         "service_profile_lease_register" => register_profile_lease_principal(command),
+        "service_profile_capability_rotate" => rotate_profile_lease_capability(command),
         "service_profile_lease_rejoin"
         | "service_profile_lease_renew"
         | "service_profile_lease_release" => mutate_profile_lease(command),
@@ -327,6 +330,157 @@ pub(crate) async fn handle_service_profile_lease_command(
         "service_profile_lease_reconcile_apply" => apply_profile_lease_command(command),
         _ => Err(format!("Unsupported profile lease command: {action}")),
     }
+}
+
+fn profile_capability_status(command: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let state = load_service_state_for_maintenance(command)?;
+    let principal_id = required_command_string(command, "principalId")?;
+    let profile_id = required_command_string(command, "profileId")?;
+    let now = service_now_timestamp();
+    let capabilities = state
+        .service_principals
+        .profile_capabilities
+        .values()
+        .filter(|capability| {
+            capability.principal_id == principal_id && capability.profile_id == profile_id
+        })
+        .map(|capability| {
+            json!({
+                "capabilityId": capability.capability_id,
+                "state": capability.state,
+                "revision": capability.revision,
+                "issuedAt": capability.issued_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    let active_capability_count = capabilities
+        .iter()
+        .filter(|capability| capability["state"] == "active")
+        .count();
+    let rotation_blockers = profile_capability_rotation_blockers(&state, profile_id, &now);
+    Ok(json!({
+        "principalId": principal_id,
+        "profileId": profile_id,
+        "registryRevision": state.service_principals.revision,
+        "capabilities": capabilities,
+        "activeCapabilityCount": active_capability_count,
+        "rotationAllowed": active_capability_count == 1 && rotation_blockers.is_empty(),
+        "rotationBlockers": rotation_blockers,
+        "observedAt": now,
+    }))
+}
+
+fn profile_capability_rotation_blockers(
+    state: &ServiceState,
+    profile_id: &str,
+    now: &str,
+) -> Vec<String> {
+    let mut blockers = BTreeSet::new();
+    if state
+        .lease_authority()
+        .current_profile_claims(now)
+        .any(|claim| claim.profile_id() == Some(profile_id))
+    {
+        blockers.insert("active_profile_claim".to_string());
+    }
+    for lease in profile_leases_for_state(state, now)
+        .into_iter()
+        .filter(|lease| lease.profile_id == profile_id)
+    {
+        if lease.state == "active" || lease.mode != "idle" || !lease.tab_ids.is_empty() {
+            blockers.insert("active_subordinate_work".to_string());
+        }
+    }
+    blockers.into_iter().collect()
+}
+
+fn rotate_profile_lease_capability(
+    command: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let principal_id = required_command_string(command, "principalId")?.to_string();
+    let profile_id = required_command_string(command, "profileId")?.to_string();
+    let expected_capability_id =
+        required_command_string(command, "expectedCapabilityId")?.to_string();
+    let expected_registry_revision = command
+        .get("expectedRegistryRevision")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| {
+            "Missing required profile capability field: expectedRegistryRevision".to_string()
+        })?;
+    let capability_path = absolute_command_path(command, "capabilityOut")?;
+    let display_name = optional_command_string(command, "displayName");
+    let registered_by = optional_command_string(command, "registeredBy");
+    let now = service_now_timestamp();
+    let raw_capability = generate_profile_capability_token();
+
+    let repository = LockedServiceStateRepository::default_json()?;
+    write_private_capability_file(&capability_path, &raw_capability)?;
+    let result = repository.mutate(|state| {
+        let blockers = profile_capability_rotation_blockers(state, &profile_id, &now);
+        if !blockers.is_empty() {
+            return Err(format!(
+                "profile_capability_rotation_blocked:{}",
+                blockers.join(",")
+            ));
+        }
+        let rotated = rotate_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: principal_id.clone(),
+                display_name: display_name.clone(),
+                profile_id: profile_id.clone(),
+                registered_at: Some(now.clone()),
+                registered_by: registered_by.clone(),
+            },
+            &expected_capability_id,
+            expected_registry_revision,
+            &raw_capability,
+        )
+        .map_err(principal_error_string)?;
+        let owner_binding = rotate_registered_principal_owner_binding(
+            state,
+            &rotated.previous_capability.capability_id,
+            &rotated.registered,
+        )?;
+        append_profile_lease_event(
+            state,
+            "rotate_capability",
+            None,
+            None,
+            &rotated.registered.principal.principal_id,
+            &rotated.registered.capability.profile_id,
+            None,
+            &now,
+            command,
+        );
+        Ok(json!({
+            "principalId": rotated.registered.principal.principal_id,
+            "profileId": rotated.registered.capability.profile_id,
+            "previousCapabilityId": rotated.previous_capability.capability_id,
+            "previousCapabilityState": rotated.previous_capability.state,
+            "capability": {
+                "capabilityId": rotated.registered.capability.capability_id,
+                "revision": rotated.registered.capability.revision,
+                "state": rotated.registered.capability.state,
+            },
+            "registryRevision": rotated.registry_revision,
+            "boundToCurrentOwner": owner_binding,
+            "capabilityFile": capability_path,
+            "capabilityWritten": true,
+            "rotatedAt": now,
+        }))
+    });
+    if let Err(error) = result {
+        let cleanup = fs::remove_file(&capability_path);
+        return match cleanup {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(format!(
+                "{error}; failed to remove unregistered capability file {}: {cleanup_error}",
+                capability_path.display()
+            )),
+        };
+    }
+    result
 }
 
 fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -415,8 +569,8 @@ fn register_profile_lease_principal(
     let now = service_now_timestamp();
     let raw_capability = generate_profile_capability_token();
 
-    write_private_capability_file(&capability_path, &raw_capability)?;
     let repository = LockedServiceStateRepository::default_json()?;
+    write_private_capability_file(&capability_path, &raw_capability)?;
     let result = repository.mutate(|state| {
         let registered = register_profile_capability(
             &mut state.service_principals,
@@ -490,6 +644,70 @@ fn bind_registered_principal_to_current_owner(
     else {
         return Ok(false);
     };
+    if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready {
+        return Ok(false);
+    }
+    state
+        .runtime_owner_registry
+        .bind_principal_authority(
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                principal_id: registered.principal.principal_id.clone(),
+                profile_id: registered.capability.profile_id.clone(),
+                profile_identity_digest,
+                capability_id: registered.capability.capability_id.clone(),
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: owner.owner_generation,
+            },
+        )
+        .map_err(|error| format!("profile_owner_binding_failed:{error:?}"))?;
+    Ok(true)
+}
+
+fn rotate_registered_principal_owner_binding(
+    state: &mut ServiceState,
+    previous_capability_id: &str,
+    registered: &super::service_principal::RegisteredProfileCapability,
+) -> Result<bool, String> {
+    let Some(profile_path) = state
+        .profiles
+        .get(&registered.capability.profile_id)
+        .and_then(|profile| profile.user_data_dir.as_deref())
+    else {
+        return Ok(false);
+    };
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+    if let Some(existing) = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&profile_identity_digest)
+        .cloned()
+    {
+        if existing.principal_id != registered.principal.principal_id
+            || existing.profile_id != registered.capability.profile_id
+            || existing.capability_id != previous_capability_id
+            || existing.provenance != ServicePrincipalProvenance::RegisteredCapability
+        {
+            return Err("profile_owner_binding_rotation_mismatch".to_string());
+        }
+        state
+            .runtime_owner_registry
+            .principal_bindings
+            .remove(&profile_identity_digest);
+        state.runtime_owner_registry.revision =
+            state.runtime_owner_registry.revision.saturating_add(1);
+    }
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owners
+        .get(&profile_identity_digest)
+        .cloned()
+    else {
+        return Ok(false);
+    };
+    if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready {
+        return Ok(false);
+    }
     state
         .runtime_owner_registry
         .bind_principal_authority(
@@ -2367,6 +2585,144 @@ mod tests {
             persisted.sessions["session-odollo"].principal_id.as_deref(),
             Some("principal:odollo-fulfillment")
         );
+
+        drop(guard);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn lost_capability_rotates_only_under_exact_idle_compare_and_swap() {
+        let home = temp_service_home("rotate-capability");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let (mut state, _, _) = state_with_lease();
+        state.service_principals = Default::default();
+        state.runtime_owner_registry.principal_bindings.clear();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.work_lease_revision = 0;
+        session.expires_at = None;
+        session.lease = LeaseState::Released;
+        save_default_state(state);
+
+        let original_path = home.join("original.cap");
+        let registered = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_register",
+            "principalId": "principal:odollo-fulfillment",
+            "profileId": "odollo-fulfillment",
+            "capabilityOut": original_path,
+        }))
+        .await
+        .unwrap();
+        let original_capability = fs::read_to_string(&original_path).unwrap();
+        fs::remove_file(&original_path).unwrap();
+
+        let status = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_capability_status",
+            "principalId": "principal:odollo-fulfillment",
+            "profileId": "odollo-fulfillment",
+        }))
+        .await
+        .unwrap();
+        assert_eq!(status["activeCapabilityCount"], 1);
+        assert_eq!(status["rotationAllowed"], true);
+        assert_eq!(status["rotationBlockers"], json!([]));
+
+        let replacement_path = home.join("replacement.cap");
+        let rotated = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_capability_rotate",
+            "principalId": "principal:odollo-fulfillment",
+            "profileId": "odollo-fulfillment",
+            "expectedCapabilityId": registered["capability"]["capabilityId"],
+            "expectedRegistryRevision": status["registryRevision"],
+            "capabilityOut": replacement_path,
+            "registeredBy": "test-operator",
+        }))
+        .await
+        .unwrap();
+        assert_eq!(rotated["previousCapabilityState"], "revoked");
+        assert_eq!(rotated["capabilityWritten"], true);
+        assert_eq!(rotated["boundToCurrentOwner"], true);
+        let replacement_capability = fs::read_to_string(&replacement_path).unwrap();
+        let state_path = super::super::service_store::default_service_state_path().unwrap();
+        let persisted_raw = fs::read_to_string(&state_path).unwrap();
+        assert!(!persisted_raw.contains(original_capability.trim()));
+        assert!(!persisted_raw.contains(replacement_capability.trim()));
+        let persisted = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        assert_eq!(
+            authenticate_profile_capability(
+                &persisted.service_principals,
+                original_capability.trim(),
+                Some("odollo-fulfillment")
+            )
+            .unwrap_err()
+            .code,
+            super::super::service_principal::ServicePrincipalFailureCode::CapabilityRevoked
+        );
+        let authority = authenticate_profile_capability(
+            &persisted.service_principals,
+            replacement_capability.trim(),
+            Some("odollo-fulfillment"),
+        )
+        .unwrap();
+        assert_eq!(
+            persisted
+                .runtime_owner_registry
+                .principal_bindings
+                .values()
+                .next()
+                .unwrap()
+                .capability_id,
+            authority.capability_id
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details["operation"].as_str())
+                == Some("rotate_capability")
+        }));
+
+        drop(guard);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn capability_rotation_status_refuses_active_claims_and_subordinate_work() {
+        let (state, authority, _) = state_with_lease();
+        let blockers = profile_capability_rotation_blockers(&state, &authority.profile_id, NOW);
+        assert!(blockers.contains(&"active_subordinate_work".to_string()));
+    }
+
+    #[tokio::test]
+    async fn capability_rotation_rejects_active_work_and_removes_staged_secret() {
+        let home = temp_service_home("rotate-capability-active-work");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let (state, authority, _) = state_with_lease();
+        let registry_revision = state.service_principals.revision;
+        save_default_state(state);
+        let capability_path = home.join("must-not-remain.cap");
+
+        let error = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_capability_rotate",
+            "principalId": authority.principal_id,
+            "profileId": authority.profile_id,
+            "expectedCapabilityId": authority.capability_id,
+            "expectedRegistryRevision": registry_revision,
+            "capabilityOut": capability_path,
+        }))
+        .await
+        .unwrap_err();
+        assert!(error.starts_with("profile_capability_rotation_blocked:"));
+        assert!(!capability_path.exists());
 
         drop(guard);
         fs::remove_dir_all(home).unwrap();

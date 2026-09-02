@@ -4,6 +4,48 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 192 | 2026-09-01
+
+Scope: remove the lost-capability catch-22 without rotating production
+authority.
+
+Actions:
+
+- confirmed the production Last30days lease is observation-only and idle with
+  one active registered capability, no active claim, and no capability file;
+- proved ordinary registration rejects another active grant while every
+  reconciliation path requires the missing secret;
+- opened P153 in an isolated worktree because the canonical checkout contains
+  unrelated P150 edits;
+- added public capability status and operator-local exact compare-and-swap
+  rotation with active-work fences, staged-file cleanup, old-grant revocation,
+  and exact owner-binding replacement; and
+- left production capability, Last30days private configuration, credentials,
+  browsers, and provider work untouched.
+
+Validation:
+
+- registry rotation, CLI parser, active-work blocker, and lost-file end-to-end
+  fixtures pass individually;
+- the lost-file fixture proves the old capability is revoked, the replacement
+  authenticates, raw secret material is absent from Service State, and only the
+  matching owner binding advances;
+- the complete serialized Rust driver, strict Clippy, formatting,
+  documentation, workstation, route-confusion, CDP architecture, CDP stream,
+  and live tab-streaming gates pass;
+- development generation `0.28.0-b48230cb56b0` passes doctor, and two
+  independent smoke invocations each pass three disposable launch, URL, close,
+  and residue iterations; and
+- Graphiti discovery returned no prior rotation contract, so current source,
+  live lease reads, and P153 remain authoritative.
+
+Result:
+
+- P153 is development-qualified;
+- production remains fail closed with `profile_capability_required`; and
+- merge and exact installation gates remain before any separately authorized
+  production rotation.
+
 ## Turn 191 | 2026-09-01
 
 Scope: install the P152 companion repairs, execute the single authorized
