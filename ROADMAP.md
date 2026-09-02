@@ -9,13 +9,14 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P153 | Lost Profile Capability Rotation Recovery
 
-State: IN PROGRESS
+State: ACCEPTED
 Current state: the operator-local public status and exact compare-and-swap
-rotation repair is development-qualified as generation
-`0.28.0-b48230cb56b0`. Comprehensive source, documentation, workstation, and
-development launch gates pass. Production still has one active Last30days
-registration whose private file is absent; no production capability or client
-configuration has been changed.
+rotation repair is merged and installed as generation
+`0.28.0-e2244cd2447c-c25a91eb0d2b`. The installed/source SHA-256 identity
+matches, production doctor succeeds with one current host and zero legacy
+daemons, and live status reports that the sole Last30days registration is idle
+and eligible for rotation with no blockers. No production capability or client
+configuration has been changed and no provider tick ran.
 
 ### Plan
 
@@ -23,9 +24,10 @@ configuration has been changed.
 
 ### Next Recommendation
 
-Merge and install only the exact qualified candidate after workstation
-preflight. Retain production capability rotation and Last30days wiring as
-explicit operator gates.
+Obtain explicit operator authority before rotating the production capability
+and writing its new private file into Last30days configuration. Treat a later
+provider acceptance tick as its own authorization because the prior tick is
+already consumed.
 
 ## P152 | Terminal Session Replacement Planner Executor Parity
 
