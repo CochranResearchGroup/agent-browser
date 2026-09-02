@@ -83,6 +83,49 @@ enroll a cryptographic identity. Plan 0156 remains the authority for exact full
 shutdown effects, while this plan supplies the operator permission and complete
 causal receipt that precede those effects.
 
+### Deep Module Seams
+
+The architecture review at
+`/tmp/architecture-review-20260902-052924.html`, produced against ancestor
+`6e89771b`, is accepted as design input for this plan.
+
+Before changing permission or public-contract semantics, extract one deep
+in-process Profile acquisition module behind the current interfaces. Its small
+interface accepts a normalized request intent plus current Service State,
+access-policy, lease-authority, and runtime observations, then returns one
+executable acquisition decision or exact denial. The implementation owns:
+
+- identity joins and assurance classification;
+- access-policy evaluation and admitted policy revision;
+- coordination admission and wait disposition;
+- dominant-blocker selection and supporting evidence;
+- retained-browser reuse, lifecycle replacement, and stale-history rejection;
+- route and runtime-lane derivation; and
+- executable recourse when acquisition cannot proceed.
+
+Service Access, Profile recovery, and action runtime consume this result. They
+must not reconstruct a decision from JSON, mutate route hints after the fact,
+or independently reinterpret access, lease, or lifecycle evidence. Keep this
+seam in-process until cohesive behavior and dependency direction are proven;
+this plan does not add a generic service-core crate or another lease-policy
+crate.
+
+The protected lease-authority kernel remains canonical. P157 operations use
+one cohesive client interface that owns request encoding, protected exchange,
+challenge lifecycle, response validation, and typed error translation. The
+client is not a second evaluator.
+
+Workstation convergence is a separate deep module. Rust owns desired state,
+observed state, the sealed convergence plan, and the final receipt. Privileged
+shell logic is an effect adapter that executes only that plan and returns
+evidence. Dashboard health consumes the typed convergence result and never
+derives installation health from ACL ambiguity or generic warning text.
+
+One semantic contract oracle owns canonical scenarios and invariants for the
+Profile acquisition and convergence interfaces. HTTP, MCP, generated clients,
+dashboard projections, and execution admission must all pass the same oracle.
+Small explicit end-to-end examples remain to protect user-visible behavior.
+
 ## Frozen Permission Contract
 
 1. `shared-local` is the default for a profile without an explicit policy in a
@@ -186,18 +229,20 @@ service-owned re-observation, rebind, bounded shutdown, or quarantine recourse.
 
 | Unit | Scope | Depends on | Exit condition |
 | --- | --- | --- | --- |
-| W1 | Freeze permission, provenance, failure, and migration schemas with red provider-free regressions | none | Tests reproduce missing scheduler recourse, lost lane correlation, circular identity recourse, and shared-profile overblocking |
-| W2 | Capture immutable request provenance at ingress and preserve it through runtime-lane dispatch | W1 | Every queued request has stable lane, subject, assurance, connection, profile, and causal identities without retaining private routing payloads |
-| W3 | Replace split terminal persistence with one typed outcome builder | W1, W2 | Every terminal exit returns and persists identical structured failure and provenance; pre-dispatch rejection is fully traceable |
-| W4 | Add revisioned access-policy evaluation and frictionless presets | W1, W3 | `shared-local`, `restricted`, and `exclusive` decisions are deterministic; clients never need runtime-owner proof for ordinary authorized work |
-| W5 | Add attributable tab participation, reconnect, and inherited child policy | W4 | Concurrent local clients reuse one browser, receive independent tabs, and close only authorized resources |
-| W6 | Add drain-and-restrict, graceful release, explicit eviction, and revision conflicts | W4, W5 | Narrowing cannot race new admission or commit while incompatible occupancy remains; force is explicit and receipted |
-| W7 | Integrate human takeover, lifecycle proof, and full-shutdown authorization | W3, W4, W6 | Controller leases remain separate, and lifecycle effects require both permission and exact physical proof |
-| W8 | Migrate legacy state and align CLI, HTTP, MCP, generated clients, dashboard, doctor, help, README, skill, and docs site | W3, W4, W7 | Existing profiles retain intended access, ambiguity is nonblocking, and every client receives executable recourse |
-| W9 | Run isolated installed acceptance and adversarial concurrency scenarios | W8 | Development doctor, multi-client sharing, live policy edits, eviction, crash recovery, logging completeness, and disposable shutdown pass without production effects |
+| W1 | Extract behavior-preserving Profile acquisition decision ownership and establish the semantic contract oracle | none | Service Access, recovery, and action runtime consume one typed executable decision; current public behavior passes canonical fixtures before policy changes |
+| W2 | Freeze permission, provenance, failure, migration, and dashboard-health schemas with red provider-free regressions | W1 | Tests reproduce missing scheduler recourse, lost lane correlation, circular identity recourse, shared-profile overblocking, and warning-axis conflation |
+| W3 | Capture immutable request provenance at ingress and preserve it through runtime-lane dispatch | W2 | Every queued request has stable lane, subject, assurance, connection, profile, and causal identities without retaining private routing payloads |
+| W4 | Replace split terminal persistence with one typed outcome builder | W2, W3 | Every terminal exit returns and persists identical structured failure and provenance; pre-dispatch rejection is fully traceable |
+| W5 | Add revisioned access-policy evaluation and frictionless presets inside the Profile acquisition owner | W1, W2, W4 | `shared-local`, `restricted`, and `exclusive` decisions are deterministic; clients never need runtime-owner proof for ordinary authorized work |
+| W6 | Add attributable tab participation, reconnect, and inherited child policy | W5 | Concurrent local clients reuse one browser, receive independent tabs, and close only authorized resources |
+| W7 | Add drain-and-restrict, graceful release, explicit eviction, and revision conflicts | W5, W6 | Narrowing cannot race new admission or commit while incompatible occupancy remains; force is explicit and receipted |
+| W8 | Integrate the cohesive lease-authority client, human takeover, lifecycle proof, and full-shutdown authorization | W4, W5, W7 | Controller leases remain separate; protected exchange is not repeated across helpers; lifecycle effects require both permission and exact physical proof |
+| W9 | Deepen workstation installation into one Rust convergence owner with a privileged effect adapter | W2, W4, W8 | Desired state, observed state, sealed plan, and receipt have one owner; ACL ambiguity cannot set runtime readiness and shell code does not own policy |
+| W10 | Migrate legacy state and align CLI, HTTP, MCP, generated clients, dashboard, doctor, help, README, skill, and docs site | W4, W5, W8, W9 | Existing profiles retain intended access; dashboard separates access, acquisition, and convergence axes; every client receives executable recourse |
+| W11 | Run isolated installed acceptance and adversarial concurrency scenarios through the contract oracle | W10 | Development doctor, multi-client sharing, live policy edits, eviction, crash recovery, logging completeness, warning taxonomy, and disposable shutdown pass without production effects |
 
-Critical path: `W1 -> W2 -> W3 -> W4 -> W5 -> W6 -> W7 -> W8 -> W9`.
-W5 may prepare reconnect fixtures while W4 completes, but policy enforcement
+Critical path: `W1 -> W2 -> W3 -> W4 -> W5 -> W6 -> W7 -> W8 -> W9 -> W10 -> W11`.
+W6 may prepare reconnect fixtures while W5 completes, but policy enforcement
 remains the join. No work unit may independently invent subject, policy,
 provenance, or terminal-outcome semantics.
 
@@ -229,6 +274,11 @@ provenance, or terminal-outcome semantics.
   each create one terminal job and one causally connected trace outcome.
 - Historical sessions, warnings, and unproved owner rows remain queryable but
   cannot create access denial or make installation unhealthy.
+- The dashboard shows profile-access ambiguity as nonblocking observation,
+  acquisition denial only on the affected request, and `Runtime status out of
+  sync` only for a typed install-convergence failure with one executable action.
+- Canonical scenarios produce the same semantic decision through HTTP, MCP,
+  generated clients, dashboard projection, and execution admission.
 - No log or client response contains capability bearer material, raw profile
   paths, credentials, page bodies, or private provider payloads.
 
@@ -261,6 +311,10 @@ provenance, or terminal-outcome semantics.
   tabs, or apply production full shutdown in this plan.
 - Do not add a second lease kernel, lifecycle owner registry, failure
   classifier, or request-log subsystem.
+- Do not add a permanent facade or new crate around Profile acquisition before
+  the cohesive in-process owner and dependency direction are proven.
+- Do not let the ACL evaluator, dashboard, or privileged shell adapter decide
+  workstation convergence.
 - Stop before enforcement if P144 integration cannot preserve the distinction
   between permission, coordination, and physical proof.
 - Stop before migration if an existing strict profile cannot be classified
@@ -290,10 +344,13 @@ agent-browser-dev install doctor
 pnpm smoke:development-browser-launch
 ```
 
-Focused Rust tests must cover the access-policy evaluator, request provenance,
+Focused Rust tests must cover the Profile acquisition owner interface,
+access-policy evaluator, cohesive lease-authority client, request provenance,
 scheduler terminalization, failure recourse, claim integration, tab ownership,
-drain and eviction, state migration, and full-shutdown authorization. Installed
-acceptance uses only disposable profiles and browsers.
+drain and eviction, install-convergence owner, state migration, and
+full-shutdown authorization. The semantic contract oracle covers transport and
+dashboard parity. Installed acceptance uses only disposable profiles and
+browsers.
 
 ## Acceptance Criteria
 
@@ -317,12 +374,16 @@ acceptance uses only disposable profiles and browsers.
    executable next action without exposing runtime proof internals.
 9. Provider-free and isolated installed validation prove the contract without
    mutating production profiles, credentials, browsers, or provider state.
+10. One deep Profile acquisition module structurally co-owns planning and
+    execution truth; callers cannot reconstruct or override its decision.
+11. Dashboard runtime health is produced by the install-convergence owner and
+    distinguishes nonblocking access ambiguity from actual runtime drift.
 
 ## Initial Checkpoint
 
 State transition: `unregistered -> planned`.
 
-Acceptance state: architecture and contract are registered; W1 through W9
+Acceptance state: architecture and contract are registered; W1 through W11
 remain.
 
 Progress classification: `outcome_progress`.
@@ -334,8 +395,10 @@ lane correlation after selector removal. Current source and Plans 0111, 0142,
 shutdown foundations. The accepted ADR freezes access policy as a separate
 axis with `shared-local` as the trusted local default.
 
-Material blocker: no versioned policy or provenance schema and no red
-provider-free regression exists yet.
+Material blocker: acquisition truth remains distributed across Service Access,
+Profile recovery, and action runtime, so policy or provenance changes would
+otherwise deepen the split before a semantic oracle can detect divergence.
 
-Next action: implement W1 only, beginning with the scheduler-rejection and
-runtime-lane provenance regressions before changing production code.
+Next action: implement W1 only. Extract the current joined acquisition decision
+behind one typed in-process interface and freeze canonical current-behavior
+fixtures before changing permission, provenance, or public-contract semantics.

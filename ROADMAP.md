@@ -17,6 +17,11 @@ The accepted architecture makes `shared-local` the trusted local default,
 retains strict policy as opt-in, narrows occupied profiles through an explicit
 drain-and-restrict transaction, and carries one immutable causal envelope from
 ingress through response, job, event, trace, and incident records.
+The revised plan first extracts one behavior-preserving deep Profile
+acquisition owner, validates every projection through a semantic contract
+oracle, keeps protected lease exchange behind one cohesive client, and makes
+the Rust install domain the sole owner of convergence truth consumed by the
+dashboard.
 
 ### Plan
 
@@ -24,10 +29,10 @@ ingress through response, job, event, trace, and incident records.
 
 ### Next Recommendation
 
-Implement W1 only: freeze additive policy, provenance, and failure schemas with
-red provider-free regressions for scheduler recourse loss, removed lane
-correlation, circular identity remediation, and shared-profile overblocking.
-Do not mutate production permissions or browser state.
+Implement W1 only: move cohesive existing acquisition behavior behind one
+typed in-process interface and establish canonical current-behavior fixtures.
+Preserve public contracts and a green checkpoint before changing policy. Do
+not add a new crate or mutate production permissions or browser state.
 
 ## P156 | Full Runtime Shutdown Replacement
 

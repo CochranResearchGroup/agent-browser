@@ -1,7 +1,7 @@
 schema_version: 1
 lanes:
   - id: P157
-    objective: Separate mutable profile permissions from coordination and runtime proof while preserving complete request provenance
+    objective: Deepen profile acquisition and install convergence while separating mutable permissions, coordination, runtime proof, and request provenance
     plan: docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md
     plan_ref: refs/heads/plan/profile-permissions-and-request-provenance
     branch: plan/profile-permissions-and-request-provenance

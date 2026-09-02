@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 201 | 2026-09-02
+
+Scope: incorporate the deep-module architecture review into P157 and restore
+the current production runtime supervisor without deleting managed profiles.
+
+Actions:
+
+- revised the accepted ADR, glossary, roadmap, and P157 work graph around one
+  deep in-process Profile acquisition owner, one cohesive lease-authority
+  client, one Rust install-convergence owner, and one semantic contract oracle;
+- separated dashboard convergence health from nonblocking profile-access
+  ambiguity and request-scoped acquisition denial;
+- diagnosed a healthy tmux-owned runtime host alongside an inactive matching
+  systemd supervisor, then gracefully closed the four exact service-owned
+  browser routes blocking controlled takeover; and
+- applied the fresh digest-bound supervisor recovery plan, replacing source
+  PID 1718 with supervised PID 43905 under transaction
+  `runtime-host-takeover-d36051d4-bf3c-4069-89e7-e0202583b5ac`.
+
+Validation:
+
+- the recovery plan reported `ready_for_takeover` with no blockers and the
+  applied outcome reported `accepted` at transaction revision 9;
+- `agent-browser-runtime-host.service` is active and running on PID 43905;
+- the dashboard backend supervisor is ready, its stream is reachable, and its
+  executable matches installed generation `0.28.0-4a92c42517e1`; and
+- install doctor reports one current runtime host, zero legacy daemons,
+  `steady_current` multiplicity, and no supervisor issues.
+
+Result:
+
+- the current supervisor defect is repaired without removing any profile or
+  stored credential state;
+- the four service-owned browsers are closed and their tabs are no longer
+  live, while unrelated externally owned browsers were preserved; and
+- P157 W1 is now the behavior-preserving acquisition-owner extraction and
+  semantic-oracle checkpoint, ahead of ACL or public-contract changes.
+
 ## Turn 200 | 2026-09-02
 
 Scope: productize the profile-permission and logging defects uncovered during

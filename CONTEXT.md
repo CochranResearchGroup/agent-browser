@@ -68,6 +68,18 @@ _Avoid_: Lock, checkout record
 A request by one authenticated service principal to obtain or reuse one managed browser lane for an exact profile and task without choosing internal browser, session, route, or lifecycle identities.
 _Avoid_: Launch request, session request
 
+**Profile acquisition owner**:
+The deep in-process module that joins current Service State, access policy, coordination evidence, and runtime proof into one executable acquisition decision or exact denial. Service Access, recovery, and action runtime consume this decision and never reconstruct it from JSON or reason strings.
+_Avoid_: Access-plan helper, recovery policy, launch policy
+
+**Install convergence owner**:
+The Rust module that owns desired workstation state, observed state, the sealed convergence plan, and the terminal receipt. Privileged shell code is an effect adapter and the dashboard consumes the owner's typed readiness result.
+_Avoid_: Installer script, doctor warning, dashboard health heuristic
+
+**Semantic contract oracle**:
+Canonical acquisition and convergence scenarios plus invariants used to prove that HTTP, MCP, generated clients, dashboard projections, and execution admission all represent the same decision.
+_Avoid_: Shape smoke, snapshot test, transport fixture
+
 **Dominant blocker**:
 The single current fact that determines why a profile acquisition cannot proceed, while all other relevant inconsistencies remain available as supporting evidence.
 _Avoid_: Error list, first validation failure
