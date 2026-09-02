@@ -81,7 +81,7 @@ pub fn gen_id() -> String {
 
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
-const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release|recover plan|recover apply] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--idempotency-key <key>] [--plan-file <absolute-path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
+const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|capability-status --principal-id <id> --profile-id <id>|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|rotate-capability --principal-id <id> --profile-id <id> --expected-capability-id <id> --expected-registry-revision <n> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release|recover plan|recover apply] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--idempotency-key <key>] [--plan-file <absolute-path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
 const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <acquire --profile-id <id> --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
@@ -215,22 +215,21 @@ fn parse_service_profile_leases(
         }
         return Ok(cmd);
     }
-    if rest[1] == "register" {
+    if rest[1] == "capability-status" {
         let mut cmd = json!({
             "id": id,
-            "action": "service_profile_lease_register",
+            "action": "service_profile_capability_status",
         });
         let mut i = 2;
         while i < rest.len() {
             let (field, label) = match rest[i] {
                 "--principal-id" => ("principalId", "--principal-id"),
                 "--profile-id" => ("profileId", "--profile-id"),
-                "--capability-out" => ("capabilityOut", "--capability-out"),
-                "--display-name" => ("displayName", "--display-name"),
-                "--registered-by" => ("registeredBy", "--registered-by"),
                 flag => {
                     return Err(ParseError::InvalidValue {
-                        message: format!("Unknown flag for service leases register: {flag}"),
+                        message: format!(
+                            "Unknown flag for service leases capability-status: {flag}"
+                        ),
                         usage: SERVICE_PROFILE_LEASES_USAGE,
                     })
                 }
@@ -244,10 +243,79 @@ fn parse_service_profile_leases(
             cmd[field] = json!(value);
             i += 2;
         }
-        for field in ["principalId", "profileId", "capabilityOut"] {
+        for field in ["principalId", "profileId"] {
             if cmd.get(field).is_none() {
                 return Err(ParseError::InvalidValue {
-                    message: format!("Missing required service lease registration field: {field}"),
+                    message: format!("Missing required profile capability field: {field}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            }
+        }
+        return Ok(cmd);
+    }
+    if rest[1] == "register" || rest[1] == "rotate-capability" {
+        let rotate = rest[1] == "rotate-capability";
+        let mut cmd = json!({
+            "id": id,
+            "action": if rotate {
+                "service_profile_capability_rotate"
+            } else {
+                "service_profile_lease_register"
+            },
+        });
+        let mut i = 2;
+        while i < rest.len() {
+            let (field, label) = match rest[i] {
+                "--principal-id" => ("principalId", "--principal-id"),
+                "--profile-id" => ("profileId", "--profile-id"),
+                "--capability-out" => ("capabilityOut", "--capability-out"),
+                "--display-name" => ("displayName", "--display-name"),
+                "--registered-by" => ("registeredBy", "--registered-by"),
+                "--expected-capability-id" if rotate => {
+                    ("expectedCapabilityId", "--expected-capability-id")
+                }
+                "--expected-registry-revision" if rotate => {
+                    ("expectedRegistryRevision", "--expected-registry-revision")
+                }
+                flag => {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown flag for service leases {}: {flag}", rest[1]),
+                        usage: SERVICE_PROFILE_LEASES_USAGE,
+                    })
+                }
+            };
+            let Some(value) = rest.get(i + 1) else {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing value for {label}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            };
+            if field == "expectedRegistryRevision" {
+                let revision = value.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                    message: format!("Invalid --expected-registry-revision value: {value}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                })?;
+                cmd[field] = json!(revision);
+            } else {
+                cmd[field] = json!(value);
+            }
+            i += 2;
+        }
+        let required = if rotate {
+            &[
+                "principalId",
+                "profileId",
+                "expectedCapabilityId",
+                "expectedRegistryRevision",
+                "capabilityOut",
+            ][..]
+        } else {
+            &["principalId", "profileId", "capabilityOut"][..]
+        };
+        for field in required {
+            if cmd.get(field).is_none() {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing required profile capability field: {field}"),
                     usage: SERVICE_PROFILE_LEASES_USAGE,
                 });
             }
@@ -9373,6 +9441,41 @@ mod tests {
         assert_eq!(cmd["profileId"], "odollo");
         assert_eq!(cmd["capabilityOut"], "/tmp/odollo.cap");
         assert!(cmd.get("profileCapability").is_none());
+    }
+
+    #[test]
+    fn test_service_profile_capability_status_and_rotation_are_exact() {
+        let status = parse_command(
+            &args(
+                "service leases capability-status --principal-id last30days --profile-id last30days-facebook",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(status["action"], "service_profile_capability_status");
+        assert_eq!(status["principalId"], "last30days");
+        assert_eq!(status["profileId"], "last30days-facebook");
+
+        let rotate = parse_command(
+            &args(
+                "service leases rotate-capability --principal-id last30days --profile-id last30days-facebook --expected-capability-id profile-capability-v1:old --expected-registry-revision 7 --capability-out /tmp/last30days.cap --registered-by operator",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(rotate["action"], "service_profile_capability_rotate");
+        assert_eq!(rotate["expectedCapabilityId"], "profile-capability-v1:old");
+        assert_eq!(rotate["expectedRegistryRevision"], 7);
+        assert_eq!(rotate["capabilityOut"], "/tmp/last30days.cap");
+        assert!(rotate.get("profileCapability").is_none());
+
+        assert!(parse_command(
+            &args(
+                "service leases rotate-capability --principal-id last30days --profile-id last30days-facebook --expected-capability-id profile-capability-v1:old --capability-out /tmp/last30days.cap",
+            ),
+            &default_flags(),
+        )
+        .is_err());
     }
 
     #[test]

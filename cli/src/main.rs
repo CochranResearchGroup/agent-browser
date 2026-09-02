@@ -3391,7 +3391,9 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_profile_lease_inspect"
                     | "service_profile_lease_explain"
                     | "service_profile_lease_doctor"
+                    | "service_profile_capability_status"
                     | "service_profile_lease_register"
+                    | "service_profile_capability_rotate"
                     | "service_profile_lease_rejoin"
                     | "service_profile_lease_renew"
                     | "service_profile_lease_release"
@@ -3595,7 +3597,9 @@ mod tests {
             "service_profile_lease_inspect",
             "service_profile_lease_explain",
             "service_profile_lease_doctor",
+            "service_profile_capability_status",
             "service_profile_lease_register",
+            "service_profile_capability_rotate",
             "service_profile_lease_rejoin",
             "service_profile_lease_renew",
             "service_profile_lease_release",

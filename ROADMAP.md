@@ -7,6 +7,26 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P153 | Lost Profile Capability Rotation Recovery
+
+State: IN PROGRESS
+Current state: the operator-local public status and exact compare-and-swap
+rotation repair is development-qualified as generation
+`0.28.0-b48230cb56b0`. Comprehensive source, documentation, workstation, and
+development launch gates pass. Production still has one active Last30days
+registration whose private file is absent; no production capability or client
+configuration has been changed.
+
+### Plan
+
+- `docs/dev/plans/0153-2026-09-01-lost-profile-capability-rotation-recovery-plan.md`
+
+### Next Recommendation
+
+Merge and install only the exact qualified candidate after workstation
+preflight. Retain production capability rotation and Last30days wiring as
+explicit operator gates.
+
 ## P152 | Terminal Session Replacement Planner Executor Parity
 
 State: IN PROGRESS

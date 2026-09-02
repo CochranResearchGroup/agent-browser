@@ -309,7 +309,9 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_profile_lease_inspect"
             | "service_profile_lease_explain"
             | "service_profile_lease_doctor"
+            | "service_profile_capability_status"
             | "service_profile_lease_register"
+            | "service_profile_capability_rotate"
             | "service_profile_lease_rejoin"
             | "service_profile_lease_renew"
             | "service_profile_lease_release"
@@ -944,7 +946,9 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_profile_lease_inspect" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_explain" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_doctor" => handle_service_profile_lease_command(cmd).await,
+            "service_profile_capability_status" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_register" => handle_service_profile_lease_command(cmd).await,
+            "service_profile_capability_rotate" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_rejoin" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_renew" => handle_service_profile_lease_command(cmd).await,
             "service_profile_lease_release" => handle_service_profile_lease_command(cmd).await,
