@@ -813,6 +813,7 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
   const generations = lifecycle?.retention?.generations
     ?? monitor?.receipt?.effects?.generations;
   const convergenceWindow = multiplicity?.convergenceWindow;
+  const access = state.health?.dashboardHealth?.access;
   const healthy = multiplicity?.steadyState === true
     && monitor?.ready === true
     && (cleanup?.missingCount ?? 0) === 0;
@@ -835,6 +836,7 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
           {generations ? ` Last retention pass removed ${generations.removed?.length ?? 0} and retained ${generations.retained?.length ?? 0}.` : ""}
           {monitor?.state ? ` Monitor ${monitor.state}${monitor.ageSeconds == null ? "" : ` (${monitor.ageSeconds}s old)`}.` : ""}
           {(lifecycle?.incident ?? monitor?.receipt?.incident)?.type ? ` Blocking incident ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.type} after ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.failureCount ?? "?"} failures.` : ""}
+          {access ? ` Access ${access.state}${access.findings.length > 0 ? `: ${access.findings.map((finding) => finding.message).join(" ")}` : "."}` : ""}
         </span>
       </div>
     </div>

@@ -8,14 +8,42 @@
 use super::service_model::{
     BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ServiceState,
 };
+use super::service_profile_access_policy::{
+    ProfileAccessGrant, ProfileAccessMode, ProfileAccessPreset, ProfileIdentityAssurance,
+    ServiceProfileAccessPolicy,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 pub(crate) const SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-state.v2";
 pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str =
     "agent-browser.service-state.unversioned";
+const PROFILE_POLICY_MIGRATION_SCHEMA_VERSION: &str = "agent-browser.profile-policy-migration.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfilePolicyMigrationEntry {
+    pub(crate) profile_id: String,
+    pub(crate) classification: String,
+    pub(crate) target_mode: ProfileAccessMode,
+    pub(crate) ambiguity: bool,
+    pub(crate) blocking: bool,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfilePolicyMigrationReport {
+    pub(crate) schema_version: String,
+    pub(crate) migration_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) target_revision: u64,
+    pub(crate) entries: Vec<ProfilePolicyMigrationEntry>,
+    pub(crate) blocking_issue_count: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +149,7 @@ pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::
         }
     }
     let mut state: ServiceState = serde_json::from_value(value)?;
+    materialize_legacy_profile_access_policies(&mut state);
     stamp_current_versions(&mut state);
     Ok(state)
 }
@@ -128,8 +157,107 @@ pub(crate) fn read_service_state(raw: &str) -> Result<ServiceState, serde_json::
 pub(crate) fn prepare_service_state_for_persistence(
     state: &mut ServiceState,
 ) -> Result<(), String> {
+    materialize_legacy_profile_access_policies(state);
     stamp_current_versions(state);
     Ok(())
+}
+
+fn materialize_legacy_profile_access_policies(state: &mut ServiceState) {
+    let source_revision = state.state_revision;
+    let profile_ids = state
+        .profiles
+        .iter()
+        .filter_map(|(profile_id, profile)| profile.access_policy.is_none().then_some(profile_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if profile_ids.is_empty() {
+        return;
+    }
+
+    let mut entries = Vec::new();
+    for profile_id in profile_ids {
+        let matching_sessions = state
+            .sessions
+            .values()
+            .filter(|session| session.profile_id.as_deref() == Some(profile_id.as_str()))
+            .collect::<Vec<_>>();
+        let proven_principal = matching_sessions
+            .first()
+            .and_then(|session| session.principal_id.as_deref())
+            .filter(|principal| {
+                !matching_sessions.is_empty()
+                    && matching_sessions.iter().all(|session| {
+                        session.lease == LeaseState::Exclusive
+                            && session.principal_id.as_deref() == Some(principal)
+                            && session.principal_provenance.is_some()
+                    })
+            })
+            .map(str::to_string);
+
+        let (policy, entry) = if let Some(principal_id) = proven_principal {
+            let mut policy = ServiceProfileAccessPolicy::shared_local_default(&profile_id);
+            policy.mode = ProfileAccessMode::Exclusive;
+            policy.default_permissions.clear();
+            policy.grants = vec![ProfileAccessGrant {
+                subject_id: principal_id,
+                minimum_assurance: ProfileIdentityAssurance::RegisteredCapability,
+                permissions: ProfileAccessPreset::Administrator.permissions(),
+            }];
+            (
+                policy,
+                ProfilePolicyMigrationEntry {
+                    profile_id: profile_id.clone(),
+                    classification: "proven-strict-compatibility".to_string(),
+                    target_mode: ProfileAccessMode::Exclusive,
+                    ambiguity: false,
+                    blocking: false,
+                    reason: "One provenance-backed principal held every exclusive legacy session."
+                        .to_string(),
+                },
+            )
+        } else {
+            let profile = &state.profiles[&profile_id];
+            let ordinary_shared = matching_sessions.is_empty()
+                && (profile.shared_service_ids.len() > 1
+                    || profile.allocation
+                        == super::service_model::ProfileAllocationPolicy::SharedService);
+            let classification = if ordinary_shared {
+                "shared-local-default"
+            } else {
+                "ambiguous-legacy"
+            };
+            let reason = if ordinary_shared {
+                "Legacy sharing configuration maps to the trusted local participant preset."
+            } else {
+                "Legacy identity evidence is insufficient for strict access and remains a nonblocking observation."
+            };
+            (
+                ServiceProfileAccessPolicy::shared_local_default(&profile_id),
+                ProfilePolicyMigrationEntry {
+                    profile_id: profile_id.clone(),
+                    classification: classification.to_string(),
+                    target_mode: ProfileAccessMode::SharedLocal,
+                    ambiguity: !ordinary_shared,
+                    blocking: false,
+                    reason: reason.to_string(),
+                },
+            )
+        };
+        if let Some(profile) = state.profiles.get_mut(&profile_id) {
+            profile.access_policy = Some(policy);
+        }
+        entries.push(entry);
+    }
+    let material = serde_json::to_vec(&(source_revision, &entries)).unwrap_or_default();
+    let migration_id = format!("profile-policy-migration-{:x}", Sha256::digest(material));
+    state.profile_policy_migration = Some(ProfilePolicyMigrationReport {
+        schema_version: PROFILE_POLICY_MIGRATION_SCHEMA_VERSION.to_string(),
+        migration_id,
+        source_revision,
+        target_revision: source_revision.saturating_add(1),
+        entries,
+        blocking_issue_count: 0,
+    });
 }
 
 pub(crate) fn plan_service_state_migration(raw: &str) -> Result<ServiceStateMigrationPlan, String> {
@@ -1288,6 +1416,122 @@ fn custom_json_error(message: String) -> serde_json::Error {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn missing_shared_profile_policy_materializes_as_nonblocking_shared_local() {
+        let raw = json!({
+            "stateRevision": 9,
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            }
+        })
+        .to_string();
+
+        let first = read_service_state(&raw).unwrap();
+        let second = read_service_state(&raw).unwrap();
+        let policy = first.profiles["research-gov"]
+            .access_policy
+            .as_ref()
+            .unwrap();
+        assert_eq!(policy.mode, ProfileAccessMode::SharedLocal);
+        assert_eq!(policy.revision, 1);
+        let report = first.profile_policy_migration.as_ref().unwrap();
+        assert_eq!(report.source_revision, 9);
+        assert_eq!(report.target_revision, 10);
+        assert_eq!(report.blocking_issue_count, 0);
+        assert_eq!(report.entries[0].classification, "shared-local-default");
+        assert!(!report.entries[0].ambiguity);
+        assert!(!report.entries[0].blocking);
+        assert_eq!(
+            report.migration_id,
+            second.profile_policy_migration.unwrap().migration_id
+        );
+    }
+
+    #[test]
+    fn ambiguous_legacy_occupancy_is_observable_but_does_not_block() {
+        let raw = json!({
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            },
+            "sessions": {
+                "fieldwork": {
+                    "id": "fieldwork",
+                    "profileId": "research-gov",
+                    "lease": "shared"
+                }
+            }
+        })
+        .to_string();
+
+        let state = read_service_state(&raw).unwrap();
+        let report = state.profile_policy_migration.unwrap();
+        assert_eq!(report.blocking_issue_count, 0);
+        assert_eq!(report.entries[0].classification, "ambiguous-legacy");
+        assert!(report.entries[0].ambiguity);
+        assert!(!report.entries[0].blocking);
+        assert_eq!(
+            state.profiles["research-gov"]
+                .access_policy
+                .as_ref()
+                .unwrap()
+                .mode,
+            ProfileAccessMode::SharedLocal
+        );
+    }
+
+    #[test]
+    fn proven_exclusive_legacy_occupancy_migrates_to_subject_bound_administration() {
+        let raw = json!({
+            "stateRevision": 4,
+            "profiles": {
+                "research-gov": {
+                    "id": "research-gov",
+                    "name": "Research.gov"
+                }
+            },
+            "sessions": {
+                "fieldwork": {
+                    "id": "fieldwork",
+                    "profileId": "research-gov",
+                    "lease": "exclusive",
+                    "principalId": "principal:fieldwork",
+                    "principalProvenance": "registered_capability"
+                }
+            }
+        })
+        .to_string();
+
+        let state = read_service_state(&raw).unwrap();
+        let policy = state.profiles["research-gov"]
+            .access_policy
+            .as_ref()
+            .unwrap();
+        assert_eq!(policy.mode, ProfileAccessMode::Exclusive);
+        assert!(policy.default_permissions.is_empty());
+        assert_eq!(policy.grants.len(), 1);
+        assert_eq!(policy.grants[0].subject_id, "principal:fieldwork");
+        assert_eq!(
+            policy.grants[0].minimum_assurance,
+            ProfileIdentityAssurance::RegisteredCapability
+        );
+        assert!(policy.grants[0].permissions.contains(
+            &super::super::service_profile_access_policy::ProfilePermission::FullShutdown
+        ));
+        let report = state.profile_policy_migration.as_ref().unwrap();
+        assert_eq!(
+            report.entries[0].classification,
+            "proven-strict-compatibility"
+        );
+        assert!(!report.entries[0].ambiguity);
+        assert_eq!(report.target_revision, 5);
+    }
 
     #[test]
     fn legacy_labels_remain_unproven_and_stage_without_effects() {

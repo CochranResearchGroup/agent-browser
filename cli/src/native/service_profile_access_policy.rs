@@ -69,6 +69,61 @@ pub enum ProfilePermission {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+/// Human-facing permission bundles. Exact policies remain available for
+/// software that needs granular grants.
+pub enum ProfileAccessPreset {
+    /// Full policy, lifecycle, cross-client tab, and shutdown authority.
+    Administrator,
+    /// Frictionless local use plus policy editing and graceful draining.
+    #[default]
+    Participant,
+    /// Read-only tab and remote-view observation.
+    Observer,
+}
+
+impl ProfileAccessPreset {
+    pub(crate) fn permissions(self) -> Vec<ProfilePermission> {
+        match self {
+            Self::Administrator => vec![
+                ProfilePermission::ProfileUse,
+                ProfilePermission::PolicyRead,
+                ProfilePermission::PolicyWrite,
+                ProfilePermission::TabCreate,
+                ProfilePermission::TabObserve,
+                ProfilePermission::TabControlOwn,
+                ProfilePermission::TabCloseOwn,
+                ProfilePermission::TabControlAny,
+                ProfilePermission::TabCloseAny,
+                ProfilePermission::ViewOpen,
+                ProfilePermission::ViewControl,
+                ProfilePermission::Drain,
+                ProfilePermission::Evict,
+                ProfilePermission::LifecycleManage,
+                ProfilePermission::FullShutdown,
+            ],
+            Self::Participant => vec![
+                ProfilePermission::ProfileUse,
+                ProfilePermission::PolicyRead,
+                ProfilePermission::PolicyWrite,
+                ProfilePermission::TabCreate,
+                ProfilePermission::TabObserve,
+                ProfilePermission::TabControlOwn,
+                ProfilePermission::TabCloseOwn,
+                ProfilePermission::ViewOpen,
+                ProfilePermission::Drain,
+            ],
+            Self::Observer => vec![
+                ProfilePermission::ProfileUse,
+                ProfilePermission::PolicyRead,
+                ProfilePermission::TabObserve,
+                ProfilePermission::ViewOpen,
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProfileConnectionState {
     #[default]
@@ -188,19 +243,22 @@ impl ServiceProfileAccessPolicy {
             mode: ProfileAccessMode::SharedLocal,
             revision: 1,
             state: ProfileAccessPolicyState::Active,
-            default_permissions: vec![
-                ProfilePermission::ProfileUse,
-                ProfilePermission::PolicyRead,
-                ProfilePermission::TabCreate,
-                ProfilePermission::TabObserve,
-                ProfilePermission::TabControlOwn,
-                ProfilePermission::TabCloseOwn,
-                ProfilePermission::ViewOpen,
-            ],
+            default_permissions: ProfileAccessPreset::Participant.permissions(),
             grants: Vec::new(),
             drain: None,
             updated_at: "1970-01-01T00:00:00Z".to_string(),
         }
+    }
+}
+
+pub(crate) fn profile_policy_target_for_preset(
+    mode: ProfileAccessMode,
+    preset: ProfileAccessPreset,
+) -> ProfilePolicyTarget {
+    ProfilePolicyTarget {
+        mode,
+        default_permissions: preset.permissions(),
+        grants: Vec::new(),
     }
 }
 
@@ -1053,6 +1111,42 @@ fn stable_decision_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn human_presets_expand_to_stable_permission_sets() {
+        let administrator = profile_policy_target_for_preset(
+            ProfileAccessMode::Exclusive,
+            ProfileAccessPreset::Administrator,
+        );
+        assert_eq!(administrator.mode, ProfileAccessMode::Exclusive);
+        assert_eq!(administrator.default_permissions.len(), 15);
+        assert!(administrator
+            .default_permissions
+            .contains(&ProfilePermission::FullShutdown));
+
+        let participant = profile_policy_target_for_preset(
+            ProfileAccessMode::SharedLocal,
+            ProfileAccessPreset::Participant,
+        );
+        assert_eq!(
+            participant.default_permissions,
+            ServiceProfileAccessPolicy::shared_local_default("profile").default_permissions
+        );
+
+        let observer = profile_policy_target_for_preset(
+            ProfileAccessMode::Restricted,
+            ProfileAccessPreset::Observer,
+        );
+        assert_eq!(
+            observer.default_permissions,
+            vec![
+                ProfilePermission::ProfileUse,
+                ProfilePermission::PolicyRead,
+                ProfilePermission::TabObserve,
+                ProfilePermission::ViewOpen,
+            ]
+        );
+    }
 
     fn evaluate(
         policy: Option<&ServiceProfileAccessPolicy>,

@@ -924,6 +924,24 @@ export interface ServiceRuntimeLifecycleStatus {
   [key: string]: unknown;
 }
 
+export interface ServiceProfilePolicyMigrationEntry {
+  profileId: string;
+  classification: 'shared-local-default' | 'proven-strict-compatibility' | 'ambiguous-legacy';
+  targetMode: 'shared-local' | 'restricted' | 'exclusive';
+  ambiguity: boolean;
+  blocking: boolean;
+  reason: string;
+}
+
+export interface ServiceProfilePolicyMigrationReport {
+  schemaVersion: 'agent-browser.profile-policy-migration.v1';
+  migrationId: string;
+  sourceRevision: number;
+  targetRevision: number;
+  entries: ServiceProfilePolicyMigrationEntry[];
+  blockingIssueCount: number;
+}
+
 export interface ServiceCrashRegenerationStatus {
   schemaVersion: 'agent-browser.crash-regeneration-status.v1';
   transactionId: string;
@@ -969,7 +987,9 @@ export interface ServiceStateLockDiagnostics {
 
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
-  service_state: Record<string, unknown>;
+  service_state: Record<string, unknown> & {
+    profilePolicyMigration?: ServiceProfilePolicyMigrationReport | null;
+  };
   profileAllocations: ServiceProfileAllocation[];
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;

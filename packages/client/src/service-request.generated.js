@@ -31,6 +31,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "remote_view_open",
   "service_profile_manual_seeding_acquire",
   "service_profile_manual_seeding_close",
+  "service_profile_policy_mutate",
+  "service_profile_tab_evict",
   "service_remote_view_handoff_resolve",
   "service_remote_view_route_preflight",
   "service_remote_view_browser_reattach",

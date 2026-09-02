@@ -97,7 +97,13 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function runtimeProfileConfigPayload\([\s\S]*profileOrigin: profile\.profileOrigin \?\? "agent_browser_owned"[\s\S]*profileClass: profile\.profileClass \?\? "durable_named"[\s\S]*targetReadiness: profile\.targetReadiness \?\? \[\],[\s\S]*registration: profile\.registration \?\? null,[\s\S]*browserCompatibilityEvidence: profile\.browserCompatibilityEvidence \?\? \[\],[\s\S]*persistent: form\.persistent/,
+  /Access mode[\s\S]*Shared local[\s\S]*Restricted[\s\S]*Exclusive[\s\S]*Permission preset[\s\S]*Administrator[\s\S]*Participant[\s\S]*Observer[\s\S]*Apply access policy/,
+  'Profile config must expose human-readable access modes and permission presets',
+);
+
+assert.match(
+  servicePanel,
+  /function runtimeProfileConfigPayload\([\s\S]*profileOrigin: profile\.profileOrigin \?\? "agent_browser_owned"[\s\S]*profileClass: profile\.profileClass \?\? "durable_named"[\s\S]*accessPolicy: profile\.accessPolicy \?\? null[\s\S]*targetReadiness: profile\.targetReadiness \?\? \[\],[\s\S]*registration: profile\.registration \?\? null,[\s\S]*browserCompatibilityEvidence: profile\.browserCompatibilityEvidence \?\? \[\],[\s\S]*persistent: form\.persistent/,
   'Profile config saves must preserve origin, class, external metadata, and readiness rows while editing config fields',
 );
 
@@ -147,6 +153,12 @@ assert.match(
   servicePanel,
   /const saveRuntimeProfileConfig = useCallback\(async \([\s\S]*fetch\(`\$\{serviceBase\(activePort\)\}\/profiles\/\$\{encodeURIComponent\(profileId\)\}`,[\s\S]*method: "POST"[\s\S]*runtimeProfileConfigPayload\(profile, form\)[\s\S]*await fetchService\(false\)/,
   'Profiles workspace must save profile config through POST /api/service/profiles/<id>',
+);
+
+assert.match(
+  servicePanel,
+  /const saveRuntimeProfileAccessPolicy = useCallback\(async \([\s\S]*action: "service_profile_policy_mutate"[\s\S]*clientSubjectId:[\s\S]*expectedRevision: profile\.accessPolicy\?\.revision \?\? 1,[\s\S]*mode,[\s\S]*preset/,
+  'Profiles workspace must submit revision-fenced access-policy presets through the shared request queue',
 );
 
 assert.match(

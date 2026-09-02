@@ -28,6 +28,8 @@ import {
   createServiceRoutePoolRepairRequest,
   createServiceManualSeedingAcquireRequest,
   createServiceManualSeedingCloseRequest,
+  createServiceProfilePolicyMutationRequest,
+  createServiceProfileTabEvictionRequest,
   createServiceBrowserContaminationReportRequest,
   createServiceBrowserRetirementPlanRequest,
   createServiceBrowserRetirementApplyRequest,
@@ -84,6 +86,8 @@ import {
   requestServiceRoutePoolRepair,
   requestServiceManualSeedingAcquire,
   requestServiceManualSeedingClose,
+  requestServiceProfilePolicyMutation,
+  requestServiceProfileTabEviction,
   requestServiceBrowserContaminationReport,
   requestServiceBrowserRetirementPlan,
   requestServiceBrowserRetirementApply,
@@ -144,6 +148,48 @@ function assertServiceRequestActionDataCoverage() {
   assert.deepEqual(
     desktopResponseSchema.required,
     ['ok', 'action', 'context', 'frameReceipt', 'imageBase64'],
+  );
+  assert.deepEqual(
+    createServiceProfilePolicyMutationRequest({
+      profileId: 'research-gov',
+      expectedRevision: 7,
+      mode: 'shared-local',
+      preset: 'participant',
+      clientSubjectId: 'client:fieldwork',
+    }),
+    {
+      action: 'service_profile_policy_mutate',
+      profileId: 'research-gov',
+      clientSubjectId: 'client:fieldwork',
+      params: {
+        expectedRevision: 7,
+        mode: 'shared-local',
+        preset: 'participant',
+      },
+    },
+  );
+  assert.deepEqual(
+    createServiceProfileTabEvictionRequest({
+      authorizationId: 'profile-eviction:7',
+      tabId: 'tab:stale',
+    }),
+    {
+      action: 'service_profile_tab_evict',
+      params: {
+        authorizationId: 'profile-eviction:7',
+        tabId: 'tab:stale',
+      },
+    },
+  );
+  assert.throws(
+    () => createServiceProfilePolicyMutationRequest({
+      profileId: 'research-gov',
+      expectedRevision: 7,
+      mode: 'restricted',
+      preset: 'observer',
+      targetPolicy: {},
+    }),
+    /targetPolicy or mode and preset/,
   );
   assert.equal(desktopResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
   assert.equal(desktopResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
@@ -3608,15 +3654,21 @@ async function main() {
   for (const [request, action] of [
     [requestServiceManualSeedingAcquire, 'service_profile_manual_seeding_acquire'],
     [requestServiceManualSeedingClose, 'service_profile_manual_seeding_close'],
+    [requestServiceProfilePolicyMutation, 'service_profile_policy_mutate'],
+    [requestServiceProfileTabEviction, 'service_profile_tab_evict'],
     [requestServiceBrowserContaminationReport, 'service_browser_contamination_report'],
     [requestServiceBrowserRetirementPlan, 'service_browser_retirement_plan'],
     [requestServiceBrowserRetirementApply, 'service_browser_retirement_apply'],
   ]) {
     const workflow = createFetchRecorder({ success: true, data: {} });
     const options = action === 'service_profile_manual_seeding_acquire'
-      ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal' }
+        ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal' }
       : action === 'service_profile_manual_seeding_close'
         ? { profileId: 'contractor-portal', targetServiceId: 'odollo-contractor-portal', handoffId: 'handoff-seeding', pid: 4242 }
+        : action === 'service_profile_policy_mutate'
+          ? { profileId: 'research-gov', expectedRevision: 7, mode: 'shared-local', preset: 'participant' }
+          : action === 'service_profile_tab_evict'
+            ? { authorizationId: 'profile-eviction:7', tabId: 'tab:stale' }
         : action === 'service_browser_retirement_plan'
           ? { browserId: 'browser-inert', expiresAt: '2026-08-29T00:00:00Z' }
           : action === 'service_browser_retirement_apply'

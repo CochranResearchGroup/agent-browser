@@ -31,6 +31,8 @@ export type ServiceRequestAction =
   | "remote_view_open"
   | "service_profile_manual_seeding_acquire"
   | "service_profile_manual_seeding_close"
+  | "service_profile_policy_mutate"
+  | "service_profile_tab_evict"
   | "service_remote_view_handoff_resolve"
   | "service_remote_view_route_preflight"
   | "service_remote_view_browser_reattach"
@@ -1099,6 +1101,26 @@ export interface ServiceManualSeedingCloseData {
   authenticationProbe: Record<string, unknown>;
 }
 
+export type ServiceProfileAccessMode = 'shared-local' | 'restricted' | 'exclusive';
+export type ServiceProfileAccessPreset = 'administrator' | 'participant' | 'observer';
+
+export interface ServiceProfilePolicyMutationData {
+  profileId: string;
+  outcome: 'committed' | 'drain_started' | string;
+  policy: Record<string, unknown>;
+  blockingOccupancy: unknown[];
+  evictionPlan: Record<string, unknown> | null;
+  evictionReceipt: Record<string, unknown> | null;
+  receipt: Record<string, unknown>;
+}
+
+export interface ServiceProfileTabEvictionData {
+  profileLifecycleProof: Record<string, unknown> | null;
+  physicalTabClose: Record<string, unknown> | null;
+  receipt: Record<string, unknown>;
+  replayed: boolean;
+}
+
 export interface ServiceBrowserContaminationReportData {
   report: Record<string, unknown>;
 }
@@ -1504,6 +1526,8 @@ export interface ServiceRequestActionDataMap {
   service_route_pool_repair: ServiceRoutePoolRepairData;
   service_profile_manual_seeding_acquire: ServiceManualSeedingAcquireData;
   service_profile_manual_seeding_close: ServiceManualSeedingCloseData;
+  service_profile_policy_mutate: ServiceProfilePolicyMutationData;
+  service_profile_tab_evict: ServiceProfileTabEvictionData;
   service_browser_contamination_report: ServiceBrowserContaminationReportData;
   service_browser_retirement_plan: ServiceBrowserRetirementPlanData;
   service_browser_retirement_apply: ServiceBrowserRetirementApplyData;
@@ -2008,6 +2032,23 @@ export interface ServiceManualSeedingCloseOptions extends ServiceManualSeedingAc
   pid: number;
 }
 
+export interface ServiceProfilePolicyMutationOptions extends Omit<ServiceRequest, "action" | "params"> {
+  profileId: string;
+  expectedRevision: number;
+  mode?: ServiceProfileAccessMode;
+  preset?: ServiceProfileAccessPreset;
+  targetPolicy?: Record<string, unknown>;
+  evictionMode?: 'graceful_only' | 'force_immediate' | 'force_after_grace';
+  graceDeadline?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceProfileTabEvictionOptions extends Omit<ServiceRequest, "action" | "params"> {
+  authorizationId: string;
+  tabId: string;
+  params?: Record<string, unknown>;
+}
+
 export interface ServiceBrowserContaminationReportOptions extends Omit<ServiceRequest, "action" | "params"> {
   params?: Record<string, unknown>;
 }
@@ -2030,6 +2071,18 @@ export interface ServiceManualSeedingAcquireHttpOptions extends ServiceManualSee
 }
 
 export interface ServiceManualSeedingCloseHttpOptions extends ServiceManualSeedingCloseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceProfilePolicyMutationHttpOptions extends ServiceProfilePolicyMutationOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceProfileTabEvictionHttpOptions extends ServiceProfileTabEvictionOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -2233,6 +2286,12 @@ export declare function createServiceManualSeedingAcquireRequest(
 export declare function createServiceManualSeedingCloseRequest(
   input: ServiceManualSeedingCloseOptions,
 ): ServiceRequestForAction<"service_profile_manual_seeding_close">;
+export declare function createServiceProfilePolicyMutationRequest(
+  input: ServiceProfilePolicyMutationOptions,
+): ServiceRequestForAction<"service_profile_policy_mutate">;
+export declare function createServiceProfileTabEvictionRequest(
+  input: ServiceProfileTabEvictionOptions,
+): ServiceRequestForAction<"service_profile_tab_evict">;
 export declare function createServiceBrowserContaminationReportRequest(
   input?: ServiceBrowserContaminationReportOptions,
 ): ServiceRequestForAction<"service_browser_contamination_report">;
@@ -2400,6 +2459,12 @@ export declare function requestServiceManualSeedingAcquire(
 export declare function requestServiceManualSeedingClose(
   options: ServiceManualSeedingCloseHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceManualSeedingCloseData>>;
+export declare function requestServiceProfilePolicyMutation(
+  options: ServiceProfilePolicyMutationHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProfilePolicyMutationData>>;
+export declare function requestServiceProfileTabEviction(
+  options: ServiceProfileTabEvictionHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProfileTabEvictionData>>;
 export declare function requestServiceBrowserContaminationReport(
   options: ServiceBrowserContaminationReportHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceBrowserContaminationReportData>>;

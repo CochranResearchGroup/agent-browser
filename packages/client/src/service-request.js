@@ -78,6 +78,10 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingAcquireOptions} ServiceManualSeedingAcquireOptions
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseHttpOptions} ServiceManualSeedingCloseHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceManualSeedingCloseOptions} ServiceManualSeedingCloseOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfilePolicyMutationHttpOptions} ServiceProfilePolicyMutationHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfilePolicyMutationOptions} ServiceProfilePolicyMutationOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfileTabEvictionHttpOptions} ServiceProfileTabEvictionHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceProfileTabEvictionOptions} ServiceProfileTabEvictionOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportHttpOptions} ServiceBrowserContaminationReportHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserContaminationReportOptions} ServiceBrowserContaminationReportOptions
  * @typedef {import('./service-request.generated.js').ServiceBrowserRetirementPlanHttpOptions} ServiceBrowserRetirementPlanHttpOptions
@@ -1512,6 +1516,67 @@ export function createServiceManualSeedingCloseRequest(input) {
 }
 
 /**
+ * Create a revision-fenced Profile access-policy mutation. Human-facing
+ * callers may use mode plus preset; advanced callers may provide targetPolicy.
+ *
+ * @param {ServiceProfilePolicyMutationOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceProfilePolicyMutationRequest(input) {
+  assertPlainObject(input, 'profile policy mutation request');
+  const { params, ...request } = input;
+  if (typeof request.profileId !== 'string' || request.profileId.trim().length === 0) {
+    throw new TypeError('profile policy mutation request requires profileId');
+  }
+  if (!Number.isInteger(request.expectedRevision) || request.expectedRevision < 1) {
+    throw new TypeError('profile policy mutation request expectedRevision must be a positive integer');
+  }
+  const hasTargetPolicy = request.targetPolicy !== undefined;
+  const hasPreset = request.mode !== undefined || request.preset !== undefined;
+  if (hasTargetPolicy === hasPreset) {
+    throw new TypeError('profile policy mutation request requires targetPolicy or mode and preset');
+  }
+  if (hasPreset && (request.mode === undefined || request.preset === undefined)) {
+    throw new TypeError('profile policy mutation request requires both mode and preset');
+  }
+  const mergedParams = mergeParams(params, request, [
+    'expectedRevision',
+    'mode',
+    'preset',
+    'targetPolicy',
+    'evictionMode',
+    'graceDeadline',
+  ]);
+  return createServiceRequest({
+    ...request,
+    action: 'service_profile_policy_mutate',
+    params: mergedParams,
+  });
+}
+
+/**
+ * Create one exact tab eviction from a persisted lifecycle authorization.
+ *
+ * @param {ServiceProfileTabEvictionOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceProfileTabEvictionRequest(input) {
+  assertPlainObject(input, 'profile tab eviction request');
+  const { params, ...request } = input;
+  for (const field of ['authorizationId', 'tabId']) {
+    if (typeof request[field] !== 'string' || request[field].trim().length === 0) {
+      throw new TypeError(`profile tab eviction request requires ${field}`);
+    }
+  }
+  const mergedParams = mergeParams(params, request, ['authorizationId', 'tabId']);
+  return createServiceRequest({
+    ...request,
+    action: 'service_profile_tab_evict',
+    params: mergedParams,
+  });
+}
+
+/**
  * @param {ServiceBrowserContaminationReportOptions} [input]
  * @returns {ServiceRequest}
  */
@@ -2482,6 +2547,26 @@ export async function requestServiceManualSeedingClose({ baseUrl, fetch = global
     fetch,
     signal,
     request: createServiceManualSeedingCloseRequest(request),
+  });
+}
+
+/** @param {ServiceProfilePolicyMutationHttpOptions} options */
+export async function requestServiceProfilePolicyMutation({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceProfilePolicyMutationRequest(request),
+  });
+}
+
+/** @param {ServiceProfileTabEvictionHttpOptions} options */
+export async function requestServiceProfileTabEviction({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceProfileTabEvictionRequest(request),
   });
 }
 

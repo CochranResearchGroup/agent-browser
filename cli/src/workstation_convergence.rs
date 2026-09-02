@@ -62,7 +62,6 @@ impl WorkstationHealthFinding {
         }
     }
 
-    #[cfg(test)]
     fn advisory(code: &str, message: &str) -> Self {
         Self {
             code: code.to_string(),
@@ -536,7 +535,27 @@ pub(crate) fn observe_installed_workstation(
     runtime_monitor: &Value,
     workstation_upgrade: &Value,
     dashboard_ingress: &Value,
+    profile_policy_migration: &Value,
 ) -> WorkstationConvergenceObservedState {
+    let access_findings = profile_policy_migration
+        .get("entries")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry.get("ambiguity").and_then(Value::as_bool) == Some(true))
+        .map(|entry| {
+            let profile_id = entry
+                .get("profileId")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            WorkstationHealthFinding::advisory(
+                "legacy_profile_identity_ambiguous",
+                &format!(
+                    "Profile {profile_id} was migrated to shared-local access because legacy identity evidence was inconclusive."
+                ),
+            )
+        })
+        .collect();
     WorkstationConvergenceObservedState {
         schema_version: WORKSTATION_CONVERGENCE_OBSERVED_SCHEMA.to_string(),
         runtime_inventory_ready: runtime_inventory
@@ -562,7 +581,7 @@ pub(crate) fn observe_installed_workstation(
         transaction_terminal: terminal_upgrade_state(workstation_upgrade),
         dashboard_ingress_ready: bool_at(dashboard_ingress, "/dashboardIngressReady"),
         operator_journey_ready: bool_at(dashboard_ingress, "/operatorJourneyReady"),
-        access_findings: Vec::new(),
+        access_findings,
         acquisition_findings: Vec::new(),
     }
 }
@@ -574,6 +593,7 @@ pub(crate) fn convergence_receipt_from_runtime_health(
     runtime_monitor: &Value,
     workstation_upgrade: &Value,
     dashboard_ingress: &Value,
+    profile_policy_migration: &Value,
 ) -> Result<WorkstationConvergenceReceipt, String> {
     let owner = WorkstationConvergenceOwner::installed(
         workstation_upgrade
@@ -588,6 +608,7 @@ pub(crate) fn convergence_receipt_from_runtime_health(
         runtime_monitor,
         workstation_upgrade,
         dashboard_ingress,
+        profile_policy_migration,
     );
     let plan = owner.plan(observed);
     owner.settle(plan)
@@ -637,6 +658,51 @@ mod tests {
     }
 
     #[test]
+    fn legacy_policy_migration_populates_only_the_access_axis() {
+        let inventory = json!({"staleCount": 0});
+        let supervisors = json!({"ready": true});
+        let multiplicity = json!({
+            "steadyState": true,
+            "counts": {"runtimeHosts": 1, "legacyDaemons": 0}
+        });
+        let monitor = json!({"ready": true});
+        let upgrade = json!({
+            "selectedGenerationId": "generation-a",
+            "readiness": {"selectedGenerationReady": true},
+            "latestTransaction": {"state": "accepted"}
+        });
+        let ingress = json!({"dashboardIngressReady": true, "operatorJourneyReady": true});
+        let migration = json!({
+            "entries": [{
+                "profileId": "research-gov",
+                "classification": "ambiguous-legacy",
+                "ambiguity": true,
+                "blocking": false
+            }]
+        });
+
+        let receipt = convergence_receipt_from_runtime_health(
+            &inventory,
+            &supervisors,
+            &multiplicity,
+            &monitor,
+            &upgrade,
+            &ingress,
+            &migration,
+        )
+        .unwrap();
+
+        assert!(receipt.ready);
+        assert!(receipt.dashboard_health.runtime.ready);
+        assert!(receipt.dashboard_health.convergence.ready);
+        assert_eq!(receipt.dashboard_health.access.state, "attention");
+        assert_eq!(
+            receipt.dashboard_health.access.findings[0].code,
+            "legacy_profile_identity_ambiguous"
+        );
+    }
+
+    #[test]
     fn sealed_plan_selects_one_executable_convergence_action() {
         let owner = WorkstationConvergenceOwner::installed(Some("generation-a".to_string()));
         let mut observed = ready_observation();
@@ -683,6 +749,7 @@ mod tests {
             &monitor,
             &upgrade,
             &ingress,
+            &Value::Null,
         )
         .unwrap();
 

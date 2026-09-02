@@ -2430,6 +2430,11 @@ pub struct ServiceState {
     pub(crate) presentation_capacity:
         Option<super::presentation_capacity::PresentationCapacityAuthority>,
     pub profiles: BTreeMap<String, BrowserProfile>,
+    /// Durable, redacted result of materializing missing legacy Profile access
+    /// policies. Ambiguous legacy identity remains observable but nonblocking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) profile_policy_migration:
+        Option<super::service_state_migration::ProfilePolicyMigrationReport>,
     /// Registered service principals and their hashed profile capabilities.
     /// Raw capability material is never retained in Service State.
     #[serde(

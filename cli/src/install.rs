@@ -2272,6 +2272,19 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
         crate::session_supervisor::session_supervisor_health_json(),
     );
     health["dashboardIngress"] = crate::dashboard_ingress::dashboard_ingress_status_json();
+    health["profilePolicyMigration"] = crate::native::service_store::default_service_state_path()
+        .and_then(|path| {
+            std::fs::read_to_string(path)
+                .map_err(|error| format!("Could not read Service State for access health: {error}"))
+        })
+        .and_then(|raw| {
+            crate::native::service_state_migration::read_service_state(&raw).map_err(|error| {
+                format!("Could not decode Service State for access health: {error}")
+            })
+        })
+        .ok()
+        .and_then(|state| serde_json::to_value(state.profile_policy_migration).ok())
+        .unwrap_or(Value::Null);
     #[cfg(not(test))]
     {
         let workstation_upgrade = crate::workstation_install::workstation_upgrade_status_json()
@@ -2342,6 +2355,7 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
         health.get("runtimeMonitor").unwrap_or(&Value::Null),
         health.get("workstationUpgrade").unwrap_or(&Value::Null),
         health.get("dashboardIngress").unwrap_or(&Value::Null),
+        health.get("profilePolicyMigration").unwrap_or(&Value::Null),
     ) {
         if let Ok(value) = serde_json::to_value(&receipt) {
             health["dashboardHealth"] =

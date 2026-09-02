@@ -1995,6 +1995,7 @@ pub(crate) mod service_commands {
         ViewStream, ViewStreamProvider, ViewerLease,
     };
     use crate::native::service_profile_access_policy::{
+        profile_policy_target_for_preset, ProfileAccessMode, ProfileAccessPreset,
         ProfileEvictionMode, ProfileIdentityAssurance, ProfilePolicyTarget,
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
@@ -2061,12 +2062,40 @@ pub(crate) mod service_commands {
             .get("expectedRevision")
             .and_then(Value::as_u64)
             .ok_or("service_profile_policy_mutate requires expectedRevision")?;
-        let target: ProfilePolicyTarget = serde_json::from_value(
-            cmd.get("targetPolicy")
-                .cloned()
-                .ok_or("service_profile_policy_mutate requires targetPolicy")?,
-        )
-        .map_err(|error| format!("Invalid targetPolicy: {error}"))?;
+        let target = match (
+            cmd.get("targetPolicy"),
+            cmd.get("mode").or_else(|| cmd.get("preset")),
+        ) {
+            (Some(_), Some(_)) => {
+                return Err(
+                    "service_profile_policy_mutate accepts targetPolicy or mode and preset, not both"
+                        .to_string(),
+                );
+            }
+            (Some(target), None) => serde_json::from_value::<ProfilePolicyTarget>(target.clone())
+                .map_err(|error| format!("Invalid targetPolicy: {error}"))?,
+            (None, Some(_)) => {
+                let mode = serde_json::from_value::<ProfileAccessMode>(
+                    cmd.get("mode")
+                        .cloned()
+                        .ok_or("service_profile_policy_mutate preset requires mode")?,
+                )
+                .map_err(|error| format!("Invalid mode: {error}"))?;
+                let preset = serde_json::from_value::<ProfileAccessPreset>(
+                    cmd.get("preset")
+                        .cloned()
+                        .ok_or("service_profile_policy_mutate mode requires preset")?,
+                )
+                .map_err(|error| format!("Invalid preset: {error}"))?;
+                profile_policy_target_for_preset(mode, preset)
+            }
+            (None, None) => {
+                return Err(
+                    "service_profile_policy_mutate requires targetPolicy or mode and preset"
+                        .to_string(),
+                );
+            }
+        };
         let eviction_mode = cmd
             .get("evictionMode")
             .cloned()
