@@ -20,6 +20,7 @@ import {
   evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
+  publishDevelopmentRuntimeIngress,
   renderDevelopmentUnits,
 } from './lib/development-runtime.js';
 
@@ -33,7 +34,7 @@ writeFileSync(
 if [ "\${1:-}" = "--version" ]; then
   echo "agent-browser 0.28.0-fixture"
 else
-  printf '%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH"
+  printf '%s|%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH"
 fi
 `,
   { mode: 0o755 },
@@ -134,6 +135,7 @@ try {
     assert.match(source, /AGENT_BROWSER_RUNTIME_ENVIRONMENT=development/);
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST=1/);
     assert.match(source, /AGENT_BROWSER_SOCKET_DIR=/);
+    assert.match(source, /AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=/);
     assert.match(source, new RegExp(`AGENT_BROWSER_EXECUTABLE_PATH=${fakeBrowser}`));
     assert.match(source, /AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=4/);
@@ -164,7 +166,7 @@ try {
   }).trim();
   assert.equal(
     launcherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${fakeBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${fakeBrowser}`,
   );
   const diagnosticBrowser = join(fixture, 'diagnostic-chrome');
   const overriddenLauncherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
@@ -173,7 +175,31 @@ try {
   }).trim();
   assert.equal(
     overriddenLauncherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${diagnosticBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${diagnosticBrowser}`,
+  );
+  writeFileSync(join(descriptor.socketDir, 'runtime-host.json'), `${JSON.stringify({
+    schemaVersion: 'agent-browser.runtime-host.v1',
+    hostId: 'runtime-host:4242',
+    pid: 4242,
+    executableGeneration: installed.generation.sha256,
+    socketIdentity: 'unix:fixture',
+  })}\n`);
+  writeFileSync(join(descriptor.socketDir, 'runtime-host.identity.json'), `${JSON.stringify({
+    pid: 4242,
+    startToken: 'linux:fixture-boot:100',
+    executablePath: installed.generation.binary,
+  })}\n`);
+  const runtimeHostIngress = publishDevelopmentRuntimeIngress({
+    descriptor,
+    generationId: installed.generation.generationId,
+    generationBinary: installed.generation.binary,
+    sha256: installed.generation.sha256,
+  });
+  assert.equal(runtimeHostIngress.selectedBackend.pid, 4242);
+  assert.equal(runtimeHostIngress.selectedBackend.generationId, installed.generation.generationId);
+  assert.equal(
+    JSON.parse(readFileSync(descriptor.runtimeHostIngressState, 'utf8')).bootEpoch,
+    'linux:fixture-boot',
   );
   assert.throws(
     () => installDevelopmentRuntime({
