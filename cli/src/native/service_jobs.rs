@@ -111,53 +111,87 @@ pub fn cancel_service_job_in_repository(
     job_id: &str,
     reason: Option<&str>,
 ) -> Result<ServiceJob, String> {
-    repository.mutate(|state| {
-        let job = state
-            .jobs
-            .get_mut(job_id)
-            .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+    repository.mutate(|state| cancel_service_job_in_state(state, job_id, reason))
+}
 
-        match job.state {
-            JobState::Queued | JobState::WaitingProfileLease => {
-                let completed_at = current_timestamp();
-                let error = reason
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or("Cancelled by operator")
-                    .to_string();
-                let outcome = terminal_outcome_for_job(
-                    job,
-                    &error,
-                    ServiceTerminalState::Cancelled,
-                    ServiceTerminalPhase::Dispatch,
-                    &completed_at,
-                );
-                job.state = JobState::Cancelled;
-                job.completed_at = Some(completed_at);
-                job.error = Some(error.clone());
-                job.result = Some(json!({ "success": false, "cancelled": true }));
-                job.failure = outcome.failure.clone();
-                job.terminal_outcome = Some(outcome.clone());
-                let result = job.clone();
-                let event = terminal_event_for_job(job, outcome, &error);
-                state.events.push(event);
-                if state.events.len() > 100 {
-                    let excess = state.events.len() - 100;
-                    state.events.drain(0..excess);
-                }
-                Ok(result)
+fn cancel_service_job_in_state(
+    state: &mut super::service_model::ServiceState,
+    job_id: &str,
+    reason: Option<&str>,
+) -> Result<ServiceJob, String> {
+    let job = state
+        .jobs
+        .get_mut(job_id)
+        .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+
+    match job.state {
+        JobState::Queued | JobState::WaitingProfileLease => {
+            let completed_at = current_timestamp();
+            let error = reason
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("Cancelled by operator")
+                .to_string();
+            let outcome = terminal_outcome_for_job(
+                job,
+                &error,
+                ServiceTerminalState::Cancelled,
+                ServiceTerminalPhase::Dispatch,
+                &completed_at,
+            );
+            job.state = JobState::Cancelled;
+            job.completed_at = Some(completed_at);
+            job.error = Some(error.clone());
+            job.result = Some(json!({ "success": false, "cancelled": true }));
+            job.failure = outcome.failure.clone();
+            job.terminal_outcome = Some(outcome.clone());
+            let result = job.clone();
+            let event = terminal_event_for_job(job, outcome, &error);
+            state.events.push(event);
+            if state.events.len() > 100 {
+                let excess = state.events.len() - 100;
+                state.events.drain(0..excess);
             }
-            JobState::Cancelled => Ok(job.clone()),
-            JobState::Running => Err(format!(
-                "Service job {} is already running and cannot be cancelled safely",
-                job_id
-            )),
-            JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
-                "Service job {} is already terminal with state {}",
-                job_id,
-                job_state_name(job.state)
-            )),
+            Ok(result)
         }
-    })
+        JobState::Cancelled => Ok(job.clone()),
+        JobState::Running => Err(format!(
+            "Service job {} is already running and cannot be cancelled safely",
+            job_id
+        )),
+        JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
+            "Service job {} is already terminal with state {}",
+            job_id,
+            job_state_name(job.state)
+        )),
+    }
+}
+
+pub(crate) fn cancel_profile_eviction_jobs_in_state(
+    state: &mut super::service_model::ServiceState,
+    profile_id: &str,
+    tab_id: &str,
+    evicted_subject_id: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let job_ids = state
+        .jobs
+        .values()
+        .filter(|job| matches!(job.state, JobState::Queued | JobState::WaitingProfileLease))
+        .filter(|job| {
+            job.provenance.tab_id.as_deref() == Some(tab_id)
+                || (job.provenance.profile_id.as_deref() == Some(profile_id)
+                    && evicted_subject_id.is_some()
+                    && job.provenance.client_subject_id.as_deref() == evicted_subject_id)
+        })
+        .map(|job| job.id.clone())
+        .collect::<Vec<_>>();
+    for job_id in &job_ids {
+        cancel_service_job_in_state(
+            state,
+            job_id,
+            Some("Cancelled by authorized profile eviction"),
+        )?;
+    }
+    Ok(job_ids)
 }
 
 fn terminal_outcome_for_job(

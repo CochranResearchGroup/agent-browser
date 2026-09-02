@@ -171,6 +171,7 @@ use super::service_profile_acquisition::handle_service_profile_recovery_command;
 use super::service_profile_lease::{
     handle_service_profile_lease_command, handle_service_profile_leases,
 };
+use super::service_profile_lifecycle::handle_service_profile_tab_evict;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
@@ -285,6 +286,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_remedies_apply"
             | "service_profile_upsert"
             | "service_profile_policy_mutate"
+            | "service_profile_tab_evict"
             | "service_profile_freshness_update"
             | "service_profile_seeding_handoff_update"
             | "service_profile_delete"
@@ -914,6 +916,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
             "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
+            "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,
             "service_profile_freshness_update" =>
                 handle_service_profile_freshness_update(cmd).await,
             "service_profile_seeding_handoff_update" => {

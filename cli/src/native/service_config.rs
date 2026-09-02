@@ -1026,6 +1026,14 @@ pub(crate) fn mutate_profile_policy_in_repository(
             serde_json::to_string(&failure)
                 .unwrap_or_else(|_| "profile_policy_mutation_failed".to_string())
         })?;
+        if let Some(plan) = result.eviction_plan.as_ref() {
+            super::service_profile_lifecycle::register_profile_eviction_authorization(
+                &mut state.profile_lifecycle_authorizations,
+                plan,
+                input.assurance,
+                input.now,
+            )?;
+        }
         let profile = state
             .profiles
             .get_mut(input.profile_id)
@@ -1811,7 +1819,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_policy_repository_mutation_computes_occupancy_and_persists_drain() {
+    fn profile_policy_repository_mutation_persists_drain_and_lifecycle_authorization() {
         use crate::native::service_model::{BrowserProcess, BrowserTab};
         use crate::native::service_profile_access_policy::{
             ProfileAccessGrant, ProfileAccessMode, ProfileChildAccess, ProfileConnectionState,
@@ -1887,20 +1895,36 @@ mod tests {
                 target: target.clone(),
                 subject_id: Some("principal:admin"),
                 assurance: ProfileIdentityAssurance::RegisteredCapability,
-                eviction_mode: None,
+                eviction_mode: Some(ProfileEvictionMode::ForceImmediate),
                 grace_deadline: None,
                 now: "2026-09-02T18:00:00Z",
             },
         )
         .expect("occupied narrowing should persist a drain");
         assert_eq!(started.blocking_occupancy, vec!["tab:fieldwork"]);
+        let persisted_drain = store.load().unwrap();
         assert_eq!(
-            store.load().unwrap().profiles["research-gov"]
+            persisted_drain.profiles["research-gov"]
                 .access_policy
                 .as_ref()
                 .unwrap()
                 .state,
             ProfileAccessPolicyState::Draining
+        );
+        let eviction_plan = started
+            .eviction_plan
+            .as_ref()
+            .expect("forced drain should create an exact eviction plan");
+        let authorization = persisted_drain
+            .profile_lifecycle_authorizations
+            .values()
+            .find(|authorization| authorization.authorization_id == eviction_plan.plan_id)
+            .expect("forced drain should persist its lifecycle authorization atomically");
+        assert_eq!(authorization.profile_id, "research-gov");
+        assert_eq!(authorization.policy_revision, 7);
+        assert_eq!(
+            authorization.target_resource_ids,
+            vec!["tab:fieldwork".to_string()]
         );
 
         repository

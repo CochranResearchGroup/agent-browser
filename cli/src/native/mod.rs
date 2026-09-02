@@ -164,6 +164,7 @@ pub(crate) mod service_profile_access_policy;
 pub(crate) mod service_profile_acquisition;
 #[allow(dead_code)]
 pub(crate) mod service_profile_lease;
+pub(crate) mod service_profile_lifecycle;
 #[allow(dead_code)]
 pub mod service_renderer_crash;
 #[allow(dead_code)]

@@ -2452,6 +2452,18 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
         BTreeMap<String, super::service_profile_acquisition::RecoveryReceipt>,
+    /// Exact, permission-backed Profile lifecycle authorizations. These bind
+    /// logical eviction intent to a policy revision before a daemon may join
+    /// it with fresh physical target evidence.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_lifecycle_authorizations:
+        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleAuthorization>,
+    /// Idempotent minimal receipts for physically proven Profile lifecycle
+    /// effects. Page contents, paths, credentials, and bearer material are
+    /// never retained here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_lifecycle_effect_receipts:
+        BTreeMap<String, super::service_profile_lifecycle::ProfileLifecycleEffectReceipt>,
     /// Idempotent receipts for exact inert browser-record retirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) browser_retirement_receipts:

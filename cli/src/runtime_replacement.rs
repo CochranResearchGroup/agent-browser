@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use crate::native::service_profile_access_policy::{ProfileIdentityAssurance, ProfilePermission};
 use crate::process_identity::RecordedProcessIdentity;
 use crate::process_identity::{VerifiedProcessSignal, VerifiedProcessTermination};
 use crate::runtime_adoption::{RuntimeClassification, StableRuntimeCensus};
@@ -72,6 +73,75 @@ pub(crate) struct RuntimeReplacementPlan {
 }
 
 const UPGRADE_SUCCESSOR_PLAN_KEY: &str = "runtimeReplacementPlan";
+const UPGRADE_SUCCESSOR_AUTHORIZATION_KEY: &str = "runtimeReplacementAuthorization";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeReplacementAuthorization {
+    pub(crate) schema_version: String,
+    pub(crate) authorization_id: String,
+    pub(crate) subject_id: String,
+    pub(crate) assurance: ProfileIdentityAssurance,
+    pub(crate) permissions: Vec<ProfilePermission>,
+    pub(crate) plan_digest: String,
+    pub(crate) target_browser_ids: Vec<String>,
+    pub(crate) issued_at: String,
+}
+
+/// Compile explicit operator intent into a plan-bound full-shutdown
+/// authorization. The reviewed plan remains the sole source of physical
+/// targets; caller-supplied browser or process identities are never accepted.
+pub(crate) fn authorize_reviewed_full_shutdown(
+    plan: &RuntimeReplacementPlan,
+    expected_plan_digest: &str,
+    subject_id: &str,
+    assurance: ProfileIdentityAssurance,
+    permissions: &[ProfilePermission],
+    issued_at: &str,
+) -> Result<RuntimeReplacementAuthorization, String> {
+    if plan.policy != RuntimeReplacementPolicy::FullShutdown
+        || plan.disposition != RuntimeReplacementDisposition::ReadyForFullShutdown
+        || plan.plan_digest != expected_plan_digest
+    {
+        return Err("runtime_replacement_authorization_plan_mismatch".to_string());
+    }
+    if subject_id.trim().is_empty()
+        || !assurance.satisfies(ProfileIdentityAssurance::Operator)
+        || !permissions.contains(&ProfilePermission::LifecycleManage)
+        || !permissions.contains(&ProfilePermission::FullShutdown)
+    {
+        return Err("runtime_replacement_operator_authorization_required".to_string());
+    }
+    chrono::DateTime::parse_from_rfc3339(issued_at)
+        .map_err(|_| "runtime_replacement_authorization_time_invalid".to_string())?;
+    let mut target_browser_ids = plan
+        .browsers
+        .iter()
+        .filter(|browser| browser.close_required)
+        .map(|browser| browser.logical_browser_id.clone())
+        .collect::<Vec<_>>();
+    target_browser_ids.sort();
+    target_browser_ids.dedup();
+    let mut authorized_permissions = permissions.to_vec();
+    authorized_permissions.sort();
+    authorized_permissions.dedup();
+    let payload = format!(
+        "agent-browser.runtime-replacement-authorization.v1\n{subject_id}\n{assurance:?}\n{expected_plan_digest}\n{target_browser_ids:?}\n{issued_at}"
+    );
+    Ok(RuntimeReplacementAuthorization {
+        schema_version: "agent-browser.runtime-replacement-authorization.v1".to_string(),
+        authorization_id: format!(
+            "runtime-replacement-authorization:{:x}",
+            Sha256::digest(payload)
+        ),
+        subject_id: subject_id.to_string(),
+        assurance,
+        permissions: authorized_permissions,
+        plan_digest: expected_plan_digest.to_string(),
+        target_browser_ids,
+        issued_at: issued_at.to_string(),
+    })
+}
 
 /// Bind the complete reviewed replacement plan to the workstation transaction.
 /// Rebinding is idempotent only for the byte-equivalent plan and therefore
@@ -91,6 +161,75 @@ pub(crate) fn bind_upgrade_transaction(
     transaction
         .successor_fields
         .insert(UPGRADE_SUCCESSOR_PLAN_KEY.to_string(), value);
+    Ok(())
+}
+
+pub(crate) fn bind_full_shutdown_authorization(
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    plan: &RuntimeReplacementPlan,
+    authorization: &RuntimeReplacementAuthorization,
+) -> Result<(), String> {
+    validate_full_shutdown_authorization(plan, authorization)?;
+    let value = serde_json::to_value(authorization)
+        .map_err(|error| format!("runtime_replacement_authorization_serialize_failed:{error}"))?;
+    if let Some(existing) = transaction
+        .successor_fields
+        .get(UPGRADE_SUCCESSOR_AUTHORIZATION_KEY)
+    {
+        if existing == &value {
+            return Ok(());
+        }
+        return Err("runtime_replacement_transaction_authorization_changed".to_string());
+    }
+    transaction
+        .successor_fields
+        .insert(UPGRADE_SUCCESSOR_AUTHORIZATION_KEY.to_string(), value);
+    Ok(())
+}
+
+fn authorization_from_upgrade_transaction(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<RuntimeReplacementAuthorization, String> {
+    transaction
+        .successor_fields
+        .get(UPGRADE_SUCCESSOR_AUTHORIZATION_KEY)
+        .cloned()
+        .ok_or_else(|| "runtime_replacement_authorization_missing".to_string())
+        .and_then(|value| {
+            serde_json::from_value(value)
+                .map_err(|error| format!("runtime_replacement_authorization_invalid:{error}"))
+        })
+}
+
+fn validate_full_shutdown_authorization(
+    plan: &RuntimeReplacementPlan,
+    authorization: &RuntimeReplacementAuthorization,
+) -> Result<(), String> {
+    let mut exact_targets = plan
+        .browsers
+        .iter()
+        .filter(|browser| browser.close_required)
+        .map(|browser| browser.logical_browser_id.clone())
+        .collect::<Vec<_>>();
+    exact_targets.sort();
+    exact_targets.dedup();
+    if authorization.schema_version != "agent-browser.runtime-replacement-authorization.v1"
+        || authorization.authorization_id.trim().is_empty()
+        || authorization.subject_id.trim().is_empty()
+        || !authorization
+            .assurance
+            .satisfies(ProfileIdentityAssurance::Operator)
+        || !authorization
+            .permissions
+            .contains(&ProfilePermission::LifecycleManage)
+        || !authorization
+            .permissions
+            .contains(&ProfilePermission::FullShutdown)
+        || authorization.plan_digest != plan.plan_digest
+        || authorization.target_browser_ids != exact_targets
+    {
+        return Err("runtime_replacement_authorization_mismatch".to_string());
+    }
     Ok(())
 }
 
@@ -318,6 +457,8 @@ pub(crate) fn execute_full_shutdown(
     plan: &RuntimeReplacementPlan,
 ) -> Result<RuntimeReplacementEffectReceipt, String> {
     bind_upgrade_transaction(transaction, plan)?;
+    let authorization = authorization_from_upgrade_transaction(transaction)?;
+    validate_full_shutdown_authorization(plan, &authorization)?;
     let identity = plan
         .selected_process_identity
         .as_ref()
@@ -337,7 +478,7 @@ pub(crate) fn execute_full_shutdown(
         source_socket_dir: plan.selected_backend.socket_dir.clone(),
         source_process,
     };
-    execute_full_shutdown_with(plan, existing, &mut effects)
+    execute_full_shutdown_with(plan, &authorization, existing, &mut effects)
 }
 
 fn wait_for_source_exit(process: &VerifiedProcessTermination) -> Result<bool, String> {
@@ -391,9 +532,11 @@ fn write_private_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), 
 
 fn execute_full_shutdown_with(
     plan: &RuntimeReplacementPlan,
+    authorization: &RuntimeReplacementAuthorization,
     existing: Option<RuntimeReplacementEffectReceipt>,
     effects: &mut impl RuntimeReplacementEffects,
 ) -> Result<RuntimeReplacementEffectReceipt, String> {
+    validate_full_shutdown_authorization(plan, authorization)?;
     if plan.policy != RuntimeReplacementPolicy::FullShutdown
         || plan.disposition != RuntimeReplacementDisposition::ReadyForFullShutdown
         || !plan.profiles_preserved
@@ -831,6 +974,21 @@ mod tests {
         )])
     }
 
+    fn authorization(plan: &RuntimeReplacementPlan) -> RuntimeReplacementAuthorization {
+        authorize_reviewed_full_shutdown(
+            plan,
+            &plan.plan_digest,
+            "operator:test",
+            ProfileIdentityAssurance::Operator,
+            &[
+                ProfilePermission::LifecycleManage,
+                ProfilePermission::FullShutdown,
+            ],
+            "2026-09-02T20:00:00Z",
+        )
+        .unwrap()
+    }
+
     #[test]
     fn full_shutdown_plan_is_deterministic_and_preserves_profile_state() {
         let (revision, backend, identity, census) = observation();
@@ -905,9 +1063,16 @@ mod tests {
 
         bind_upgrade_transaction(&mut transaction, &plan).unwrap();
         bind_upgrade_transaction(&mut transaction, &plan).unwrap();
+        let authorization = authorization(&plan);
+        bind_full_shutdown_authorization(&mut transaction, &plan, &authorization).unwrap();
+        bind_full_shutdown_authorization(&mut transaction, &plan, &authorization).unwrap();
         assert_eq!(
             plan_from_upgrade_transaction(&transaction).unwrap(),
             Some(plan.clone())
+        );
+        assert_eq!(
+            authorization_from_upgrade_transaction(&transaction).unwrap(),
+            authorization
         );
 
         let mut changed = plan;
@@ -915,6 +1080,63 @@ mod tests {
         assert_eq!(
             bind_upgrade_transaction(&mut transaction, &changed).unwrap_err(),
             "runtime_replacement_transaction_plan_changed"
+        );
+    }
+
+    #[test]
+    fn full_shutdown_authorization_requires_operator_permission_and_exact_plan() {
+        let (revision, backend, identity, census) = observation();
+        let plan = build_runtime_replacement_plan(
+            RuntimeReplacementPolicy::FullShutdown,
+            revision,
+            backend,
+            identity,
+            census,
+            &browser_identities(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            authorize_reviewed_full_shutdown(
+                &plan,
+                &plan.plan_digest,
+                "client:self-declared",
+                ProfileIdentityAssurance::SelfDeclared,
+                &[
+                    ProfilePermission::LifecycleManage,
+                    ProfilePermission::FullShutdown
+                ],
+                "2026-09-02T20:00:00Z",
+            )
+            .unwrap_err(),
+            "runtime_replacement_operator_authorization_required"
+        );
+        assert_eq!(
+            authorize_reviewed_full_shutdown(
+                &plan,
+                &plan.plan_digest,
+                "operator:test",
+                ProfileIdentityAssurance::Operator,
+                &[ProfilePermission::FullShutdown],
+                "2026-09-02T20:00:00Z",
+            )
+            .unwrap_err(),
+            "runtime_replacement_operator_authorization_required"
+        );
+        assert_eq!(
+            authorize_reviewed_full_shutdown(
+                &plan,
+                &"0".repeat(64),
+                "operator:test",
+                ProfileIdentityAssurance::Operator,
+                &[
+                    ProfilePermission::LifecycleManage,
+                    ProfilePermission::FullShutdown
+                ],
+                "2026-09-02T20:00:00Z",
+            )
+            .unwrap_err(),
+            "runtime_replacement_authorization_plan_mismatch"
         );
     }
 
@@ -999,7 +1221,9 @@ mod tests {
             browser_running: true,
         };
 
-        let receipt = execute_full_shutdown_with(&plan, None, &mut effects).unwrap();
+        let authorization = authorization(&plan);
+        let receipt =
+            execute_full_shutdown_with(&plan, &authorization, None, &mut effects).unwrap();
         assert_eq!(receipt.state, RuntimeReplacementEffectState::SourceAbsent);
         assert_eq!(receipt.closed_sessions, vec!["research"]);
         assert!(receipt.source_exit_proven);
@@ -1026,8 +1250,9 @@ mod tests {
         );
 
         effects.calls.clear();
-        let replayed = execute_full_shutdown_with(&plan, Some(receipt.clone()), &mut effects)
-            .expect("source-absent replay should remain idempotent");
+        let replayed =
+            execute_full_shutdown_with(&plan, &authorization, Some(receipt.clone()), &mut effects)
+                .expect("source-absent replay should remain idempotent");
         assert_eq!(replayed, receipt);
         assert_eq!(effects.calls, vec!["source-running", "census"]);
     }

@@ -6403,6 +6403,24 @@ fn prepare_payload_transaction_with_replacement(
                 return Err("runtime_replacement_prepare_authority_mismatch".to_string());
             }
             crate::runtime_replacement::bind_upgrade_transaction(&mut transaction, plan)?;
+            let authorization = crate::runtime_replacement::authorize_reviewed_full_shutdown(
+                plan,
+                args.expected_runtime_replacement_plan_digest
+                    .as_deref()
+                    .expect("full-shutdown digest was checked above"),
+                "operator:workstation-install",
+                crate::native::service_profile_access_policy::ProfileIdentityAssurance::Operator,
+                &[
+                    crate::native::service_profile_access_policy::ProfilePermission::LifecycleManage,
+                    crate::native::service_profile_access_policy::ProfilePermission::FullShutdown,
+                ],
+                &runtime_adoption_timestamp(),
+            )?;
+            crate::runtime_replacement::bind_full_shutdown_authorization(
+                &mut transaction,
+                plan,
+                &authorization,
+            )?;
         }
         _ => return Err("runtime_replacement_prepare_plan_missing_or_unexpected".to_string()),
     }
