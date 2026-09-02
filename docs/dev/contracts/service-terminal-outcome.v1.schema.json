@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-terminal-outcome.v1.schema.json",
+  "title": "agent-browser service terminal outcome",
+  "description": "One terminal result projected identically into responses, jobs, events, traces, and incidents.",
+  "type": "object",
+  "required": ["schemaVersion", "state", "phase", "effectState", "retryDisposition", "failure", "provenance", "completedAt"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.service-terminal-outcome.v1" },
+    "state": { "enum": ["succeeded", "failed", "cancelled", "timed_out", "rejected"] },
+    "phase": { "enum": ["ingress", "queue_admission", "scheduler_admission", "dispatch", "execution", "commit", "finalize"] },
+    "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
+    "retryDisposition": { "enum": ["do_not_retry", "inspect_before_retry", "retry_same_request", "refresh_access_plan"] },
+    "failure": {
+      "oneOf": [
+        { "$ref": "service-failure-recourse.v1.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "provenance": { "$ref": "service-request-provenance.v1.schema.json" },
+    "completedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "succeeded" } } },
+      "then": { "properties": { "failure": { "type": "null" } } }
+    }
+  ],
+  "additionalProperties": false
+}

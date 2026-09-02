@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "agent-browser.p157-regression-oracle.v1",
+  "contractSchemas": [
+    "service-profile-access-policy.v1.schema.json",
+    "service-profile-access-decision.v1.schema.json",
+    "service-request-provenance.v1.schema.json",
+    "service-terminal-outcome.v1.schema.json",
+    "service-profile-policy-migration.v1.schema.json",
+    "service-dashboard-health.v1.schema.json"
+  ],
+  "cases": [
+    {
+      "id": "scheduler-rejection-has-one-terminal-outcome",
+      "implementationWorkUnit": "W4",
+      "currentStatus": "red",
+      "risk": "Scheduler profile-lease rejection persists and responds before structured failure decoration.",
+      "requiredPaths": ["response.terminalOutcome", "job.terminalOutcome", "event.provenance.requestId"],
+      "currentProjection": {
+        "response": { "success": false, "error": "profile lease rejected" },
+        "job": { "state": "failed", "error": "profile lease rejected" },
+        "event": { "kind": "job_failed" }
+      }
+    },
+    {
+      "id": "runtime-lane-survives-ingress-routing",
+      "implementationWorkUnit": "W3",
+      "currentStatus": "red",
+      "risk": "The runtime host consumes the session selector before ControlRequest retains causal provenance.",
+      "requiredPaths": ["controlRequest.provenance.runtimeLaneId", "job.provenance.runtimeLaneId"],
+      "currentProjection": {
+        "controlRequest": { "sessionNameConsumed": true, "provenance": null },
+        "job": { "provenance": null }
+      }
+    },
+    {
+      "id": "identity-denial-recourse-is-not-circular",
+      "implementationWorkUnit": "W5",
+      "currentStatus": "red",
+      "risk": "A client can be told to acquire the same profile whose acquisition produced the identity denial.",
+      "requiredPaths": ["failure.subject", "failure.missingPermission", "failure.executableNextAction"],
+      "forbiddenValues": ["failure.executableNextAction=profile_acquire_same_request"],
+      "currentProjection": {
+        "failure": {
+          "code": "existing_session_profile_identity_unproven",
+          "recommendedAction": "profile_acquire_same_request"
+        }
+      }
+    },
+    {
+      "id": "shared-local-does-not-require-cryptographic-enrollment",
+      "implementationWorkUnit": "W5",
+      "currentStatus": "red",
+      "risk": "Ordinary trusted local profile reuse is blocked by universal principal and capability proof.",
+      "requiredPaths": ["decision.policy.mode", "decision.subject.assurance", "decision.allowed"],
+      "targetValues": { "decision.allowed": true },
+      "currentProjection": {
+        "decision": {
+          "profileReuseAction": "authenticate_for_profile_reuse",
+          "allowed": false
+        }
+      }
+    },
+    {
+      "id": "access-ambiguity-cannot-block-runtime-health",
+      "implementationWorkUnit": "W9",
+      "currentStatus": "red",
+      "risk": "Dashboard warning composition can present profile access ambiguity as runtime drift.",
+      "requiredPaths": ["health.runtime.ready", "health.access.findings", "health.acquisition.requestScoped"],
+      "forbiddenValues": ["health.runtime.state=blocked_by_access_ambiguity"],
+      "currentProjection": {
+        "health": {
+          "runtime": { "state": "blocked_by_access_ambiguity" },
+          "access": null,
+          "acquisition": null
+        }
+      }
+    }
+  ]
+}

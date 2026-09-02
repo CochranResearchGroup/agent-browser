@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-access-policy.v1.schema.json",
+  "title": "agent-browser profile access policy",
+  "description": "Revisioned authorization policy for a managed profile. Access policy is independent from coordination leases and runtime lifecycle proof.",
+  "type": "object",
+  "required": ["schemaVersion", "profileId", "mode", "revision", "state", "defaultPermissions", "grants", "updatedAt"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.profile-access-policy.v1" },
+    "profileId": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["shared-local", "restricted", "exclusive"], "default": "shared-local" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "state": { "enum": ["active", "draining"] },
+    "defaultPermissions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/permission" },
+      "uniqueItems": true
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subjectId", "minimumAssurance", "permissions"],
+        "properties": {
+          "subjectId": { "type": "string", "minLength": 1 },
+          "minimumAssurance": { "$ref": "#/$defs/assurance" },
+          "permissions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/permission" },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "drain": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["targetMode", "expectedRevision", "incompatibleOccupancy", "forceAuthorized"],
+          "properties": {
+            "targetMode": { "enum": ["shared-local", "restricted", "exclusive"] },
+            "expectedRevision": { "type": "integer", "minimum": 1 },
+            "incompatibleOccupancy": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "forceAuthorized": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "assurance": { "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"] },
+    "permission": {
+      "enum": [
+        "profile_use", "policy_read", "policy_write", "tab_create", "tab_observe",
+        "tab_control_own", "tab_close_own", "tab_control_any", "tab_close_any",
+        "view_open", "view_control", "drain", "evict", "lifecycle_manage", "full_shutdown"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

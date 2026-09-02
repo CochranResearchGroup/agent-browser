@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-policy-migration.v1.schema.json",
+  "title": "agent-browser profile policy migration",
+  "description": "Deterministic migration plan for legacy profile access state. Ambiguity is observable and nonblocking for shared local migration.",
+  "type": "object",
+  "required": ["schemaVersion", "migrationId", "sourceRevision", "targetRevision", "entries", "blockingIssueCount"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.profile-policy-migration.v1" },
+    "migrationId": { "type": "string", "minLength": 1 },
+    "sourceRevision": { "type": "integer", "minimum": 0 },
+    "targetRevision": { "type": "integer", "minimum": 1 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["profileId", "classification", "targetMode", "ambiguity", "blocking", "reason"],
+        "properties": {
+          "profileId": { "type": "string", "minLength": 1 },
+          "classification": { "enum": ["shared-local-default", "proven-strict-compatibility", "ambiguous-legacy"] },
+          "targetMode": { "enum": ["shared-local", "restricted", "exclusive"] },
+          "ambiguity": { "type": "boolean" },
+          "blocking": { "type": "boolean" },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "classification": { "const": "ambiguous-legacy" } } },
+            "then": { "properties": { "targetMode": { "const": "shared-local" }, "ambiguity": { "const": true }, "blocking": { "const": false } } }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "blockingIssueCount": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

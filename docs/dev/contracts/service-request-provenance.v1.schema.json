@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-request-provenance.v1.schema.json",
+  "title": "agent-browser service request provenance",
+  "description": "Immutable redacted causal identity captured before runtime routing fields are consumed.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "requestId", "jobId", "traceId", "causedByRequestId",
+    "clientSubjectId", "identityAssurance", "connectionInstanceId", "runtimeEnvironmentId",
+    "runtimeLaneId", "profileId", "profileResourceKey", "browserId", "sessionId", "tabId",
+    "serviceName", "agentName", "taskName", "action", "policyRevision", "accessDecisionId"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.service-request-provenance.v1" },
+    "requestId": { "$ref": "#/$defs/requiredId" },
+    "jobId": { "$ref": "#/$defs/requiredId" },
+    "traceId": { "$ref": "#/$defs/nullableId" },
+    "causedByRequestId": { "$ref": "#/$defs/nullableId" },
+    "clientSubjectId": { "$ref": "#/$defs/nullableId" },
+    "identityAssurance": { "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"] },
+    "connectionInstanceId": { "$ref": "#/$defs/nullableId" },
+    "runtimeEnvironmentId": { "$ref": "#/$defs/nullableId" },
+    "runtimeLaneId": { "$ref": "#/$defs/nullableId" },
+    "profileId": { "$ref": "#/$defs/nullableId" },
+    "profileResourceKey": { "$ref": "#/$defs/nullableId" },
+    "browserId": { "$ref": "#/$defs/nullableId" },
+    "sessionId": { "$ref": "#/$defs/nullableId" },
+    "tabId": { "$ref": "#/$defs/nullableId" },
+    "serviceName": { "$ref": "#/$defs/nullableId" },
+    "agentName": { "$ref": "#/$defs/nullableId" },
+    "taskName": { "$ref": "#/$defs/nullableId" },
+    "action": { "$ref": "#/$defs/requiredId" },
+    "policyRevision": { "type": ["integer", "null"], "minimum": 1 },
+    "accessDecisionId": { "$ref": "#/$defs/nullableId" }
+  },
+  "$defs": {
+    "requiredId": { "type": "string", "minLength": 1 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1 }
+  },
+  "additionalProperties": false
+}
