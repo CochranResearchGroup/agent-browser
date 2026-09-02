@@ -1,8 +1,48 @@
 # Agent Browser
 
-Agent Browser coordinates browser automation and operator-visible remote control while preserving one authoritative identity for each managed browser lane.
+Agent Browser coordinates browser automation and operator-visible remote control while separating access authority, work coordination, and exact runtime lifecycle ownership.
 
 ## Language
+
+**Client subject**:
+The stable identity to which access policy grants are assigned, together with an explicit assurance level such as locally self-declared or authenticated.
+_Avoid_: Runtime owner, daemon identity, session name
+
+**Connection instance**:
+The service-generated identity for one live attachment of a Client Subject, used for command attribution and temporary coordination without becoming durable access authority.
+_Avoid_: Client ID, principal, browser session
+
+**Access policy**:
+The revisioned rules that authorize a Client Subject to observe, use, coordinate, administer, or reclaim a browser resource.
+_Avoid_: Lease, runtime ownership proof, profile identity
+
+**Shared-local profile**:
+A profile whose default policy allows locally trusted Client Subjects to reuse one managed browser and receive attributable tabs without first enrolling a strict identity.
+_Avoid_: Unowned profile, public profile, exclusive profile
+
+**Policy revision**:
+The monotonic version of one Access Policy against which an admission, denial, or policy edit is evaluated.
+_Avoid_: Owner generation, lease generation
+
+**Profile occupancy**:
+The current set of client work, tabs, controller leases, and viewer leases that must be considered before a profile can become more restrictive.
+_Avoid_: Profile ownership, process ownership
+
+**Drain-and-restrict transition**:
+A revision-fenced change that stops new admission, clears incompatible Profile Occupancy, and commits a narrower Access Policy only after the required occupancy reaches zero.
+_Avoid_: Immediate revocation, force unlock
+
+**Eviction authority**:
+The explicit permission to end another Client Subject's current Profile Occupancy during a Drain-and-restrict Transition.
+_Avoid_: Policy edit, lease release, process kill
+
+**Runtime ownership proof**:
+Internal evidence that binds an exact managed browser or runtime process to its profile, executable, process instance, endpoint, and owner generation before lifecycle effects occur.
+_Avoid_: Client identity, access permission, profile lease
+
+**Request provenance**:
+The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.
+_Avoid_: Log message, caller label, lane selector
 
 **Daemon command**:
 A requested browser or control-plane operation executed in the serialized native runtime.

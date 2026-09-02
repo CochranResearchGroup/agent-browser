@@ -7,6 +7,28 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P157 | Profile Permissions And Request Provenance
+
+State: PLANNED
+Current state: Research.gov fieldwork exposed that profile access, coordination
+leases, and runtime ownership proof are conflated, while scheduler rejection
+can bypass structured failure decoration and lose runtime-lane correlation.
+The accepted architecture makes `shared-local` the trusted local default,
+retains strict policy as opt-in, narrows occupied profiles through an explicit
+drain-and-restrict transaction, and carries one immutable causal envelope from
+ingress through response, job, event, trace, and incident records.
+
+### Plan
+
+- `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
+
+### Next Recommendation
+
+Implement W1 only: freeze additive policy, provenance, and failure schemas with
+red provider-free regressions for scheduler recourse loss, removed lane
+correlation, circular identity remediation, and shared-profile overblocking.
+Do not mutate production permissions or browser state.
+
 ## P156 | Full Runtime Shutdown Replacement
 
 State: SOURCE COMPLETE

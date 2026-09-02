@@ -4,6 +4,40 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 200 | 2026-09-02
+
+Scope: productize the profile-permission and logging defects uncovered during
+Research.gov fieldwork without changing production runtime state.
+
+Actions:
+
+- pressure-tested and accepted a filesystem-like profile permission model with
+  `shared-local` as the trusted local default and strict identity as opt-in;
+- separated access policy, coordination leases, human controller posture, and
+  exact runtime lifecycle proof in the domain model and accepted ADR;
+- traced scheduler rejection and confirmed it returns before structured failure
+  decoration while the runtime lane is removed before `ControlRequest` retains
+  it; and
+- opened P157 with request provenance and unified terminal outcomes ahead of
+  access-policy enforcement, migration, eviction, and full-shutdown
+  authorization.
+
+Validation:
+
+- CodeGraph and current source agree on the control-plane terminal-path split;
+- Graphiti was healthy and recalled shared-profile routing but no prior complete
+  permission or request-provenance decision;
+- the active-lane and goal-governance audits pass before registration; and
+- the worktree was clean before the P157 branch and documentation changes.
+
+Result:
+
+- the architecture, glossary, roadmap lane, and bounded implementation plan are
+  registered;
+- no source behavior, installed runtime, browser, profile, permission, lease,
+  credential, or provider state changed; and
+- W1 red contract fixtures are the next bounded slice.
+
 ## Turn 199 | 2026-09-02
 
 Scope: qualify and close P156 in the isolated installed development runtime.

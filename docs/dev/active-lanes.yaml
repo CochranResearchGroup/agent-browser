@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P157
+    objective: Separate mutable profile permissions from coordination and runtime proof while preserving complete request provenance
+    plan: docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md
+    plan_ref: refs/heads/plan/profile-permissions-and-request-provenance
+    branch: plan/profile-permissions-and-request-provenance
+    target: main
+    plan_state: PLANNED
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: pending_first_published_checkpoint
+    remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
+    integration_receipt: null
+    integration: merge
+    dependencies: [P144, P156]
+    overlaps: [P144, P156]
+    reconciled_overlaps: [P144, P156]
+    updated_at: 2026-09-02
   - id: P156
     objective: Add explicit full-shutdown runtime replacement so workstation installation can converge after cooperative takeover fails
     plan: docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md
