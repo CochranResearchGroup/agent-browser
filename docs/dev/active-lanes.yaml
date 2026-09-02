@@ -46,7 +46,7 @@ lanes:
     integration: merge
     dependencies: [P114, P144]
     overlaps: [P144]
-    reconciled_overlaps: [P144_integrated_tip_is_ancestor_of_source_baseline]
+    reconciled_overlaps: [P144]
     updated_at: 2026-09-01
   - id: P151
     objective: Extract CDP protocol and websocket transport into a focused Rust library crate
