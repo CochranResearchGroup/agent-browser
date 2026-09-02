@@ -78,6 +78,78 @@ pub struct ServiceFailureRecourse {
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
     let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
+    if error == "Control queue is full" {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "control_queue_full".to_string(),
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::RetrySameRequest,
+            recommended_action: "retry_after_queue_capacity".to_string(),
+            reuse_allowed: true,
+            safe_next_actions: vec![
+                "inspect_service_status".to_string(),
+                "retry_same_request".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+    if error.contains("Control plane worker is stopped") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "control_plane_worker_stopped".to_string(),
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_service_status".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec!["inspect_service_status".to_string()],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+    if error.contains("cancelled before dispatch") || error == "Cancelled by operator" {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_job_cancelled".to_string(),
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: "inspect_service_job".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec!["inspect_service_job".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+    if error.contains("cancelled while running") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_job_cancelled".to_string(),
+            effect_state: ServiceEffectState::EffectUncertain,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_service_job_and_trace".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_job".to_string(),
+                "inspect_service_trace".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
+    if error.contains("timed out") || error.contains("exceeded its persisted") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_job_timed_out".to_string(),
+            effect_state: ServiceEffectState::EffectUncertain,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_service_job_and_trace".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_job".to_string(),
+                "inspect_service_trace".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if error.starts_with("service_state_stale_revision:") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -286,6 +358,31 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn control_queue_rejection_is_safe_to_retry_as_the_same_request() {
+        let recourse = classify_service_failure("Control queue is full");
+
+        assert_eq!(recourse.code, "control_queue_full");
+        assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::RetrySameRequest
+        );
+        assert!(recourse.reuse_allowed);
+    }
+
+    #[test]
+    fn running_timeout_requires_inspection_before_retry() {
+        let recourse = classify_service_failure("Service job timed out after 1000ms");
+
+        assert_eq!(recourse.code, "service_job_timed_out");
+        assert_eq!(recourse.effect_state, ServiceEffectState::EffectUncertain);
+        assert_eq!(
+            recourse.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+    }
 
     #[test]
     fn process_mutation_lock_timeout_requires_inspection_before_retry() {

@@ -8,6 +8,7 @@
     "id",
     "action",
     "provenance",
+    "terminalOutcome",
     "serviceName",
     "agentName",
     "taskName",
@@ -36,6 +37,13 @@
     "provenance": {
       "$ref": "service-request-provenance.v1.schema.json",
       "description": "Immutable, redacted causal identity captured at runtime-lane ingress."
+    },
+    "terminalOutcome": {
+      "oneOf": [
+        { "$ref": "service-terminal-outcome.v1.schema.json" },
+        { "type": "null" }
+      ],
+      "description": "Canonical outcome for terminal jobs. Null while queued, waiting, or running."
     },
     "serviceName": {
       "type": ["string", "null"]

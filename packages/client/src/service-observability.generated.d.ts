@@ -69,7 +69,8 @@ export type ServiceEventKind =
   | "route_released"
   | "reconciliation_error"
   | "incident_acknowledged"
-  | "incident_resolved";
+  | "incident_resolved"
+  | "job_terminal";
 
 export type ServiceBrowserHealthState =
   | "not_started"
@@ -139,10 +140,32 @@ export interface ServiceRequestProvenance {
   accessDecisionId: string | null;
 }
 
+export type ServiceTerminalState = 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'rejected';
+export type ServiceTerminalPhase =
+  | 'ingress'
+  | 'queue_admission'
+  | 'scheduler_admission'
+  | 'dispatch'
+  | 'execution'
+  | 'commit'
+  | 'finalize';
+
+export interface ServiceTerminalOutcome {
+  schemaVersion: 'agent-browser.service-terminal-outcome.v1';
+  state: ServiceTerminalState;
+  phase: ServiceTerminalPhase;
+  effectState: ServiceEffectState;
+  retryDisposition: ServiceRetryDisposition;
+  failure: ServiceFailureRecourse | null;
+  provenance: ServiceRequestProvenance;
+  completedAt: string;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
   provenance: ServiceRequestProvenance;
+  terminalOutcome: ServiceTerminalOutcome | null;
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
@@ -660,6 +683,8 @@ export interface ServiceEventRecord {
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
+  provenance: ServiceRequestProvenance | null;
+  terminalOutcome: ServiceTerminalOutcome | null;
   previousHealth: ServiceBrowserHealthState | null;
   currentHealth: ServiceBrowserHealthState | null;
   details: unknown;

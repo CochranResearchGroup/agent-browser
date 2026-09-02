@@ -95,10 +95,12 @@ const schedulerRejectStart = controlPlaneSource.indexOf('SchedulerLeaseDecision:
 const schedulerRejectEnd = controlPlaneSource.indexOf('SchedulerLeaseDecision::Wait {', schedulerRejectStart);
 const schedulerRejectSource = controlPlaneSource.slice(schedulerRejectStart, schedulerRejectEnd);
 assert(
-  schedulerRejectSource.includes('persist_service_job_failed_to_enqueue') &&
+  schedulerRejectSource.includes('finalize_service_request') &&
+    schedulerRejectSource.includes('ServiceTerminalState::Rejected') &&
+    schedulerRejectSource.includes('ServiceTerminalPhase::SchedulerAdmission') &&
     schedulerRejectSource.includes('response_tx.send') &&
-    !schedulerRejectSource.includes('attach_service_failure_recourse'),
-  'scheduler-rejection red case must be retired or updated',
+    !schedulerRejectSource.includes('persist_service_job_failed_to_enqueue'),
+  'scheduler rejection bypasses the unified terminal outcome path',
 );
 
 const failureSource = readFileSync(join(root, 'cli/src/native/service_failure.rs'), 'utf8');
@@ -159,5 +161,5 @@ assert(expectedCases.size === 0, `P157 regression cases missing: ${[...expectedC
 
 const greenCases = oracle.cases.filter((regression) => regression.currentStatus === 'green').length;
 console.log(
-  `P157 contract oracle passed: 6 frozen schemas, ${greenCases} green case, and ${oracle.cases.length - greenCases} reproducible red cases`,
+  `P157 contract oracle passed: 6 frozen schemas, ${greenCases} green cases, and ${oracle.cases.length - greenCases} reproducible red cases`,
 );

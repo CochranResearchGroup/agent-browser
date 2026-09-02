@@ -2,8 +2,12 @@
 
 use serde_json::json;
 
-use super::service_model::{JobState, ServiceJob, ServiceState};
+use super::service_failure::attach_service_failure_recourse;
+use super::service_model::{JobState, ServiceEvent, ServiceEventKind, ServiceJob, ServiceState};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use super::service_terminal_outcome::{
+    ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
+};
 
 pub const MAX_SERVICE_JOBS: usize = 200;
 /// Every persisted running job needs a bounded recovery horizon. Callers may
@@ -37,6 +41,7 @@ pub fn reconcile_stale_running_service_jobs(state: &mut ServiceState, now: &str)
         return Vec::new();
     };
     let mut reconciled = Vec::new();
+    let mut terminal_events = Vec::new();
     for job in state
         .jobs
         .values_mut()
@@ -58,12 +63,20 @@ pub fn reconcile_stale_running_service_jobs(state: &mut ServiceState, now: &str)
         if elapsed_ms < 0 || i128::from(elapsed_ms) < i128::from(timeout_ms) {
             continue;
         }
-        job.state = JobState::TimedOut;
-        job.completed_at = Some(now.to_string());
-        job.error = Some(format!(
+        let error = format!(
             "Service job exceeded its persisted {}ms deadline and was reconciled",
             timeout_ms
-        ));
+        );
+        let outcome = terminal_outcome_for_job(
+            job,
+            &error,
+            ServiceTerminalState::TimedOut,
+            ServiceTerminalPhase::Finalize,
+            now,
+        );
+        job.state = JobState::TimedOut;
+        job.completed_at = Some(now.to_string());
+        job.error = Some(error.clone());
         job.result = Some(json!({
             "success": false,
             "timedOut": true,
@@ -71,7 +84,15 @@ pub fn reconcile_stale_running_service_jobs(state: &mut ServiceState, now: &str)
             "effectUncertain": true,
             "timeoutMs": timeout_ms,
         }));
+        job.failure = outcome.failure.clone();
+        job.terminal_outcome = Some(outcome.clone());
+        terminal_events.push(terminal_event_for_job(job, outcome, &error));
         reconciled.push(job.id.clone());
+    }
+    state.events.extend(terminal_events);
+    if state.events.len() > 100 {
+        let excess = state.events.len() - 100;
+        state.events.drain(0..excess);
     }
     reconciled
 }
@@ -98,16 +119,32 @@ pub fn cancel_service_job_in_repository(
 
         match job.state {
             JobState::Queued | JobState::WaitingProfileLease => {
-                job.state = JobState::Cancelled;
-                job.completed_at = Some(current_timestamp());
-                job.error = Some(
-                    reason
-                        .filter(|value| !value.trim().is_empty())
-                        .unwrap_or("Cancelled by operator")
-                        .to_string(),
+                let completed_at = current_timestamp();
+                let error = reason
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("Cancelled by operator")
+                    .to_string();
+                let outcome = terminal_outcome_for_job(
+                    job,
+                    &error,
+                    ServiceTerminalState::Cancelled,
+                    ServiceTerminalPhase::Dispatch,
+                    &completed_at,
                 );
+                job.state = JobState::Cancelled;
+                job.completed_at = Some(completed_at);
+                job.error = Some(error.clone());
                 job.result = Some(json!({ "success": false, "cancelled": true }));
-                Ok(job.clone())
+                job.failure = outcome.failure.clone();
+                job.terminal_outcome = Some(outcome.clone());
+                let result = job.clone();
+                let event = terminal_event_for_job(job, outcome, &error);
+                state.events.push(event);
+                if state.events.len() > 100 {
+                    let excess = state.events.len() - 100;
+                    state.events.drain(0..excess);
+                }
+                Ok(result)
             }
             JobState::Cancelled => Ok(job.clone()),
             JobState::Running => Err(format!(
@@ -121,6 +158,51 @@ pub fn cancel_service_job_in_repository(
             )),
         }
     })
+}
+
+fn terminal_outcome_for_job(
+    job: &ServiceJob,
+    error: &str,
+    state: ServiceTerminalState,
+    phase: ServiceTerminalPhase,
+    completed_at: &str,
+) -> ServiceTerminalOutcome {
+    let mut response = json!({
+        "id": job.id,
+        "success": false,
+        "error": error,
+    });
+    attach_service_failure_recourse(&mut response);
+    ServiceTerminalOutcome::from_response(
+        &job.provenance,
+        &response,
+        state,
+        phase,
+        completed_at.to_string(),
+    )
+}
+
+fn terminal_event_for_job(
+    job: &ServiceJob,
+    outcome: ServiceTerminalOutcome,
+    message: &str,
+) -> ServiceEvent {
+    ServiceEvent {
+        id: format!("service-job-terminal-{}", uuid::Uuid::new_v4()),
+        timestamp: outcome.completed_at.clone(),
+        kind: ServiceEventKind::JobTerminal,
+        message: message.to_string(),
+        browser_id: job.provenance.browser_id.clone(),
+        profile_id: job.provenance.profile_id.clone(),
+        session_id: job.provenance.session_id.clone(),
+        service_name: job.service_name.clone(),
+        agent_name: job.agent_name.clone(),
+        task_name: job.task_name.clone(),
+        provenance: Some(job.provenance.clone()),
+        terminal_outcome: Some(outcome),
+        details: Some(json!({ "jobId": job.id, "action": job.action })),
+        ..ServiceEvent::default()
+    }
 }
 
 pub fn load_service_job_in_repository(
@@ -215,6 +297,23 @@ mod tests {
         assert_eq!(
             state.jobs["overdue"].result.as_ref().unwrap()["effectUncertain"],
             true
+        );
+        let outcome = state.jobs["overdue"].terminal_outcome.as_ref().unwrap();
+        assert_eq!(outcome.state, ServiceTerminalState::TimedOut);
+        assert_eq!(outcome.phase, ServiceTerminalPhase::Finalize);
+        assert_eq!(
+            outcome.failure.as_ref().unwrap().code,
+            "service_job_timed_out"
+        );
+        let event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .unwrap();
+        assert_eq!(event.terminal_outcome.as_ref(), Some(outcome));
+        assert_eq!(
+            event.provenance.as_ref(),
+            Some(&state.jobs["overdue"].provenance)
         );
         assert_eq!(state.jobs["active"].state, JobState::Running);
     }

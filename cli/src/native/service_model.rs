@@ -222,7 +222,7 @@ pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
     "failed",
     "denied",
 ];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 19] = [
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 20] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -242,9 +242,10 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 19] = [
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
+    "job_terminal",
 ];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
-pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 22] = [
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 23] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -264,6 +265,7 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 22] = [
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
+    "job_terminal",
     "service_job_timeout",
     "service_job_cancelled",
     "service_job",
@@ -395,6 +397,8 @@ pub fn assert_service_event_record_contract(value: &serde_json::Value) {
             "serviceName",
             "agentName",
             "taskName",
+            "provenance",
+            "terminalOutcome",
             "previousHealth",
             "currentHealth",
             "details",
@@ -1566,6 +1570,8 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
             &[
                 "id",
                 "action",
+                "provenance",
+                "terminalOutcome",
                 "serviceName",
                 "agentName",
                 "taskName",
@@ -3926,6 +3932,8 @@ pub struct ServiceEvent {
     pub service_name: Option<String>,
     pub agent_name: Option<String>,
     pub task_name: Option<String>,
+    pub provenance: Option<super::service_request_provenance::ServiceRequestProvenance>,
+    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
     pub previous_health: Option<BrowserHealth>,
     pub current_health: Option<BrowserHealth>,
     pub details: Option<serde_json::Value>,
@@ -4017,6 +4025,7 @@ pub enum ServiceEventKind {
     ReconciliationError,
     IncidentAcknowledged,
     IncidentResolved,
+    JobTerminal,
 }
 
 fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
@@ -4289,6 +4298,9 @@ fn incident_is_newer(candidate: &str, current: &str) -> bool {
 
 fn service_event_is_incident(event: &ServiceEvent) -> bool {
     match event.kind {
+        ServiceEventKind::JobTerminal => event.terminal_outcome.as_ref().is_some_and(|outcome| {
+            outcome.state != super::service_terminal_outcome::ServiceTerminalState::Succeeded
+        }),
         ServiceEventKind::ReconciliationError => true,
         ServiceEventKind::IncidentAcknowledged
         | ServiceEventKind::IncidentResolved
@@ -4852,6 +4864,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",
+        ServiceEventKind::JobTerminal => "job_terminal",
     }
 }
 
@@ -6044,6 +6057,8 @@ pub struct ServiceJob {
     pub action: String,
     /// Immutable, redacted causal identity captured at runtime-lane ingress.
     pub provenance: super::service_request_provenance::ServiceRequestProvenance,
+    /// Canonical result attached once the job reaches a terminal state.
+    pub terminal_outcome: Option<super::service_terminal_outcome::ServiceTerminalOutcome>,
     /// Service-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub service_name: Option<String>,
     /// Agent-level caller label supplied by MCP, CLI, HTTP, or API clients.
@@ -6109,6 +6124,7 @@ impl Default for ServiceJob {
             id: String::new(),
             action: String::new(),
             provenance: super::service_request_provenance::ServiceRequestProvenance::default(),
+            terminal_outcome: None,
             service_name: None,
             agent_name: None,
             task_name: None,
@@ -7167,6 +7183,8 @@ mod tests {
             service_name: Some("JournalDownloader".to_string()),
             agent_name: Some("codex".to_string()),
             task_name: Some("probeACSwebsite".to_string()),
+            provenance: None,
+            terminal_outcome: None,
             previous_health: Some(BrowserHealth::Ready),
             current_health: Some(BrowserHealth::ProcessExited),
             details: Some(json!({"reasonKind": "process_exited"})),
@@ -7579,6 +7597,8 @@ mod tests {
                 "serviceName": "JournalDownloader",
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
+                "provenance": null,
+                "terminalOutcome": null,
                 "previousHealth": "degraded",
                 "currentHealth": "faulted",
                 "details": null,
@@ -7614,6 +7634,8 @@ mod tests {
                 "serviceName": "JournalDownloader",
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
+                "provenance": null,
+                "terminalOutcome": null,
                 "previousHealth": "degraded",
                 "currentHealth": "faulted",
                 "details": null,
@@ -7638,6 +7660,30 @@ mod tests {
         let job = json!({
             "id": "job-1",
             "action": "navigate",
+            "provenance": {
+                "schemaVersion": "agent-browser.service-request-provenance.v1",
+                "requestId": "request-1",
+                "jobId": "job-1",
+                "traceId": null,
+                "causedByRequestId": null,
+                "clientSubjectId": null,
+                "identityAssurance": "unknown",
+                "connectionInstanceId": null,
+                "runtimeEnvironmentId": null,
+                "runtimeLaneId": null,
+                "profileId": null,
+                "profileResourceKey": null,
+                "browserId": null,
+                "sessionId": null,
+                "tabId": null,
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "action": "navigate",
+                "policyRevision": null,
+                "accessDecisionId": null
+            },
+            "terminalOutcome": null,
             "serviceName": "JournalDownloader",
             "agentName": "codex",
             "taskName": "probeACSwebsite",

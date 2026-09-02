@@ -3006,6 +3006,8 @@ fn service_browser_recovery_override_event(
         service_name: service_name.map(str::to_string),
         agent_name: agent_name.map(str::to_string),
         task_name: task_name.map(str::to_string),
+        provenance: None,
+        terminal_outcome: None,
         previous_health: Some(previous_health),
         current_health: Some(browser.health),
         details: Some(details),

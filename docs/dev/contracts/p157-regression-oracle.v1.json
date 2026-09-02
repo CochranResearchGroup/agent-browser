@@ -12,13 +12,29 @@
     {
       "id": "scheduler-rejection-has-one-terminal-outcome",
       "implementationWorkUnit": "W4",
-      "currentStatus": "red",
+      "currentStatus": "green",
       "risk": "Scheduler profile-lease rejection persists and responds before structured failure decoration.",
       "requiredPaths": ["response.terminalOutcome", "job.terminalOutcome", "event.provenance.requestId"],
+      "targetValues": {
+        "response.terminalOutcome": "outcome:scheduler-rejection",
+        "job.terminalOutcome": "outcome:scheduler-rejection",
+        "event.provenance.requestId": "request:scheduler-rejection"
+      },
       "currentProjection": {
-        "response": { "success": false, "error": "profile lease rejected" },
-        "job": { "state": "failed", "error": "profile lease rejected" },
-        "event": { "kind": "job_failed" }
+        "response": {
+          "success": false,
+          "error": "profile lease rejected",
+          "terminalOutcome": "outcome:scheduler-rejection"
+        },
+        "job": {
+          "state": "failed",
+          "error": "profile lease rejected",
+          "terminalOutcome": "outcome:scheduler-rejection"
+        },
+        "event": {
+          "kind": "job_terminal",
+          "provenance": { "requestId": "request:scheduler-rejection" }
+        }
       }
     },
     {

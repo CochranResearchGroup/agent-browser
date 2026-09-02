@@ -45,6 +45,7 @@ const schemas = {
   challengesResponse: readSchema('service-challenges-response.v1.schema.json'),
   reconcileResponse: readSchema('service-reconcile-response.v1.schema.json'),
   requestProvenance: readSchema('service-request-provenance.v1.schema.json'),
+  terminalOutcome: readSchema('service-terminal-outcome.v1.schema.json'),
   job: readSchema('service-job-record.v1.schema.json'),
   jobsResponse: readSchema('service-jobs-response.v1.schema.json'),
   incident: readSchema('service-incident-record.v1.schema.json'),
@@ -199,10 +200,32 @@ export interface ServiceRequestProvenance {
   accessDecisionId: string | null;
 }
 
+export type ServiceTerminalState = 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'rejected';
+export type ServiceTerminalPhase =
+  | 'ingress'
+  | 'queue_admission'
+  | 'scheduler_admission'
+  | 'dispatch'
+  | 'execution'
+  | 'commit'
+  | 'finalize';
+
+export interface ServiceTerminalOutcome {
+  schemaVersion: 'agent-browser.service-terminal-outcome.v1';
+  state: ServiceTerminalState;
+  phase: ServiceTerminalPhase;
+  effectState: ServiceEffectState;
+  retryDisposition: ServiceRetryDisposition;
+  failure: ServiceFailureRecourse | null;
+  provenance: ServiceRequestProvenance;
+  completedAt: string;
+}
+
 export interface ServiceJobRecord {
   id: string;
   action: string;
   provenance: ServiceRequestProvenance;
+  terminalOutcome: ServiceTerminalOutcome | null;
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
@@ -720,6 +743,8 @@ export interface ServiceEventRecord {
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
+  provenance: ServiceRequestProvenance | null;
+  terminalOutcome: ServiceTerminalOutcome | null;
   previousHealth: ServiceBrowserHealthState | null;
   currentHealth: ServiceBrowserHealthState | null;
   details: unknown;

@@ -77,7 +77,8 @@ export const SERVICE_EVENT_KINDS = [
   "route_released",
   "reconciliation_error",
   "incident_acknowledged",
-  "incident_resolved"
+  "incident_resolved",
+  "job_terminal"
 ];
 
 export const SERVICE_BROWSER_HEALTH_STATES = [

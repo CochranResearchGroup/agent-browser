@@ -178,6 +178,7 @@ pub(crate) mod service_state_migration;
 pub mod service_status_projection;
 #[allow(dead_code)]
 pub mod service_store;
+pub(crate) mod service_terminal_outcome;
 #[allow(dead_code)]
 pub mod service_trace;
 #[allow(dead_code)]
