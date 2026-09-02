@@ -18,7 +18,7 @@ Actions:
   candidate received no authenticated handoff resolution within five minutes;
 - used the existing private dashboard bootstrap credential to authenticate the
   staged candidate and resolve opaque handoff `r580584`, without logging or
-  copying credential material; and
+  copying credential material;
 - synchronized the ignored workspace candidate and user-scoped Agent Browser
   skill to the accepted source;
 - removed four clean accepted or closed P153/P154 worktrees, deleted their
