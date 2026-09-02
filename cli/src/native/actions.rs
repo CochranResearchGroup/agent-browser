@@ -137,8 +137,9 @@ use super::service_activity::{handle_service_events, handle_service_incident_act
 use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
-    handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
-    handle_service_site_policy_delete, handle_service_site_policy_upsert,
+    handle_service_profile_policy_mutate, handle_service_profile_seeding_handoff_update,
+    handle_service_profile_upsert, handle_service_site_policy_delete,
+    handle_service_site_policy_upsert,
 };
 use super::service_diagnostics::handle_service_diagnostics;
 use super::service_file_transfer::handle_service_file_transfer;
@@ -283,6 +284,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_browser_retry"
             | "service_remedies_apply"
             | "service_profile_upsert"
+            | "service_profile_policy_mutate"
             | "service_profile_freshness_update"
             | "service_profile_seeding_handoff_update"
             | "service_profile_delete"
@@ -911,6 +913,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
+            "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
             "service_profile_freshness_update" =>
                 handle_service_profile_freshness_update(cmd).await,
             "service_profile_seeding_handoff_update" => {

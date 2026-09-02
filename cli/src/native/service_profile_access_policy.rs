@@ -158,6 +158,15 @@ pub enum ProfileAccessPolicyState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileAccessDrain {
+    pub target_mode: ProfileAccessMode,
+    pub expected_revision: u64,
+    pub incompatible_occupancy: Vec<String>,
+    pub force_authorized: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServiceProfileAccessPolicy {
     pub schema_version: String,
@@ -167,7 +176,7 @@ pub struct ServiceProfileAccessPolicy {
     pub state: ProfileAccessPolicyState,
     pub default_permissions: Vec<ProfilePermission>,
     pub grants: Vec<ProfileAccessGrant>,
-    pub drain: Option<Value>,
+    pub drain: Option<ProfileAccessDrain>,
     pub updated_at: String,
 }
 
@@ -350,6 +359,17 @@ pub(crate) fn effective_profile_permissions(
     subject_id: Option<&str>,
     assurance: ProfileIdentityAssurance,
 ) -> Vec<ProfilePermission> {
+    if policy.state != ProfileAccessPolicyState::Active {
+        return Vec::new();
+    }
+    profile_permissions_for_subject(policy, subject_id, assurance)
+}
+
+fn profile_permissions_for_subject(
+    policy: &ServiceProfileAccessPolicy,
+    subject_id: Option<&str>,
+    assurance: ProfileIdentityAssurance,
+) -> Vec<ProfilePermission> {
     let mode_assurance_satisfied = match policy.mode {
         ProfileAccessMode::SharedLocal => true,
         ProfileAccessMode::Restricted => {
@@ -359,7 +379,7 @@ pub(crate) fn effective_profile_permissions(
             assurance.satisfies(ProfileIdentityAssurance::RegisteredCapability)
         }
     };
-    if !mode_assurance_satisfied || policy.state != ProfileAccessPolicyState::Active {
+    if !mode_assurance_satisfied {
         return Vec::new();
     }
     let mut permissions = policy
@@ -402,8 +422,13 @@ pub(crate) struct ProfileChildAccessResult {
 pub(crate) fn evaluate_profile_child_access(
     input: ProfileChildAccessRequest<'_>,
 ) -> ProfileChildAccessResult {
-    let current_permissions =
-        effective_profile_permissions(input.current_policy, input.subject_id, input.assurance);
+    let current_permissions = if input.current_policy.state == ProfileAccessPolicyState::Draining
+        && input.permission == ProfilePermission::TabCloseOwn
+    {
+        profile_permissions_for_subject(input.current_policy, input.subject_id, input.assurance)
+    } else {
+        effective_profile_permissions(input.current_policy, input.subject_id, input.assurance)
+    };
     let current_permission_set = current_permissions.into_iter().collect::<BTreeSet<_>>();
     let inherited_permission = input.child.permissions.contains(&input.permission)
         && current_permission_set.contains(&input.permission);
@@ -443,6 +468,560 @@ pub(crate) fn evaluate_profile_child_access(
         reason,
         child,
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfilePolicyTarget {
+    pub mode: ProfileAccessMode,
+    pub default_permissions: Vec<ProfilePermission>,
+    pub grants: Vec<ProfileAccessGrant>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileEvictionMode {
+    GracefulOnly,
+    ForceImmediate,
+    ForceAfterGrace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfilePolicyMutationRequest<'a> {
+    pub(crate) expected_revision: u64,
+    pub(crate) target: ProfilePolicyTarget,
+    pub(crate) subject_id: Option<&'a str>,
+    pub(crate) assurance: ProfileIdentityAssurance,
+    pub(crate) incompatible_occupancy: Vec<String>,
+    pub(crate) eviction_mode: Option<ProfileEvictionMode>,
+    pub(crate) grace_deadline: Option<String>,
+    pub(crate) now: &'a str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfilePolicyMutationOutcome {
+    Unchanged,
+    Widened,
+    DrainStarted,
+    DrainUpdated,
+    Restricted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfilePolicyRevisionDiff {
+    pub mode_changed: bool,
+    pub default_permissions_added: usize,
+    pub default_permissions_removed: usize,
+    pub grant_count_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfilePolicyMutationFailure {
+    pub code: String,
+    pub expected_revision: u64,
+    pub current_revision: u64,
+    pub missing_permission: Option<ProfilePermission>,
+    pub current_diff: ProfilePolicyRevisionDiff,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileEvictionPlan {
+    pub plan_id: String,
+    pub profile_id: String,
+    pub policy_revision: u64,
+    pub requested_by: Option<String>,
+    pub mode: ProfileEvictionMode,
+    pub grace_deadline: Option<String>,
+    pub target_resource_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileEvictionReceipt {
+    pub receipt_id: String,
+    pub plan_id: String,
+    pub profile_id: String,
+    pub policy_revision: u64,
+    pub mode: ProfileEvictionMode,
+    pub gracefully_released_resource_ids: Vec<String>,
+    pub forcibly_evicted_resource_ids: Vec<String>,
+    pub remaining_resource_ids: Vec<String>,
+    pub outcome: String,
+    pub completed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfilePolicyAuditReceipt {
+    pub receipt_id: String,
+    pub profile_id: String,
+    pub subject_id: Option<String>,
+    pub assurance: ProfileIdentityAssurance,
+    pub operation: String,
+    pub prior_revision: u64,
+    pub resulting_revision: u64,
+    pub drain_outcome: String,
+    pub eviction_outcome: String,
+    pub occurred_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfilePolicyMutationResult {
+    pub(crate) outcome: ProfilePolicyMutationOutcome,
+    pub(crate) policy: ServiceProfileAccessPolicy,
+    pub(crate) blocking_occupancy: Vec<String>,
+    pub(crate) eviction_plan: Option<ProfileEvictionPlan>,
+    pub(crate) eviction_receipt: Option<ProfileEvictionReceipt>,
+    pub(crate) receipt: ProfilePolicyAuditReceipt,
+}
+
+/// Apply one revision-fenced policy edit. Widening commits immediately.
+/// Narrowing first establishes a durable admission fence and commits only
+/// after the caller proves that incompatible occupancy has reached zero.
+pub(crate) fn mutate_profile_policy(
+    current: &ServiceProfileAccessPolicy,
+    request: ProfilePolicyMutationRequest<'_>,
+) -> Result<ProfilePolicyMutationResult, ProfilePolicyMutationFailure> {
+    let target = canonical_policy_target(request.target.clone());
+    let diff = policy_revision_diff(current, &target);
+    if request.expected_revision != current.revision {
+        return Err(policy_mutation_failure(
+            "policy_revision_conflict",
+            request.expected_revision,
+            current,
+            None,
+            diff,
+        ));
+    }
+    for permission in [ProfilePermission::PolicyWrite] {
+        if !profile_permissions_for_subject(current, request.subject_id, request.assurance)
+            .contains(&permission)
+        {
+            return Err(policy_mutation_failure(
+                "profile_policy_permission_denied",
+                request.expected_revision,
+                current,
+                Some(permission),
+                diff,
+            ));
+        }
+    }
+
+    let unchanged = current.state == ProfileAccessPolicyState::Active
+        && current.mode == target.mode
+        && canonical_permissions(&current.default_permissions) == target.default_permissions
+        && canonical_grants(&current.grants) == target.grants;
+    if unchanged {
+        return Ok(profile_policy_mutation_result(
+            current.clone(),
+            current,
+            &request,
+            ProfilePolicyMutationOutcome::Unchanged,
+            Vec::new(),
+            None,
+        ));
+    }
+
+    let widening = current.state == ProfileAccessPolicyState::Active
+        && policy_target_is_widening(current, &target);
+    if widening {
+        let policy = committed_policy(current, &target, request.now);
+        return Ok(profile_policy_mutation_result(
+            policy,
+            current,
+            &request,
+            ProfilePolicyMutationOutcome::Widened,
+            Vec::new(),
+            None,
+        ));
+    }
+
+    if !profile_permissions_for_subject(current, request.subject_id, request.assurance)
+        .contains(&ProfilePermission::Drain)
+    {
+        return Err(policy_mutation_failure(
+            "profile_drain_permission_denied",
+            request.expected_revision,
+            current,
+            Some(ProfilePermission::Drain),
+            diff,
+        ));
+    }
+    if let Some(drain) = current.drain.as_ref() {
+        if drain.target_mode != target.mode || drain.expected_revision != request.expected_revision
+        {
+            return Err(policy_mutation_failure(
+                "profile_drain_target_conflict",
+                request.expected_revision,
+                current,
+                None,
+                diff,
+            ));
+        }
+    }
+
+    let occupancy = canonical_strings(request.incompatible_occupancy.clone());
+    if occupancy.is_empty() {
+        let policy = committed_policy(current, &target, request.now);
+        return Ok(profile_policy_mutation_result(
+            policy,
+            current,
+            &request,
+            ProfilePolicyMutationOutcome::Restricted,
+            Vec::new(),
+            None,
+        ));
+    }
+
+    let force_requested = matches!(
+        request.eviction_mode,
+        Some(ProfileEvictionMode::ForceImmediate | ProfileEvictionMode::ForceAfterGrace)
+    );
+    if matches!(
+        request.eviction_mode,
+        Some(ProfileEvictionMode::GracefulOnly | ProfileEvictionMode::ForceAfterGrace)
+    ) && request.grace_deadline.is_none()
+    {
+        return Err(policy_mutation_failure(
+            "profile_eviction_grace_deadline_required",
+            request.expected_revision,
+            current,
+            None,
+            diff,
+        ));
+    }
+    if force_requested
+        && !profile_permissions_for_subject(current, request.subject_id, request.assurance)
+            .contains(&ProfilePermission::Evict)
+    {
+        return Err(policy_mutation_failure(
+            "profile_evict_permission_denied",
+            request.expected_revision,
+            current,
+            Some(ProfilePermission::Evict),
+            diff,
+        ));
+    }
+    let eviction_plan = request.eviction_mode.map(|mode| ProfileEvictionPlan {
+        plan_id: stable_policy_operation_id(
+            "profile-eviction-plan",
+            &current.profile_id,
+            current.revision,
+            request.subject_id,
+            &format!("{mode:?}:{occupancy:?}"),
+        ),
+        profile_id: current.profile_id.clone(),
+        policy_revision: current.revision,
+        requested_by: request.subject_id.map(str::to_string),
+        mode,
+        grace_deadline: request.grace_deadline.clone(),
+        target_resource_ids: occupancy.clone(),
+    });
+    let mut policy = current.clone();
+    let outcome = if policy.state == ProfileAccessPolicyState::Draining {
+        ProfilePolicyMutationOutcome::DrainUpdated
+    } else {
+        ProfilePolicyMutationOutcome::DrainStarted
+    };
+    policy.state = ProfileAccessPolicyState::Draining;
+    policy.drain = Some(ProfileAccessDrain {
+        target_mode: target.mode,
+        expected_revision: current.revision,
+        incompatible_occupancy: occupancy.clone(),
+        force_authorized: force_requested,
+    });
+    policy.updated_at = request.now.to_string();
+    Ok(profile_policy_mutation_result(
+        policy,
+        current,
+        &request,
+        outcome,
+        occupancy,
+        eviction_plan,
+    ))
+}
+
+/// Produce the minimal outcome receipt after the lease-authority and exact
+/// lifecycle layers execute an explicit eviction plan.
+pub(crate) fn record_profile_eviction_receipt(
+    plan: &ProfileEvictionPlan,
+    gracefully_released_resource_ids: Vec<String>,
+    forcibly_evicted_resource_ids: Vec<String>,
+    completed_at: &str,
+) -> Result<ProfileEvictionReceipt, String> {
+    let targets = plan
+        .target_resource_ids
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let graceful = canonical_strings(gracefully_released_resource_ids);
+    let forced = canonical_strings(forcibly_evicted_resource_ids);
+    if graceful
+        .iter()
+        .chain(forced.iter())
+        .any(|resource_id| !targets.contains(resource_id))
+    {
+        return Err("profile_eviction_receipt_target_mismatch".to_string());
+    }
+    if graceful
+        .iter()
+        .any(|resource_id| forced.contains(resource_id))
+    {
+        return Err("profile_eviction_receipt_duplicate_outcome".to_string());
+    }
+    if plan.mode == ProfileEvictionMode::GracefulOnly && !forced.is_empty() {
+        return Err("profile_eviction_receipt_force_not_authorized".to_string());
+    }
+    let completed = graceful
+        .iter()
+        .chain(forced.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let remaining = targets.difference(&completed).cloned().collect::<Vec<_>>();
+    let outcome = if remaining.is_empty() {
+        if forced.is_empty() {
+            "released_gracefully"
+        } else {
+            "forced_eviction_completed"
+        }
+    } else {
+        "incomplete"
+    };
+    Ok(ProfileEvictionReceipt {
+        receipt_id: stable_policy_operation_id(
+            "profile-eviction-receipt",
+            &plan.profile_id,
+            plan.policy_revision,
+            plan.requested_by.as_deref(),
+            &format!("{}:{graceful:?}:{forced:?}", plan.plan_id),
+        ),
+        plan_id: plan.plan_id.clone(),
+        profile_id: plan.profile_id.clone(),
+        policy_revision: plan.policy_revision,
+        mode: plan.mode,
+        gracefully_released_resource_ids: graceful,
+        forcibly_evicted_resource_ids: forced,
+        remaining_resource_ids: remaining,
+        outcome: outcome.to_string(),
+        completed_at: completed_at.to_string(),
+    })
+}
+
+fn committed_policy(
+    current: &ServiceProfileAccessPolicy,
+    target: &ProfilePolicyTarget,
+    now: &str,
+) -> ServiceProfileAccessPolicy {
+    ServiceProfileAccessPolicy {
+        mode: target.mode,
+        revision: current.revision.saturating_add(1),
+        state: ProfileAccessPolicyState::Active,
+        default_permissions: target.default_permissions.clone(),
+        grants: target.grants.clone(),
+        drain: None,
+        updated_at: now.to_string(),
+        ..current.clone()
+    }
+}
+
+fn profile_policy_mutation_result(
+    policy: ServiceProfileAccessPolicy,
+    current: &ServiceProfileAccessPolicy,
+    request: &ProfilePolicyMutationRequest<'_>,
+    outcome: ProfilePolicyMutationOutcome,
+    blocking_occupancy: Vec<String>,
+    eviction_plan: Option<ProfileEvictionPlan>,
+) -> ProfilePolicyMutationResult {
+    let drain_outcome = match outcome {
+        ProfilePolicyMutationOutcome::DrainStarted => "started",
+        ProfilePolicyMutationOutcome::DrainUpdated => "updated",
+        ProfilePolicyMutationOutcome::Restricted => "completed",
+        _ => "not_required",
+    };
+    let eviction_outcome = if eviction_plan.is_some() {
+        "planned"
+    } else {
+        "not_requested"
+    };
+    let eviction_receipt = eviction_plan.as_ref().map(|plan| {
+        record_profile_eviction_receipt(plan, Vec::new(), Vec::new(), request.now)
+            .expect("an exact eviction plan must produce its initial receipt")
+    });
+    ProfilePolicyMutationResult {
+        receipt: ProfilePolicyAuditReceipt {
+            receipt_id: stable_policy_operation_id(
+                "profile-policy-receipt",
+                &current.profile_id,
+                current.revision,
+                request.subject_id,
+                &format!("{outcome:?}:{}", policy.revision),
+            ),
+            profile_id: current.profile_id.clone(),
+            subject_id: request.subject_id.map(str::to_string),
+            assurance: request.assurance,
+            operation: "profile_policy_update".to_string(),
+            prior_revision: current.revision,
+            resulting_revision: policy.revision,
+            drain_outcome: drain_outcome.to_string(),
+            eviction_outcome: eviction_outcome.to_string(),
+            occurred_at: request.now.to_string(),
+        },
+        outcome,
+        policy,
+        blocking_occupancy,
+        eviction_plan,
+        eviction_receipt,
+    }
+}
+
+fn policy_mutation_failure(
+    code: &str,
+    expected_revision: u64,
+    current: &ServiceProfileAccessPolicy,
+    missing_permission: Option<ProfilePermission>,
+    current_diff: ProfilePolicyRevisionDiff,
+) -> ProfilePolicyMutationFailure {
+    ProfilePolicyMutationFailure {
+        code: code.to_string(),
+        expected_revision,
+        current_revision: current.revision,
+        missing_permission,
+        current_diff,
+    }
+}
+
+fn policy_target_is_widening(
+    current: &ServiceProfileAccessPolicy,
+    target: &ProfilePolicyTarget,
+) -> bool {
+    if access_mode_rank(target.mode) > access_mode_rank(current.mode) {
+        return false;
+    }
+    let target_defaults = target
+        .default_permissions
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if current
+        .default_permissions
+        .iter()
+        .any(|permission| !target_defaults.contains(permission))
+    {
+        return false;
+    }
+    current.grants.iter().all(|current_grant| {
+        target.grants.iter().any(|target_grant| {
+            target_grant.subject_id == current_grant.subject_id
+                && target_grant.minimum_assurance.rank() <= current_grant.minimum_assurance.rank()
+                && current_grant
+                    .permissions
+                    .iter()
+                    .all(|permission| target_grant.permissions.contains(permission))
+        })
+    })
+}
+
+fn access_mode_rank(mode: ProfileAccessMode) -> u8 {
+    match mode {
+        ProfileAccessMode::SharedLocal => 0,
+        ProfileAccessMode::Restricted => 1,
+        ProfileAccessMode::Exclusive => 2,
+    }
+}
+
+fn canonical_policy_target(mut target: ProfilePolicyTarget) -> ProfilePolicyTarget {
+    target.default_permissions = canonical_permissions(&target.default_permissions);
+    target.grants = canonical_grants(&target.grants);
+    target
+}
+
+fn canonical_permissions(permissions: &[ProfilePermission]) -> Vec<ProfilePermission> {
+    permissions
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn canonical_grants(grants: &[ProfileAccessGrant]) -> Vec<ProfileAccessGrant> {
+    let mut grants = grants
+        .iter()
+        .cloned()
+        .map(|mut grant| {
+            grant.permissions = canonical_permissions(&grant.permissions);
+            grant
+        })
+        .collect::<Vec<_>>();
+    grants.sort_by(|left, right| {
+        left.subject_id.cmp(&right.subject_id).then_with(|| {
+            left.minimum_assurance
+                .rank()
+                .cmp(&right.minimum_assurance.rank())
+        })
+    });
+    grants
+}
+
+fn canonical_strings(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn policy_revision_diff(
+    current: &ServiceProfileAccessPolicy,
+    target: &ProfilePolicyTarget,
+) -> ProfilePolicyRevisionDiff {
+    let current_permissions = current
+        .default_permissions
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let target_permissions = target
+        .default_permissions
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    ProfilePolicyRevisionDiff {
+        mode_changed: current.mode != target.mode,
+        default_permissions_added: target_permissions.difference(&current_permissions).count(),
+        default_permissions_removed: current_permissions.difference(&target_permissions).count(),
+        grant_count_changed: current.grants.len() != target.grants.len(),
+    }
+}
+
+fn stable_policy_operation_id(
+    prefix: &str,
+    profile_id: &str,
+    revision: u64,
+    subject_id: Option<&str>,
+    operation: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(prefix.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(profile_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(revision.to_le_bytes());
+    hasher.update(b"\0");
+    hasher.update(subject_id.unwrap_or("unknown").as_bytes());
+    hasher.update(b"\0");
+    hasher.update(operation.as_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("{prefix}:{suffix}")
 }
 
 fn stable_decision_id(
@@ -634,5 +1213,204 @@ mod tests {
         ]);
 
         assert_eq!(child.permissions, vec![ProfilePermission::TabObserve]);
+    }
+
+    fn administrative_policy(include_evict: bool) -> ServiceProfileAccessPolicy {
+        let mut permissions = vec![ProfilePermission::PolicyWrite, ProfilePermission::Drain];
+        if include_evict {
+            permissions.push(ProfilePermission::Evict);
+        }
+        ServiceProfileAccessPolicy {
+            profile_id: "research-gov".to_string(),
+            revision: 7,
+            grants: vec![ProfileAccessGrant {
+                subject_id: "operator:admin".to_string(),
+                minimum_assurance: ProfileIdentityAssurance::Operator,
+                permissions,
+            }],
+            ..ServiceProfileAccessPolicy::shared_local_default("research-gov")
+        }
+    }
+
+    fn restricted_target() -> ProfilePolicyTarget {
+        ProfilePolicyTarget {
+            mode: ProfileAccessMode::Restricted,
+            default_permissions: Vec::new(),
+            grants: vec![ProfileAccessGrant {
+                subject_id: "operator:admin".to_string(),
+                minimum_assurance: ProfileIdentityAssurance::Operator,
+                permissions: vec![
+                    ProfilePermission::PolicyWrite,
+                    ProfilePermission::Drain,
+                    ProfilePermission::Evict,
+                    ProfilePermission::ProfileUse,
+                ],
+            }],
+        }
+    }
+
+    fn mutation_request(
+        target: ProfilePolicyTarget,
+        occupancy: Vec<String>,
+        eviction_mode: Option<ProfileEvictionMode>,
+        grace_deadline: Option<&str>,
+    ) -> ProfilePolicyMutationRequest<'static> {
+        ProfilePolicyMutationRequest {
+            expected_revision: 7,
+            target,
+            subject_id: Some("operator:admin"),
+            assurance: ProfileIdentityAssurance::Operator,
+            incompatible_occupancy: occupancy,
+            eviction_mode,
+            grace_deadline: grace_deadline.map(str::to_string),
+            now: "2026-09-02T18:00:00Z",
+        }
+    }
+
+    #[test]
+    fn narrowing_fences_admission_then_commits_only_after_occupancy_drains() {
+        let current = administrative_policy(true);
+        let started = mutate_profile_policy(
+            &current,
+            mutation_request(
+                restricted_target(),
+                vec!["tab:z".to_string(), "tab:a".to_string()],
+                None,
+                None,
+            ),
+        )
+        .expect("authorized narrowing should begin a drain");
+
+        assert_eq!(started.outcome, ProfilePolicyMutationOutcome::DrainStarted);
+        assert_eq!(started.policy.revision, 7);
+        assert_eq!(started.policy.state, ProfileAccessPolicyState::Draining);
+        assert_eq!(started.blocking_occupancy, vec!["tab:a", "tab:z"]);
+        assert!(started.eviction_plan.is_none());
+        let (_, denied_during_drain) = evaluate_profile_access(ProfileAccessEvaluation {
+            profile_id: "research-gov",
+            explicit_policy: Some(&started.policy),
+            subject_id: Some("client:new".to_string()),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: Some("connection:new".to_string()),
+            permission: ProfilePermission::TabCreate,
+            operation: "tab_create",
+            incompatible_occupancy: Vec::new(),
+        });
+        assert!(!denied_during_drain.allowed);
+        let draining_child = shared_child(ProfileConnectionState::Active);
+        let close_during_drain = evaluate_profile_child_access(ProfileChildAccessRequest {
+            child: &draining_child,
+            current_policy: &started.policy,
+            subject_id: Some("client:fieldwork"),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: "connection:owner",
+            permission: ProfilePermission::TabCloseOwn,
+            reconnect: false,
+        });
+        let control_during_drain = evaluate_profile_child_access(ProfileChildAccessRequest {
+            child: &draining_child,
+            current_policy: &started.policy,
+            subject_id: Some("client:fieldwork"),
+            assurance: ProfileIdentityAssurance::SelfDeclared,
+            connection_instance_id: "connection:owner",
+            permission: ProfilePermission::TabControlOwn,
+            reconnect: false,
+        });
+        assert!(close_during_drain.allowed);
+        assert!(!control_during_drain.allowed);
+
+        let completed = mutate_profile_policy(
+            &started.policy,
+            mutation_request(restricted_target(), Vec::new(), None, None),
+        )
+        .expect("the same target should commit after occupancy reaches zero");
+        assert_eq!(completed.outcome, ProfilePolicyMutationOutcome::Restricted);
+        assert_eq!(completed.policy.revision, 8);
+        assert_eq!(completed.policy.state, ProfileAccessPolicyState::Active);
+        assert!(completed.policy.drain.is_none());
+    }
+
+    #[test]
+    fn widening_commits_immediately_at_a_new_revision() {
+        let mut current = administrative_policy(true);
+        current.mode = ProfileAccessMode::Restricted;
+        current.default_permissions = Vec::new();
+        let target = ProfilePolicyTarget {
+            mode: ProfileAccessMode::SharedLocal,
+            default_permissions: ServiceProfileAccessPolicy::shared_local_default("research-gov")
+                .default_permissions,
+            grants: current.grants.clone(),
+        };
+
+        let result = mutate_profile_policy(
+            &current,
+            mutation_request(target, vec!["tab:existing".to_string()], None, None),
+        )
+        .expect("widening should not wait for occupancy");
+        assert_eq!(result.outcome, ProfilePolicyMutationOutcome::Widened);
+        assert_eq!(result.policy.revision, 8);
+        assert_eq!(result.policy.state, ProfileAccessPolicyState::Active);
+        assert!(result.blocking_occupancy.is_empty());
+    }
+
+    #[test]
+    fn revision_conflict_returns_current_revision_and_redacted_diff() {
+        let current = administrative_policy(true);
+        let mut request = mutation_request(restricted_target(), Vec::new(), None, None);
+        request.expected_revision = 6;
+
+        let failure = mutate_profile_policy(&current, request)
+            .expect_err("stale expected revision must fail closed");
+        assert_eq!(failure.code, "policy_revision_conflict");
+        assert_eq!(failure.expected_revision, 6);
+        assert_eq!(failure.current_revision, 7);
+        assert!(failure.current_diff.mode_changed);
+        assert!(failure.current_diff.default_permissions_removed > 0);
+    }
+
+    #[test]
+    fn force_is_explicit_permission_checked_and_minimally_receipted() {
+        let current = administrative_policy(true);
+        let planned = mutate_profile_policy(
+            &current,
+            mutation_request(
+                restricted_target(),
+                vec!["tab:b".to_string(), "tab:a".to_string()],
+                Some(ProfileEvictionMode::ForceAfterGrace),
+                Some("2026-09-02T18:05:00Z"),
+            ),
+        )
+        .expect("authorized explicit force should produce an exact plan");
+        let plan = planned
+            .eviction_plan
+            .as_ref()
+            .expect("explicit force should be planned");
+        assert_eq!(plan.target_resource_ids, vec!["tab:a", "tab:b"]);
+        assert!(planned.policy.drain.as_ref().unwrap().force_authorized);
+
+        let denied = mutate_profile_policy(
+            &administrative_policy(false),
+            mutation_request(
+                restricted_target(),
+                vec!["tab:a".to_string()],
+                Some(ProfileEvictionMode::ForceImmediate),
+                None,
+            ),
+        )
+        .expect_err("force requires the separate evict permission");
+        assert_eq!(denied.missing_permission, Some(ProfilePermission::Evict));
+
+        let receipt = record_profile_eviction_receipt(
+            plan,
+            vec!["tab:a".to_string()],
+            vec!["tab:b".to_string()],
+            "2026-09-02T18:05:01Z",
+        )
+        .expect("exact target outcomes should produce a receipt");
+        assert_eq!(receipt.outcome, "forced_eviction_completed");
+        assert!(receipt.remaining_resource_ids.is_empty());
+        let serialized = serde_json::to_string(&receipt).unwrap();
+        assert!(!serialized.contains("page"));
+        assert!(!serialized.contains("form"));
     }
 }
