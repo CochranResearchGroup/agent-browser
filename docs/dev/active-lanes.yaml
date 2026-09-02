@@ -1,5 +1,21 @@
 schema_version: 1
 lanes:
+  - id: P154 Desktop Locator Deep Module
+    objective: Reduce desktop locator to its two production operations and one canonical captured-frame representation
+    plan: docs/dev/plans/0154-2026-09-01-desktop-locator-deep-module-plan.md
+    plan_ref: refs/heads/architecture/desktop-locator-deep-module
+    branch: architecture/desktop-locator-deep-module
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: c664c25bb2dac0daee619b82334d708ffa4e998f
+    remote_ref: refs/remotes/origin/architecture/desktop-locator-deep-module
+    integration_receipt: null
+    integration: merge
+    dependencies: [P110, P131]
+    overlaps: []
+    reconciled_overlaps: []
+    updated_at: 2026-09-01
   - id: P152 Terminal Session Replacement Planner Executor Parity
     objective: Make authenticated terminal replacement plans executable without weakening identity or live-owner fences
     plan: docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md
