@@ -160,9 +160,9 @@ pub(crate) mod service_principal;
 #[allow(dead_code)]
 pub mod service_probe;
 #[allow(dead_code)]
-pub(crate) mod service_profile_lease;
+pub(crate) mod service_profile_acquisition;
 #[allow(dead_code)]
-pub(crate) mod service_profile_recovery;
+pub(crate) mod service_profile_lease;
 #[allow(dead_code)]
 pub mod service_renderer_crash;
 #[allow(dead_code)]

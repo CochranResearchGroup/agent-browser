@@ -2445,7 +2445,7 @@ pub struct ServiceState {
     /// Idempotent terminal receipts for sealed profile acquisition recoveries.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_recovery_receipts:
-        BTreeMap<String, super::service_profile_recovery::RecoveryReceipt>,
+        BTreeMap<String, super::service_profile_acquisition::RecoveryReceipt>,
     /// Idempotent receipts for exact inert browser-record retirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) browser_retirement_receipts:

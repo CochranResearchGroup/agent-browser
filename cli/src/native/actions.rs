@@ -166,10 +166,10 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
+use super::service_profile_acquisition::handle_service_profile_recovery_command;
 use super::service_profile_lease::{
     handle_service_profile_lease_command, handle_service_profile_leases,
 };
-use super::service_profile_recovery::handle_service_profile_recovery_command;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };

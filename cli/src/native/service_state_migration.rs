@@ -286,8 +286,8 @@ pub(crate) fn read_recovery_artifact_compatibility(
         "unknown_recovery_artifact"
     };
     let known_current_schemas = [
-        super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
-        super::service_profile_recovery::PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
+        super::service_profile_acquisition::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+        super::service_profile_acquisition::PROFILE_RECOVERY_RECEIPT_SCHEMA_V1,
         super::service_browser_retirement::BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
         super::service_browser_retirement::BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
     ];
@@ -2096,7 +2096,7 @@ mod tests {
     #[test]
     fn recovery_artifact_reader_is_forward_backward_and_mixed_version_safe() {
         let current = json!({
-            "schemaVersion": super::super::service_profile_recovery::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
+            "schemaVersion": super::super::service_profile_acquisition::PROFILE_RECOVERY_PLAN_SCHEMA_V1,
             "actions": [{"actionType": "retire_inert_browser_record"}],
         })
         .to_string();

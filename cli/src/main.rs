@@ -2120,10 +2120,10 @@ fn main() {
 
     let authority_selected_session = match cmd.get("action").and_then(|value| value.as_str()) {
         Some("service_profile_acquire") => {
-            native::service_profile_recovery::profile_acquisition_daemon_route(&cmd).map(Some)
+            native::service_profile_acquisition::profile_acquisition_daemon_route(&cmd).map(Some)
         }
         Some("service_profile_recovery_apply") => {
-            native::service_profile_recovery::profile_recovery_apply_daemon_route(&cmd).map(Some)
+            native::service_profile_acquisition::profile_recovery_apply_daemon_route(&cmd).map(Some)
         }
         _ => Ok(None),
     };
