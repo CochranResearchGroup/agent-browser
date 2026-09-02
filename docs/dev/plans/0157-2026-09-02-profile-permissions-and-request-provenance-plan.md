@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w7_drain_restrict_and_eviction_in_progress`
+Execution state: `w8_lease_authority_and_lifecycle_in_progress`
 
 Lane: P157
 
@@ -540,6 +540,40 @@ Validation evidence:
   route-confusion, no-launch collection, and close-scope gates pass;
 - focused connection, reconnect, subject isolation, inherited-permission, and
   exact own-tab close tests pass; and
+- the P157 oracle remains at six schemas, four green cases, and the one W9
+  convergence case intentionally red.
+
+## Execution Checkpoint W7
+
+Source checkpoint: `d3c12100`.
+
+State transition: `w6_complete -> w7_complete`.
+
+Completed in W7 attempt 1:
+
+- added expected-revision compare-and-swap for every Profile policy mutation,
+  with the current revision and a redacted structural diff on conflicts;
+- made widening commit immediately at a new revision while narrowing an
+  occupied Profile enters a persisted drain at the current revision;
+- fenced new admission and later child control during a drain while preserving
+  exact own-tab release so compatible occupants can leave gracefully;
+- derived incompatible occupancy from attributed persisted tabs instead of
+  trusting caller-supplied blockers, then committed narrowing only after the
+  occupancy reached zero; and
+- separated explicit eviction authorization from policy editing, with exact
+  target plans and minimal receipts for graceful and forced outcomes.
+
+W7 is complete without production profile, browser, runtime, ACL, or eviction
+effects. W8 is open to integrate the cohesive lease-authority client, human
+takeover, exact lifecycle proof, and full-shutdown authorization.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,901 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- focused policy, repository persistence, revision-conflict, drain-fencing,
+  graceful-release, and explicit-eviction receipt tests pass; and
 - the P157 oracle remains at six schemas, four green cases, and the one W9
   convergence case intentionally red.
 

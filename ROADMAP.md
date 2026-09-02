@@ -59,6 +59,13 @@ the same stable subject, active connections cannot be stolen by repeated
 labels, current parent policy always bounds child permission, and tab release
 closes only the authorized owned resource. Internal child and connection fields
 cannot be forged through request parameters.
+W7 is source complete at `d3c12100`. Profile policy edits now use
+expected-revision compare-and-swap. Widening commits immediately, while
+narrowing occupied Profiles persists a drain that fences new admission and
+later control but preserves exact own-tab release. Incompatible occupancy is
+derived from attributed Service state, restriction commits only at zero, and
+forced eviction requires a separate explicit permission, exact target plan,
+and minimal receipt.
 
 ### Plan
 
@@ -66,9 +73,9 @@ cannot be forged through request parameters.
 
 ### Next Recommendation
 
-Execute W7: add revision-fenced drain-and-restrict, graceful release, and
-explicit receipted eviction so policy narrowing cannot race new admission or
-silently displace incompatible occupants.
+Execute W8: integrate the cohesive lease-authority client, human takeover,
+exact lifecycle proof, and full-shutdown authorization so forced effects
+require both Profile permission and verified physical ownership.
 
 ## P156 | Full Runtime Shutdown Replacement
 

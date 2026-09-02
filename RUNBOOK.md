@@ -4,6 +4,40 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 209 | 2026-09-02
+
+Scope: complete P157 W7 revision-fenced Profile drain-and-restrict without
+production profile, browser, runtime, ACL, or eviction effects.
+
+Actions:
+
+- added expected-revision compare-and-swap with current-revision and redacted
+  structural conflict evidence;
+- made widening immediate and made occupied narrowing persist a drain at the
+  current revision until incompatible occupancy reaches zero;
+- fenced new admission and later child control during draining while retaining
+  exact own-tab release for graceful departure;
+- computed blockers from attributed persisted tabs instead of caller input;
+  and
+- required separate explicit eviction permission, mode, exact targets, and
+  minimal outcome receipts.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,901 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- focused policy, repository, revision-conflict, drain, and eviction-receipt
+  tests pass; and
+- the P157 oracle remains at four green cases with only the W9 convergence
+  case intentionally red.
+
+Result:
+
+- W7 is complete and pushed at `d3c12100` without production effects; and
+- W8 cohesive lease authority, human takeover, lifecycle proof, and
+  full-shutdown authorization is next.
+
 ## Turn 208 | 2026-09-02
 
 Scope: complete P157 W6 attributable tab participation without production
