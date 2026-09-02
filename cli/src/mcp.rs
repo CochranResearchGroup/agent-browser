@@ -994,6 +994,15 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
                     },
+                    "clientSubjectId": {
+                        "type": "string",
+                        "description": "Stable self-declared or authenticated client subject evaluated by the selected profile access policy."
+                    },
+                    "identityAssurance": {
+                        "type": "string",
+                        "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"],
+                        "description": "Assurance used by the current profile access decision. Trusted ingress state determines effective assurance."
+                    },
                     "agentName": {
                         "type": "string",
                         "description": "Calling agent name."
@@ -1415,6 +1424,24 @@ fn service_mcp_tools() -> Vec<Value> {
                     "serviceName": {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "clientSubjectId": {
+                        "type": "string",
+                        "description": "Stable self-declared or authenticated client subject evaluated by the selected profile access policy."
+                    },
+                    "identityAssurance": {
+                        "type": "string",
+                        "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"],
+                        "description": "Assurance used by the current profile access decision. Trusted ingress state determines effective assurance."
+                    },
+                    "policyRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Profile access-policy revision admitted by the broker."
+                    },
+                    "accessDecisionId": {
+                        "type": "string",
+                        "description": "Deterministic profile access-decision identity admitted by the broker."
                     },
                     "agentName": {
                         "type": "string",

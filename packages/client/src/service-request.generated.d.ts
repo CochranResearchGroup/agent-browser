@@ -126,6 +126,9 @@ export interface ServiceRequest {
   serviceName?: string;
   agentName?: string;
   taskName?: string;
+  clientSubjectId?: string;
+  identityAssurance?: string;
+  accessDecisionId?: string;
   targetServiceId?: string;
   targetService?: string;
   siteId?: string;
@@ -163,6 +166,7 @@ export interface ServiceRequest {
   maxConsoleEntries?: number;
   maxErrorEntries?: number;
   maxRequestEntries?: number;
+  policyRevision?: number;
   cdpPort?: number;
   maxBytes?: number;
   pid?: number;
@@ -1577,6 +1581,9 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  subject: Record<string, unknown> | null;
+  missingPermission: string | null;
+  executableNextAction: Record<string, unknown> | null;
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;

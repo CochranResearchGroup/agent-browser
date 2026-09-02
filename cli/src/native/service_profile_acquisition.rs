@@ -5,7 +5,8 @@
 //! extraction by giving callers one typed representation of the selected
 //! browser and daemon route. The owner also contains recovery coordination so
 //! access planning, retry, and execution share one dependency direction.
-//! Policy semantics remain unchanged in this slice.
+//! Revisioned profile-access policy is evaluated here before coordination and
+//! lifecycle evidence are considered.
 
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -19,6 +20,10 @@ use super::service_model::{
     ControlInputProvider, LeaseState, ProfileOrigin, ServiceState, ViewStreamProvider,
 };
 use super::service_principal::AuthenticatedServicePrincipal;
+use super::service_profile_access_policy::{
+    evaluate_profile_access, ProfileAccessEvaluation, ProfileAccessMode, ProfileIdentityAssurance,
+    ProfilePermission, ServiceProfileAccessDecision, ServiceProfileAccessPolicy,
+};
 use super::{
     action_runtime, service_lease_authority, service_model, service_principal, service_resources,
     service_store, service_trace,
@@ -44,6 +49,8 @@ pub(crate) struct ProfileAcquisitionInput<'a> {
 
 /// Typed acquisition result plus its stable public compatibility projections.
 pub(crate) struct ProfileAcquisitionPlan {
+    pub(crate) access_policy: ServiceProfileAccessPolicy,
+    pub(crate) access_decision: ServiceProfileAccessDecision,
     pub(crate) profile_reuse: Value,
     pub(crate) lifecycle_replacement: Value,
     pub(crate) service_request: Value,
@@ -56,15 +63,18 @@ pub(crate) fn decide_profile_acquisition(
 ) -> ProfileAcquisitionPlan {
     let lifecycle_replacement =
         lifecycle_replacement_decision(input.selected_profile, input.service_state);
-    let profile_reuse = profile_reuse_decision(
-        input.request,
-        input.selected_profile,
-        input.service_state,
-        input.launch_posture,
-        input.manual_seeding_required,
-        &lifecycle_replacement,
-        input.authenticated_principal,
-    );
+    let (access_policy, access_decision) = profile_access_decision(&input);
+    let strict_identity_required = access_policy.mode != ProfileAccessMode::SharedLocal;
+    let profile_reuse = profile_reuse_decision(ProfileReuseInput {
+        request: input.request,
+        selected_profile: input.selected_profile,
+        service_state: input.service_state,
+        launch_posture: input.launch_posture,
+        manual_seeding_required: input.manual_seeding_required,
+        lifecycle_replacement: &lifecycle_replacement,
+        authenticated_principal: input.authenticated_principal,
+        strict_identity_required,
+    });
     let reuse_action = profile_reuse
         .get("recommendedAction")
         .and_then(Value::as_str);
@@ -72,15 +82,19 @@ pub(crate) fn decide_profile_acquisition(
         && reuse_action == Some("launch_new_browser")
         && lifecycle_replacement["replacementEligible"].as_bool() == Some(true)
         && lifecycle_replacement["reason"].as_str() == Some("terminal_cleanup_satisfied");
-    let acquisition_blocker = match reuse_action {
-        Some("blocked_by_explicit_session_route") => Some("explicit_session_route_invalid"),
-        Some("wait_for_foreign_principal") => Some("foreign_principal_profile_lease"),
-        Some("authenticate_for_profile_reuse") => Some("profile_capability_required"),
-        Some("lifecycle_profile_identity_inconsistent") => {
-            Some("lifecycle_profile_identity_inconsistent")
+    let acquisition_blocker = if !access_decision.allowed {
+        Some("profile_access_denied")
+    } else {
+        match reuse_action {
+            Some("blocked_by_explicit_session_route") => Some("explicit_session_route_invalid"),
+            Some("wait_for_foreign_principal") => Some("foreign_principal_profile_lease"),
+            Some("authenticate_for_profile_reuse") => Some("profile_capability_required"),
+            Some("lifecycle_profile_identity_inconsistent") => {
+                Some("lifecycle_profile_identity_inconsistent")
+            }
+            _ if terminal_replacement_requires_capability => Some("profile_capability_required"),
+            _ => None,
         }
-        _ if terminal_replacement_requires_capability => Some("profile_capability_required"),
-        _ => None,
     };
     let service_request = service_request_decision(ServiceRequestDecisionInput {
         request: input.request,
@@ -94,9 +108,12 @@ pub(crate) fn decide_profile_acquisition(
         one_time_profile_recommendation: input.one_time_profile_recommendation,
         acquisition_blocker,
         authenticated_principal: input.authenticated_principal,
+        access_policy: &access_policy,
+        access_decision: &access_decision,
     });
     let decision = ProfileAcquisitionDecision::from_components(
         input.selected_profile,
+        &access_decision,
         &profile_reuse,
         &lifecycle_replacement,
         &service_request,
@@ -104,6 +121,8 @@ pub(crate) fn decide_profile_acquisition(
     .expect("profile acquisition owner must produce a coherent decision");
 
     ProfileAcquisitionPlan {
+        access_policy,
+        access_decision,
         profile_reuse,
         lifecycle_replacement,
         service_request,
@@ -124,6 +143,76 @@ struct ServiceRequestDecisionInput<'a> {
     one_time_profile_recommendation: &'a Value,
     acquisition_blocker: Option<&'a str>,
     authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
+    access_policy: &'a ServiceProfileAccessPolicy,
+    access_decision: &'a ServiceProfileAccessDecision,
+}
+
+fn profile_access_decision(
+    input: &ProfileAcquisitionInput<'_>,
+) -> (ServiceProfileAccessPolicy, ServiceProfileAccessDecision) {
+    let profile_id = input
+        .selected_profile
+        .map(|profile| profile.id.as_str())
+        .or(input.request.runtime_profile.as_deref())
+        .unwrap_or("unselected");
+    let subject_id = input
+        .authenticated_principal
+        .map(|authority| authority.principal_id.clone())
+        .or_else(|| input.request.client_subject_id.clone())
+        .or_else(|| self_declared_subject(input.request));
+    let assurance = if input.authenticated_principal.is_some() {
+        ProfileIdentityAssurance::RegisteredCapability
+    } else if subject_id.is_some() {
+        // Identity assurance is derived from trusted ingress state. A caller may
+        // describe its own subject, but it cannot promote that assertion by
+        // supplying a stronger assurance label in the request.
+        ProfileIdentityAssurance::SelfDeclared
+    } else {
+        ProfileIdentityAssurance::Unknown
+    };
+    let incompatible_occupancy = input
+        .service_state
+        .sessions
+        .iter()
+        .filter(|(_id, session)| {
+            session_blocks_profile_reuse(session, profile_id)
+                && session.principal_id.as_deref() != subject_id.as_deref()
+        })
+        .map(|(id, _session)| id.clone())
+        .collect();
+    evaluate_profile_access(ProfileAccessEvaluation {
+        profile_id,
+        explicit_policy: input
+            .selected_profile
+            .and_then(|profile| profile.access_policy.as_ref()),
+        subject_id,
+        assurance,
+        connection_instance_id: None,
+        permission: ProfilePermission::TabCreate,
+        operation: "tab_create",
+        incompatible_occupancy,
+    })
+}
+
+fn self_declared_subject(request: &ServiceAccessPlanRequest) -> Option<String> {
+    let parts = [
+        request
+            .service_name
+            .as_deref()
+            .map(|value| format!("service:{value}")),
+        request
+            .agent_name
+            .as_deref()
+            .map(|value| format!("agent:{value}")),
+        request
+            .task_name
+            .as_deref()
+            .map(|value| format!("task:{value}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| parts.join("/"))
 }
 
 /// Return the stable daemon route for a registered principal's first browser.
@@ -243,6 +332,21 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     if let Some(task_name) = request.task_name.as_ref() {
         service_request.insert("taskName".to_string(), json!(task_name));
     }
+    if let Some(subject_id) = input.access_decision.subject.subject_id.as_ref() {
+        service_request.insert("clientSubjectId".to_string(), json!(subject_id));
+    }
+    service_request.insert(
+        "identityAssurance".to_string(),
+        json!(input.access_decision.subject.assurance),
+    );
+    service_request.insert(
+        "policyRevision".to_string(),
+        json!(input.access_policy.revision),
+    );
+    service_request.insert(
+        "accessDecisionId".to_string(),
+        json!(input.access_decision.decision_id),
+    );
     let replacement_session_name = (profile_reuse
         .get("recommendedAction")
         .and_then(Value::as_str)
@@ -423,6 +527,10 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
             "serviceName",
             "agentName",
             "taskName",
+            "clientSubjectId",
+            "identityAssurance",
+            "policyRevision",
+            "accessDecisionId",
             "targetServiceIds",
             "accountIds",
             "browserBuild",
@@ -483,15 +591,26 @@ fn cdp_free_command_availability(applies: bool) -> Value {
     })
 }
 
-pub(crate) fn profile_reuse_decision(
-    request: &ServiceAccessPlanRequest,
-    selected_profile: Option<&BrowserProfile>,
-    service_state: &ServiceState,
-    launch_posture: &Value,
+struct ProfileReuseInput<'a> {
+    request: &'a ServiceAccessPlanRequest,
+    selected_profile: Option<&'a BrowserProfile>,
+    service_state: &'a ServiceState,
+    launch_posture: &'a Value,
     manual_seeding_required: bool,
-    lifecycle_replacement: &Value,
-    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
-) -> Value {
+    lifecycle_replacement: &'a Value,
+    authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
+    strict_identity_required: bool,
+}
+
+fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
+    let request = input.request;
+    let selected_profile = input.selected_profile;
+    let service_state = input.service_state;
+    let launch_posture = input.launch_posture;
+    let manual_seeding_required = input.manual_seeding_required;
+    let lifecycle_replacement = input.lifecycle_replacement;
+    let authenticated_principal = input.authenticated_principal;
+    let strict_identity_required = input.strict_identity_required;
     let Some(profile) = selected_profile else {
         return json!({
             "recommendedAction": "register_or_select_profile",
@@ -606,50 +725,54 @@ pub(crate) fn profile_reuse_decision(
     principal_bound_session_ids.dedup();
     let mut same_principal_profile_mismatch_browser_ids = Vec::new();
     let mut capability_profile_mismatch = false;
-    if let Some(authority) = authenticated_principal {
-        foreign_principal_session_ids = service_state
-            .sessions
-            .iter()
-            .filter(|(_id, session)| {
-                session_blocks_profile_reuse(session, &profile.id)
-                    && session
-                        .principal_id
-                        .as_deref()
-                        .is_some_and(|principal_id| principal_id != authority.principal_id)
-            })
-            .map(|(id, _session)| id.clone())
-            .collect();
-        foreign_principal_session_ids.sort();
-        foreign_principal_session_ids.dedup();
-        same_principal_profile_mismatch_browser_ids = service_state
-            .sessions
-            .values()
-            .filter(|session| {
-                session_blocks_profile_reuse(session, &profile.id)
-                    && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
-            })
-            .flat_map(|session| session.browser_ids.iter())
-            .filter(|browser_id| {
-                service_state
-                    .browsers
-                    .get(*browser_id)
-                    .is_some_and(|browser| {
-                        browser.profile_id.as_deref() != Some(profile.id.as_str())
-                    })
-            })
-            .cloned()
-            .collect();
-        same_principal_profile_mismatch_browser_ids.sort();
-        same_principal_profile_mismatch_browser_ids.dedup();
-        capability_profile_mismatch = authority.profile_id != profile.id;
-        if !foreign_principal_session_ids.is_empty()
-            || capability_profile_mismatch
-            || active_claim_is_foreign
-        {
+    if strict_identity_required {
+        if let Some(authority) = authenticated_principal {
+            foreign_principal_session_ids = service_state
+                .sessions
+                .iter()
+                .filter(|(_id, session)| {
+                    session_blocks_profile_reuse(session, &profile.id)
+                        && session
+                            .principal_id
+                            .as_deref()
+                            .is_some_and(|principal_id| principal_id != authority.principal_id)
+                })
+                .map(|(id, _session)| id.clone())
+                .collect();
+            foreign_principal_session_ids.sort();
+            foreign_principal_session_ids.dedup();
+            same_principal_profile_mismatch_browser_ids = service_state
+                .sessions
+                .values()
+                .filter(|session| {
+                    session_blocks_profile_reuse(session, &profile.id)
+                        && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
+                })
+                .flat_map(|session| session.browser_ids.iter())
+                .filter(|browser_id| {
+                    service_state
+                        .browsers
+                        .get(*browser_id)
+                        .is_some_and(|browser| {
+                            browser.profile_id.as_deref() != Some(profile.id.as_str())
+                        })
+                })
+                .cloned()
+                .collect();
+            same_principal_profile_mismatch_browser_ids.sort();
+            same_principal_profile_mismatch_browser_ids.dedup();
+            capability_profile_mismatch = authority.profile_id != profile.id;
+            if !foreign_principal_session_ids.is_empty()
+                || capability_profile_mismatch
+                || active_claim_is_foreign
+            {
+                reusable_browser_ids.clear();
+            }
+        } else if !principal_bound_session_ids.is_empty() || active_claim_requires_authentication {
             reusable_browser_ids.clear();
         }
-    } else if !principal_bound_session_ids.is_empty() || active_claim_requires_authentication {
-        reusable_browser_ids.clear();
+    } else {
+        principal_bound_session_ids.clear();
     }
 
     let mut explicit_session_route_error = None;
@@ -740,7 +863,8 @@ pub(crate) fn profile_reuse_decision(
     if active_claim_is_foreign {
         reasons.push("foreign_principal_active_claim");
     }
-    if authenticated_principal.is_none()
+    if strict_identity_required
+        && authenticated_principal.is_none()
         && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
     {
         reasons.push("profile_capability_required");
@@ -791,9 +915,12 @@ pub(crate) fn profile_reuse_decision(
         "seed_profile_before_reuse"
     } else if explicit_session_route_error.is_some() {
         "blocked_by_explicit_session_route"
-    } else if !foreign_principal_session_ids.is_empty() || active_claim_is_foreign {
+    } else if strict_identity_required
+        && (!foreign_principal_session_ids.is_empty() || active_claim_is_foreign)
+    {
         "wait_for_foreign_principal"
-    } else if authenticated_principal.is_none()
+    } else if strict_identity_required
+        && authenticated_principal.is_none()
         && (!principal_bound_session_ids.is_empty() || active_claim_requires_authentication)
     {
         "authenticate_for_profile_reuse"
@@ -1108,6 +1235,11 @@ pub(crate) struct ProfileAcquisitionDecision {
     browser_id: Option<String>,
     session_name: Option<String>,
     acquisition_blocker: Option<String>,
+    policy_revision: u64,
+    access_decision_id: String,
+    client_subject_id: Option<String>,
+    identity_assurance: ProfileIdentityAssurance,
+    connection_instance_id: Option<String>,
     service_request_available: bool,
     profile_reuse_action: String,
     profile_reuse_reasons: Vec<String>,
@@ -1122,6 +1254,7 @@ impl ProfileAcquisitionDecision {
     /// Join the owner's compatibility projections into its executable result.
     fn from_components(
         selected_profile: Option<&BrowserProfile>,
+        access_decision: &ServiceProfileAccessDecision,
         profile_reuse: &Value,
         lifecycle_replacement: &Value,
         service_request: &Value,
@@ -1176,6 +1309,11 @@ impl ProfileAcquisitionDecision {
             browser_id,
             session_name,
             acquisition_blocker,
+            policy_revision: access_decision.policy_revision,
+            access_decision_id: access_decision.decision_id.clone(),
+            client_subject_id: access_decision.subject.subject_id.clone(),
+            identity_assurance: access_decision.subject.assurance,
+            connection_instance_id: access_decision.subject.connection_instance_id.clone(),
             service_request_available: available,
             profile_reuse_action: recommended_action.to_string(),
             profile_reuse_reasons: profile_reuse
@@ -1291,6 +1429,15 @@ impl ProfileAcquisitionDecision {
         command: &mut Value,
         authenticated_principal: Option<&AuthenticatedServicePrincipal>,
     ) -> Result<(), String> {
+        command["policyRevision"] = json!(self.policy_revision);
+        command["accessDecisionId"] = json!(self.access_decision_id);
+        command["identityAssurance"] = json!(self.identity_assurance);
+        if let Some(subject_id) = self.client_subject_id.as_ref() {
+            command["clientSubjectId"] = json!(subject_id);
+        }
+        if let Some(connection_instance_id) = self.connection_instance_id.as_ref() {
+            command["connectionInstanceId"] = json!(connection_instance_id);
+        }
         if !self.service_request_available {
             return Err(format!(
                 "service_access_plan_request_unavailable:{}",

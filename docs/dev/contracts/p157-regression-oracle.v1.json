@@ -58,28 +58,32 @@
     {
       "id": "identity-denial-recourse-is-not-circular",
       "implementationWorkUnit": "W5",
-      "currentStatus": "red",
+      "currentStatus": "green",
       "risk": "A client can be told to acquire the same profile whose acquisition produced the identity denial.",
       "requiredPaths": ["failure.subject", "failure.missingPermission", "failure.executableNextAction"],
       "forbiddenValues": ["failure.executableNextAction=profile_acquire_same_request"],
       "currentProjection": {
         "failure": {
           "code": "existing_session_profile_identity_unproven",
-          "recommendedAction": "profile_acquire_same_request"
+          "subject": { "subjectId": null, "assurance": "unknown" },
+          "missingPermission": "lifecycle_manage",
+          "executableNextAction": "service_profile_recovery_plan"
         }
       }
     },
     {
       "id": "shared-local-does-not-require-cryptographic-enrollment",
       "implementationWorkUnit": "W5",
-      "currentStatus": "red",
+      "currentStatus": "green",
       "risk": "Ordinary trusted local profile reuse is blocked by universal principal and capability proof.",
       "requiredPaths": ["decision.policy.mode", "decision.subject.assurance", "decision.allowed"],
       "targetValues": { "decision.allowed": true },
       "currentProjection": {
         "decision": {
-          "profileReuseAction": "authenticate_for_profile_reuse",
-          "allowed": false
+          "policy": { "mode": "shared-local" },
+          "subject": { "assurance": "self-declared" },
+          "profileReuseAction": "reuse_existing_browser",
+          "allowed": true
         }
       }
     },

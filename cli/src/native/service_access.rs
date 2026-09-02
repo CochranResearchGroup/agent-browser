@@ -43,6 +43,8 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) service_name: Option<String>,
     pub(crate) agent_name: Option<String>,
     pub(crate) task_name: Option<String>,
+    pub(crate) client_subject_id: Option<String>,
+    pub(crate) identity_assurance: Option<String>,
     /// Explicit daemon lane that must survive planning into the executable request.
     pub(crate) session_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
@@ -85,6 +87,12 @@ pub(crate) fn parse_service_access_plan_query(
             }
             "agentName" | "agent_name" | "agent-name" => request.agent_name = non_empty(value),
             "taskName" | "task_name" | "task-name" => request.task_name = non_empty(value),
+            "clientSubjectId" | "client_subject_id" | "client-subject-id" => {
+                request.client_subject_id = non_empty(value)
+            }
+            "identityAssurance" | "identity_assurance" | "identity-assurance" => {
+                request.identity_assurance = non_empty(value)
+            }
             "sessionName" | "session_name" | "session-name" => {
                 request.session_name = non_empty(value)
             }
@@ -289,6 +297,8 @@ fn service_access_plan_artifact_for_state_with_principal(
             "serviceName": request.service_name,
             "agentName": request.agent_name,
             "taskName": request.task_name,
+            "clientSubjectId": request.client_subject_id,
+            "identityAssurance": request.identity_assurance,
             "sessionName": request.session_name,
             "targetServiceIds": request.target_service_ids,
             "accountIds": request.account_ids,
@@ -922,6 +932,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
         one_time_profile_recommendation: &one_time_profile_recommendation,
         authenticated_principal: input.authenticated_principal,
     });
+    let access_policy = acquisition_plan.access_policy;
+    let access_decision = acquisition_plan.access_decision;
     let profile_reuse = acquisition_plan.profile_reuse;
     let lifecycle_replacement = acquisition_plan.lifecycle_replacement;
     let service_request = acquisition_plan.service_request;
@@ -1047,6 +1059,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
         "profileReuse": profile_reuse,
+        "profileAccess": {
+            "policy": access_policy,
+            "decision": access_decision,
+        },
         "lifecycleReplacement": lifecycle_replacement,
         "oneTimeProfileRecommendation": one_time_profile_recommendation,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
@@ -1087,6 +1103,8 @@ pub(crate) const SERVICE_REQUEST_ACCESS_PLAN_ROUTING_FIELDS: &[&str] = &[
     "serviceName",
     "agentName",
     "taskName",
+    "clientSubjectId",
+    "identityAssurance",
     "sessionName",
     "targetServiceId",
     "targetService",
@@ -2926,7 +2944,19 @@ mod tests {
         ProfileTargetReadiness, ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident,
         ServiceProvider, SiteMonitor, SitePolicy, ViewStream,
     };
+    use crate::native::service_profile_access_policy::{
+        ProfileAccessMode, ProfilePermission, ServiceProfileAccessPolicy,
+    };
     use serde_json::json;
+
+    fn restricted_profile_policy(profile_id: &str) -> ServiceProfileAccessPolicy {
+        ServiceProfileAccessPolicy {
+            profile_id: profile_id.to_string(),
+            mode: ProfileAccessMode::Restricted,
+            default_permissions: vec![ProfilePermission::TabCreate],
+            ..ServiceProfileAccessPolicy::default()
+        }
+    }
 
     #[test]
     fn service_access_plan_recommends_google_manual_seeding_before_attachable_work() {
@@ -4484,6 +4514,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -4660,6 +4691,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -4726,6 +4758,7 @@ mod tests {
                 "odollo-fedex".to_string(),
                 BrowserProfile {
                     id: "odollo-fedex".to_string(),
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -4773,6 +4806,7 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(restricted_profile_policy("odollo-fedex")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -4832,6 +4866,7 @@ mod tests {
                     id: "books-bank".to_string(),
                     target_service_ids: vec!["bank".to_string()],
                     authenticated_service_ids: vec!["bank".to_string()],
+                    access_policy: Some(restricted_profile_policy("books-bank")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -4876,6 +4911,127 @@ mod tests {
     }
 
     #[test]
+    fn shared_local_self_declared_client_reuses_principal_bound_browser() {
+        use crate::native::service_principal::ServicePrincipalProvenance;
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    target_service_ids: vec!["research-gov".to_string()],
+                    authenticated_service_ids: vec!["research-gov".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-research-gov".to_string(),
+                BrowserProcess {
+                    id: "browser-research-gov".to_string(),
+                    profile_id: Some("research-gov".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-research-gov".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-research-gov".to_string(),
+                BrowserSession {
+                    id: "session-research-gov".to_string(),
+                    principal_id: Some("principal:prior-client".to_string()),
+                    principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+                    profile_id: Some("research-gov".to_string()),
+                    browser_ids: vec!["browser-research-gov".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                client_subject_id: Some("client:fieldwork".to_string()),
+                identity_assurance: Some("self-declared".to_string()),
+                target_service_ids: vec!["research-gov".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileAccess"]["policy"]["mode"],
+            "shared-local"
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["allowed"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["subject"]["assurance"],
+            "self-declared"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "reuse_existing_browser"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["clientSubjectId"],
+            "client:fieldwork"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["policyRevision"],
+            1
+        );
+        assert!(
+            plan["decision"]["serviceRequest"]["request"]["accessDecisionId"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("profile-access-decision:"))
+        );
+    }
+
+    #[test]
+    fn caller_cannot_self_promote_identity_assurance_for_restricted_profile() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "research-gov".to_string(),
+                BrowserProfile {
+                    id: "research-gov".to_string(),
+                    target_service_ids: vec!["research-gov".to_string()],
+                    access_policy: Some(restricted_profile_policy("research-gov")),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                client_subject_id: Some("client:fieldwork".to_string()),
+                identity_assurance: Some("operator".to_string()),
+                target_service_ids: vec!["research-gov".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["subject"]["assurance"],
+            "self-declared"
+        );
+        assert_eq!(
+            plan["decision"]["profileAccess"]["decision"]["allowed"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["acquisitionBlocker"],
+            "profile_access_denied"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+    }
+
+    #[test]
     fn same_principal_profile_contradiction_is_not_reported_as_lease_wait() {
         use crate::native::service_principal::{
             AuthenticatedServicePrincipal, ServicePrincipalProvenance,
@@ -4895,6 +5051,7 @@ mod tests {
                     id: "last30days-social".to_string(),
                     target_service_ids: vec!["social".to_string()],
                     authenticated_service_ids: vec!["social".to_string()],
+                    access_policy: Some(restricted_profile_policy("last30days-social")),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5081,6 +5238,7 @@ mod tests {
                     id: "last30days-social".to_string(),
                     target_service_ids: vec!["social".to_string()],
                     authenticated_service_ids: vec!["social".to_string()],
+                    access_policy: Some(restricted_profile_policy("last30days-social")),
                     ..BrowserProfile::default()
                 },
             )]),

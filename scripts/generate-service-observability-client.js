@@ -159,6 +159,9 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  subject: Record<string, unknown> | null;
+  missingPermission: string | null;
+  executableNextAction: Record<string, unknown> | null;
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
@@ -269,6 +272,7 @@ export interface ServiceProfileRecord {
   accountLabels: string[];
   profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
   profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
+  accessPolicy: ServiceProfileAccessPolicy | null;
   userDataDir: string | null;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
@@ -2662,6 +2666,7 @@ export interface ServiceAccessPlanDecision {
   browserHost: string | null;
   launchPosture: ServiceAccessPlanLaunchPosture;
   profileReuse: ServiceAccessPlanProfileReuse;
+  profileAccess: ServiceProfileAccessEvaluation;
   oneTimeProfileRecommendation: ServiceAccessPlanOneTimeProfileRecommendation | null;
   interactionMode: string | null;
   challengePolicy: string | null;
@@ -2681,6 +2686,56 @@ export interface ServiceAccessPlanDecision {
   hasNamingWarning: boolean;
   reasons: string[];
   [key: string]: unknown;
+}
+
+export type ServiceProfileAccessMode = 'shared-local' | 'restricted' | 'exclusive';
+export type ServiceProfileIdentityAssurance =
+  | 'self-declared'
+  | 'authenticated-ingress'
+  | 'registered-capability'
+  | 'operator'
+  | 'unknown';
+
+export interface ServiceProfileAccessPolicy {
+  schemaVersion: 'agent-browser.profile-access-policy.v1';
+  profileId: string;
+  mode: ServiceProfileAccessMode;
+  revision: number;
+  state: 'active' | 'draining';
+  defaultPermissions: string[];
+  grants: Array<{
+    subjectId: string;
+    minimumAssurance: ServiceProfileIdentityAssurance;
+    permissions: string[];
+  }>;
+  drain: Record<string, unknown> | null;
+  updatedAt: string;
+}
+
+export interface ServiceProfileAccessDecision {
+  schemaVersion: 'agent-browser.profile-access-decision.v1';
+  decisionId: string;
+  subject: {
+    subjectId: string | null;
+    assurance: ServiceProfileIdentityAssurance;
+    connectionInstanceId: string | null;
+  };
+  resource: { profileId: string | null; resourceKey: string };
+  operation: string;
+  policyRevision: number;
+  allowed: boolean;
+  missingPermission: string | null;
+  blockingOccupancy: string[];
+  nextAction: {
+    action: string;
+    executable: boolean;
+    request: Record<string, unknown> | null;
+  };
+}
+
+export interface ServiceProfileAccessEvaluation {
+  policy: ServiceProfileAccessPolicy;
+  decision: ServiceProfileAccessDecision;
 }
 
 export interface ServiceAccessPlanProfileReuse {
@@ -2877,6 +2932,10 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
 export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOptions {
   /** Ephemeral capability proving the principal that owns the selected profile. Sent only as a bearer header. */
   profileCapability?: string;
+  /** Stable caller-selected subject ID used for ordinary shared-local attribution. */
+  clientSubjectId?: string;
+  /** Caller-declared assurance hint. The service derives effective assurance from trusted ingress state. */
+  identityAssurance?: ServiceIdentityAssurance;
   /** Calling agent name for multi-agent traceability. */
   agentName?: string;
   /** Caller task name for queue and trace debugging. */

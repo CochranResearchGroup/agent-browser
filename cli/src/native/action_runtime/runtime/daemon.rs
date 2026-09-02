@@ -426,6 +426,8 @@ pub(crate) fn launch_command_with_effective_service_defaults(
         service_name: optional_command_string(command, "serviceName"),
         agent_name: optional_command_string(command, "agentName"),
         task_name: optional_command_string(command, "taskName"),
+        client_subject_id: optional_command_string(command, "clientSubjectId"),
+        identity_assurance: optional_command_string(command, "identityAssurance"),
         session_name: optional_command_string(command, "sessionName"),
         target_service_ids: target_service_ids_from_command(command),
         account_ids: account_ids_from_command(command),

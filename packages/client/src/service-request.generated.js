@@ -130,6 +130,9 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "serviceName",
   "agentName",
   "taskName",
+  "clientSubjectId",
+  "identityAssurance",
+  "accessDecisionId",
   "targetServiceId",
   "targetService",
   "siteId",
@@ -173,6 +176,7 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "maxConsoleEntries",
   "maxErrorEntries",
   "maxRequestEntries",
+  "policyRevision",
   "cdpPort",
   "maxBytes",
   "pid"

@@ -159,6 +159,7 @@ pub mod service_network_capture;
 pub(crate) mod service_principal;
 #[allow(dead_code)]
 pub mod service_probe;
+pub(crate) mod service_profile_access_policy;
 #[allow(dead_code)]
 pub(crate) mod service_profile_acquisition;
 #[allow(dead_code)]

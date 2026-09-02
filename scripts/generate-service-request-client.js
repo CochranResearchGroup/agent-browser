@@ -1492,6 +1492,9 @@ export interface ServiceFailureRecourse {
   retryDisposition: ServiceRetryDisposition;
   recommendedAction: string;
   reuseAllowed: boolean;
+  subject: Record<string, unknown> | null;
+  missingPermission: string | null;
+  executableNextAction: Record<string, unknown> | null;
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;

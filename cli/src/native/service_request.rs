@@ -57,6 +57,13 @@ const PROFILE_CLASSES: &[&str] = &[
     "durable_named",
     "operator_supplied",
 ];
+const IDENTITY_ASSURANCE_LEVELS: &[&str] = &[
+    "self-declared",
+    "authenticated-ingress",
+    "registered-capability",
+    "operator",
+    "unknown",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RouteHintStage {
@@ -288,6 +295,22 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("serviceName", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("agentName", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("taskName", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field("clientSubjectId", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field(
+        "identityAssurance",
+        FieldKind::Enum(IDENTITY_ASSURANCE_LEVELS),
+        true,
+        true,
+        true,
+    ),
+    ServiceRequestFieldSpec::field(
+        "policyRevision",
+        FieldKind::PositiveInteger,
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field("accessDecisionId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("targetServiceId", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("targetService", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("targetServiceIds", FieldKind::StringArray, true, true, true),
@@ -2018,6 +2041,16 @@ mod tests {
                     id: "odollo-fedex".to_string(),
                     target_service_ids: vec!["fedex".to_string()],
                     authenticated_service_ids: vec!["fedex".to_string()],
+                    access_policy: Some(
+                        crate::native::service_profile_access_policy::ServiceProfileAccessPolicy {
+                            profile_id: "odollo-fedex".to_string(),
+                            mode: crate::native::service_profile_access_policy::ProfileAccessMode::Restricted,
+                            default_permissions: vec![
+                                crate::native::service_profile_access_policy::ProfilePermission::TabCreate,
+                            ],
+                            ..crate::native::service_profile_access_policy::ServiceProfileAccessPolicy::default()
+                        },
+                    ),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -2114,7 +2147,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 78);
+        assert_eq!(canonical_names.len(), 82);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),

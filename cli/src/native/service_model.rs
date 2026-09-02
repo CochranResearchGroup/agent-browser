@@ -4942,6 +4942,9 @@ pub struct BrowserProfile {
     pub profile_origin: ProfileOrigin,
     /// Product-level profile class used for reuse and cleanup decisions.
     pub profile_class: ProfileClass,
+    /// Revisioned authorization policy. Missing legacy values evaluate as the
+    /// trusted single-user `shared-local` preset.
+    pub access_policy: Option<super::service_profile_access_policy::ServiceProfileAccessPolicy>,
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
     /// Target sites or identity providers this profile is intended to satisfy.

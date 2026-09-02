@@ -59,6 +59,9 @@ pub struct ServiceFailureRecourse {
     pub retry_disposition: ServiceRetryDisposition,
     pub recommended_action: String,
     pub reuse_allowed: bool,
+    pub subject: Option<Value>,
+    pub missing_permission: Option<String>,
+    pub executable_next_action: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -299,11 +302,20 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                 phase: ServiceFailurePhase::LaunchAdmission,
                 effect_state: ServiceEffectState::NoEffect,
                 retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
-                recommended_action: "acquire_profile".to_string(),
+                recommended_action: "inspect_profile_recovery_plan".to_string(),
                 reuse_allowed: false,
+                subject: Some(serde_json::json!({
+                    "subjectId": null,
+                    "assurance": "unknown",
+                })),
+                missing_permission: Some("lifecycle_manage".to_string()),
+                executable_next_action: Some(serde_json::json!({
+                    "action": "service_profile_recovery_plan",
+                    "executable": true,
+                    "request": { "action": "service_profile_recovery_plan" },
+                })),
                 safe_next_actions: vec![
                     "inspect_profile_lease".to_string(),
-                    "acquire_profile".to_string(),
                     "inspect_profile_recovery_plan".to_string(),
                 ],
                 hard_stops: vec![
@@ -509,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_identity_admission_failure_routes_to_profile_acquisition() {
+    fn profile_identity_admission_failure_has_non_circular_lifecycle_recourse() {
         for error in [
             "existing_session_profile_identity_unproven",
             "existing_session_profile_identity_inconsistent",
@@ -524,8 +536,16 @@ mod tests {
                 recourse.retry_disposition,
                 ServiceRetryDisposition::InspectBeforeRetry
             );
-            assert_eq!(recourse.recommended_action, "acquire_profile");
-            assert!(recourse
+            assert_eq!(recourse.recommended_action, "inspect_profile_recovery_plan");
+            assert_eq!(
+                recourse.missing_permission.as_deref(),
+                Some("lifecycle_manage")
+            );
+            assert_eq!(
+                recourse.executable_next_action.as_ref().unwrap()["action"],
+                "service_profile_recovery_plan"
+            );
+            assert!(!recourse
                 .safe_next_actions
                 .contains(&"acquire_profile".to_string()));
             assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));

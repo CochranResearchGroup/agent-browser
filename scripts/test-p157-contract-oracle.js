@@ -107,15 +107,24 @@ const failureSource = readFileSync(join(root, 'cli/src/native/service_failure.rs
 const identityFailureStart = failureSource.indexOf('"existing_session_profile_identity_unproven"');
 const identityFailureEnd = failureSource.indexOf('ServiceFailureRecourse::default()', identityFailureStart);
 assert(
-  failureSource.slice(identityFailureStart, identityFailureEnd).includes('recommended_action: "acquire_profile"'),
-  'circular identity-recourse red case must be retired or updated',
+  failureSource.slice(identityFailureStart, identityFailureEnd).includes(
+    'recommended_action: "inspect_profile_recovery_plan"',
+  ) &&
+    failureSource.slice(identityFailureStart, identityFailureEnd).includes(
+      'missing_permission: Some("lifecycle_manage"',
+    ) &&
+    !failureSource.slice(identityFailureStart, identityFailureEnd).includes(
+      'recommended_action: "acquire_profile"',
+    ),
+  'identity denial recourse is circular or lacks lifecycle-specific authority',
 );
 
 const acquisitionSource = readFileSync(join(root, 'cli/src/native/service_profile_acquisition.rs'), 'utf8');
 assert(
-  acquisitionSource.includes('"authenticate_for_profile_reuse"') &&
-    acquisitionSource.includes('authenticated_principal.is_none()'),
-  'shared-local overblocking red case must be retired or updated',
+  acquisitionSource.includes('evaluate_profile_access') &&
+    acquisitionSource.includes('strict_identity_required') &&
+    acquisitionSource.includes('ProfileAccessMode::SharedLocal'),
+  'profile acquisition does not gate strict identity checks on the selected access policy',
 );
 
 const dashboardSource = readFileSync(join(root, 'packages/dashboard/src/app/page.tsx'), 'utf8');

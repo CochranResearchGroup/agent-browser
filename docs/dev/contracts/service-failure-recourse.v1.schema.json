@@ -12,7 +12,10 @@
     "effectState",
     "retryDisposition",
     "recommendedAction",
-    "reuseAllowed"
+    "reuseAllowed",
+    "subject",
+    "missingPermission",
+    "executableNextAction"
   ],
   "properties": {
     "schemaVersion": {
@@ -42,6 +45,15 @@
     },
     "reuseAllowed": {
       "type": "boolean"
+    },
+    "subject": {
+      "type": ["object", "null"]
+    },
+    "missingPermission": {
+      "type": ["string", "null"]
+    },
+    "executableNextAction": {
+      "type": ["object", "null"]
     },
     "waitMs": {
       "type": "integer",
