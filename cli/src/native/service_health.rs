@@ -1978,6 +1978,19 @@ pub fn merge_reconciled_service_state(
         }
     }
 
+    for (id, reconciled_lease) in &reconciled.remote_view_acquisition_leases {
+        if before.remote_view_acquisition_leases.get(id) == Some(reconciled_lease) {
+            continue;
+        }
+        let unchanged_after_reconcile_started = target.remote_view_acquisition_leases.get(id)
+            == before.remote_view_acquisition_leases.get(id);
+        if unchanged_after_reconcile_started {
+            target
+                .remote_view_acquisition_leases
+                .insert(id.clone(), reconciled_lease.clone());
+        }
+    }
+
     for (id, reconciled_job) in &reconciled.jobs {
         let job_unchanged_after_reconcile_started = target
             .jobs
@@ -3439,8 +3452,8 @@ mod tests {
     };
     use crate::native::service_model::{
         ControlInputProvider, DisplayAllocation, JobState, RemoteViewAcquisitionLease,
-        RemoteViewRoute, RoutePoolEntry, ServiceJob, ServiceProvider, SitePolicy, ViewStream,
-        ViewStreamProvider, ViewerLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceJob, ServiceProvider,
+        SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
     };
     use crate::native::service_store::{
         mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
@@ -4723,6 +4736,265 @@ mod tests {
             .cleanup
             .as_ref()
             .is_some_and(|cleanup| cleanup.get("quarantine").is_none()));
+    }
+
+    #[tokio::test]
+    async fn reconcile_closes_quarantine_after_exact_prior_route_and_display_are_restored() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+        let prior_route = RemoteViewRoute {
+            browser_id: Some("browser-prior".to_string()),
+            session_id: Some("session-prior".to_string()),
+            ..state.remote_view_routes["route-1"].clone()
+        };
+        let prior_display = DisplayAllocation {
+            owner_browser_id: Some("browser-prior".to_string()),
+            owner_session_id: Some("session-prior".to_string()),
+            profile_id: Some("profile-prior".to_string()),
+            ..state.display_allocations["display-1"].clone()
+        };
+        state
+            .remote_view_routes
+            .insert("route-1".to_string(), prior_route.clone());
+        state
+            .display_allocations
+            .insert("display-1".to_string(), prior_display.clone());
+        let acquisition = state
+            .remote_view_acquisition_leases
+            .get_mut(acquisition_lease_id)
+            .unwrap();
+        acquisition.previous_remote_view_route = Some(prior_route);
+        acquisition.previous_display_allocation = Some(prior_display);
+        acquisition.cleanup = Some(json!({
+            "state": "rollback_incomplete",
+            "restoredRemoteViewRoute": true,
+            "restoredDisplayAllocation": true,
+            "quarantine": { "state": "active" }
+        }));
+        state.remote_view_handoffs.insert(
+            "handoff-prior".to_string(),
+            RemoteViewHandoff {
+                id: "handoff-prior".to_string(),
+                state: "ready".to_string(),
+                browser_id: Some("browser-prior".to_string()),
+                last_route_id: Some("route-1".to_string()),
+                last_display_allocation_id: Some("display-1".to_string()),
+                ..RemoteViewHandoff::default()
+            },
+        );
+        state.remote_view_acquisition_leases.insert(
+            "pending-prior-route".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "pending-prior-route".to_string(),
+                browser_id: "browser-abandoned".to_string(),
+                session_id: "session-abandoned".to_string(),
+                route_id: "route-1".to_string(),
+                display_allocation_id: "display-1".to_string(),
+                route_pool_entry_id: Some("route-pool-1".to_string()),
+                state: "pending".to_string(),
+                phase: "reserved".to_string(),
+                created_at: Some("2000-01-01T00:00:00Z".to_string()),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        );
+        state.remote_view_acquisition_leases.insert(
+            "completed-prior-route".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "completed-prior-route".to_string(),
+                browser_id: "browser-historical".to_string(),
+                session_id: "session-historical".to_string(),
+                route_id: "route-1".to_string(),
+                display_allocation_id: "display-1".to_string(),
+                route_pool_entry_id: Some("route-pool-1".to_string()),
+                state: "completed".to_string(),
+                phase: "checked_out".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        );
+        state.remote_view_acquisition_leases.insert(
+            "pending-reused-display".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "pending-reused-display".to_string(),
+                browser_id: "browser-detached".to_string(),
+                session_id: "session-detached".to_string(),
+                route_id: "route-2".to_string(),
+                display_allocation_id: "display-1".to_string(),
+                route_pool_entry_id: Some("route-pool-2".to_string()),
+                state: "pending".to_string(),
+                phase: "reserved".to_string(),
+                created_at: Some("2000-01-01T00:00:00Z".to_string()),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        );
+        state.remote_view_routes.insert(
+            "route-2".to_string(),
+            RemoteViewRoute {
+                id: "route-2".to_string(),
+                display_allocation_id: Some("display-other".to_string()),
+                browser_id: Some("browser-unrelated".to_string()),
+                session_id: Some("session-unrelated".to_string()),
+                state: "ready".to_string(),
+                ..RemoteViewRoute::default()
+            },
+        );
+        state.browsers.insert(
+            "browser-unrelated".to_string(),
+            BrowserProcess {
+                id: "browser-unrelated".to_string(),
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+        state.remote_view_handoffs.insert(
+            "handoff-unrelated".to_string(),
+            RemoteViewHandoff {
+                id: "handoff-unrelated".to_string(),
+                state: "ready".to_string(),
+                browser_id: Some("browser-unrelated".to_string()),
+                session_name: Some("session-unrelated".to_string()),
+                last_route_id: Some("route-2".to_string()),
+                last_display_allocation_id: Some("display-other".to_string()),
+                ..RemoteViewHandoff::default()
+            },
+        );
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            3
+        );
+        assert_eq!(state.remote_view_routes["route-1"].state, "released");
+        assert_eq!(state.display_allocations["display-1"].state, "released");
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_complete"
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases["pending-prior-route"].phase,
+            "rollback_complete"
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases["pending-reused-display"].phase,
+            "rollback_complete"
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_preserves_fresh_detached_pending_acquisition() {
+        let mut state = ServiceState {
+            remote_view_acquisition_leases: BTreeMap::from([(
+                "pending-fresh".to_string(),
+                RemoteViewAcquisitionLease {
+                    id: "pending-fresh".to_string(),
+                    browser_id: "browser-fresh".to_string(),
+                    session_id: "session-fresh".to_string(),
+                    route_id: "route-fresh".to_string(),
+                    display_allocation_id: "display-fresh".to_string(),
+                    route_pool_entry_id: Some("pool-fresh".to_string()),
+                    state: "pending".to_string(),
+                    phase: "reserved".to_string(),
+                    created_at: Some(chrono::Utc::now().to_rfc3339()),
+                    ..RemoteViewAcquisitionLease::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            0
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases["pending-fresh"].state,
+            "pending"
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases["pending-fresh"].phase,
+            "reserved"
+        );
+    }
+
+    #[tokio::test]
+    async fn repository_reconcile_persists_acquisition_rollback_convergence() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let home = temp_home("service-health-acquisition-rollback-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&inactive_acquisition_quarantine_state())
+            .unwrap();
+
+        let summary = reconcile_service_state_in_repository(&repository)
+            .await
+            .unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            1
+        );
+        assert_eq!(
+            persisted.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_complete"
+        );
+        assert_eq!(persisted.remote_view_routes["route-1"].state, "released");
+        assert_eq!(persisted.display_allocations["display-1"].state, "released");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[tokio::test]
+    async fn reconcile_preserves_restored_prior_owner_quarantine_when_prior_browser_is_live() {
+        let acquisition_lease_id = "remote-view-open-session-1-route-1";
+        let mut state = inactive_acquisition_quarantine_state();
+        let prior_route = RemoteViewRoute {
+            browser_id: Some("browser-prior".to_string()),
+            session_id: Some("session-prior".to_string()),
+            ..state.remote_view_routes["route-1"].clone()
+        };
+        let prior_display = DisplayAllocation {
+            owner_browser_id: Some("browser-prior".to_string()),
+            owner_session_id: Some("session-prior".to_string()),
+            ..state.display_allocations["display-1"].clone()
+        };
+        state
+            .remote_view_routes
+            .insert("route-1".to_string(), prior_route.clone());
+        state
+            .display_allocations
+            .insert("display-1".to_string(), prior_display.clone());
+        state.browsers.insert(
+            "browser-prior".to_string(),
+            BrowserProcess {
+                id: "browser-prior".to_string(),
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+        let acquisition = state
+            .remote_view_acquisition_leases
+            .get_mut(acquisition_lease_id)
+            .unwrap();
+        acquisition.previous_remote_view_route = Some(prior_route);
+        acquisition.previous_display_allocation = Some(prior_display);
+        acquisition.cleanup = Some(json!({
+            "restoredRemoteViewRoute": true,
+            "restoredDisplayAllocation": true,
+            "quarantine": { "state": "active" }
+        }));
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(
+            summary.remote_view_repair.completed_acquisition_rollbacks,
+            0
+        );
+        assert_eq!(
+            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
+            "rollback_incomplete"
+        );
     }
 
     #[tokio::test]

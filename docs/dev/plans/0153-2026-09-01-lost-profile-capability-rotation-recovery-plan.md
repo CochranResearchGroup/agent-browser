@@ -2,9 +2,9 @@
 
 Date: 2026-09-01
 
-State: ACTIVE
+State: ACCEPTED
 
-Execution state: `development_qualified`
+Execution state: `installed_acceptance`
 
 Lane: P153
 
@@ -139,3 +139,38 @@ no Last30days private configuration was written, and no provider tick ran.
 
 Next action: merge the exact qualified source, build that merge commit, and run
 the workstation installation preflight without overriding unrelated live work.
+
+## Installed Acceptance Checkpoint
+
+State transition: `development_qualified -> installed_acceptance`.
+
+Progress classification: `accepted_progress`.
+
+Release evidence:
+
+- topic commit `c09f3e19` was merged by `c664c25b` and pushed to `origin/main`;
+- the exact merged optimized binary SHA-256 is
+  `e2244cd2447ce0de6239d41b7fbec7e77aad9145e57ca86cd2ad2de7bf3c7d94`;
+- workstation transaction
+  `upgrade-c65674ff-8d5f-437c-a5e8-d46a7efed92c` installed generation
+  `0.28.0-e2244cd2447c-c25a91eb0d2b`, with installed, selected, and source
+  binary identity converged;
+- the installation consumed an authenticated ready presentation receipt for
+  opaque handoff `r580584`; the proof resolved without page navigation,
+  relaunch, provider response access, or credential access; and
+- production doctor succeeds with one current runtime host, one executable
+  generation, zero legacy daemons, and all seven readiness axes accepted.
+
+Operational readback:
+
+- installed `capability-status` reports one active `last30days` /
+  `last30days-facebook` grant, `rotationAllowed=true`, and no rotation
+  blockers;
+- the user-scoped Agent Browser skill is synchronized to the accepted source;
+  and
+- no production capability was rotated, no Last30days private configuration
+  was changed, no credentials were accessed, and no provider tick ran.
+
+P153 is accepted as an installed recovery capability. Executing the production
+rotation, wiring the newly created private capability into Last30days, and
+running a provider acceptance tick remain separate operator-authorized actions.

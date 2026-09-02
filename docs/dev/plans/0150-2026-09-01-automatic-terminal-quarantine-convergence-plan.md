@@ -4,7 +4,7 @@ Date: 2026-09-01
 
 State: OPEN
 
-Execution state: `slice_e_production_installation`
+Execution state: `slice_g_fresh_acquisition_race_hardening`
 
 Lane: P150
 
@@ -81,6 +81,9 @@ still represent a live effect.
 6. Ambiguous or live evidence remains quarantined with a typed reason.
 7. No browser launch, termination, profile mutation, or provider action occurs
    during source and development qualification.
+8. A detached pending lease is never auto-completed until its valid creation
+   timestamp is at least 15 minutes old. Resource ID reuse is not ownership
+   without matching browser, session, or allocation identity.
 
 ## Acceptance Criteria
 
@@ -178,6 +181,38 @@ the isolated development runtime.
 Next action: build the optimized development candidate, publish it only to the
 development pseudo-home, run development doctor and disposable launch smoke,
 then re-evaluate the production installation gate.
+
+## Production Fieldwork Checkpoint
+
+State transition: `source_qualified -> live_handoff_ready_with_race_hardening_pending`.
+
+The exact August 31 Research.gov quarantine converged to
+`failed/rollback_complete`; its quarantine marker was removed, cleanup recorded
+`confirmed_inactive_retained_state`, Route A and display 12 became released, and
+the pool entry returned to available. The first fresh acquisition then exposed
+a separate race: background reconciliation classified its seconds-old pending
+lease as detached before the foreground path advanced it to `DisplayReady`.
+The state machine rejected `RolledBack -> DisplayReady`, while the browser,
+window, route, and Research.gov tab remained healthy.
+
+A no-launch reattach recovered that exact live browser and finalized durable
+handoff `r580584` with `operatorVisible.state=ready`; no duplicate browser was
+started. The source now adds the 15-minute age fence and identity-aware reused
+resource checks, with fresh-acquisition and live-unrelated-handoff regressions.
+
+Development generation `0.28.0-4d2c8ce7ecba` passed doctor, provider-isolation
+checks, and three disposable launch checks with the age fence installed.
+Production candidate `672d311dd354` was built from the same source. Its first
+handoff-safe activation preserved the old generation because candidate
+presentation was not proven. A separate coordinated installer later accepted
+generation `0.28.0-e2244cd2447c-c25a91eb0d2b` with an authenticated candidate
+presentation receipt, finalized the Research.gov lane at owner generation 6,
+and restored a green install doctor. The browser, route, display, Research.gov
+tab, and durable handoff all remain ready. That accepted generation does not
+contain this plan's age fence. Material remaining gate: merge and install the
+qualified age fence through another handoff-safe transition without a new
+browser launch. Do not start an overlapping workstation repair or another cold
+acquisition.
 
 ## Development Qualification Checkpoint
 
