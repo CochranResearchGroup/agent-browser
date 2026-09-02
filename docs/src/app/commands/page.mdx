@@ -1432,6 +1432,16 @@ manual-preservation processes stays preserved and does not block the
 browserless install. The install transaction records both-round census evidence
 and its browserless validation reason; ambiguous or live-owned runtimes still
 block.
+When the old managed runtime is still live but cannot complete cooperative
+handoff, use the separate digest-bound full-shutdown replacement policy. First
+run <code>agent-browser install workstation --dry-run
+--runtime-replacement-policy full-shutdown --json</code>, review its exact close
+targets and live-state consequence, then provide the current
+<code>planDigest</code> to apply through
+<code>--expected-runtime-replacement-plan-digest</code>. The flow preserves
+profile directories and stored credentials while ending live tabs. It never
+uses broad process-name cleanup, and it becomes forward-only after the first
+receipted close.
 The fixture repair uses the route-specific user-scoped XRDP secrets and stops
 before display restoration when the schema, users, secrets, managed-row
 ownership, or resulting two-route topology does not pass readiness. It

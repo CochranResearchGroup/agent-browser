@@ -211,6 +211,7 @@ pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
 agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
@@ -233,6 +234,20 @@ owners, or lifecycle identities. Unknown successor fields and action types are
 preserved without effect authority, so rollback readers can retain newer
 terminal bookkeeping. An already advertised recovery action does not require
 an upgrade merely to apply it.
+
+Cooperative continuity remains the default replacement policy. If an old
+managed runtime cannot complete handoff, first run a dry-run with
+`--runtime-replacement-policy full-shutdown`. Review the returned
+`runtimeReplacementPlan`, including every close target, the profile-preservation
+claim, the live-state consequence, and `planDigest`. Apply requires that exact
+digest through `--expected-runtime-replacement-plan-digest`. The transaction
+closes only the reviewed managed session lanes, leaves profile directories and
+stored credentials intact, proves a stable browserless census, retires only the
+recorded source process identity, then starts the candidate generation. Open
+tabs and other in-memory browser state are intentionally lost. Once a close is
+receipted the transaction is forward-only; inspect and resume or recover it
+instead of attempting rollback. External, manual-preservation, ambiguous, and
+unproven processes are never selected for forced termination.
 
 The first apply uses one `sudo -v` authorization boundary for host preparation.
 After that bootstrap, recurring workstation, route-user, XRDP restart, and
@@ -1368,6 +1383,14 @@ owned browser remains. Churn confined to external or manual-preservation
 processes stays preserved and does not block the browserless install. The
 transaction records both-round census evidence and its browserless validation
 reason; ambiguous or live-owned runtimes still block.
+
+If the old managed runtime is still live and cannot hand off coherently, use
+the separate reviewed replacement flow. Dry-run
+`agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json`,
+then pass its current `planDigest` to apply with
+`--expected-runtime-replacement-plan-digest`. This ends live tabs while
+preserving the managed profile and its stored credentials. It never broadens
+the reviewed process or session targets during apply.
 
 On Linux, named sessions can run as lanes under one bounded user-scoped runtime
 host service without launching a browser. Each install records the exact

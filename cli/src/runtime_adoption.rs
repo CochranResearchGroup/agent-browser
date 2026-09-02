@@ -675,6 +675,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, RolledBackAfterCommit)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
+            | (RuntimesTransferring, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
             | (BlockedInflightEffect, FailedPreservedOldGeneration)
@@ -4770,7 +4771,7 @@ mod tests {
         assert_source_order(
             workstation,
             &[
-                "prepare_payload_transaction(&root, &paths, &parsed, isolated_root)",
+                "prepare_payload_transaction_with_replacement(",
                 "crate::install::install_remote_view_privileges(true, parsed.json)",
                 "activate_prepared_payload_transaction(prepared, &paths, isolated_root)",
                 "quiesce_existing_user_units(&paths)",

@@ -11,11 +11,12 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 State: ACTIVE
 Current state: the installation deadlock exposed by Research.gov fieldwork has
-been separated into a provider-neutral product lane. W1 now gives the installer
-an explicit replacement-policy authority boundary: `preserve` is the default,
-`full-shutdown` apply requires a reviewed SHA-256 plan digest, and the policy
-cannot be combined with the older browserless override. No shutdown executor is
-wired or installed yet.
+been separated into a provider-neutral product lane. W1 through W5 are source
+qualified. `preserve` remains the default; `full-shutdown` apply requires a
+current reviewed SHA-256 plan digest. The deep replacement module closes only
+digest-bound managed lanes, escalates only through exact process identities,
+preserves profiles and stored credentials, retires the exact source host, and
+resumes forward from durable receipts. No production shutdown was applied.
 
 ### Plan
 
@@ -23,10 +24,9 @@ wired or installed yet.
 
 ### Next Recommendation
 
-Add the deterministic effect inventory and durable replacement receipt, then
-implement exact owned-browser closure and old-host retirement. Do not install
-or exercise the incomplete source flag against the retained Research.gov
-runtime.
+Publish the source-qualified commit into the isolated development pseudo-home,
+then run installed doctor and the disposable three-launch smoke. Do not apply
+full shutdown to the retained Research.gov runtime in this lane.
 
 ## P155 | Durable Handoff Resume Intent
 

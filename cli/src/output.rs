@@ -5525,7 +5525,7 @@ Examples:
 agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
-       agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--dashboard-port <port>] [--guacamole-port <port>]
+       agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]
        agent-browser install workstation status [--json]
        agent-browser install workstation recover --transaction-id <id> [--json]
        agent-browser install workstation finalize [--json]
@@ -5654,6 +5654,16 @@ remains. External or manual-preservation process churn stays preserved and does
 not block the browserless install. The transaction records both-round census
 evidence and its browserless validation reason. Ambiguous or live-owned runtimes
 still block.
+Use --runtime-replacement-policy full-shutdown when cooperative handoff cannot
+produce one coherent runtime. Dry-run returns an exact replacement plan and
+digest without mutation. Apply additionally requires that digest through
+--expected-runtime-replacement-plan-digest. The reviewed plan closes only its
+named managed sessions, preserves their profile directories and stored
+credentials, proves a browserless census, retires only the recorded source
+process identity, and starts the candidate generation. Live tabs and
+in-memory session state end. Once the first close effect is receipted, recovery
+is forward-only and guarded rollback is unavailable. The default preserve
+policy retains the cooperative continuity path.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. The shadow stays backend-only while all old-generation cooperative
 lanes complete handoff prepare. A no-browser stream-status bootstrap starts the
@@ -5748,6 +5758,10 @@ Options:
   --apply              Materialize the installed workstation payload
   --force-browserless-upgrade
                        Bypass stale presentation history only when a stable census proves no owned live browser remains
+  --runtime-replacement-policy <preserve|full-shutdown>
+                       Preserve live runtime continuity by default, or review an exact managed-runtime shutdown plan
+  --expected-runtime-replacement-plan-digest <sha256>
+                       Required on full-shutdown apply; must equal the current dry-run plan digest
   --dashboard-port <port>
                        Set the workstation dashboard port (default: 4848)
   --guacamole-port <port>
@@ -5772,6 +5786,8 @@ Examples:
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
   agent-browser install workstation --apply --force-browserless-upgrade --json
+  agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
+  agent-browser install workstation --apply --runtime-replacement-policy full-shutdown --expected-runtime-replacement-plan-digest <sha256> --json
   agent-browser install workstation status --json
   agent-browser install workstation recover --transaction-id upgrade-... --json
   agent-browser install workstation finalize --json

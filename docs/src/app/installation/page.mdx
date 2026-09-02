@@ -96,6 +96,7 @@ checkout or pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
 agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
@@ -118,6 +119,21 @@ principals, capabilities, runtime owners, or lifecycle identities. Unknown
 successor fields and action types are preserved without effect authority, so
 rollback readers retain newer terminal bookkeeping. An already advertised
 recovery action does not require an upgrade merely to apply it.
+
+Cooperative continuity is the default runtime replacement policy. When an old
+managed runtime cannot complete handoff, run a dry-run with
+<code>--runtime-replacement-policy full-shutdown</code> and review the returned
+<code>runtimeReplacementPlan</code>. It identifies the exact managed session
+lanes and source process, states that live browser state will end, confirms
+profile preservation, and supplies a <code>planDigest</code>. Apply requires the
+same digest through
+<code>--expected-runtime-replacement-plan-digest &lt;sha256&gt;</code>. The
+transaction closes only those reviewed lanes, preserves the profile directory
+and stored credentials, proves a stable browserless census, retires only the
+recorded source process identity, and starts the candidate generation. Open
+tabs and in-memory state are lost. After the first close receipt, recovery is
+forward-only through transaction inspect and resume or recover. External,
+manual-preservation, ambiguous, and unproven processes remain untouched.
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight

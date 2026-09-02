@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 198 | 2026-09-02
+
+Scope: implement and source-qualify P156 full-runtime-shutdown replacement
+without changing production browser state.
+
+Actions:
+
+- added deterministic digest-bound replacement plans with exact browser and
+  source-host process identities;
+- added durable replay receipts, bounded cooperative close, exact verified
+  browser termination escalation, two browserless census gates, and exact
+  source-host retirement;
+- integrated full shutdown with workstation prepare, resume, inspection,
+  forward-only recovery, post-shutdown migration baselines, and candidate
+  activation;
+- exposed redacted replacement state and safe actions in transaction inspect;
+  and
+- updated CLI help, README, the agent skill, and both docs-site surfaces.
+
+Validation:
+
+- focused full-shutdown, migration, replay, digest, and forward-only tests pass;
+- strict workspace Clippy, format, and patch hygiene pass;
+- the source-free workstation fixture, host-provision fixture, fresh-VM harness,
+  docs build, and remote-view docs guard pass;
+- the canonical Rust runner recorded 1,879 passing parallel-safe tests; its
+  source-anchor regression was repaired and its unrelated timing failure plus
+  the repaired anchor both pass independently; and
+- a current production dry-run was read-only and returned a ready plan with
+  exact process identity for every managed close target.
+
+Result:
+
+- W2 through W5 are source qualified;
+- W6 isolated installed qualification remains; and
+- no production process, browser, profile, route, handoff, credential, or
+  provider state changed.
+
 ## Turn 197 | 2026-09-02
 
 Scope: open the provider-neutral full-runtime-shutdown installer escape hatch

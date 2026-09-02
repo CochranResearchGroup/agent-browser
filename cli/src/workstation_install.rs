@@ -38,6 +38,10 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Child, Command, Output, Stdio};
 
+use crate::runtime_replacement::{
+    RuntimeReplacementDisposition, RuntimeReplacementPlan, RuntimeReplacementPolicy,
+};
+
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
 const DEFAULT_DASHBOARD_PORT: u16 = 4848;
 const DEFAULT_GUACAMOLE_PORT: u16 = 8092;
@@ -175,17 +179,6 @@ enum InstallMode {
     Apply,
 }
 
-/// Selects whether workstation installation must preserve live browser
-/// continuity or may deliberately end exact owned runtime processes.
-///
-/// `FullShutdown` never authorizes profile deletion or broad process cleanup.
-/// Apply requires a digest from a matching read-only replacement plan.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeReplacementPolicy {
-    Preserve,
-    FullShutdown,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WorkstationInstallArgs {
     mode: InstallMode,
@@ -226,6 +219,10 @@ struct WorkstationInstallReport {
     /// Read-only classification of the Service State migration the candidate
     /// would stage after preflight and a stable runtime census.
     service_state_migration_preview: Value,
+    /// Exact, secret-free consequences of an explicitly requested destructive
+    /// runtime replacement. Preserve-mode installs omit this field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_replacement_plan: Option<RuntimeReplacementPlan>,
     paths: WorkstationPaths,
     phases: Vec<&'static str>,
     host_prepared: bool,
@@ -493,6 +490,9 @@ fn install_transaction_effect_free(
 ) -> Result<(), String> {
     use crate::runtime_adoption::RuntimeLaneTransferState;
 
+    if crate::runtime_replacement::requires_forward_recovery(transaction).unwrap_or(true) {
+        return Err("runtime_replacement_forward_only".to_string());
+    }
     if transaction
         .service_state_migration
         .as_ref()
@@ -584,6 +584,9 @@ fn rollback_install_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let (path, mut transaction) = load_guarded_install_transaction(root, guard)?;
+    if crate::runtime_replacement::requires_forward_recovery(&transaction).unwrap_or(true) {
+        return Err("runtime_replacement_forward_only".to_string());
+    }
     verify_install_transaction_census(&transaction)?;
     if transaction.state == UpgradeTransactionState::RolledBackBeforeCommit {
         return Ok(serde_json::json!({
@@ -867,8 +870,15 @@ fn rehydrate_prepared_payload_transaction(
         mode: InstallMode::Apply,
         json: true,
         force_browserless_upgrade: false,
-        runtime_replacement_policy: RuntimeReplacementPolicy::Preserve,
-        expected_runtime_replacement_plan_digest: None,
+        runtime_replacement_policy: crate::runtime_replacement::plan_from_upgrade_transaction(
+            &transaction,
+        )?
+        .as_ref()
+        .map(|plan| plan.policy)
+        .unwrap_or(RuntimeReplacementPolicy::Preserve),
+        expected_runtime_replacement_plan_digest:
+            crate::runtime_replacement::plan_from_upgrade_transaction(&transaction)?
+                .map(|plan| plan.plan_digest),
         dashboard_port: port("dashboardPort")?,
         guacamole_port: port("guacamolePort")?,
     };
@@ -1226,6 +1236,15 @@ fn install_transaction_safe_actions(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Vec<&'static str> {
     use crate::runtime_adoption::UpgradeTransactionState::*;
+    if crate::runtime_replacement::requires_forward_recovery(transaction).unwrap_or(true) {
+        return match transaction.state {
+            OperatorRecoveryRequired => vec!["inspect", "recover"],
+            Accepted => vec!["inspect", "finalize"],
+            OldGenerationRetirable => vec!["inspect", "review_gc"],
+            FailedEffectUncertain => vec!["inspect"],
+            _ => vec!["inspect", "resume"],
+        };
+    }
     match transaction.state {
         Planned
         | CandidateStaged
@@ -1263,6 +1282,13 @@ fn install_transaction_safe_actions(
 /// compare-and-swap value required by guarded transaction mutations.
 fn install_transaction_summary(transaction: &crate::runtime_adoption::UpgradeTransaction) -> Value {
     let migration = transaction.service_state_migration.as_ref();
+    let replacement_plan = crate::runtime_replacement::plan_from_upgrade_transaction(transaction)
+        .ok()
+        .flatten();
+    let replacement_receipt =
+        crate::runtime_replacement::effect_receipt_from_upgrade_transaction(transaction)
+            .ok()
+            .flatten();
     serde_json::json!({
         "transactionId": transaction.transaction_id,
         "revision": transaction.revision,
@@ -1279,6 +1305,15 @@ fn install_transaction_summary(transaction: &crate::runtime_adoption::UpgradeTra
         "outstandingOwnerObligationCount": transaction.runtime_handoffs.iter().filter(|handoff| handoff.committed && !handoff.source_finalized).count(),
         "stopReason": transaction.stop_reason,
         "terminalResult": transaction.terminal_result,
+        "runtimeReplacementPolicy": replacement_plan.as_ref().map(|plan| plan.policy),
+        "runtimeReplacementPlanDigest": replacement_plan.as_ref().map(|plan| plan.plan_digest.as_str()),
+        "runtimeReplacementDisposition": replacement_plan.as_ref().map(|plan| plan.disposition),
+        "runtimeReplacementProfilesPreserved": replacement_plan.as_ref().map(|plan| plan.profiles_preserved),
+        "runtimeReplacementLiveStateWillEnd": replacement_plan.as_ref().map(|plan| plan.live_state_will_end),
+        "runtimeReplacementEffectState": replacement_receipt.as_ref().map(|receipt| receipt.state),
+        "runtimeReplacementSourceExitProven": replacement_receipt.as_ref().map(|receipt| receipt.source_exit_proven),
+        "runtimeReplacementClosedSessionCount": replacement_receipt.as_ref().map(|receipt| receipt.closed_sessions.len()),
+        "runtimeReplacementForcedBrowserCount": replacement_receipt.as_ref().map(|receipt| receipt.forced_browser_ids.len()),
         "safeActions": install_transaction_safe_actions(transaction),
     })
 }
@@ -2524,9 +2559,56 @@ fn run_workstation_install(args: &[String]) {
     let mut phases = vec!["plan-validated"];
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
     let host_plan = build_host_plan(isolated_root, &root);
+    let runtime_replacement_plan = if parsed.runtime_replacement_policy
+        == RuntimeReplacementPolicy::FullShutdown
+    {
+        let plan =
+            crate::runtime_replacement::plan_runtime_replacement(parsed.runtime_replacement_policy)
+                .unwrap_or_else(|error| fail(&error, parsed.json));
+        if parsed.mode == InstallMode::Apply {
+            let expected = parsed
+                .expected_runtime_replacement_plan_digest
+                .as_deref()
+                .expect("full-shutdown apply digest was validated by the parser");
+            if plan.plan_digest != expected {
+                fail(
+                    &format!(
+                        "runtime_replacement_plan_changed:expected={expected}:current={}",
+                        plan.plan_digest
+                    ),
+                    parsed.json,
+                );
+            }
+            if plan.disposition != RuntimeReplacementDisposition::ReadyForFullShutdown {
+                fail(
+                    &format!("runtime_replacement_blocked:{:?}", plan.blockers),
+                    parsed.json,
+                );
+            }
+        }
+        Some(plan)
+    } else {
+        None
+    };
     let mut candidate_presentation_prerequisite =
         workstation_candidate_presentation_prerequisite(&root, &paths, isolated_root);
     let mut browserless_upgrade_override_applied = false;
+    if parsed.runtime_replacement_policy == RuntimeReplacementPolicy::FullShutdown {
+        candidate_presentation_prerequisite["ready"] = Value::Bool(true);
+        candidate_presentation_prerequisite["overrideRequested"] = Value::Bool(true);
+        candidate_presentation_prerequisite["overrideApplied"] = Value::Bool(true);
+        candidate_presentation_prerequisite["overrideReason"] =
+            Value::String("reviewed_full_shutdown_runtime_replacement".to_string());
+        candidate_presentation_prerequisite["runtimeReplacementPlanDigest"] = Value::String(
+            runtime_replacement_plan
+                .as_ref()
+                .map(|plan| plan.plan_digest.clone())
+                .unwrap_or_default(),
+        );
+        candidate_presentation_prerequisite["nextAction"] =
+            Value::String("proceed_with_reviewed_full_shutdown".to_string());
+        browserless_upgrade_override_applied = true;
+    }
     if parsed.force_browserless_upgrade
         && !isolated_root
         && candidate_presentation_prerequisite
@@ -2629,7 +2711,13 @@ fn run_workstation_install(args: &[String]) {
     let mut next_action =
         "workstation substrate provisioning is required before service activation".to_string();
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
-        let prepared = match prepare_payload_transaction(&root, &paths, &parsed, isolated_root) {
+        let prepared = match prepare_payload_transaction_with_replacement(
+            &root,
+            &paths,
+            &parsed,
+            isolated_root,
+            runtime_replacement_plan.as_ref(),
+        ) {
             Ok(prepared) => prepared,
             Err(error) => fail(&error, parsed.json),
         };
@@ -2706,6 +2794,29 @@ fn run_workstation_install(args: &[String]) {
             phases.push("candidate-dashboard-shadow-ready");
         }
         if let Err(error) = activate_prepared_payload_transaction(prepared, &paths, isolated_root) {
+            if crate::runtime_replacement::requires_forward_recovery(&prepared.transaction)
+                .unwrap_or(true)
+            {
+                prepared.transaction.stop_reason = Some(error.clone());
+                prepared.transaction.terminal_result =
+                    Some("forward_runtime_replacement_required".to_string());
+                let transition = persist_upgrade_transition(
+                    &prepared.transaction_path,
+                    &mut prepared.transaction,
+                    crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired,
+                    "runtime_replacement_forward_recovery_required",
+                );
+                let message = transition.err().map_or_else(
+                    || {
+                        format!(
+                            "{error}; forward recovery required; transaction: {}",
+                            prepared.transaction_path.display()
+                        )
+                    },
+                    |transition| format!("{error}; recovery receipt failed: {transition}"),
+                );
+                fail(&message, parsed.json);
+            }
             let rollback_error = rollback_prepared_payload_transaction(
                 &paths,
                 prepared,
@@ -2959,6 +3070,7 @@ fn run_workstation_install(args: &[String]) {
         host_plan,
         candidate_presentation_prerequisite,
         service_state_migration_preview,
+        runtime_replacement_plan,
         paths: WorkstationPaths {
             root: root.display().to_string(),
             binary: paths.binary.display().to_string(),
@@ -5757,6 +5869,97 @@ fn prepare_service_state_migration_transaction(
     Ok(())
 }
 
+fn refresh_service_state_migration_after_full_shutdown(
+    transaction_path: &Path,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    use crate::native::service_state_migration::{
+        stage_service_state_migration, ServiceStateMigrationStatus,
+    };
+
+    let Some(migration) = transaction.service_state_migration.as_mut() else {
+        return Err("runtime_replacement_service_state_migration_missing".to_string());
+    };
+    if migration.status == "staged_validated_no_change" {
+        migration.successor_fields.insert(
+            "runtimeReplacementBaseline".to_string(),
+            Value::String("live_state_preserved_no_change".to_string()),
+        );
+        write_private_json_atomic(transaction_path, transaction)?;
+        return Ok(());
+    }
+    let state_path = PathBuf::from(&migration.authoritative_state_path);
+    let current = match fs::read(&state_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => b"{}\n".to_vec(),
+        Err(error) => {
+            return Err(format!(
+                "runtime_replacement_service_state_read_failed:{error}"
+            ))
+        }
+    };
+    let raw = std::str::from_utf8(&current)
+        .map_err(|error| format!("runtime_replacement_service_state_utf8_invalid:{error}"))?;
+    let staged = stage_service_state_migration(raw)?;
+    if matches!(
+        staged.plan.status,
+        ServiceStateMigrationStatus::BlockedNewerSchema
+            | ServiceStateMigrationStatus::BlockedInvariant
+    ) {
+        return Err("runtime_replacement_service_state_refresh_blocked".to_string());
+    }
+    let snapshot_path = PathBuf::from(
+        migration
+            .snapshot_path
+            .as_deref()
+            .ok_or_else(|| "runtime_replacement_service_state_snapshot_missing".to_string())?,
+    );
+    let staged_path = PathBuf::from(
+        migration
+            .staged_path
+            .as_deref()
+            .ok_or_else(|| "runtime_replacement_service_state_stage_missing".to_string())?,
+    );
+    let pre_shutdown_snapshot = snapshot_path.with_extension("pre-full-shutdown.audit.json");
+    if !pre_shutdown_snapshot.exists() && snapshot_path.is_file() {
+        let original = fs::read(&snapshot_path).map_err(display_io(
+            "read pre-full-shutdown snapshot",
+            &snapshot_path,
+        ))?;
+        write_private_bytes_atomic(&pre_shutdown_snapshot, &original)?;
+    }
+    write_private_bytes_atomic(&snapshot_path, &current)?;
+    write_private_bytes_atomic(&staged_path, &staged.bytes)?;
+    migration.source_state_schema = staged.plan.source_state_schema;
+    migration.target_state_schema = staged.plan.target_state_schema.to_string();
+    migration.source_profile_lease_schema = staged.plan.source_profile_lease_schema;
+    migration.target_profile_lease_schema = staged.plan.target_profile_lease_schema.to_string();
+    migration.status = match staged.plan.status {
+        ServiceStateMigrationStatus::NotRequired => "staged_validated_no_change",
+        ServiceStateMigrationStatus::Required => "staged_validated_forward",
+        ServiceStateMigrationStatus::BlockedNewerSchema
+        | ServiceStateMigrationStatus::BlockedInvariant => unreachable!(),
+    }
+    .to_string();
+    migration.snapshot_sha256 = Some(workstation_bytes_sha256(&current));
+    migration.staged_sha256 = Some(workstation_bytes_sha256(&staged.bytes));
+    migration.old_reader_compatible = staged.plan.old_reader_compatible;
+    migration.summary = serde_json::to_value(&staged.summary).map_err(|error| {
+        format!("runtime_replacement_service_state_summary_serialize_failed:{error}")
+    })?;
+    migration.contamination_report = staged.contamination_report;
+    migration.backup_locator = Some(snapshot_path.display().to_string());
+    migration.successor_fields.insert(
+        "preFullShutdownAuditSnapshotPath".to_string(),
+        Value::String(pre_shutdown_snapshot.display().to_string()),
+    );
+    migration.successor_fields.insert(
+        "runtimeReplacementBaseline".to_string(),
+        Value::String("post_full_shutdown".to_string()),
+    );
+    write_private_json_atomic(transaction_path, transaction)
+}
+
 fn commit_prepared_service_state_migration(
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
@@ -6167,11 +6370,22 @@ fn isolated_runtime_census() -> Result<crate::runtime_adoption::StableRuntimeCen
     crate::runtime_adoption::build_stable_runtime_census(&round, &round)
 }
 
+#[cfg(test)]
 fn prepare_payload_transaction(
     root: &Path,
     paths: &InstallPaths,
     args: &WorkstationInstallArgs,
     isolated_root: bool,
+) -> Result<PreparedPayloadTransaction, String> {
+    prepare_payload_transaction_with_replacement(root, paths, args, isolated_root, None)
+}
+
+fn prepare_payload_transaction_with_replacement(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+    runtime_replacement_plan: Option<&RuntimeReplacementPlan>,
 ) -> Result<PreparedPayloadTransaction, String> {
     use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
@@ -6179,6 +6393,19 @@ fn prepare_payload_transaction(
         candidate_generation_identity(paths, args)?;
     let mut transaction =
         new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
+    match (args.runtime_replacement_policy, runtime_replacement_plan) {
+        (RuntimeReplacementPolicy::Preserve, None) => {}
+        (RuntimeReplacementPolicy::FullShutdown, Some(plan)) => {
+            if plan.policy != RuntimeReplacementPolicy::FullShutdown
+                || args.expected_runtime_replacement_plan_digest.as_deref()
+                    != Some(plan.plan_digest.as_str())
+            {
+                return Err("runtime_replacement_prepare_authority_mismatch".to_string());
+            }
+            crate::runtime_replacement::bind_upgrade_transaction(&mut transaction, plan)?;
+        }
+        _ => return Err("runtime_replacement_prepare_plan_missing_or_unexpected".to_string()),
+    }
     let transaction_path = transaction_path(root, &transaction.transaction_id);
     write_private_json_atomic(&transaction_path, &transaction)?;
     let admission_drain_path = root
@@ -6364,15 +6591,22 @@ fn activate_prepared_payload_transaction(
         UpgradeTransactionState::AdmissionDraining,
         "admission_draining",
     )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    let full_shutdown =
+        crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?.is_some();
+    if !full_shutdown {
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    }
     persist_upgrade_transition(
         &prepared.transaction_path,
         &mut prepared.transaction,
         UpgradeTransactionState::RuntimesTransferring,
         "runtimes_transferring",
     )?;
-    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    if !full_shutdown {
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    }
     complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     complete_presentation_rebind_phase(prepared)
 }
 
@@ -6383,6 +6617,68 @@ fn complete_runtime_transfer_phase(
 ) -> Result<(), String> {
     if candidate_runtime_host_stage_required(isolated_root, 0) {
         capture_selected_runtime_host_before_transfer(&mut prepared.transaction)?;
+        if let Some(plan) =
+            crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
+        {
+            if prepared
+                .transaction
+                .runtime_host_convergence
+                .as_ref()
+                .and_then(|convergence| convergence.candidate_host.as_ref())
+                .is_some()
+            {
+                return Ok(());
+            }
+            crate::runtime_replacement::execute_full_shutdown(
+                &prepared.transaction_path,
+                &mut prepared.transaction,
+                &plan,
+            )?;
+            refresh_service_state_migration_after_full_shutdown(
+                &prepared.transaction_path,
+                &mut prepared.transaction,
+            )?;
+            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+            for migration in &mut prepared.transaction.runtime_migrations {
+                if migration.disposition
+                    == crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer
+                {
+                    migration.disposition =
+                        crate::runtime_adoption::RuntimeDisposition::RetiredIdle;
+                    let reason = "closed_by_reviewed_full_shutdown";
+                    if !migration.reason_codes.iter().any(|value| value == reason) {
+                        migration.reason_codes.push(reason.to_string());
+                    }
+                }
+            }
+            let candidate_socket_dir =
+                candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
+            let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
+            start_candidate_runtime_host_after_source_prepares(
+                &candidate_binary,
+                &prepared.transaction.transaction_id,
+                prepared.transaction.revision,
+                &candidate_socket_dir,
+            )?;
+            let (host_identity, candidate_backend) = capture_runtime_host_identity(
+                &candidate_socket_dir,
+                &prepared.transaction.candidate_generation_id,
+                &prepared.transaction.candidate_binary_sha256,
+                true,
+            )?;
+            crate::runtime_adoption::record_runtime_host_identity(
+                &mut prepared.transaction,
+                true,
+                host_identity,
+            )?;
+            stage_candidate_runtime_host_ingress(
+                paths,
+                &mut prepared.transaction,
+                candidate_backend,
+            )?;
+            write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
+            return Ok(());
+        }
         let transfer_outcome = transfer_discovered_runtimes(
             paths,
             &prepared.staged,
@@ -6464,12 +6760,17 @@ fn complete_presentation_rebind_phase(
             prepared.transaction.state
         ));
     }
-    prepared.transaction.presentation_validation_summary =
-        Some(if prepared.transaction.runtime_migrations.is_empty() {
+    prepared.transaction.presentation_validation_summary = Some(
+        if crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
+            .is_some()
+        {
+            "runtime_presentations_terminated_by_reviewed_full_shutdown".to_string()
+        } else if prepared.transaction.runtime_migrations.is_empty() {
             "no_live_presentations".to_string()
         } else {
             "runtime_presentations_preserved_for_candidate".to_string()
-        });
+        },
+    );
     write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
     persist_upgrade_transition(
         &prepared.transaction_path,
@@ -6488,26 +6789,38 @@ fn resume_activation_from_durable_phase(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     if prepared.transaction.state == UpgradeTransactionState::AdmissionDraining {
+        let full_shutdown =
+            crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
+                .is_some();
         persist_upgrade_transition(
             &prepared.transaction_path,
             &mut prepared.transaction,
             UpgradeTransactionState::RuntimesTransferring,
             "runtimes_transferring_on_resume",
         )?;
-        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+        if !full_shutdown {
+            persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+        }
         complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
+        persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     } else if prepared.transaction.state == UpgradeTransactionState::RuntimesTransferring
         && !isolated_root
     {
-        validate_durable_runtime_handoff_replay(&prepared.transaction)?;
-        if prepared
-            .transaction
-            .runtime_host_convergence
-            .as_ref()
-            .and_then(|convergence| convergence.candidate_host.as_ref())
-            .is_none()
+        if crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?
+            .is_some()
         {
-            return Err("install_transaction_runtime_transfer_host_receipt_missing".to_string());
+            complete_runtime_transfer_phase(prepared, paths, isolated_root)?;
+        } else {
+            validate_durable_runtime_handoff_replay(&prepared.transaction)?;
+            if prepared
+                .transaction
+                .runtime_host_convergence
+                .as_ref()
+                .and_then(|convergence| convergence.candidate_host.as_ref())
+                .is_none()
+            {
+                return Err("install_transaction_runtime_transfer_host_receipt_missing".to_string());
+            }
         }
     }
     if matches!(
@@ -16163,6 +16476,136 @@ mod tests {
         let legacy_projection: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert!(legacy_projection.get("runtimeHandoffs").is_none());
         assert!(legacy_projection.get("serviceStateMigration").is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn started_full_shutdown_is_forward_only_for_guarded_actions() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-forward-only-runtime-replacement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::RuntimesTransferring;
+        transaction.successor_fields.insert(
+            "runtimeReplacementEffectReceipt".to_string(),
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-replacement-effect-receipt.v1",
+                "state": "browsers_closing",
+                "planDigest": "c".repeat(64),
+                "closedSessions": ["reviewed-session"],
+                "finalCensusDigest": null,
+                "sourceExitProven": false,
+                "profilesPreserved": true
+            }),
+        );
+        let path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&path, &transaction).unwrap();
+        let guard = InstallTransactionMutationGuard {
+            transaction_id: transaction.transaction_id.clone(),
+            expected_revision: transaction.revision,
+            candidate_generation_id: transaction.candidate_generation_id.clone(),
+            census_digest: None,
+        };
+
+        assert_eq!(
+            install_transaction_safe_actions(&transaction),
+            vec!["inspect", "resume"]
+        );
+        assert_eq!(
+            rollback_install_transaction(&root, &guard).unwrap_err(),
+            "runtime_replacement_forward_only"
+        );
+
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::BlockedInflightEffect;
+        write_private_json_atomic(&path, &transaction).unwrap();
+        assert_eq!(
+            close_install_transaction(&root, &guard).unwrap_err(),
+            "runtime_replacement_forward_only"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn full_shutdown_refreshes_migration_rollback_baseline_after_live_state_ends() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-replacement-state-baseline-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let artifacts = root.join("artifacts");
+        let state_path = root.join("state.json");
+        let snapshot_path = artifacts.join("state.before.json");
+        let staged_path = artifacts.join("state.candidate.json");
+        let transaction_path = artifacts.join("transaction.json");
+        let original = b"{\"legacyAudit\":true}\n";
+        let post_shutdown = b"{}\n";
+        write_private_bytes_atomic(&snapshot_path, original).unwrap();
+        write_private_bytes_atomic(&staged_path, original).unwrap();
+        write_private_bytes_atomic(&state_path, post_shutdown).unwrap();
+
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.service_state_migration =
+            Some(crate::runtime_adoption::UpgradeServiceStateMigration {
+                schema_version: "agent-browser.upgrade-service-state-migration.v1".to_string(),
+                source_state_schema: "agent-browser.service-state.unversioned".to_string(),
+                target_state_schema: "agent-browser.service-state.v2".to_string(),
+                source_profile_lease_schema: None,
+                target_profile_lease_schema: "agent-browser.profile-lease.v1".to_string(),
+                status: "staged_validated_forward".to_string(),
+                authoritative_state_path: state_path.display().to_string(),
+                authoritative_state_existed: true,
+                snapshot_path: Some(snapshot_path.display().to_string()),
+                snapshot_sha256: Some(workstation_bytes_sha256(original)),
+                staged_path: Some(staged_path.display().to_string()),
+                staged_sha256: Some(workstation_bytes_sha256(original)),
+                committed: false,
+                rollback_ready: true,
+                old_reader_compatible: true,
+                summary: serde_json::json!({}),
+                contamination_report: serde_json::json!({}),
+                backup_locator: Some(snapshot_path.display().to_string()),
+                restore_procedure: "inspect then recover forward".to_string(),
+                receipt_path: None,
+                successor_fields: std::collections::BTreeMap::new(),
+            });
+
+        refresh_service_state_migration_after_full_shutdown(&transaction_path, &mut transaction)
+            .unwrap();
+
+        let audit_path = snapshot_path.with_extension("pre-full-shutdown.audit.json");
+        assert_eq!(fs::read(audit_path).unwrap(), original);
+        assert_eq!(fs::read(&snapshot_path).unwrap(), post_shutdown);
+        let staged: Value = serde_json::from_slice(&fs::read(&staged_path).unwrap()).unwrap();
+        assert_eq!(
+            staged["schemaVersion"],
+            crate::native::service_state_migration::SERVICE_STATE_SCHEMA_VERSION
+        );
+        let migration = transaction.service_state_migration.as_ref().unwrap();
+        assert_eq!(
+            migration
+                .successor_fields
+                .get("runtimeReplacementBaseline")
+                .and_then(Value::as_str),
+            Some("post_full_shutdown")
+        );
+        assert_eq!(
+            migration.snapshot_sha256.as_deref(),
+            Some(workstation_bytes_sha256(post_shutdown).as_str())
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

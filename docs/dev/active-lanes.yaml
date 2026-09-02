@@ -7,8 +7,8 @@ lanes:
     branch: feature/full-runtime-shutdown
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE
-    checkpoint: 5d35900a555f90fb6731ad8760ccae74e7b729c1
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 961be3994f075f56bf559514b94ad37a21dc28d8
     remote_ref: null
     integration_receipt: null
     integration: merge

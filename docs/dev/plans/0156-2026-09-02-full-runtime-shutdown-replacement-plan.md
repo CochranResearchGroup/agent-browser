@@ -153,3 +153,45 @@ qualified.
 
 Next action: add the deterministic effect inventory and durable replacement
 transaction model, with red fixtures for digest drift and policy immutability.
+
+## W2 Through W5 Checkpoint
+
+State transition: `active -> source-qualified`.
+
+Acceptance state: W2, W3, W4, and W5 complete; W6 remains.
+
+Progress classification: `capability_delivery`.
+
+Evidence: `runtime_replacement` now owns deterministic read-only planning,
+digest binding, durable transaction receipts, exact close targets, replay, and
+verified effect sequencing. Each close target carries its recorded browser
+PID, process start token, executable, session lanes, and profile identity
+digest. The executor gives the old lane one bounded close request, then uses
+the same verified process handle for TERM and KILL only if the exact browser
+remains. It rechecks browser absence, requires stable browserless census before
+and after exact source-host retirement, and never deletes or copies a profile.
+
+Workstation prepare, resume, inspection, recovery, migration baseline refresh,
+and candidate activation now retain the immutable plan and effect receipt.
+Once a close effect starts, guarded rollback and zero-effect close reject with
+`runtime_replacement_forward_only`; replay resumes from the last durable
+checkpoint. The candidate is not started until browser and source absence are
+proved. CLI help, README, the agent skill, installation docs, and command docs
+state the session-loss and profile-preservation contract.
+
+Validation: focused full-shutdown and recovery tests pass; strict Clippy passes;
+the source-free workstation fixture, host-provision fixture, fresh-VM harness,
+docs build, remote-view documentation guard, format, and patch hygiene pass.
+The canonical Rust runner reached 1,879 passing parallel-safe tests. Its two
+reported failures were the renamed prepare source anchor and an unrelated
+dashboard timing test; the anchor was updated and both tests pass alone. A
+read-only production dry-run remains mutation-free and currently produces a
+ready plan with exact process identity for each reviewed managed close target.
+
+Material blocker: W6 still requires publication into the isolated development
+pseudo-home, installed doctor, and disposable browser launch smoke. Production
+full shutdown remains outside this plan's authority.
+
+Next action: commit the source-qualified checkpoint, publish that exact commit
+as a development candidate, run isolated doctor and launch smoke, then close
+P156 only if installed/source identity and runtime residue checks pass.
