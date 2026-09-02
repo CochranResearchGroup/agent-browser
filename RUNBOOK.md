@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 202 | 2026-09-02
+
+Scope: execute P157 W1 attempt 1 by establishing behavior-preserving Profile
+acquisition ownership without changing permission or public-contract semantics.
+
+Actions:
+
+- introduced a typed acquisition artifact shared by access planning and
+  action-runtime route application;
+- removed downstream JSON reconstruction of acquisition blockers, lifecycle
+  replacement, browser reuse, and authenticated launch-route receipts;
+- placed the existing recovery coordinator inside the Profile acquisition
+  module and redirected all production callers; and
+- moved exact lifecycle-replacement evaluation under that owner and added
+  reuse, launch, and denial oracle assertions.
+
+Validation:
+
+- 51 Service Access, 87 route-host, and 23 acquisition-recovery tests pass;
+- the full provider-free Rust gate passes, including 1,881 parallel-safe tests
+  and all serial environment-mutating partitions;
+- formatting and workspace clippy with warnings denied pass; and
+- service API/MCP parity, generated-client drift, and client type checks pass.
+
+Result:
+
+- W1 attempt 1 is source accepted at `2566592f` with no public behavior or
+  runtime mutation;
+- W1 remains open because profile reuse, dominant-blocker selection, and
+  executable request projection still originate in `service_access.rs`; and
+- attempt 2 must move those computations behind the typed interface and remove
+  the temporary projection parser before permission semantics change.
+
 ## Turn 201 | 2026-09-02
 
 Scope: incorporate the deep-module architecture review into P157 and restore

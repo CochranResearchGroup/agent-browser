@@ -6,9 +6,9 @@ lanes:
     plan_ref: refs/heads/plan/profile-permissions-and-request-provenance
     branch: plan/profile-permissions-and-request-provenance
     target: main
-    plan_state: PLANNED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 60efe68257e74712d78c5f46076d42d8adbbe9c6
+    checkpoint: 2566592f60235ad6fb27eef3c2f15fe0799ec4b6
     remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
     integration_receipt: null
     integration: merge

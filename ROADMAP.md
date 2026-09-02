@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P157 | Profile Permissions And Request Provenance
 
-State: PLANNED
+State: IN PROGRESS
 Current state: Research.gov fieldwork exposed that profile access, coordination
 leases, and runtime ownership proof are conflated, while scheduler rejection
 can bypass structured failure decoration and lose runtime-lane correlation.
@@ -22,6 +22,11 @@ acquisition owner, validates every projection through a semantic contract
 oracle, keeps protected lease exchange behind one cohesive client, and makes
 the Rust install domain the sole owner of convergence truth consumed by the
 dashboard.
+W1 attempt 1 is published at `2566592f`: one typed acquisition artifact now
+drives both access-plan projection and action-runtime route application,
+recovery coordination is internal to the Profile acquisition module, and the
+exact lifecycle-replacement evaluator moved under that owner. Reuse, launch,
+and denial oracle cases preserve current behavior.
 
 ### Plan
 
@@ -29,10 +34,11 @@ dashboard.
 
 ### Next Recommendation
 
-Implement W1 only: move cohesive existing acquisition behavior behind one
-typed in-process interface and establish canonical current-behavior fixtures.
-Preserve public contracts and a green checkpoint before changing policy. Do
-not add a new crate or mutate production permissions or browser state.
+Continue W1 only: move profile-reuse evaluation, dominant-blocker selection,
+and executable service-request projection behind the typed acquisition
+interface, then delete the temporary projection parser. Preserve public
+contracts before changing policy. Do not add a new crate or mutate production
+permissions or browser state.
 
 ## P156 | Full Runtime Shutdown Replacement
 

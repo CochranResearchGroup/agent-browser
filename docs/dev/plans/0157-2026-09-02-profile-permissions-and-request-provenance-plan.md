@@ -2,9 +2,9 @@
 
 Date: 2026-09-02
 
-State: PLANNED
+State: OPEN
 
-Execution state: `architecture_and_contract_registered`
+Execution state: `w1_profile_acquisition_owner_in_progress`
 
 Lane: P157
 
@@ -402,3 +402,39 @@ otherwise deepen the split before a semantic oracle can detect divergence.
 Next action: implement W1 only. Extract the current joined acquisition decision
 behind one typed in-process interface and freeze canonical current-behavior
 fixtures before changing permission, provenance, or public-contract semantics.
+
+## Execution Checkpoint W1-A
+
+Source checkpoint: `2566592f60235ad6fb27eef3c2f15fe0799ec4b6`.
+
+State transition: `planned -> open`.
+
+Completed in W1 attempt 1:
+
+- introduced one typed `ProfileAcquisitionDecision` artifact while preserving
+  the existing public access-plan projection;
+- changed action-runtime route application to consume that artifact directly,
+  removing its JSON blocker, lifecycle, and route reconstruction;
+- made the existing recovery coordinator an internal child of the Profile
+  acquisition module and redirected all production callers to that owner;
+- moved exact lifecycle-replacement evaluation under the same module; and
+- froze current reuse, launch, and foreign-principal denial behavior as the
+  first semantic-oracle cases.
+
+W1 remains open. `profile_reuse_decision`, dominant-blocker selection, and the
+executable service-request projection still originate in `service_access.rs`.
+The acquisition module temporarily validates the completed projection at its
+seam. Attempt 2 must move those cohesive computations behind the typed
+interface and delete `ProfileAcquisitionDecision::from_access_plan`; policy and
+public-contract semantics remain frozen until that checkpoint is green.
+
+Validation evidence:
+
+- 51 Service Access tests pass;
+- 87 action-runtime route-host tests pass;
+- 23 Profile acquisition recovery tests pass;
+- workspace clippy passes with warnings denied;
+- the complete provider-free Rust gate passes, including 1,881 parallel-safe
+  tests and every serial environment-mutating partition; and
+- service API/MCP parity, generated-client contract drift, and client type
+  checks pass.
