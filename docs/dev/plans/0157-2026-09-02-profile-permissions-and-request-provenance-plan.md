@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w4_terminal_outcome_in_progress`
+Execution state: `w5_profile_access_policy_in_progress`
 
 Lane: P157
 
@@ -438,6 +438,38 @@ Validation evidence:
   tests and every serial environment-mutating partition; and
 - service API/MCP parity, generated-client contract drift, and client type
   checks pass.
+
+## Execution Checkpoint W4
+
+Source checkpoint: `2ab08e87`.
+
+State transition: `w3_complete -> w4_complete`.
+
+Completed in W4 attempt 1:
+
+- introduced one typed terminal outcome builder for success, failure,
+  cancellation, timeout, and rejection across every control-plane exit;
+- persisted the exact same failure, provenance, state, phase, and completion
+  identity in the response, ServiceJob, terminal ServiceEvent, and trace
+  projection;
+- replaced the split enqueue, execution, timeout, cancellation, and scheduler
+  persistence helpers with the single terminal finalizer; and
+- turned only the scheduler-rejection regression case green, leaving the three
+  W5 and W9 cases intentionally red.
+
+W4 is complete without changing profile-access policy or production runtime
+state. W5 is open to add revisioned `shared-local`, `restricted`, and
+`exclusive` evaluation inside the Profile acquisition owner.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,886 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the P157 oracle passes with six schemas, two green cases, and three bounded
+  red cases; and
+- generated-client drift, service-client contracts, client types, and patch
+  whitespace checks pass.
 
 ## Execution Checkpoint W2
 

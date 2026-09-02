@@ -4,6 +4,37 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 206 | 2026-09-02
+
+Scope: complete P157 W4 unified terminal outcomes without changing profile
+access policy or production runtime state.
+
+Actions:
+
+- added one typed terminal outcome model and one control-plane finalizer for
+  success, failure, cancellation, timeout, and rejection;
+- preserved the same structured failure and immutable provenance across the
+  response, ServiceJob, terminal ServiceEvent, and trace projection;
+- converted enqueue, scheduler, execution, cancellation, timeout, and response
+  delivery exits to the common terminal path; and
+- updated frozen schemas and generated client projections, then turned only
+  the scheduler-rejection regression case green.
+
+Validation:
+
+- focused scheduler, timeout, cancellation, failure-classification, event,
+  job, and terminal-outcome tests pass;
+- the full provider-free Rust gate passes with 1,886 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass; and
+- the P157 oracle, generated-client drift, service-client contract, client
+  type, and patch checks pass.
+
+Result:
+
+- W4 is complete and pushed at `2ab08e87` without production effects; and
+- W5 revisioned Profile access-policy evaluation is next.
+
 ## Turn 205 | 2026-09-02
 
 Scope: complete P157 W3 immutable request provenance without changing access

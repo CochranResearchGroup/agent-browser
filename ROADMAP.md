@@ -39,6 +39,11 @@ job state preserves the same request, connection, lane, subject, assurance,
 profile, and causal identifiers. Private routing payloads remain outside the
 envelope. The runtime-lane oracle case is green while the four later cases
 remain red.
+W4 is source complete at `2ab08e87`. One typed terminal finalizer now owns
+success, failure, cancellation, timeout, and rejection. The exact structured
+failure and immutable provenance are preserved across response, ServiceJob,
+terminal ServiceEvent, and trace projections. Scheduler rejection now uses
+that path, leaving the three W5 and W9 oracle cases intentionally red.
 
 ### Plan
 
@@ -46,10 +51,10 @@ remain red.
 
 ### Next Recommendation
 
-Execute W4: replace split response and job terminal handling with one typed
-outcome builder, attach the W3 provenance envelope to every terminal response,
-job, event, and trace projection, and turn only the scheduler-rejection oracle
-case green. Do not change access-policy semantics or production runtime state.
+Execute W5: add revisioned access-policy evaluation inside the Profile
+acquisition owner, make `shared-local` the frictionless trusted-local default,
+and retire circular identity recourse plus shared-profile overblocking. Turn
+only the two W5 oracle cases green without changing production runtime state.
 
 ## P156 | Full Runtime Shutdown Replacement
 
