@@ -2,15 +2,15 @@
 
 Date: 2026-09-01
 
-State: OPEN
+State: ACCEPTED
 
-Execution state: `slice_g_fresh_acquisition_race_hardening`
+Execution state: `installed_acceptance`
 
 Lane: P150
 
 Source baseline: `09e1d6f69eecd0a5e2590a44f2ecba903e36214d`
 
-Source checkpoint: `8673204661340d92dfbf4eeb847588a16df59e78`
+Source checkpoint: `1986e004bf4f1328cbc08d98638e52501e8f621c`
 
 Branch: `fix/automatic-terminal-quarantine-convergence`
 
@@ -108,9 +108,11 @@ still represent a live effect.
 
 - Implementation attempts: `1/2`.
 - Review and rework cycles: `0/1`.
-- Production candidate installs: `0/1`.
-- Production reconciliation applies: `0/1`.
-- Route-bound acquisition retries: `0/1`.
+- Final merged-candidate apply attempts: `2/2`; the first preserved the old
+  generation at the authenticated-presentation gate and the second accepted
+  after the supported candidate journey was supplied.
+- Production reconciliation applies: `1/1`.
+- Route-bound acquisition retries: `1/1`.
 - Checkpoint interval: three slices or ninety minutes.
 - Stop before production installation if source or development qualification
   fails.
@@ -241,3 +243,43 @@ inactive quarantine.
 Next action: integrate the qualified source checkpoint, dry-run the exact
 production workstation candidate transaction, and apply only if census and
 installed-runtime gates are green.
+
+## Installed Acceptance
+
+State transition: `live_handoff_ready_with_race_hardening_pending -> installed_acceptance`.
+
+Acceptance state: Slices E and F complete; Plan 0150 accepted.
+
+Progress classification: `accepted_progress`.
+
+Evidence:
+
+- source checkpoint `1986e004bf4f1328cbc08d98638e52501e8f621c`
+  was integrated into `main` by `4b58b6bb12cb674ee37850d34e957c4f3c08a39c`;
+- merged `origin/main` checkpoint `b73dafcccb2366805de4350d0af8c09a01431ef4`
+  produced optimized binary SHA-256
+  `4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`;
+- transaction `upgrade-a65e0348-7d32-4f62-9889-b4908c8cbe91` accepted
+  generation `0.28.0-4a92c42517e1-6121fd69672b` after an authenticated
+  candidate handoff receipt and finalized the Research.gov lane at owner
+  generation 9;
+- installed command, selected generation, workspace candidate, and source
+  candidate share the exact binary digest; production doctor succeeds with one
+  current runtime host, one executable generation, and zero legacy daemons;
+- durable handoff `r580584` remains ready at presentation generation 3 with the
+  original Research.gov tab valid, browser PID 43472 healthy, and no browser
+  relaunch; and
+- the repository and user-scoped Agent Browser skill share SHA-256
+  `de6aecad582058c2e0eca727675c2b5cadf727834c00b27cc5cf03acffe5550d`.
+
+The first apply attempt failed closed because no authenticated request reached
+the shadow candidate within its five-minute window. The old generation was
+preserved. The accepted retry used the existing private dashboard bootstrap
+credential only to authenticate the candidate and resolve the same opaque
+handoff; no credential material was logged or copied.
+
+Material blocker: none for Plan 0150. Legacy profile-lease provenance and an
+inactive supervisor remain nonblocking doctor warnings owned by other lanes.
+
+Next action: continue Research.gov fieldwork through the same durable handoff;
+do not cold-launch a replacement browser.

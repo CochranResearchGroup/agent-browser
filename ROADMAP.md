@@ -51,17 +51,18 @@ capability; the consumed acceptance tick must not be repeated implicitly.
 
 ## P150 | Automatic Terminal Quarantine Convergence
 
-State: IN PROGRESS
+State: ACCEPTED
 Current state: production reconciliation closed the exact Research.gov
 quarantine and a recovered no-launch reattach produced ready durable handoff
 `r580584`. The first fresh acquisition exposed a background-reconcile race in
 which a seconds-old pending lease was mistaken for detached. Source now requires
 a valid 15-minute age plus matching ownership identity before detached pending
-convergence. Development generation `0.28.0-4d2c8ce7ecba` and production
-candidate `672d311dd354` qualify the age fence. A separate coordinated upgrade
-accepted production generation `0.28.0-e2244cd2447c-c25a91eb0d2b`, finalized
-the Research.gov lane at owner generation 6, and preserved the ready browser
-and handoff. That accepted generation does not yet contain the age fence.
+convergence. Production transaction `upgrade-a65e0348-7d32-4f62-9889-b4908c8cbe91`
+installed the merged age fence as generation
+`0.28.0-4a92c42517e1-6121fd69672b`, finalized the Research.gov lane at owner
+generation 9, and preserved the ready browser, tab, route, display, and durable
+handoff. Production doctor succeeds with one current runtime host and zero
+legacy daemons.
 
 ### Plan
 
@@ -69,9 +70,8 @@ and handoff. That accepted generation does not yet contain the age fence.
 
 ### Next Recommendation
 
-Merge the qualified age fence, then install it through the same handoff-safe
-runtime transition and prove the durable Research.gov URL reconnects without a
-new browser launch. Do not start an overlapping workstation repair.
+Continue Research.gov fieldwork through durable handoff `r580584`. Do not
+cold-launch a replacement browser for route, display, or viewer reconnection.
 
 ## P144 | Lease Authority Coordination And Revocation
 

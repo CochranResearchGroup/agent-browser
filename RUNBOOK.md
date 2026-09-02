@@ -4,6 +4,51 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 193 | 2026-09-01
+
+Scope: install the merged P150 race hardening, synchronize operator guidance,
+and close only Git custody proven integrated and inactive.
+
+Actions:
+
+- reconciled clean `main` with `origin/main` at
+  `b73dafcccb2366805de4350d0af8c09a01431ef4` and qualified optimized candidate
+  SHA-256 `4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`;
+- allowed the first transactional apply to fail closed when the shadow
+  candidate received no authenticated handoff resolution within five minutes;
+- used the existing private dashboard bootstrap credential to authenticate the
+  staged candidate and resolve opaque handoff `r580584`, without logging or
+  copying credential material; and
+- synchronized the ignored workspace candidate and user-scoped Agent Browser
+  skill to the accepted source;
+- removed four clean accepted or closed P153/P154 worktrees, deleted their
+  integrated local branches plus the merged P154 remote branch, deleted the
+  merged P150 remote branch, pruned worktree metadata, and ran automatic Git
+  maintenance. The P153 topic worktree was retained because live Chrome
+  processes still hold it as their working directory; active and ambiguous
+  lanes were left untouched.
+
+Validation:
+
+- strict Clippy and formatting pass for the merged workspace;
+- 91 service-health, 19 quarantine, and 10 desktop-locator tests pass;
+- the source-free workstation fixture and durable-handoff documentation check
+  pass;
+- transaction `upgrade-a65e0348-7d32-4f62-9889-b4908c8cbe91` is accepted at
+  revision 13 with candidate and dashboard presentation receipts; and
+- production doctor succeeds with one current runtime host, one executable
+  generation, zero legacy daemons, and no runtime-multiplicity issue.
+
+Result:
+
+- generation `0.28.0-4a92c42517e1-6121fd69672b` is selected and installed;
+- installed command, workspace candidate, and source candidate have the exact
+  SHA-256 `4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`;
+- Research.gov remains healthy in browser PID 43472 and handoff `r580584` is
+  ready at presentation generation 3 and owner generation 9; and
+- P150 reaches installed acceptance. Legacy profile-lease provenance and the
+  inactive optional supervisor remain nonblocking warnings owned elsewhere.
+
 ## Turn 192 | 2026-09-01
 
 Scope: remove the lost-capability catch-22 without rotating production
