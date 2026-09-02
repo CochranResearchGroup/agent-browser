@@ -2,7 +2,9 @@
 
 Date: 2026-09-01
 
-State: OPEN
+State: CLOSED
+
+Execution state: `production_integrated_and_verified`
 
 Lane: P147
 
@@ -80,3 +82,17 @@ upgrade transaction, a binary mismatch, or failed process observation.
 - Preserve the other agent's uncommitted Plan 0144 custody and plan changes.
 - Stop production installation if source validation or development
   qualification fails.
+
+## Completion Receipt
+
+The ingress repair is integrated into `main` by merge
+`671e4a121fb8b81eeed02698b57b83314bb077de`. The final topic tip is
+`78801b4ea9ee821760fbaef2ff2537a7c419ac53`; its additional lease-authority
+validation guards are also contained in `main`.
+
+Plan 0148 production acceptance exercised the repaired same-generation
+adoption path: the governed supervisor replacement selected PID `82961`,
+advanced ingress to the live socket, and left one current runtime host with
+zero legacy daemons. A subsequent takeover dry-run returned
+`already_supervised` with no blockers. That evidence closes the P147 objective
+without changing the still-open P144 lease-authority lane.

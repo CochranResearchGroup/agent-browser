@@ -31,13 +31,14 @@ already consumed.
 
 ## P152 | Terminal Session Replacement Planner Executor Parity
 
-State: IN PROGRESS
-Current state: the terminal replacement and Last30days schema-17 repairs are
-merged and installed. The single acceptance tick proved three-attempt
-persistence for both X and LinkedIn, then exposed that Last30days has no profile
-capability. A follow-up source repair now prevents unauthenticated planning from
-advertising the protected terminal replacement as executable. No credentials,
-profile identity, or authentication authority has been mutated.
+State: ACCEPTED
+Current state: the terminal replacement, Last30days schema-17, and truthful
+capability-gate repairs are merged and installed. The single acceptance tick
+proved three-attempt persistence for both X and LinkedIn. A production
+no-launch readback then proved that unauthenticated planning reports
+`profile_capability_required` before daemon relay while the authenticated path
+remains executable. No credentials, profile identity, or authentication
+authority has been mutated.
 
 ### Plan
 
@@ -45,9 +46,9 @@ profile identity, or authentication authority has been mutated.
 
 ### Next Recommendation
 
-Merge and install the truthful-planning follow-up. Then obtain explicit
-authority before registering and privately wiring a Last30days profile
-capability; the consumed acceptance tick must not be repeated implicitly.
+Treat Last30days capability registration and private wiring as a separate
+identity-mutation objective requiring explicit authority. The consumed
+acceptance tick must not be repeated implicitly.
 
 ## P150 | Automatic Terminal Quarantine Convergence
 

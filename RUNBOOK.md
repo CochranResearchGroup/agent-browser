@@ -4,6 +4,42 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 194 | 2026-09-02
+
+Scope: stop the exact P152/P153 worktree-owned Chrome trees and complete Git
+and active-lane custody reconciliation.
+
+Actions:
+
+- proved P152 process group `45686` belonged to its disposable test profile
+  and P153 process group `16792` belonged to the managed default profile using
+  exact start tokens, executables, profile paths, and worktree working
+  directories;
+- sent `TERM` to only those two process groups; both Chrome trees and their
+  crashpad handlers exited immediately without forced termination;
+- ran service reconciliation after exit, preserving the viable Research.gov
+  browser and repairing retained route/display projections without releasing
+  an active route;
+- closed P147 from its merged and production-proven P148 receipt, and closed
+  P152 at its installed truthful-planning boundary; and
+- reduced the active-lane catalog to the genuinely open P144 paused branch.
+
+Validation:
+
+- neither removed Chrome process group nor its crashpad handlers remain;
+- neither P152 nor P153 worktree has a live working-directory holder;
+- every cleanup candidate is clean, equal to its remote, and contained in
+  `origin/main`; and
+- the active-lane auditor passes for the retained P144 catalog entry.
+
+Result:
+
+- P152 and P153 runtime cleanup obligations are satisfied without affecting
+  the live Research.gov browser;
+- P147, P148, P152, and P153 worktree custody is closed; and
+- P144 remains open as a published paused ref rather than being mistaken for
+  completed cleanup.
+
 ## Turn 193 | 2026-09-01
 
 Scope: install the merged P150 race hardening, synchronize operator guidance,

@@ -2,9 +2,9 @@
 
 Date: 2026-09-01
 
-State: ACTIVE
+State: CLOSED
 
-Execution state: `slice_f_production_installation`
+Execution state: `truthful_planning_installed`
 
 Lane: P152
 
@@ -295,3 +295,19 @@ Progress classification: `outcome_progress`.
 Next action: obtain explicit operator authority for the identity mutation;
 after implementation, obtain separate authority for any additional acceptance
 tick because the P152 tick budget is exhausted.
+
+## Closure And Custody Reconciliation | 2026-09-02
+
+P152 is closed for its frozen scope. Merge `451e8d29` integrated the terminal
+replacement and retry-persistence repair, and merge `8719b57b` integrated the
+truthful capability gate. The exact latter candidate was installed and its
+no-launch production readback proved that an unauthenticated terminal owner is
+reported as blocked before daemon relay while the authenticated path remains
+executable.
+
+The remaining Last30days capability registration, private client wiring, and
+any additional provider tick are separate identity-mutation and provider
+authorities. They are not unfinished P152 implementation. The topic and
+follow-up branches are fully contained in `main`, and their retained test
+Chrome process was stopped after exact process-group, executable, profile, and
+working-directory proof.

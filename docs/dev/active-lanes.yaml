@@ -1,66 +1,18 @@
 schema_version: 1
 lanes:
-  - id: P154 Desktop Locator Deep Module
-    objective: Reduce desktop locator to its two production operations and one canonical captured-frame representation
-    plan: docs/dev/plans/0154-2026-09-01-desktop-locator-deep-module-plan.md
-    plan_ref: refs/heads/architecture/desktop-locator-deep-module
-    branch: architecture/desktop-locator-deep-module
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 80abe35388dedbf0b066805370cd99a9d1900d36
-    remote_ref: refs/remotes/origin/architecture/desktop-locator-deep-module
-    integration_receipt: ae4497119431548434330617ef408ed1f1d98428
-    integration: merge
-    dependencies: [P110, P131]
-    overlaps: []
-    reconciled_overlaps: []
-    updated_at: 2026-09-01
-  - id: P152 Terminal Session Replacement Planner Executor Parity
-    objective: Make authenticated terminal replacement plans executable without weakening identity or live-owner fences
-    plan: docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md
-    plan_ref: refs/heads/fix/terminal-session-replacement-parity
-    branch: fix/terminal-session-replacement-parity
+  - id: P144
+    objective: Replace inferred profile lease authority with one canonical fenced authority kernel
+    plan: docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md
+    plan_ref: refs/heads/plan/lease-authority-coordination
+    branch: plan/lease-authority-coordination
     target: main
     plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
-    checkpoint: 97466f05c7d91d15d4ffe20f0ee468bf4e02ccb4
-    remote_ref: refs/remotes/origin/fix/terminal-session-replacement-parity
+    custody_state: PAUSED_REF
+    checkpoint: ae5ad34cccd545b41ed60b803fbd8f03aaa66dd7
+    remote_ref: refs/remotes/origin/plan/lease-authority-coordination
     integration_receipt: null
     integration: merge
-    dependencies: [P137, P144, P148, P150]
-    overlaps: [P150]
-    reconciled_overlaps: [P150_integrated_and_distinct_implementation_surfaces]
-    updated_at: 2026-09-01
-  - id: P150 Automatic Terminal Quarantine Convergence
-    objective: Automatically close a provably inactive route-bound acquisition quarantine after retained owners disappear
-    plan: docs/dev/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md
-    plan_ref: refs/heads/fix/automatic-terminal-quarantine-convergence
-    branch: fix/automatic-terminal-quarantine-convergence
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 1986e004bf4f1328cbc08d98638e52501e8f621c
-    remote_ref: refs/remotes/origin/fix/automatic-terminal-quarantine-convergence
-    integration_receipt: 4b58b6bb12cb674ee37850d34e957c4f3c08a39c
-    integration: merge
-    dependencies: [P114, P144]
-    overlaps: [P144]
-    reconciled_overlaps: [P144]
-    updated_at: 2026-09-01
-  - id: P151
-    objective: Extract CDP protocol and websocket transport into a focused Rust library crate
-    plan: docs/dev/plans/0151-2026-09-01-cdp-transport-crate-extraction-plan.md
-    plan_ref: refs/heads/architecture/cdp-transport-crate
-    branch: architecture/cdp-transport-crate
-    target: main
-    plan_state: CLOSED
-    custody_state: INTEGRATED
-    checkpoint: 88e2468f8d8ad76bb66e4c341f35d5913949d399
-    remote_ref: refs/remotes/origin/architecture/cdp-transport-crate
-    integration_receipt: 6d5b3377c9438d3a6b86a20da9c5c97f3da9ab59
-    integration: merge
-    dependencies: [P149]
+    dependencies: []
     overlaps: []
     reconciled_overlaps: []
-    updated_at: 2026-09-01
+    updated_at: 2026-09-02
