@@ -11,8 +11,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::io::Cursor;
 
-use super::desktop_capture::{DesktopContext, FrameReceipt};
-use super::desktop_locator::BoundFrame;
+use super::desktop_capture::{DesktopCaptureResult, DesktopContext, FrameReceipt};
 
 const PROMPT_PROFILE_ID: &str = "p110-external-prompt-v1";
 const PROMPT_PROFILE_VERSION: &str = "p110-prompt-v1";
@@ -144,7 +143,7 @@ pub(crate) struct SyntheticPageReference {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PromptEvidenceBundle {
-    pub frame: BoundFrame,
+    pub frame: DesktopCaptureResult,
     pub surface: BrowserSurfaceEvidence,
     pub page: SyntheticPageReference,
     pub captured_at_ms: u64,
@@ -1526,7 +1525,7 @@ fn render_fixture(
         surface.route_id = "route-mismatch".to_string();
     }
     Ok(PromptEvidenceBundle {
-        frame: BoundFrame {
+        frame: DesktopCaptureResult {
             context,
             frame_receipt,
             image_bytes: desktop_bytes,
