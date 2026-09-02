@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w8_lease_authority_and_lifecycle_in_progress`
+Execution state: `w9_install_convergence_in_progress`
 
 Lane: P157
 
@@ -574,6 +574,51 @@ Validation evidence:
 - formatting and workspace clippy with warnings denied pass;
 - focused policy, repository persistence, revision-conflict, drain-fencing,
   graceful-release, and explicit-eviction receipt tests pass; and
+- the P157 oracle remains at six schemas, four green cases, and the one W9
+  convergence case intentionally red.
+
+## Execution Checkpoint W8
+
+Source checkpoint: `c46c6d43`.
+
+State transition: `w7_complete -> w8_complete`.
+
+Completed in W8 attempt 1:
+
+- centralized protected lease-authority request encoding, exchange, and typed
+  response validation in one cohesive client while retaining the kernel as the
+  canonical policy evaluator;
+- kept human takeover limited to controller authority, advanced its epoch to
+  fence the former controller, and proved the Profile access policy remained
+  unchanged across the transaction;
+- converted exact W7 eviction plans into durable lifecycle authorizations and
+  required current policy revision, permission, force mode, tab identity,
+  daemon route, browser identity, CDP target, and attached-target observation
+  before a physical close;
+- made forced tab eviction close only the proven target, cancel matching
+  queued work through the canonical terminalizer, release only an empty exact
+  session, disconnect matching viewer authority, and persist a minimal
+  idempotency receipt; and
+- bound full-runtime shutdown authorization to Operator assurance, both
+  lifecycle permissions, the reviewed P156 plan digest, and its exact managed
+  browser targets before any shutdown effect.
+
+W8 is complete without production Profile, browser, runtime, ACL, eviction, or
+shutdown effects. W9 is open to deepen workstation installation into one Rust
+convergence owner with a privileged effect adapter.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,909 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the source-free workstation install fixture, host-provision fixture, fresh
+  VM harness, Guacamole durability, route-specific user synchronization,
+  route-confusion, CDP tab-streaming, API/MCP parity, and generated-client
+  gates pass;
+- focused cohesive-client, takeover-fencing, lifecycle-authorization,
+  exact-target, grace-deadline, full-shutdown, and repository persistence tests
+  pass; and
 - the P157 oracle remains at six schemas, four green cases, and the one W9
   convergence case intentionally red.
 

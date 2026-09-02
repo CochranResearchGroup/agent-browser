@@ -66,6 +66,15 @@ later control but preserves exact own-tab release. Incompatible occupancy is
 derived from attributed Service state, restriction commits only at zero, and
 forced eviction requires a separate explicit permission, exact target plan,
 and minimal receipt.
+W8 is source complete at `c46c6d43`. Protected lease-authority exchange now
+has one cohesive client, while the kernel remains the canonical evaluator.
+Human takeover mutates only controller authority and fences the former
+controller without changing Profile policy. Forced lifecycle effects require
+a durable permission authorization plus an exact current policy, daemon,
+browser, tab, and physical CDP-target proof, then persist a minimal idempotency
+receipt. Full-runtime shutdown is similarly bound to Operator assurance, both
+required lifecycle permissions, the reviewed P156 plan digest, and its exact
+managed browser targets.
 
 ### Plan
 
@@ -73,9 +82,9 @@ and minimal receipt.
 
 ### Next Recommendation
 
-Execute W8: integrate the cohesive lease-authority client, human takeover,
-exact lifecycle proof, and full-shutdown authorization so forced effects
-require both Profile permission and verified physical ownership.
+Execute W9: deepen workstation installation into one Rust convergence owner
+with a privileged effect adapter so ACL ambiguity cannot set runtime readiness
+and shell code no longer owns convergence policy.
 
 ## P156 | Full Runtime Shutdown Replacement
 

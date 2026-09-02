@@ -4,6 +4,42 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 210 | 2026-09-02
+
+Scope: complete P157 W8 cohesive lease authority and exact lifecycle proof
+without production Profile, browser, runtime, ACL, eviction, or shutdown
+effects.
+
+Actions:
+
+- centralized protected lease-authority exchange and typed response validation
+  in one client while preserving the kernel policy evaluator;
+- kept human takeover separate from Profile access and proved it advances only
+  controller authority while fencing the former controller;
+- persisted exact lifecycle authorizations from forced eviction plans and
+  joined them to current policy, daemon, browser, tab, and physical CDP target
+  evidence before any close;
+- settled only the proven tab, matching queued work, empty exact session, and
+  matching viewer authority behind a minimal idempotency receipt; and
+- required Operator assurance, both lifecycle permissions, the reviewed plan
+  digest, and exact managed targets for full-runtime shutdown.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,909 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- all validation-selector workstation, route, streaming, API/MCP parity, and
+  generated-client gates pass; and
+- the P157 oracle remains at four green cases with only the W9 convergence
+  case intentionally red.
+
+Result:
+
+- W8 is complete and pushed at `c46c6d43` without production effects; and
+- W9 single-owner Rust install convergence and its privileged effect adapter
+  are next.
+
 ## Turn 209 | 2026-09-02
 
 Scope: complete P157 W7 revision-fenced Profile drain-and-restrict without
