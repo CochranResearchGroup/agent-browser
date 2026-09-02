@@ -106,6 +106,8 @@ git diff --check
 
 Implementation commit: `79cb48da`
 
+Integration receipt: `ae4497119431548434330617ef408ed1f1d98428`
+
 Progress classification: `outcome_progress`
 
 - The locator now has exactly two `pub(crate)` declarations, covering the

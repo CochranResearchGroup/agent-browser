@@ -7,10 +7,10 @@ lanes:
     branch: architecture/desktop-locator-deep-module
     target: main
     plan_state: CLOSED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     checkpoint: 79cb48da
     remote_ref: refs/remotes/origin/architecture/desktop-locator-deep-module
-    integration_receipt: null
+    integration_receipt: ae4497119431548434330617ef408ed1f1d98428
     integration: merge
     dependencies: [P110, P131]
     overlaps: []
