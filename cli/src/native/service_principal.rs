@@ -117,6 +117,13 @@ pub(crate) struct RegisteredProfileCapability {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RotatedProfileCapability {
+    pub(crate) previous_capability: ServiceProfileCapability,
+    pub(crate) registered: RegisteredProfileCapability,
+    pub(crate) registry_revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AuthenticatedServicePrincipal {
     pub(crate) principal_id: String,
     pub(crate) profile_id: String,
@@ -129,6 +136,8 @@ pub(crate) struct AuthenticatedServicePrincipal {
 pub(crate) enum ServicePrincipalFailureCode {
     InvalidRegistration,
     RegistrationConflict,
+    RegistryRevisionMismatch,
+    CapabilityRotationConflict,
     CapabilityMissing,
     CapabilityMismatch,
     CapabilityRevoked,
@@ -142,6 +151,8 @@ impl ServicePrincipalFailureCode {
         match self {
             Self::InvalidRegistration => "invalid_registration",
             Self::RegistrationConflict => "registration_conflict",
+            Self::RegistryRevisionMismatch => "registry_revision_mismatch",
+            Self::CapabilityRotationConflict => "capability_rotation_conflict",
             Self::CapabilityMissing => "capability_missing",
             Self::CapabilityMismatch => "capability_mismatch",
             Self::CapabilityRevoked => "capability_revoked",
@@ -298,6 +309,56 @@ pub(crate) fn register_profile_capability(
     };
     *registry = staged;
     Ok(registered)
+}
+
+/// Rotates one exact active profile capability without accepting the lost raw
+/// capability as proof. The caller must compare-and-swap both the registry
+/// revision and the public capability ID. Active work is fenced by the service
+/// profile-lease command before this registry-only transition is attempted.
+pub(crate) fn rotate_profile_capability(
+    registry: &mut ServicePrincipalRegistry,
+    request: ServicePrincipalRegistrationRequest,
+    expected_capability_id: &str,
+    expected_registry_revision: u64,
+    raw_capability: &str,
+) -> Result<RotatedProfileCapability, ServicePrincipalError> {
+    if registry.revision != expected_registry_revision {
+        return Err(principal_error(
+            ServicePrincipalFailureCode::RegistryRevisionMismatch,
+        ));
+    }
+    let active = registry
+        .profile_capabilities
+        .values()
+        .filter(|capability| {
+            capability.principal_id == request.principal_id
+                && capability.profile_id == request.profile_id
+                && capability.state == ServiceProfileCapabilityState::Active
+        })
+        .collect::<Vec<_>>();
+    if active.len() != 1 || active[0].capability_id != expected_capability_id {
+        return Err(principal_error(
+            ServicePrincipalFailureCode::CapabilityRotationConflict,
+        ));
+    }
+
+    let mut staged = registry.clone();
+    let previous_capability = staged
+        .profile_capabilities
+        .get_mut(expected_capability_id)
+        .expect("validated capability must remain present");
+    previous_capability.state = ServiceProfileCapabilityState::Revoked;
+    previous_capability.revision = previous_capability.revision.saturating_add(1);
+    let previous_capability = previous_capability.clone();
+    staged.revision = staged.revision.saturating_add(1);
+    let registered = register_profile_capability(&mut staged, request, raw_capability)?;
+    let registry_revision = staged.revision;
+    *registry = staged;
+    Ok(RotatedProfileCapability {
+        previous_capability,
+        registered,
+        registry_revision,
+    })
 }
 
 pub(crate) fn authenticate_profile_capability(
@@ -859,6 +920,12 @@ fn principal_error(code: ServicePrincipalFailureCode) -> ServicePrincipalError {
         ServicePrincipalFailureCode::RegistrationConflict => {
             "principal or profile capability conflicts with current registration"
         }
+        ServicePrincipalFailureCode::RegistryRevisionMismatch => {
+            "service principal registry revision changed"
+        }
+        ServicePrincipalFailureCode::CapabilityRotationConflict => {
+            "profile capability rotation does not match the one active grant"
+        }
         ServicePrincipalFailureCode::CapabilityMissing => "profile capability is missing",
         ServicePrincipalFailureCode::CapabilityMismatch => {
             "profile capability does not match a current registered grant"
@@ -962,6 +1029,78 @@ mod tests {
         let serialized = serde_json::to_string(&state.service_principals).unwrap();
         assert!(!serialized.contains(CAPABILITY));
         assert!(serialized.contains("sha256:"));
+    }
+
+    #[test]
+    fn rotation_revokes_one_exact_capability_under_registry_compare_and_swap() {
+        let (mut state, authority) = principal_state();
+        let before = state.service_principals.clone();
+        let next_capability = "replacement-capability-token-with-more-than-thirty-two-characters";
+
+        let mismatch = rotate_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: authority.principal_id.clone(),
+                display_name: Some("Synthetic service".to_string()),
+                profile_id: authority.profile_id.clone(),
+                registered_at: Some("2026-09-01T23:00:00Z".to_string()),
+                registered_by: Some("test-operator".to_string()),
+            },
+            &authority.capability_id,
+            before.revision.saturating_add(1),
+            next_capability,
+        )
+        .unwrap_err();
+        assert_eq!(
+            mismatch.code,
+            ServicePrincipalFailureCode::RegistryRevisionMismatch
+        );
+        assert_eq!(state.service_principals, before);
+
+        let rotated = rotate_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: authority.principal_id.clone(),
+                display_name: Some("Synthetic service".to_string()),
+                profile_id: authority.profile_id.clone(),
+                registered_at: Some("2026-09-01T23:00:00Z".to_string()),
+                registered_by: Some("test-operator".to_string()),
+            },
+            &authority.capability_id,
+            before.revision,
+            next_capability,
+        )
+        .unwrap();
+
+        assert_eq!(
+            rotated.previous_capability.state,
+            ServiceProfileCapabilityState::Revoked
+        );
+        assert_eq!(rotated.registry_revision, before.revision + 2);
+        assert_ne!(
+            rotated.registered.capability.capability_id,
+            authority.capability_id
+        );
+        assert_eq!(
+            authenticate_profile_capability(
+                &state.service_principals,
+                CAPABILITY,
+                Some(&authority.profile_id)
+            )
+            .unwrap_err()
+            .code,
+            ServicePrincipalFailureCode::CapabilityRevoked
+        );
+        let replacement = authenticate_profile_capability(
+            &state.service_principals,
+            next_capability,
+            Some(&authority.profile_id),
+        )
+        .unwrap();
+        assert_eq!(
+            replacement.capability_id,
+            rotated.registered.capability.capability_id
+        );
     }
 
     #[test]
