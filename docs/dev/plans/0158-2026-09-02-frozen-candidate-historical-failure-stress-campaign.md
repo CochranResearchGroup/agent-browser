@@ -1372,3 +1372,53 @@ Next action: build and install a fresh isolated candidate containing
 `e631da26`, then repeat only the stale browser and stale session probes under a
 new attempt identity to verify immediate recourse and exact durable logging.
 Do not repeat the already successful E6 client A and B browser effects.
+
+Development generation `0.28.0-8e5747e7ad76` passed isolated installation,
+the production-unchanged comparison, three disposable browser launches, skill
+synchronization, and the complete provider-required doctor. A fresh E7
+shared-local Profile then received one deliberately stale browser route. The
+installed HTTP surface rejected it before dispatch with status 400 and exact
+code `service_access_plan_route_browser_conflict`. Its structured failure says
+`effectState=no_effect`, `phase=launch_admission`, and
+`retryDisposition=refresh_access_plan`; it exposes `service_access_plan` as the
+executable next action and forbids blind retry and a duplicate Profile lane.
+No rejection job was created. The only job in the bounded time window was the
+preceding Profile upsert.
+
+Direct installed-runtime journal readback found the same E7 request as a
+single `http_service_request` record at `ingress_validation`, with the exact
+route-conflict code, request ID, runtime environment, boot epoch, action, and
+runtime-lane reference. This confirms that the new generation no longer
+collapses the denial to generic `route_hint_failure`. The earlier E6
+browser-conflict and session-conflict records remain preserved with that old
+generic code as pre-repair evidence. The installed session-conflict response
+was not repeated after the generation switch because no compatible live E7
+browser existed; its provider-free response and journal regressions pass, but
+that is not claimed as installed live evidence.
+
+The named `test:p158-last30days-regressions` battery now contains thirteen
+exact Rust regressions rather than six. The added tests cover retained-route
+reuse, deterministic cold shared-local routing without owner proof, exact
+route-constrained attachment, route-conflict recourse, exact pre-job journal
+codes, HTTP response recourse, and Last30-shaped terminal provenance. The
+generated Service-client and handoff documentation checks remain in the same
+script. The expanded battery passes in full with cache disabled and bounded
+two-job Cargo admission.
+
+Two additional observations are retained without interrupting the campaign.
+First, after the E6 browser process became terminal across installation, an
+access plan for its shared-local Profile required `profile_capability_required`
+instead of treating the terminal owner as replaceable shared history. This may
+reintroduce strict proof friction for terminal shared-local replacement and is
+deferred to W10 because a fresh E7 Profile allowed the no-effect sequence to
+continue. Second, an accidentally malformed harness request omitted its action
+while probing an unavailable plan; its generic rejection is classified as a
+harness failure, not product evidence.
+
+Revised next action: resume external-handoff readiness and the remaining W6
+calibration gates. Register the existing external-vantage workflow through the
+narrow reviewed integration path required by GitHub, then dispatch it against
+this feature commit only after rechecking the protected synthetic environment.
+Production remains read-only. The terminal shared-local replacement friction,
+the absence of an installed post-generation session-conflict probe, and the
+historical generic E6 journal records remain explicit W10 review inputs.
