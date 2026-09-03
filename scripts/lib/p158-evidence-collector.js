@@ -61,6 +61,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-distributed-calibration.js',
   'scripts/lib/p158-w7-development-adapters.js',
   'scripts/lib/p158-w7-agent-orchestration.js',
+  'scripts/lib/p158-w7-a01-a03-live.js',
   'scripts/lib/p158-w7-live-hook-readiness.js',
   'scripts/lib/p158-w8-hd-adapters.js',
   'scripts/lib/p158-w8-dashboard-live.js',
@@ -72,6 +73,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/p158-synthetic-visual-fixture.js',
   'scripts/run-p158-distributed-calibration-live.js',
   'scripts/run-p158-external-vantage.js',
+  'scripts/run-p158-w7-a01-a03-live.js',
   'scripts/run-p158-w9-endurance.js',
   'scripts/test-p158-calibration-runner.js',
   'scripts/test-p158-campaign-controller.js',
@@ -90,6 +92,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-synthetic-visual-fixture.js',
   'scripts/test-p158-w7-development-adapters.js',
   'scripts/test-p158-w7-agent-orchestration.js',
+  'scripts/test-p158-w7-a01-a03-live.js',
   'scripts/test-p158-w7-live-hook-readiness.js',
   'scripts/test-p158-w8-hd-adapters.js',
   'scripts/test-p158-w8-dashboard-live.js',
@@ -100,6 +103,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
 
 export const P158_REQUIRED_LIVE_HOOK_IDS = Object.freeze([
   'w7.agent_existing_seam_workflow',
+  'w7.a01_a03.service_concurrency',
   'w7.browser', 'w7.cli', 'w7.display', 'w7.evidence', 'w7.logs', 'w7.process',
   'w7.shutdown', 'w7.systemd', 'w8.dashboard_capture', 'w8.dashboard_execute',
   'w8.external_workflow', 'w8.playwright', 'w8.stimulus', 'w9.browser_crash',

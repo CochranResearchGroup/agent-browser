@@ -868,6 +868,7 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   primitives,
   agentWorkflowManifest = null,
   agentWorkflowDrivers = null,
+  a01A03LiveBundle = null,
   additionalAdapters = [],
   liveHookManifestSha256,
 }) {
@@ -908,11 +909,25 @@ export function createP158W7LiveDevelopmentAdapterBundle({
         drivers: agentWorkflowDrivers,
       });
   const agentConcreteCaseIds = new Set(agentOrchestration?.concreteCaseIds ?? []);
+  if (a01A03LiveBundle !== null &&
+      (a01A03LiveBundle.freezeEligible !== true || a01A03LiveBundle.providerFree !== false ||
+       a01A03LiveBundle.liveHookManifestSha256 !== liveHookManifestSha256 ||
+       a01A03LiveBundle.campaignRunId !== target.campaignRunId ||
+       a01A03LiveBundle.candidateSha256 !== target.candidateSha256 ||
+       !/^[a-f0-9]{64}$/u.test(a01A03LiveBundle.ownershipManifestSha256 ?? '') ||
+       !/^[a-f0-9]{64}$/u.test(a01A03LiveBundle.driverSource?.sourceSha256 ?? '') ||
+       typeof a01A03LiveBundle.driverSource?.sourcePath !== 'string' ||
+       JSON.stringify(a01A03LiveBundle.concreteCaseIds) !== JSON.stringify(['A01', 'A02', 'A03']) ||
+       !Array.isArray(a01A03LiveBundle.adapters) || a01A03LiveBundle.adapters.length !== 3 ||
+       !Array.isArray(a01A03LiveBundle.liveHookIds) || a01A03LiveBundle.liveHookIds.length !== 1)) {
+    fail('a01_a03_live_bundle_unproven', 'A01-A03 promotion requires the exact frozen live bundle');
+  }
+  const specializedCaseIds = new Set(a01A03LiveBundle?.concreteCaseIds ?? []);
   // Reviewed command shapes are not sufficient ownership proof. Until frozen
   // candidate/environment receipts bind and are revalidated against each PID,
   // unit, profile, display, browser, and target at effect time, every W7 case
   // remains explicit_blocked.
-  const concreteCaseIds = new Set([...agentConcreteCaseIds]);
+  const concreteCaseIds = new Set([...agentConcreteCaseIds, ...specializedCaseIds]);
   const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
   const sourceSha256 = w7SourceSha256();
   const explicitBlockedAdapters = Object.entries(P158_W7_LIVE_HOOK_GAPS)
@@ -948,21 +963,28 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   const adapterBindings = P158_W7_CASE_IDS.map((caseId) => {
     const concreteLive = concreteCaseIds.has(caseId);
     const agentConcrete = agentConcreteCaseIds.has(caseId);
+    const specialized = specializedCaseIds.has(caseId);
     const partial = ['A09', 'A15'].includes(caseId);
     return deepFreeze({
       caseId,
       mode: concreteLive ? 'concrete_live' : 'explicit_blocked',
       providerFree: false,
-      sourcePath: agentConcrete ? agentOrchestration.driverSource.sourcePath : W7_SOURCE_PATH,
-      sourceSha256: agentConcrete ? agentOrchestration.driverSource.sourceSha256 : sourceSha256,
+      sourcePath: specialized
+        ? a01A03LiveBundle.driverSource.sourcePath
+        : (agentConcrete ? agentOrchestration.driverSource.sourcePath : W7_SOURCE_PATH),
+      sourceSha256: specialized
+        ? a01A03LiveBundle.driverSource.sourceSha256
+        : (agentConcrete ? agentOrchestration.driverSource.sourceSha256 : sourceSha256),
       hookIds: concreteLive
-        ? (agentConcrete
+        ? (specialized
+            ? [...a01A03LiveBundle.liveHookIds]
+            : (agentConcrete
             ? ['w7.agent_existing_seam_workflow']
             : (caseId === 'A07'
             ? ['w7.evidence', 'w7.logs', 'w7.process']
             : (caseId === 'A13'
                 ? ['w7.evidence', 'w7.logs', 'w7.systemd']
-                : ['w7.display', 'w7.evidence', 'w7.logs'])))
+                : ['w7.display', 'w7.evidence', 'w7.logs']))))
         : (partial ? ['w7.browser', 'w7.evidence', 'w7.logs'] : []),
       implementedActionCount: concreteLive
         ? actionCounts.get(caseId)
@@ -978,6 +1000,7 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   const undecoratedW7ByCase = new Map([
     ...concrete.w7Adapters,
     ...(agentOrchestration?.adapters ?? []),
+    ...(a01A03LiveBundle?.adapters ?? []),
     ...explicitBlockedAdapters,
   ].map((adapter) => [adapter.caseId, adapter]));
   const w7Adapters = P158_W7_CASE_IDS.map((caseId) => {

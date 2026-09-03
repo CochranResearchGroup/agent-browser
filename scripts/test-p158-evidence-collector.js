@@ -178,6 +178,8 @@ function makeLiveHookContext(context) {
   const aggregateEntries = new Map(aggregate.manifest.entries.map((entry) => [entry.path, entry]));
   const sourceFor = (hookId) => hookId === 'w7.agent_existing_seam_workflow'
     ? 'scripts/lib/p158-w7-agent-orchestration.js'
+    : hookId === 'w7.a01_a03.service_concurrency'
+      ? 'scripts/lib/p158-w7-a01-a03-live.js'
     : hookId.startsWith('w7.')
     ? 'scripts/lib/p158-w7-development-adapters.js'
     : hookId.startsWith('w8.external') || hookId === 'w8.playwright'
