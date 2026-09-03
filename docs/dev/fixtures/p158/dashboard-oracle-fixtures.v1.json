@@ -149,6 +149,14 @@
         "viewportWidth": 390,
         "viewportHeight": 844,
         "detail": null
+      },
+      {
+        "checkId": "ui-viewport-typical",
+        "kind": "viewport",
+        "state": "passed",
+        "viewportWidth": 1024,
+        "viewportHeight": 768,
+        "detail": null
       }
     ],
     "timings": [
