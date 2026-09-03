@@ -128,6 +128,7 @@ function driverHarness({ failOnceAt = null } = {}) {
     'executeDeclaredSupervisorTransition', 'executeScheduledTeardown', 'verifyEvidenceArtifact',
   ];
   return {
+    enduranceCaseWindowsSha256: sha256({ C04: windows().C04, C05: windows().C05 }),
     hookBindings: Object.fromEntries(hookNames.map((method, index) => [method, {
       implementationKind: 'concrete_live', sourcePath: `scripts/live-hooks/${method}.js`,
       sourceSha256: String(index + 1).padStart(64, '0'),

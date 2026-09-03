@@ -16,6 +16,7 @@ import {
   p158W9HookManifestEntries,
   P158_W9_MANIFEST_HOOK_IDS,
 } from './lib/p158-w9-concrete-drivers.js';
+import { buildP158W9EnduranceDispatch } from './lib/p158-w9-endurance.js';
 
 const registry = JSON.parse(await readFile(
   new URL('../docs/dev/contracts/p158-historical-failure-registry.v1.json', import.meta.url), 'utf8',
@@ -60,6 +61,8 @@ function externalReceipt(action, workflowPlanSha256) {
 }
 
 function plans({ omitActionId = null } = {}) {
+  const allExternalActions = actions.filter((action) =>
+    action.caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind));
   const externalActions = actions.filter((action) =>
     action.caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind) &&
     action.actionId !== omitActionId);
@@ -71,6 +74,49 @@ function plans({ omitActionId = null } = {}) {
     repairAllowed: false, retryAllowed: false, garbageCollectionAllowed: false,
     actions: externalActions.map((action) => ({ actionId: action.actionId, receiptPath: `/evidence/${action.actionId}.json` })),
   };
+  const producer = {
+    workflowPath: '.github/workflows/p158-w9-endurance.yml', workflowSha256: '66'.repeat(32),
+    segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml', segmentWorkflowSha256: '65'.repeat(32),
+    runnerPath: 'scripts/run-p158-w9-endurance.js', runnerSha256: '77'.repeat(32),
+    libraryPath: 'scripts/lib/p158-w9-endurance.js', librarySha256: '88'.repeat(32),
+  };
+  external.enduranceProducer = {
+    workflowSourceSha256: producer.workflowSha256,
+    segmentWorkflowSourceSha256: producer.segmentWorkflowSha256,
+    runnerSourceSha256: producer.runnerSha256,
+    librarySourceSha256: producer.librarySha256,
+    postconditionPreparationSha256: '42'.repeat(32),
+  };
+  external.enduranceDispatches = Object.fromEntries(['C04', 'C05'].map((caseId) => [caseId,
+    buildP158W9EnduranceDispatch({
+      caseId, runId: target().runId, sourceCommit: 'a'.repeat(40),
+      workflowRunId: target().workflowRunId, workflowRunAttempt: target().workflowRunAttempt,
+      candidateSha256: target().candidateSha256, scheduleSha256: schedule.scheduleSha256,
+      handoffUrlSha256: target().handoffUrlSha256,
+      retainedIdentitySha256: target().retainedIdentitySha256,
+      externalVantageAggregateSha256: target().externalVantageAggregateSha256,
+      externalHandoffOracleSha256: target().externalHandoffOracleSha256,
+      postconditionPreparationSha256: '42'.repeat(32),
+      startAt: caseId === 'C04' ? '2026-09-04T00:00:00.000Z' : '2026-09-05T00:00:00.000Z',
+      actions: allExternalActions.filter((action) => action.caseId === caseId).map((action) => ({
+        ...action,
+        ...(action.kind === 'dashboard_action' ? { postcondition: {
+          kind: 'pixel_region_transition', region: { x: 10, y: 10, width: 20, height: 20 },
+          beforeSha256: 'ab'.repeat(32), afterSha256: 'cd'.repeat(32),
+        } } : {}),
+      })),
+      eventPostconditions: caseId === 'C05' ? {
+        viewer_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '10'.repeat(32),
+          viewerRole: 'viewer', fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
+        controller_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '20'.repeat(32),
+          viewerRole: 'controller', fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
+        client_restart: { kind: 'retained_identity_reopen', retainedIdentitySha256: target().retainedIdentitySha256 },
+        scheduled_network_profile: { kind: 'offline_failure_then_unchanged_handoff_recovery' },
+      } : {},
+      producer,
+      receiptRoot: `/evidence/${caseId}`,
+    }),
+  ]));
   external.planSha256 = canonicalW9PlanDigest(external);
   for (let index = 0; index < external.actions.length; index += 1) {
     external.actions[index].receipt = externalReceipt(externalActions[index], external.planSha256);
@@ -113,12 +159,17 @@ function transitionPrimitives() {
   };
 }
 
-function makeBundle({ testing, omitActionId = null, targetOverride = null, fetchOverride = null } = {}) {
+function makeBundle({ testing, omitActionId = null, targetOverride = null, fetchOverride = null,
+  caseWindowsOverride = null } = {}) {
   const prepared = plans({ omitActionId });
   const options = {
     schedule, target: targetOverride ?? target(), artifactStore: createMemoryArtifactStore(),
     externalWorkflowPlan: prepared.external, declaredTransitionPlan: prepared.transition,
     c01: c01(), testing,
+    caseWindows: caseWindowsOverride ?? {
+      C04: { startAt: '2026-09-04T00:00:00.000Z', endAt: '2026-09-04T08:00:00.000Z' },
+      C05: { startAt: '2026-09-05T00:00:00.000Z', endAt: '2026-09-06T00:00:00.000Z' },
+    },
     clock: { wallNow: () => '2026-09-03T12:00:00.000Z', monotonicNow: () => 1_000_000 },
   };
   if (testing) {
@@ -211,6 +262,16 @@ await runTest('classifies a missing external action as exact zero-effect blocked
   assert.equal(binding.implementedActionCount, 0);
   assert.equal(binding.blockedActionCount, 500);
   assert.equal(binding.effectsAllowed, false);
+});
+
+await runTest('keeps endurance blocked when its local and external windows differ', async () => {
+  const mismatchedWindows = {
+    C04: { startAt: '2026-09-04T00:00:01.000Z', endAt: '2026-09-04T08:00:01.000Z' },
+    C05: { startAt: '2026-09-05T00:00:00.000Z', endAt: '2026-09-06T00:00:00.000Z' },
+  };
+  const bundle = makeBundle({ testing: true, caseWindowsOverride: mismatchedWindows });
+  assert.equal(bundle.classification.get('C04').mode, 'explicit_blocked');
+  assert.match(bundle.classification.get('C04').blocker.detail, /external_endurance_producer/);
 });
 
 await runTest('classifies an unbound C01 live driver as explicit blocked', async () => {

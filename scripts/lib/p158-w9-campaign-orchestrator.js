@@ -381,6 +381,12 @@ export async function runP158W9Phase({
   assertP158W9DevelopmentTarget(target);
   assertDriverBindings(drivers);
   validateWindowOrder(caseWindows);
+  if (drivers?.enduranceCaseWindowsSha256 !== sha256({
+    C04: caseWindows.C04,
+    C05: caseWindows.C05,
+  })) {
+    fail('endurance_window_binding_mismatch', 'C04/C05 live drivers are not bound to the exact execution windows');
+  }
   if (!isAbsolute(runRoot ?? '')) fail('run_root_invalid', 'W9 requires an absolute runtime root');
   const fromRepo = relative(REPO_ROOT, resolve(runRoot));
   if (fromRepo === '' || (!fromRepo.startsWith('..') && !isAbsolute(fromRepo))) {

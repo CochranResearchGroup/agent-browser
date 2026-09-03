@@ -21,6 +21,7 @@ import {
   createDistributedC01LiveHook,
   P158_W9_CASE_IDS,
 } from './p158-w9-campaign-orchestrator.js';
+import { validateP158W9EndurancePlanBinding } from './p158-w9-endurance.js';
 
 const SOURCE_PATH = 'scripts/lib/p158-w9-concrete-drivers.js';
 const SOURCE_SHA256 = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex');
@@ -174,6 +175,7 @@ function concreteTransitionPrimitives({ execFile = promisify(nodeExecFile), kill
 
 export function createP158W9ConcreteDriverBundle({
   schedule, target, artifactStore, externalWorkflowPlan, declaredTransitionPlan,
+  caseWindows,
   c01, fetch: suppliedFetch, clock = { wallNow: () => new Date().toISOString(), monotonicNow: () => Number(process.hrtime.bigint()) },
   transitionPrimitives: suppliedTransitionPrimitives, testing = false,
 }) {
@@ -219,6 +221,16 @@ export function createP158W9ConcreteDriverBundle({
     const caseActions = actions.filter((action) => action.caseId === caseId);
     const missing = [];
     if (caseId === 'C01' && !c01Hook) missing.push('distributed_c01_live_driver');
+    if (['C04', 'C05'].includes(caseId)) {
+      const endurance = validateP158W9EndurancePlanBinding({
+        externalWorkflowPlan,
+        caseId,
+        actions: caseActions,
+        target,
+        caseWindow: caseWindows?.[caseId],
+      });
+      if (!endurance.valid) missing.push(`external_endurance_producer:${endurance.code}`);
+    }
     for (const action of caseActions) {
       if (caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind) && !external.has(action.actionId)) {
         missing.push(`external_workflow:${action.actionId}`);
@@ -342,6 +354,7 @@ export function createP158W9ConcreteDriverBundle({
   }
 
   const drivers = {
+    enduranceCaseWindowsSha256: sha256({ C04: caseWindows?.C04 ?? null, C05: caseWindows?.C05 ?? null }),
     executeDistributedC01: c01Hook,
     executeServiceCommand,
     executeExternalDashboardAction: executeExternal,
@@ -394,6 +407,9 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
     };
     const count = bundle.actionCountByCase.get(caseId);
     const effectId = contract.declaredEffectIds[0];
+    const exactBlocker = classified.blocker === null ? null : Object.freeze({
+      ...clone(classified.blocker), sourcePath: bundle.sourcePath, sourceSha256: bundle.sourceSha256,
+    });
     effects[effectId] = async (payload) => {
       const actionIds = payload?.actionIds ?? [];
       const actions = actionIds.map((actionId) => bundle.actions.find((action) => action.actionId === actionId));
@@ -428,8 +444,8 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
       caseId, evidenceProfile: contract.evidenceProfile, executionContract: contract.executionContract,
       execute: async ({ attempt, requestEffect }) => {
         if (classified.mode === 'explicit_blocked') return {
-          resultState: 'skipped_blocked', blocker: clone(classified.blocker), effectState: 'not_started',
-          retryDisposition: 'prohibited', repairAttempted: false, retryAttempted: false,
+          resultState: 'skipped_blocked', blocker: clone(exactBlocker), effectState: 'not_started',
+          requestedEffects: [], retryDisposition: 'prohibited_opportunistic_retry', repairAttempted: false, retryAttempted: false,
           garbageCollectionAttempted: false,
         };
         const actionIds = bundle.actions.filter((action) => action.attemptId === attempt.attemptId).map((action) => action.actionId);
@@ -437,20 +453,23 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
         return { ...clone(receipt), actionIds, retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false };
       },
     });
-    const adapter = {
-      ...base, executionMode: classified.mode, providerFree: false,
-      liveHookManifestSha256, effectsAllowed: classified.mode === 'concrete_live',
-      blocker: clone(classified.blocker),
-    };
-    adapters.push(adapter);
-    adapterBindings.push({
+    const binding = {
       caseId, adapterId: contract.adapterId, executionContractSha256: contract.executionContractSha256,
       mode: classified.mode, sourcePath: bundle.sourcePath, sourceSha256: bundle.sourceSha256,
       hookIds: classified.mode === 'concrete_live' ? hookIds(caseId) : [],
       implementedActionCount: classified.mode === 'concrete_live' ? count : 0,
       blockedActionCount: classified.mode === 'concrete_live' ? 0 : count,
-      effectsAllowed: classified.mode === 'concrete_live', blocker: clone(classified.blocker),
-    });
+      effectsAllowed: classified.mode === 'concrete_live', blocker: clone(exactBlocker),
+    };
+    const adapter = {
+      ...base, executionMode: classified.mode, providerFree: false,
+      liveHookManifestSha256, effectsAllowed: classified.mode === 'concrete_live',
+      sourcePath: bundle.sourcePath, sourceSha256: bundle.sourceSha256,
+      liveBindingSha256: sha256(binding), liveHookIds: Object.freeze([...binding.hookIds]),
+      blocker: exactBlocker,
+    };
+    adapters.push(adapter);
+    adapterBindings.push(binding);
   }
   return { adapters, adapterBindings, effects };
 }
