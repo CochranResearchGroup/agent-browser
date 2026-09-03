@@ -1157,12 +1157,18 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
         apply_unsafe_claim_any_route(service_state, command)?;
         return Ok(());
     }
-    if service_request_has_complete_route_hints(command)
-        || command
-            .get("allowDuplicateProfileLane")
-            .and_then(Value::as_bool)
-            == Some(true)
+    if command
+        .get("allowDuplicateProfileLane")
+        .and_then(Value::as_bool)
+        == Some(true)
     {
+        return Ok(());
+    }
+    if service_request_has_complete_route_hints(command)
+        && command.get("action").and_then(Value::as_str) == Some("remote_view_open")
+    {
+        // The retained-handoff stage owns remote-view route validation and may
+        // have just supplied these exact route hints.
         return Ok(());
     }
     if service_request_has_browser_hint(command) && !service_request_has_session_hint(command) {
@@ -1175,6 +1181,16 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
         request,
         authenticated_principal,
     );
+    if service_request_has_complete_route_hints(command) {
+        let requested_browser = command.get("browserId").and_then(Value::as_str);
+        let requested_session = command.get("sessionName").and_then(Value::as_str);
+        if artifact.acquisition.browser_id() != requested_browser {
+            return Err("service_access_plan_route_browser_conflict".to_string());
+        }
+        if artifact.acquisition.session_name() != requested_session {
+            return Err("service_access_plan_route_session_conflict".to_string());
+        }
+    }
     artifact
         .acquisition
         .apply_to_service_command(command, authenticated_principal)
@@ -4364,6 +4380,36 @@ mod tests {
 
         assert_eq!(command["browserId"], "browser-x");
         assert_eq!(command["sessionName"], "operator-x");
+        apply_shared_profile_route_hints_for_service_request(&state, &mut command)
+            .expect("an exact planned route should remain idempotently valid");
+
+        let mut contradictory_complete_route = json!({
+            "action": "tab_new",
+            "runtimeProfile": "x-social",
+            "siteId": "x",
+            "browserId": "browser-other",
+            "sessionName": "operator-x",
+        });
+        let error = apply_shared_profile_route_hints_for_service_request(
+            &state,
+            &mut contradictory_complete_route,
+        )
+        .unwrap_err();
+        assert_eq!(error, "service_access_plan_route_browser_conflict");
+
+        let mut contradictory_session_route = json!({
+            "action": "tab_new",
+            "runtimeProfile": "x-social",
+            "siteId": "x",
+            "browserId": "browser-x",
+            "sessionName": "operator-other",
+        });
+        let error = apply_shared_profile_route_hints_for_service_request(
+            &state,
+            &mut contradictory_session_route,
+        )
+        .unwrap_err();
+        assert_eq!(error, "service_access_plan_route_session_conflict");
 
         let mut invalid_command = json!({
             "action": "tab_new",

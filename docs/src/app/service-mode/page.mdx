@@ -1034,7 +1034,10 @@ selected, or warns when the caller supplied an unknown one-time
 Top-level <code>browserId</code> and <code>sessionName</code> on service
 requests are reuse route hints copied from access plans. Action-specific
 <code>params.browserId</code> and <code>params.sessionName</code> remain scoped
-to actions such as <code>view_takeover</code>. Direct launches that select a
+to actions such as <code>view_takeover</code>. Agent Browser validates a
+complete pair against the current access plan, rejects contradictions before
+browser effects, and attaches the exact compatible retained browser instead of
+launching another profile process. Direct launches that select a
 profile already backed by a live retained browser are rejected unless the
 request uses those route hints or sets
 <code>allowDuplicateProfileLane: true</code> for reviewed isolation or throwaway

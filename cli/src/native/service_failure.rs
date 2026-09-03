@@ -323,6 +323,38 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     }
 
     for code in [
+        "service_access_plan_route_browser_conflict",
+        "service_access_plan_route_session_conflict",
+    ] {
+        if error.starts_with(code) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::ProfileLease,
+                phase: ServiceFailurePhase::LaunchAdmission,
+                effect_state: ServiceEffectState::NoEffect,
+                retry_disposition: ServiceRetryDisposition::RefreshAccessPlan,
+                recommended_action: "refresh_access_plan_and_use_exact_route".to_string(),
+                reuse_allowed: false,
+                executable_next_action: Some(serde_json::json!({
+                    "action": "service_access_plan",
+                    "executable": true,
+                    "request": { "action": "service_access_plan" },
+                })),
+                safe_next_actions: vec![
+                    "refresh_access_plan".to_string(),
+                    "submit_exact_planned_route".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "launch_duplicate_profile_lane".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
+
+    for code in [
         "existing_session_profile_identity_unproven",
         "existing_session_profile_identity_inconsistent",
     ] {
@@ -581,6 +613,40 @@ mod tests {
                 .safe_next_actions
                 .contains(&"acquire_profile".to_string()));
             assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
+        }
+    }
+
+    #[test]
+    fn access_plan_route_conflict_refreshes_before_exact_reuse() {
+        for code in [
+            "service_access_plan_route_browser_conflict",
+            "service_access_plan_route_session_conflict",
+        ] {
+            let recourse = classify_service_failure(code);
+
+            assert_eq!(recourse.code, code);
+            assert_eq!(recourse.axis, ServiceFailureAxis::ProfileLease);
+            assert_eq!(recourse.phase, ServiceFailurePhase::LaunchAdmission);
+            assert_eq!(recourse.effect_state, ServiceEffectState::NoEffect);
+            assert_eq!(
+                recourse.retry_disposition,
+                ServiceRetryDisposition::RefreshAccessPlan
+            );
+            assert_eq!(
+                recourse.recommended_action,
+                "refresh_access_plan_and_use_exact_route"
+            );
+            assert_eq!(
+                recourse.executable_next_action.as_ref().unwrap()["action"],
+                "service_access_plan"
+            );
+            assert!(recourse
+                .safe_next_actions
+                .contains(&"submit_exact_planned_route".to_string()));
+            assert!(recourse.hard_stops.contains(&"blind_retry".to_string()));
+            assert!(recourse
+                .hard_stops
+                .contains(&"launch_duplicate_profile_lane".to_string()));
         }
     }
 

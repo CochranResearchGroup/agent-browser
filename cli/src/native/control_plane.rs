@@ -4708,14 +4708,19 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_rejection_uses_one_terminal_outcome_for_response_job_and_event() {
+    fn shared_profile_identity_rejection_keeps_provenance_recourse_and_terminal_event() {
         let home = temp_home("control-plane-scheduler-terminal-outcome");
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", home.to_str().unwrap());
         let request = control_request_for_mode_test(json!({
             "id": "scheduler-rejection",
-            "action": "open",
-            "profileId": "research-gov"
+            "action": "tab_new",
+            "runtimeProfile": "last30days-facebook",
+            "browserId": "session:retained-social",
+            "sessionName": "retained-social",
+            "serviceName": "last30days",
+            "agentName": "x-scraper",
+            "taskName": "x-feed"
         }));
         persist_service_job_queued(&request);
 
@@ -4755,6 +4760,26 @@ mod tests {
             response_outcome
         );
         assert_eq!(event.provenance.as_ref().unwrap(), &request.provenance);
+        assert_eq!(
+            job.provenance.profile_id.as_deref(),
+            Some("last30days-facebook")
+        );
+        assert_eq!(
+            job.provenance.browser_id.as_deref(),
+            Some("session:retained-social")
+        );
+        assert_eq!(
+            job.provenance.session_id.as_deref(),
+            Some("retained-social")
+        );
+        assert_eq!(
+            job.failure.as_ref().unwrap().effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        assert_eq!(
+            job.failure.as_ref().unwrap().recommended_action,
+            "inspect_profile_recovery_plan"
+        );
 
         let _ = std::fs::remove_dir_all(&home);
     }

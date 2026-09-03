@@ -3578,6 +3578,77 @@ fn test_shared_profile_attach_target_reuses_current_session_owner() {
     );
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn test_shared_profile_attach_target_honors_exact_service_route_hints() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("shared-profile-explicit-route-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-facebook".to_string(),
+                BrowserProfile {
+                    id: "last30days-facebook".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:retained-social".to_string(),
+                BrowserProcess {
+                    id: "session:retained-social".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    host: ServiceBrowserHost::RemoteHeaded,
+                    health: ServiceBrowserHealth::Ready,
+                    display_isolation: Some("shared_display".to_string()),
+                    pid: Some(42),
+                    cdp_endpoint: Some("http://127.0.0.1:9222".to_string()),
+                    active_session_ids: vec!["retained-social".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "retained-social".to_string(),
+                BrowserSession {
+                    id: "retained-social".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    browser_ids: vec!["session:retained-social".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let metadata = ServiceLaunchMetadata {
+        profile_id: Some("last30days-facebook".to_string()),
+        ..ServiceLaunchMetadata::default()
+    };
+
+    let target = shared_profile_attach_target_for_auto_launch(
+        &metadata,
+        &json!({
+            "action": "tab_new",
+            "runtimeProfile": "last30days-facebook",
+            "browserId": "session:retained-social",
+            "sessionName": "retained-social",
+            "browserHost": "remote_headed",
+            "displayIsolation": "shared_display",
+        }),
+        "shared-runtime-host",
+    )
+    .expect("exact service route should attach the retained shared browser");
+
+    assert_eq!(target.browser_id, "session:retained-social");
+    assert_eq!(target.runtime_profile, "last30days-facebook");
+    assert_eq!(
+        target.owner_session_ids,
+        vec!["retained-social".to_string()]
+    );
+    let _ = fs::remove_dir_all(&home);
+}
 #[test]
 fn test_shared_profile_auto_launch_acquisition_reports_plain_open_owner() {
     let command = json!(
