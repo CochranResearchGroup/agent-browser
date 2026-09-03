@@ -363,7 +363,7 @@ assert.equal(reviewed.ready, false);
 assert.deepEqual(reviewed.concreteCaseIds, []);
 assert.deepEqual(reviewed.explicitlyBlockedCaseIds, P158_W8_CASE_IDS);
 assert.equal(reviewed.blockerCount, 24);
-assert.equal(reviewed.reviewedSourceCount, 6);
+assert.equal(reviewed.reviewedSourceCount, 7);
 assert.equal(reviewed.effectsExecuted, false);
 assert.equal(reviewed.scheduledActionCount, 1017);
 assert.deepEqual(readinessInputs, originalReadinessInputs);
@@ -615,6 +615,119 @@ try {
   );
 } finally {
   rmSync(resultRoot, { recursive: true, force: true });
+}
+
+const dashboardResultRoot = mkdtempSync(join(tmpdir(), 'p158-w8-dashboard-result-'));
+const dashboardResultPath = join(dashboardResultRoot, 'result.json');
+const dashboardCampaignPlanSha256 = digest('dashboard-campaign-plan');
+const dashboardActions = schedule.attempts.filter((attempt) => attempt.caseId === 'D01')
+  .flatMap((attempt) => buildP158W8ActionPlan({ testCase: cases.get(attempt.caseId), attempt }).actions);
+const dashboardCampaignReceipts = dashboardActions.map((action) => {
+  const counts = {
+    empty: { profiles: 0, browsers: 0, tabs: 0, jobs: 0, events: 0 },
+    sparse: { profiles: 2, browsers: 5, tabs: 20, jobs: 100, events: 100 },
+    normal: { profiles: 10, browsers: 50, tabs: 200, jobs: 1000, events: 1000 },
+    dense: { profiles: 100, browsers: 500, tabs: 2000, jobs: 10000, events: 10000 },
+  }[action.assignment.inventory_density];
+  const actionFixture = generateDenseDashboardFixture({
+    ...counts,
+    idNamespace: `p158-w8-${action.assignment.inventory_density}`,
+  });
+  actionFixture.density = action.assignment.inventory_density;
+  actionFixture.timings = structuredClone(dashboardCorpus.baseline.timings);
+  actionFixture.resourceSamples = structuredClone(dashboardCorpus.baseline.resourceSamples);
+  actionFixture.resourceSlopeBudgets = structuredClone(dashboardCorpus.baseline.resourceSlopeBudgets);
+  const body = {
+    schemaVersion: 'agent-browser.p158-dashboard-campaign-action-receipt.v1',
+    planId: 'P158',
+    actionId: action.actionId,
+    attemptId: action.attemptId,
+    caseId: action.caseId,
+    candidateSha256: seals.candidateSha256,
+    projection: {
+      authoritativeSnapshotSha256: digest(`snapshot:${action.actionId}`),
+      density: action.assignment.inventory_density,
+    },
+    dashboardFixture: actionFixture,
+    oracleBinding: { passed: true, reportSha256: digest(`oracle:${action.actionId}`) },
+    teardown: { state: 'stopped', pid: 1000 + action.ordinal },
+    terminalState: 'completed',
+    resultState: 'passed',
+    productionStateTouched: false,
+    repairAttempted: false,
+    retryAttempted: false,
+  };
+  return { ...body, receiptSha256: sha256(body) };
+});
+const dashboardAggregateBody = {
+  schemaVersion: 'agent-browser.p158-dashboard-campaign-aggregate.v1',
+  planId: 'P158',
+  campaignPlanSha256: dashboardCampaignPlanSha256,
+  candidateSha256: seals.candidateSha256,
+  actionCount: dashboardCampaignReceipts.length,
+  actionIds: dashboardCampaignReceipts.map((receipt) => receipt.actionId).sort(),
+  receiptSha256s: dashboardCampaignReceipts.map((receipt) => receipt.receiptSha256).sort(),
+  resultCounts: { passed: dashboardCampaignReceipts.length, failed: 0 },
+  success: true,
+  repairAttempted: false,
+  retryCount: 0,
+};
+const dashboardResult = {
+  receipts: dashboardCampaignReceipts,
+  aggregate: { ...dashboardAggregateBody, aggregateSha256: sha256(dashboardAggregateBody) },
+};
+writeFileSync(dashboardResultPath, `${JSON.stringify(dashboardResult)}\n`);
+try {
+  const dashboardBundle = createP158W8ReviewedLiveAdapterBundle({
+    registry,
+    schedule,
+    seals,
+    liveHookManifestSha256,
+    dashboardCampaignExecution: {
+      resultPath: dashboardResultPath,
+      campaignPlanSha256: dashboardCampaignPlanSha256,
+    },
+  });
+  assert.deepEqual(
+    dashboardBundle.adapterBindings.filter((binding) => binding.mode === 'concrete_live')
+      .map((binding) => binding.caseId),
+    ['D01'],
+  );
+  assert.equal(dashboardBundle.reviewedLiveSources.blockerCount, 23);
+  const adapters = new Map(dashboardBundle.w8Adapters.map((adapter) => [adapter.caseId, adapter]));
+  for (const caseId of ['D01']) {
+    const attempt = schedule.attempts.find((entry) => entry.caseId === caseId);
+    const outcome = await adapters.get(caseId).execute({
+      attempt,
+      requestEffect: (effectId, payload) => dashboardBundle.effects[effectId](payload),
+    });
+    assert.equal(outcome.resultState, 'passed');
+    assert.equal(outcome.effectState, 'verified_effect');
+  }
+
+  const failedResultPath = join(dashboardResultRoot, 'failed-result.json');
+  const failedReceipts = structuredClone(dashboardCampaignReceipts);
+  failedReceipts[0].resultState = 'harness_failure';
+  writeFileSync(failedResultPath, `${JSON.stringify({ ...dashboardResult, receipts: failedReceipts })}\n`);
+  const failedBundle = createP158W8ReviewedLiveAdapterBundle({
+    registry,
+    schedule,
+    seals,
+    dashboardCampaignExecution: {
+      resultPath: failedResultPath,
+      campaignPlanSha256: dashboardCampaignPlanSha256,
+    },
+  });
+  const failedAttempt = schedule.attempts.find((entry) => entry.caseId === 'D01');
+  await assert.rejects(
+    () => failedBundle.w8Adapters.find((entry) => entry.caseId === 'D01').execute({
+      attempt: failedAttempt,
+      requestEffect: (effectId, payload) => failedBundle.effects[effectId](payload),
+    }),
+    (error) => error instanceof P158W8AdapterError && error.code === 'external_action_result_invalid',
+  );
+} finally {
+  rmSync(dashboardResultRoot, { recursive: true, force: true });
 }
 
 process.stdout.write(`Plan 0158 W8 H/D adapters provider-free checks passed (${calls.external.length} external actions, ${reviewed.scheduledActionCount} reviewed live actions blocked)\n`);

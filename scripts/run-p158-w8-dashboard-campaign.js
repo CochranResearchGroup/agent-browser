@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import {
@@ -95,6 +95,35 @@ function isolatedEnvironment(root) {
   };
 }
 
+async function processIdentity(pid, candidateSha256) {
+  const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+  const fields = stat.slice(stat.lastIndexOf(') ') + 2).trim().split(/\s+/);
+  const executablePath = await readlink(`/proc/${pid}/exe`);
+  const executableSha256 = sha256Bytes(await readFile(`/proc/${pid}/exe`));
+  if (executableSha256 !== candidateSha256) throw new Error(`PID ${pid} does not run the frozen candidate`);
+  return { pid, startToken: fields[19], executablePath, executableSha256 };
+}
+
+async function waitForProcessIdentity(pid, candidateSha256) {
+  let lastError = null;
+  for (let observation = 0; observation < 50; observation += 1) {
+    try {
+      return await processIdentity(pid, candidateSha256);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+  }
+  throw lastError ?? new Error(`PID ${pid} identity did not become observable`);
+}
+
+async function assertSameProcessIdentity(expected) {
+  const current = await processIdentity(expected.pid, expected.executableSha256);
+  if (current.startToken !== expected.startToken || current.executablePath !== expected.executablePath) {
+    throw new Error(`PID ${expected.pid} was reused or changed executable identity`);
+  }
+}
+
 async function validateInstalledState(request) {
   await assertExecutableDigest(request.candidate);
   await mkdir(dirname(request.validationInputPath), { recursive: true, mode: 0o700 });
@@ -138,15 +167,48 @@ function createLiveEffects(executionInput) {
       await Promise.all(Object.entries(root.environment)
         .filter(([key]) => key === 'HOME' || key.startsWith('XDG_') || key === 'AGENT_BROWSER_SOCKET_DIR')
         .map(([, path]) => mkdir(path, { recursive: true, mode: 0o700 })));
-      const result = await runProcess(root.candidate.executablePath, [
-        '--json', 'dashboard', 'start', '--port', String(root.ports.dashboard),
-      ], { env: isolatedEnvironment(root) });
+      const runtimeHost = spawn(root.candidate.executablePath, [], {
+        env: {
+          ...isolatedEnvironment(root),
+          AGENT_BROWSER_RUNTIME_HOST: '1',
+          AGENT_BROWSER_RUNTIME_HOST_PROCESS: '1',
+        },
+        detached: true,
+        stdio: 'ignore',
+      });
+      runtimeHost.unref();
+      const runtimeHostIdentity = await waitForProcessIdentity(
+        runtimeHost.pid,
+        root.candidate.executableSha256,
+      );
+      let result;
+      try {
+        result = await runProcess(root.candidate.executablePath, [
+          '--json', 'dashboard', 'start', '--port', String(root.ports.dashboardIngress),
+        ], { env: isolatedEnvironment(root) });
+      } catch (error) {
+        await assertSameProcessIdentity(runtimeHostIdentity);
+        process.kill(runtimeHost.pid, 'SIGTERM');
+        throw error;
+      }
       const parsed = parseJson(result.stdout, 'dashboard start');
       const pid = parsed?.data?.pid;
-      if (parsed?.success !== true || !Number.isInteger(pid)) throw new Error('Dashboard start omitted its exact PID');
+      const backendPid = parsed?.data?.backendPid;
+      if (parsed?.success !== true || !Number.isInteger(pid) || !Number.isInteger(backendPid) ||
+          parsed?.data?.backendPort !== root.ports.dashboardBackend) {
+        throw new Error('Dashboard start omitted its exact ingress or backend process');
+      }
+      const processIdentities = {
+        ingress: await waitForProcessIdentity(pid, root.candidate.executableSha256),
+        backend: await waitForProcessIdentity(backendPid, root.candidate.executableSha256),
+        runtimeHost: runtimeHostIdentity,
+      };
       return {
         state: 'ready',
         pid,
+        backendPid,
+        runtimeHostPid: runtimeHost.pid,
+        processIdentities,
         candidateSha256: root.candidate.executableSha256,
         statePath: root.target.statePath,
       };
@@ -188,62 +250,38 @@ function createLiveEffects(executionInput) {
         },
       };
     },
-    produceChurn: async ({ page, root, churnPlan }) => {
-      let state = JSON.parse(await readFile(root.target.statePath, 'utf8'));
-      const browserId = Object.keys(state.browsers).sort()[0];
-      if (!browserId) throw new Error('D09 active churn requires at least one exact browser row');
-      const transitions = [];
-      for (const operation of churnPlan.operations) {
-        const health = operation.ordinal % 2 === 0 ? 'not_started' : 'degraded';
-        state = structuredClone(state);
-        state.stateRevision += 1;
-        state.browsers[browserId].health = health;
-        const bytes = `${JSON.stringify(state)}\n`;
-        const validationInputPath = `${root.target.disposableRoot}/churn/state-${String(operation.ordinal).padStart(4, '0')}.json`;
-        const parserReceipt = await validateInstalledState({
-          candidate: root.candidate,
-          environment: root.environment,
-          validationInputPath,
-          stateBytes: bytes,
-        });
-        if (parserReceipt.accepted !== true || parserReceipt.classification !== 'accepted' ||
-            parserReceipt.parserIdentitySha256 !== root.candidate.executableSha256 ||
-            parserReceipt.stateSha256 !== sha256Bytes(bytes)) {
-          throw new Error(`D09 transition parser rejected ${operation.correlationId}`);
-        }
-        const nextPath = `${root.target.statePath}.p158-${String(operation.ordinal).padStart(4, '0')}`;
-        await writeFile(nextPath, bytes, { flag: 'wx', mode: 0o600 });
-        await rename(nextPath, root.target.statePath);
-        const observed = await page.evaluate(async ({ id, expectedHealth }) => {
-          const response = await fetch('/api/service/browsers?limit=500', {
-            credentials: 'same-origin', cache: 'no-store',
-          });
-          const body = await response.json();
-          const browsers = body?.data?.browsers ?? body?.data ?? [];
-          return response.ok && body.success === true &&
-            browsers.find((browser) => browser.id === id)?.health === expectedHealth;
-        }, { id: browserId, expectedHealth: health });
-        if (!observed) throw new Error(`D09 live Service state did not reach ${operation.correlationId}`);
-        transitions.push({ correlationId: operation.correlationId, health, stateSha256: parserReceipt.stateSha256 });
-      }
-      return {
-        churnPlanSha256: churnPlan.churnPlanSha256,
-        completedOperationCount: transitions.length,
-        transitionsSha256: sha256Bytes(`${JSON.stringify(transitions)}\n`),
-        retryAttempted: false,
-      };
-    },
-    stopExact: async ({ expectedPid, environment }) => {
+    produceChurn: async () => ({
+      blocked: true,
+      detail: 'Installed Service has no declared lock-respecting development fixture mutation API; raw state replacement is prohibited',
+      retryAttempted: false,
+    }),
+    stopExact: async ({ expectedPid, environment, processIdentities }) => {
       const root = { environment };
       const pidPath = join(environment.AGENT_BROWSER_SOCKET_DIR, 'dashboard.pid');
+      const backendPidPath = join(environment.AGENT_BROWSER_SOCKET_DIR, 'dashboard-backend.pid');
       const selectedPid = Number((await readFile(pidPath, 'utf8')).trim());
-      if (selectedPid !== expectedPid) throw new Error('Dashboard PID selector does not match the started instance');
+      const selectedBackendPid = Number((await readFile(backendPidPath, 'utf8')).trim());
+      if (selectedPid !== expectedPid || selectedBackendPid !== processIdentities.backend.pid) {
+        throw new Error('Dashboard PID selectors do not match the started instance');
+      }
+      await assertSameProcessIdentity(processIdentities.ingress);
+      await assertSameProcessIdentity(processIdentities.backend);
+      await assertSameProcessIdentity(processIdentities.runtimeHost);
       const result = await runProcess(executionInput.campaignPlan.candidate.executablePath,
         ['--json', 'dashboard', 'stop'],
         { env: isolatedEnvironment(root) });
       const parsed = parseJson(result.stdout, 'dashboard stop');
-      if (parsed?.success !== true || parsed?.data?.stopped !== true) throw new Error('Dashboard stop did not stop the selected root');
-      return { state: 'stopped', pid: expectedPid };
+      if (parsed?.success !== true || parsed?.data?.stopped !== true ||
+          parsed?.data?.ingressStopped !== true || parsed?.data?.backendStopped !== true) {
+        throw new Error('Dashboard stop did not stop both selected dashboard processes');
+      }
+      process.kill(processIdentities.runtimeHost.pid, 'SIGTERM');
+      return {
+        state: 'stopped',
+        pid: expectedPid,
+        backendPid: processIdentities.backend.pid,
+        runtimeHostPid: processIdentities.runtimeHost.pid,
+      };
     },
   };
 }

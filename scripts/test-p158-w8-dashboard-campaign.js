@@ -53,7 +53,7 @@ try {
   });
 
   assert.equal(campaignPlan.actionCount, 2);
-  assert.equal(new Set(campaignPlan.roots.flatMap((root) => Object.values(root.ports))).size, 6);
+  assert.equal(new Set(campaignPlan.roots.flatMap((root) => Object.values(root.ports))).size, 8);
   assert.equal(new Set(campaignPlan.roots.map((root) => root.environment.HOME)).size, 2);
   for (const root of campaignPlan.roots) {
     assert(root.environment.HOME.startsWith(`${root.target.disposableRoot}/`));
@@ -167,6 +167,13 @@ try {
       return {
         state: 'ready',
         pid: root.caseId === 'D09' ? 9009 : 9001,
+        backendPid: root.caseId === 'D09' ? 9109 : 9101,
+        runtimeHostPid: root.caseId === 'D09' ? 9209 : 9201,
+        processIdentities: {
+          ingress: { startToken: '101', executableSha256: root.candidate.executableSha256 },
+          backend: { startToken: '102', executableSha256: root.candidate.executableSha256 },
+          runtimeHost: { startToken: '103', executableSha256: root.candidate.executableSha256 },
+        },
         candidateSha256: root.candidate.executableSha256,
         statePath: root.target.statePath,
       };
@@ -181,7 +188,12 @@ try {
         actionId: request.actionId,
         runtimeRootSha256: request.runtimeRootSha256,
         dashboardPort: request.dashboardPort,
+        dashboardBackendPort: request.dashboardBackendPort,
+        runtimeStreamPort: request.runtimeStreamPort,
         expectedPid: request.expectedPid,
+        expectedBackendPid: request.expectedBackendPid,
+        expectedRuntimeHostPid: request.expectedRuntimeHostPid,
+        processIdentitySha256: request.processIdentitySha256,
         reviewedRevision: request.reviewedRevision,
         externalProof: {
           offHost: true,
@@ -208,11 +220,11 @@ try {
         },
         railRows: [
           ...profiles.map((entry, index) => ({
-            rowId: `profile-${entry.id}`, resourceId: entry.id, resourceType: 'profile',
+            rowId: `row-${entry.id}`, resourceId: entry.id, resourceType: 'profile',
             label: entry.name, state: 'ready', orderKey: index,
           })),
           ...browsers.map((entry, index) => ({
-            rowId: `browser-${entry.id}`, resourceId: entry.id, resourceType: 'browser',
+            rowId: `row-${entry.id}`, resourceId: entry.id, resourceType: 'browser',
             label: entry.id, state: entry.health, orderKey: profiles.length + index,
           })),
         ],
@@ -244,7 +256,7 @@ try {
     },
     stopExact: async ({ actionId, expectedPid }) => {
       lifecycle.push(`stop:${actionId}`);
-      return { state: 'stopped', pid: expectedPid };
+      return { state: 'stopped', pid: expectedPid, backendPid: expectedPid + 100, runtimeHostPid: expectedPid + 200 };
     },
   };
 
@@ -316,7 +328,12 @@ try {
           actionId: request.actionId,
           runtimeRootSha256: sha256('foreign-root'),
           dashboardPort: request.dashboardPort,
+          dashboardBackendPort: request.dashboardBackendPort,
+          runtimeStreamPort: request.runtimeStreamPort,
           expectedPid: request.expectedPid,
+          expectedBackendPid: request.expectedBackendPid,
+          expectedRuntimeHostPid: request.expectedRuntimeHostPid,
+          processIdentitySha256: request.processIdentitySha256,
           reviewedRevision: request.reviewedRevision,
           externalProof: {
             offHost: true, outsideServiceNetworkNamespace: true, publicHttps: true,

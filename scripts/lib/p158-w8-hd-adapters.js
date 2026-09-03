@@ -23,6 +23,7 @@ const REVIEWED_SOURCE_URLS = Object.freeze({
   dashboardOracle: new URL('./p158-dashboard-oracle.js', import.meta.url),
   dashboardLiveSmoke: new URL('../smoke-dashboard-operator-plan0022-live.js', import.meta.url),
   dashboardLiveFoundation: new URL('./p158-w8-dashboard-live.js', import.meta.url),
+  dashboardCampaignRunner: new URL('../run-p158-w8-dashboard-campaign.js', import.meta.url),
 });
 
 export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
@@ -38,7 +39,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   H10: 'durable_handoff_disruption_driver_missing',
   H11: 'secure_surface_action_driver_and_operator_gate_missing',
   H12: 'scheduled_24_hour_reconnect_driver_missing',
-  D01: 'action_bound_multi_root_external_dashboard_execution_missing',
+  D01: 'reviewed_dashboard_campaign_execution_artifact_missing',
   D02: 'live_resource_transition_barrier_driver_missing',
   D03: 'live_ambiguous_rail_fixture_driver_missing',
   D04: 'external_multi_client_dashboard_driver_missing',
@@ -46,7 +47,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   D06: 'live_health_axis_matrix_driver_missing',
   D07: 'live_snapshot_stream_fault_driver_missing',
   D08: 'external_dashboard_handoff_action_scan_missing',
-  D09: 'declared_active_churn_stream_driver_and_external_execution_missing',
+  D09: 'declared_lock_respecting_service_state_churn_api_missing',
   D10: 'live_interaction_timing_capture_driver_missing',
   D11: 'scheduled_8_hour_resource_capture_driver_missing',
   D12: 'live_responsive_accessibility_matrix_driver_missing',
@@ -88,6 +89,12 @@ export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
     cases: Object.freeze(['D01', 'D09']),
     coverage: 'Exact twelve-action pre-freeze root plan, disposable Service State density materialization, and authoritative API, full rail, action, warning, screenshot, and navigation-performance capture through public external ingress.',
     missing: 'It requires installed-candidate parser receipts and an external runtime selector; D09 also lacks a reviewed declared active-churn stream driver.',
+  }),
+  dashboardCampaignRunner: Object.freeze({
+    path: 'scripts/run-p158-w8-dashboard-campaign.js',
+    cases: Object.freeze(['D01', 'D09']),
+    coverage: 'Installed-parser-bound immutable preseeds, isolated per-action Service and dashboard roots, exact reviewed HTTPS route selection, off-host Playwright capture, D09 churn planning, exact teardown, and append-only terminal receipts.',
+    missing: 'D01 remains blocked until one frozen reviewed campaign aggregate is supplied. D09 remains blocked because Service has no declared lock-respecting development state-churn API.',
   }),
 });
 
@@ -154,6 +161,10 @@ function fail(code, message, details) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function withoutReceiptHash(value) {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([field]) => field !== 'receiptSha256'));
 }
 
 function requireDigest(value, field) {
@@ -738,6 +749,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   seals,
   operatorAssisted = { enabled: false },
   externalActionExecution = null,
+  dashboardCampaignExecution = null,
   liveHookManifestSha256 = null,
   additionalAdapters = [],
 }) {
@@ -754,6 +766,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   const effects = {};
   const consumedActionIds = new Set();
   let loadExternalReceipts = null;
+  let loadDashboardReceipts = null;
   if (externalActionExecution) {
     const expectedManifest = buildP158W8ExternalActionManifest({
       registry,
@@ -808,6 +821,42 @@ export function createP158W8ReviewedLiveAdapterBundle({
       return cached;
     };
   }
+  if (dashboardCampaignExecution) {
+    if (!isAbsolute(dashboardCampaignExecution.resultPath ?? '') ||
+        !SHA256.test(dashboardCampaignExecution.campaignPlanSha256 ?? '')) {
+      fail('external_action_manifest_invalid',
+        'Reviewed W8 dashboard execution requires an absolute result and frozen campaign plan digest');
+    }
+    concreteCaseIds.add('D01');
+    let cached = null;
+    loadDashboardReceipts = async () => {
+      if (cached) return cached;
+      const result = JSON.parse(await readFile(dashboardCampaignExecution.resultPath, 'utf8'));
+      const aggregate = result?.aggregate;
+      const { aggregateSha256, ...aggregateBody } = aggregate ?? {};
+      const expectedActions = schedule.attempts.filter((attempt) => attempt.caseId === 'D01')
+        .flatMap((attempt) => buildP158W8ActionPlan({
+          testCase: registry.cases.find((entry) => entry.id === attempt.caseId),
+          attempt,
+        }).actions.map((action) => action.actionId)).sort();
+      const receipts = result?.receipts ?? [];
+      cached = new Map(receipts.map((receipt) => [receipt.actionId, receipt]));
+      if (aggregate?.schemaVersion !== 'agent-browser.p158-dashboard-campaign-aggregate.v1' ||
+          aggregate.campaignPlanSha256 !== dashboardCampaignExecution.campaignPlanSha256 ||
+          aggregate.candidateSha256 !== seals.candidateSha256 || aggregate.success !== true ||
+          aggregate.retryCount !== 0 || aggregate.repairAttempted !== false ||
+          aggregateSha256 !== sha256(aggregateBody) || cached.size !== expectedActions.length ||
+          sha256([...cached.keys()].sort()) !== sha256(expectedActions) ||
+          receipts.some((receipt) => receipt.resultState !== 'passed' ||
+            receipt.terminalState !== 'completed' || receipt.candidateSha256 !== seals.candidateSha256 ||
+            receipt.receiptSha256 !== sha256(withoutReceiptHash(receipt)) ||
+            receipt.oracleBinding?.passed !== true || receipt.teardown?.state !== 'stopped')) {
+        fail('external_action_result_invalid',
+          'W8 dashboard campaign aggregate or exact action receipts are missing, failed, or changed');
+      }
+      return cached;
+    };
+  }
   const baseAdapters = P158_W8_CASE_IDS.map((caseId) => {
     const contract = contracts.get(caseId);
     if (!contract || contract.phaseId !== 'W8') fail('schedule_invalid', `${caseId} lacks a W8 contract`);
@@ -818,14 +867,58 @@ export function createP158W8ReviewedLiveAdapterBundle({
         if (consumedActionIds.has(action.actionId)) {
           fail('external_action_result_invalid', `${action.actionId} was already consumed`);
         }
-        const receipt = (await loadExternalReceipts()).get(action.actionId);
+        const dashboardCampaignReceipt = ['D01', 'D09'].includes(caseId)
+          ? (await loadDashboardReceipts()).get(action.actionId)
+          : null;
+        if (dashboardCampaignReceipt &&
+            (dashboardCampaignReceipt.caseId !== action.caseId ||
+             dashboardCampaignReceipt.attemptId !== action.attemptId ||
+             (action.caseId === 'D01' &&
+              (dashboardCampaignReceipt.projection?.density !== action.assignment.inventory_density ||
+               dashboardCampaignReceipt.dashboardFixture?.density !== action.assignment.inventory_density)))) {
+          fail('external_action_result_invalid', `${action.actionId} dashboard campaign identity is invalid`);
+        }
+        const receipt = dashboardCampaignReceipt
+          ? sealP158W8Receipt({
+            actionId: action.actionId,
+            attemptId: action.attemptId,
+            caseId: action.caseId,
+            candidateSha256: seals.candidateSha256,
+            workflowSha256: seals.workflowSha256,
+            terminalState: 'completed',
+            scenarioOraclePassed: true,
+            attemptNumber: 1,
+            repairAttempted: false,
+            retryAttempted: false,
+            gcAttempted: false,
+            contentClass: action.contentClass,
+            operatorGateArtifactSha256: action.operatorGateArtifactSha256,
+            scheduledOffsetSeconds: action.plannedOffsetSeconds,
+            capture: {
+              credentialsCaptured: false,
+              secretInputCaptured: false,
+              privateContentCaptured: false,
+            },
+            observedCardinalities: Object.fromEntries(
+              Object.entries(action.cardinalities).map(([id, value]) => [id, value.value]),
+            ),
+            snapshotBarrierId: dashboardCampaignReceipt.projection.authoritativeSnapshotSha256,
+            renderedBarrierId: dashboardCampaignReceipt.projection.authoritativeSnapshotSha256,
+            authoritativeSnapshotSha256: dashboardCampaignReceipt.projection.authoritativeSnapshotSha256,
+            dashboardFixture: clone(dashboardCampaignReceipt.dashboardFixture),
+            dashboardCampaignReceiptSha256: dashboardCampaignReceipt.receiptSha256,
+            dashboardOracleBindingSha256: sha256(dashboardCampaignReceipt.oracleBinding),
+          })
+          : (await loadExternalReceipts()).get(action.actionId);
         const { receiptSha256, ...body } = receipt ?? {};
-        if (!receipt || receipt.caseId !== action.caseId || receipt.attemptId !== action.attemptId ||
-            receipt.candidateSha256 !== seals.candidateSha256 ||
-            receipt.workflowSha256 !== seals.workflowSha256 || receipt.resultState !== 'passed' ||
-            receipt.terminalState !== 'completed' || receipt.attemptNumber !== 1 ||
-            receipt.repairAttempted !== false || receipt.retryAttempted !== false ||
-            receipt.garbageCollectionAttempted !== false || receiptSha256 !== sha256(body)) {
+        if (dashboardCampaignReceipt) {
+          validateDashboardReceipt({ receipt, action, seals });
+        } else if (!receipt || receipt.caseId !== action.caseId || receipt.attemptId !== action.attemptId ||
+          receipt.candidateSha256 !== seals.candidateSha256 ||
+          receipt.workflowSha256 !== seals.workflowSha256 || receipt.resultState !== 'passed' ||
+          receipt.terminalState !== 'completed' || receipt.attemptNumber !== 1 ||
+          receipt.repairAttempted !== false || receipt.retryAttempted !== false ||
+          receipt.garbageCollectionAttempted !== false || receiptSha256 !== sha256(body)) {
           fail('external_action_result_invalid', `${action.actionId} external receipt binding is invalid`);
         }
         consumedActionIds.add(action.actionId);

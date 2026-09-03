@@ -6,6 +6,7 @@ import { sha256 } from './p158-campaign-controller.js';
 import { generateDenseDashboardFixture } from './p158-dashboard-oracle.js';
 import {
   auditP158DashboardLiveProjection,
+  buildP158DashboardServiceState,
   captureP158DashboardLiveProjection,
   materializeP158DashboardPreseedPlan,
 } from './p158-w8-dashboard-live.js';
@@ -109,15 +110,16 @@ export function buildP158DashboardCampaignPlan({
       preseedPlan.planSha256 !== sha256(Object.fromEntries(
         Object.entries(preseedPlan).filter(([key]) => key !== 'planSha256'),
       )) || !Number.isInteger(basePort) || basePort < 1024 ||
-      basePort + (preseedPlan.actionCount * 3) > 65535) {
+      basePort + (preseedPlan.actionCount * 4) > 65535) {
     fail('campaign_plan_invalid', 'W8 dashboard campaign inputs are missing, changed, or outside the port range');
   }
   const roots = preseedPlan.roots.map((root, index) => {
     const runtimeRoot = normalize(root.target.disposableRoot);
     const xdgRoot = join(runtimeRoot, 'xdg');
-    const runtimePort = basePort + (index * 3);
-    const dashboardPort = runtimePort + 1;
-    const streamPort = runtimePort + 2;
+    const runtimeStreamPort = basePort + (index * 4);
+    const dashboardIngressPort = runtimeStreamPort + 1;
+    const dashboardBackendPort = runtimeStreamPort + 2;
+    const presentationStreamPort = runtimeStreamPort + 3;
     return {
       actionId: root.actionId,
       attemptId: root.attemptId,
@@ -135,10 +137,17 @@ export function buildP158DashboardCampaignPlan({
         XDG_RUNTIME_DIR: join(xdgRoot, 'runtime'),
         AGENT_BROWSER_SOCKET_DIR: join(runtimeRoot, 'runtime', 'sockets'),
         AGENT_BROWSER_SESSION: root.target.runId,
-        AGENT_BROWSER_STREAM_PORT: String(streamPort),
+        AGENT_BROWSER_STREAM_PORT: String(runtimeStreamPort),
+        AGENT_BROWSER_STREAM_PORT_STRICT: '1',
+        AGENT_BROWSER_RUNTIME_HOST: '1',
         AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
       },
-      ports: { runtime: runtimePort, dashboard: dashboardPort, stream: streamPort },
+      ports: {
+        runtimeStream: runtimeStreamPort,
+        dashboardIngress: dashboardIngressPort,
+        dashboardBackend: dashboardBackendPort,
+        presentationStream: presentationStreamPort,
+      },
       candidate: frozenCandidate,
       externalIngress: ingress,
       validationInputPath: join(runtimeRoot, 'preseed', 'state.candidate.json'),
@@ -258,10 +267,18 @@ export function buildP158D09ChurnPlan({ root, cycleCount = 32 }) {
 }
 
 /** Convert the single live correlation barrier into the immutable W5 oracle shape. */
-export function buildP158DashboardFixtureFromProjection({ projection, actionId }) {
+export function buildP158DashboardFixtureFromProjection({
+  projection,
+  actionId,
+  expectedState,
+  materializationReceipt,
+}) {
   if (projection?.schemaVersion !== 'agent-browser.p158-dashboard-live-projection.v1' ||
-      typeof actionId !== 'string' || !actionId) {
-    fail('dashboard_projection_invalid', 'Dashboard fixture requires one live projection and action identity');
+      typeof actionId !== 'string' || !actionId ||
+      materializationReceipt?.stateSha256 !== sha256(canonical(expectedState)) ||
+      sha256(materializationReceipt.counts) !== sha256(projection.counts)) {
+    fail('dashboard_projection_invalid',
+      'Dashboard fixture requires one live projection bound to independent sealed preseed truth');
   }
   const fixture = generateDenseDashboardFixture({
     ...projection.counts,
@@ -271,20 +288,32 @@ export function buildP158DashboardFixtureFromProjection({ projection, actionId }
   fixture.fixtureId = `p158-live-${sha256(actionId).slice(0, 20)}`;
   fixture.description = 'Plan 0158 externally captured dashboard correlation barrier.';
   fixture.density = projection.density;
+  const profileTruth = Object.values(expectedState.profiles).map((profile, index) => ({
+    resourceId: profile.id,
+    resourceType: 'profile',
+    label: profile.name,
+    state: 'ready',
+    rowExpected: true,
+    orderKey: index,
+    rowId: `row-${profile.id}`,
+    badge: null,
+    count: 0,
+  }));
+  const browserTruth = Object.values(expectedState.browsers).map((browser, index) => ({
+    resourceId: browser.id,
+    resourceType: 'browser',
+    label: browser.id,
+    state: browser.health,
+    rowExpected: true,
+    orderKey: profileTruth.length + index,
+    rowId: `row-${browser.id}`,
+    badge: null,
+    count: 0,
+  }));
   fixture.truth = {
     snapshotRevision,
-    counts: structuredClone(projection.counts),
-    resources: projection.capture.railRows.map((row) => ({
-      resourceId: row.resourceId,
-      resourceType: row.resourceType,
-      label: row.label,
-      state: row.state,
-      rowExpected: true,
-      orderKey: row.orderKey,
-      rowId: row.rowId,
-      badge: null,
-      count: 0,
-    })),
+    counts: structuredClone(materializationReceipt.counts),
+    resources: [...profileTruth, ...browserTruth],
   };
   fixture.railRows = projection.capture.railRows.map((row) => ({
     ...structuredClone(row), snapshotRevision, badge: null, count: 0,
@@ -298,17 +327,8 @@ export function buildP158DashboardFixtureFromProjection({ projection, actionId }
     deepLinkRequestedId: selectedResourceId,
     deepLinkResolvedId: selectedResourceId,
   };
-  fixture.actions = projection.capture.actionButtons
-    .filter((button) => button.actionId && button.targetResourceId)
-    .map((button) => ({
-      actionId: button.actionId,
-      declaredTargetResourceId: button.targetResourceId,
-      invokedTargetResourceId: button.targetResourceId,
-      eligible: !button.disabled,
-      displayedEligible: !button.disabled,
-      rendered: true,
-    }));
-  fixture.warnings.displayedAxes = projection.capture.warnings.map((warning) => warning.axis).filter(Boolean).sort();
+  fixture.actions = [];
+  fixture.warnings.displayedAxes = [];
   fixture.stream = {
     streamId: `${actionId}:stream`, snapshotRevision, streamRevision: snapshotRevision,
     displayedReady: true, authoritativeReady: true,
@@ -367,6 +387,10 @@ export async function executeP158DashboardCampaignAction({
   const root = campaignPlan.roots.find((entry) => entry.actionId === actionId);
   if (!root) fail('action_not_planned', 'W8 dashboard action is not present in the frozen campaign plan');
   const preseed = matchingPreseedReceipt(campaignPlan, preparation, root);
+  const sealedPreseed = buildP158DashboardServiceState({ target: root.target, density: root.density });
+  if (sealedPreseed.receipt.receiptSha256 !== preseed.materializationReceipt.receiptSha256) {
+    fail('preseed_receipt_invalid', `${root.actionId} deterministic preseed truth changed after freeze`);
+  }
   for (const name of ['startExact', 'selectExternalIngress', 'openExternalPage', 'stopExact']) {
     if (typeof effects?.[name] !== 'function') fail('lifecycle_effect_missing', `W8 dashboard effect ${name} is required`);
   }
@@ -385,13 +409,25 @@ export async function executeP158DashboardCampaignAction({
         !Number.isInteger(started?.pid) || started.pid < 1 || started?.statePath !== root.target.statePath) {
       fail('wrong_runtime_state', 'Started dashboard instance is not the exact frozen root and candidate');
     }
+    if (!Number.isInteger(started.backendPid) || started.backendPid < 1 ||
+        !Number.isInteger(started.runtimeHostPid) || started.runtimeHostPid < 1 ||
+        ['ingress', 'backend', 'runtimeHost'].some((role) =>
+          started.processIdentities?.[role]?.executableSha256 !== root.candidate.executableSha256 ||
+          typeof started.processIdentities?.[role]?.startToken !== 'string')) {
+      fail('wrong_runtime_state', 'Service host and dashboard process identities are incomplete or foreign');
+    }
     selected = await effects.selectExternalIngress({
       actionId: root.actionId,
       reviewedRevision: root.externalIngress.reviewedRevision,
       bindingSha256: root.externalIngress.bindingSha256,
-      dashboardPort: root.ports.dashboard,
+      dashboardPort: root.ports.dashboardIngress,
+      dashboardBackendPort: root.ports.dashboardBackend,
+      runtimeStreamPort: root.ports.runtimeStream,
       runtimeRootSha256: sha256(root.target.disposableRoot),
       expectedPid: started.pid,
+      expectedBackendPid: started.backendPid,
+      expectedRuntimeHostPid: started.runtimeHostPid,
+      processIdentitySha256: sha256(started.processIdentities),
     });
     const publicUrl = new URL(selected?.publicUrl ?? 'invalid:');
     if (publicUrl.protocol !== 'https:' || publicUrl.origin !== root.externalIngress.publicOperatorUrl ||
@@ -399,7 +435,12 @@ export async function executeP158DashboardCampaignAction({
         !selected.publicPath.startsWith('/p158/') || selected?.bindingSha256 !== root.externalIngress.bindingSha256 ||
         selected?.selected !== true || selected?.actionId !== root.actionId ||
         selected?.runtimeRootSha256 !== sha256(root.target.disposableRoot) ||
-        selected?.dashboardPort !== root.ports.dashboard || selected?.expectedPid !== started.pid ||
+        selected?.dashboardPort !== root.ports.dashboardIngress ||
+        selected?.dashboardBackendPort !== root.ports.dashboardBackend ||
+        selected?.runtimeStreamPort !== root.ports.runtimeStream ||
+        selected?.expectedPid !== started.pid || selected?.expectedBackendPid !== started.backendPid ||
+        selected?.expectedRuntimeHostPid !== started.runtimeHostPid ||
+        selected?.processIdentitySha256 !== sha256(started.processIdentities) ||
         selected?.reviewedRevision !== root.externalIngress.reviewedRevision ||
         selected?.selectionReceiptSha256 !== receiptDigest(selected, 'selectionReceiptSha256')) {
       fail('external_ingress_selection_invalid', 'Reviewed ingress did not select the exact dashboard root');
@@ -409,6 +450,10 @@ export async function executeP158DashboardCampaignAction({
       if (typeof effects.produceChurn !== 'function') fail('lifecycle_effect_missing', 'D09 requires active churn');
       const churnPlan = buildP158D09ChurnPlan({ root });
       churnReceipt = await effects.produceChurn({ page: pageHandle.page, root: structuredClone(root), churnPlan });
+      if (churnReceipt?.blocked === true) {
+        fail('d09_state_churn_seam_missing', churnReceipt.detail ??
+          'D09 requires a declared lock-respecting Service state churn seam');
+      }
       if (churnReceipt?.churnPlanSha256 !== churnPlan.churnPlanSha256 ||
           churnReceipt?.completedOperationCount !== churnPlan.cycleCount || churnReceipt?.retryAttempted !== false) {
         fail('wrong_runtime_state', 'D09 churn did not complete the exact declared sequence');
@@ -420,7 +465,12 @@ export async function executeP158DashboardCampaignAction({
       externalProof: selected.externalProof,
       screenshotPath: root.screenshotPath,
     });
-    dashboardFixture = buildP158DashboardFixtureFromProjection({ projection, actionId: root.actionId });
+    dashboardFixture = buildP158DashboardFixtureFromProjection({
+      projection,
+      actionId: root.actionId,
+      expectedState: sealedPreseed.state,
+      materializationReceipt: preseed.materializationReceipt,
+    });
     oracleBinding = auditP158DashboardLiveProjection({ projection, dashboardFixture });
     if (!oracleBinding.passed) fail('dashboard_oracle_failed', 'Externally captured dashboard oracle did not pass');
   } catch (error) {
@@ -440,13 +490,23 @@ export async function executeP158DashboardCampaignAction({
           actionId: root.actionId,
           expectedPid: started.pid,
           environment: structuredClone(root.environment),
-          dashboardPort: root.ports.dashboard,
+          dashboardPort: root.ports.dashboardIngress,
           statePath: root.target.statePath,
+          processIdentities: structuredClone(started.processIdentities),
         });
-        if (stopped?.state !== 'stopped' || stopped?.pid !== started.pid) {
+        if (stopped?.state !== 'stopped' || stopped?.pid !== started.pid ||
+            stopped?.backendPid !== started.backendPid || stopped?.runtimeHostPid !== started.runtimeHostPid) {
           fail('wrong_runtime_state', 'Exact W8 dashboard instance did not stop cleanly');
         }
-        teardown = { attempted: true, state: 'stopped', pid: stopped.pid, failure: null };
+        teardown = {
+          attempted: true,
+          state: 'stopped',
+          pid: stopped.pid,
+          backendPid: stopped.backendPid,
+          runtimeHostPid: stopped.runtimeHostPid,
+          processIdentitySha256: sha256(started.processIdentities),
+          failure: null,
+        };
       } catch (error) {
         teardown = { attempted: true, state: 'failed', pid: started.pid ?? null, failure: errorRecord(error) };
         firstFailure ??= errorRecord(error);
@@ -471,7 +531,9 @@ export async function executeP158DashboardCampaignAction({
     firstFailure,
     teardown,
     terminalState: 'completed',
-    resultState: firstFailure === null && teardown.state === 'stopped' ? 'passed' : 'harness_failure',
+    resultState: firstFailure === null && teardown.state === 'stopped'
+      ? 'passed'
+      : firstFailure?.code === 'd09_state_churn_seam_missing' ? 'skipped_blocked' : 'harness_failure',
     productionStateTouched: false,
     repairAttempted: false,
     retryAttempted: false,
