@@ -33,6 +33,19 @@ const a07BrowserBindingsByActionId = Object.fromEntries(preliminaryW7Plans
     browserId: `p158-a07-browser-${index + 1}`,
     profilePath: `/tmp/p158-development-run-01/profiles/a07-${index + 1}`,
   }]));
+const x06DesktopFixturesByActionId = Object.fromEntries(preliminaryW7Plans
+  .filter((action) => action.caseId === 'X06')
+  .map((action, index) => {
+    const windowState = action.dimensionAssignments.find((entry) =>
+      entry.dimensionId === 'window_state').value;
+    return [action.actionId, {
+      browserId: `p158-x06-browser-${index + 1}`,
+      profilePath: `/tmp/p158-development-run-01/profiles/x06-${index + 1}`,
+      displayName: `:${100 + index}`,
+      locatorId: 'p110-control-v1',
+      windowState,
+    }];
+  }));
 const target = Object.freeze({
   targetId: 'p158-development-target-01',
   campaignRunId: 'p158-development-run-01',
@@ -54,6 +67,7 @@ const target = Object.freeze({
   runtimeProfile: 'p158-development-run-01',
   sessionName: 'p158-development-run-01',
   localFixtureOrigin: 'http://127.0.0.1:43158',
+  desktopFixtureBindingsByActionId: x06DesktopFixturesByActionId,
   allowedExecutables: [
     '/usr/bin/printf',
     '/usr/bin/journalctl',
@@ -72,10 +86,19 @@ const target = Object.freeze({
     ...Object.values(a07BrowserBindingsByActionId).map((binding) => binding.pid),
   ],
   allowedBrowserIds: Object.values(a07BrowserBindingsByActionId)
-    .map((binding) => binding.browserId).concat('p158-agent-browser-01'),
+    .map((binding) => binding.browserId)
+    .concat(
+      'p158-agent-browser-01',
+      ...Object.values(x06DesktopFixturesByActionId).map((binding) => binding.browserId),
+    ),
   allowedProfilePaths: Object.values(a07BrowserBindingsByActionId)
     .map((binding) => binding.profilePath)
-    .concat('/tmp/p158-development-run-01/profiles/agent-main'),
+    .concat(
+      '/tmp/p158-development-run-01/profiles/agent-main',
+      ...Object.values(x06DesktopFixturesByActionId).map((binding) => binding.profilePath),
+    ),
+  allowedDisplayNames: Object.values(x06DesktopFixturesByActionId)
+    .map((binding) => binding.displayName),
 });
 
 function recordingPrimitives(overrides = {}) {
@@ -167,13 +190,13 @@ assert.equal(liveActionPlans.filter((action) =>
   action.caseId === 'X10' && action.requiredStimulus === 'host_restart').length, 1);
 const reviewedLive = assessP158W7ReviewedLiveDispatcher({ schedule, target });
 assert.equal(reviewedLive.ready, false);
-assert.deepEqual(reviewedLive.implementedCaseIds, ['A07', 'A13', 'X07']);
+assert.deepEqual(reviewedLive.implementedCaseIds, ['A07', 'A13', 'X06']);
 assert.deepEqual(reviewedLive.partiallyImplementedCaseIds, ['A09', 'A15']);
 assert.equal(reviewedLive.blockerCount, 22);
 assert.equal(reviewedLive.effectsExecuted, false);
 assert.equal(reviewedLive.implementedActionCount,
   liveActionPlans.filter((action) =>
-    ['A07', 'A13', 'X07'].includes(action.caseId) ||
+    ['A07', 'A13', 'X06'].includes(action.caseId) ||
     (action.caseId === 'A09' &&
       action.dimensionAssignments.some((entry) =>
         entry.dimensionId === 'target_pathology' && entry.value === 'blank')) ||
@@ -195,6 +218,12 @@ assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
   .some((binding) => binding.systemd.unit === target.daemonUnit));
 assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
   .some((binding) => binding.systemd.unit === target.supervisorUnit));
+assert.equal(reviewedLive.bindings.filter((binding) => binding.caseId === 'X06').length, 21);
+assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'X06')
+  .every((binding) =>
+    binding.command.args.includes('desktop') &&
+    binding.command.args.includes('locate') &&
+    binding.displayName === target.desktopFixtureBindingsByActionId[binding.actionId].displayName));
 assert.equal(reviewedLive.bindings.filter((binding) => binding.caseId === 'A09').length, 2);
 assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A09')
   .every((binding) => binding.command.args.at(-1) === 'about:blank'));

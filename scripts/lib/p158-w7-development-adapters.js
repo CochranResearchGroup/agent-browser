@@ -12,7 +12,7 @@ export const P158_W7_CASE_IDS = Object.freeze([
   ...Array.from({ length: 10 }, (_, index) => `X${String(index + 1).padStart(2, '0')}`),
 ]);
 
-export const P158_W7_REVIEWED_LIVE_CASE_IDS = Object.freeze(['A07', 'A13', 'X07']);
+export const P158_W7_REVIEWED_LIVE_CASE_IDS = Object.freeze(['A07', 'A13', 'X06']);
 
 export const P158_W7_LIVE_HOOK_GAPS = Object.freeze({
   A01: 'multi_client_identity_load_driver',
@@ -33,7 +33,7 @@ export const P158_W7_LIVE_HOOK_GAPS = Object.freeze({
   X03: 'display_evidence_fault_driver',
   X04: 'owned_foreign_display_exhaustion_driver',
   X05: 'x11_authority_matrix_driver',
-  X06: 'desktop_locator_fixture_driver',
+  X07: 'supervisor_fault_state_injection_driver',
   X08: 'development_install_handoff_shutdown_driver',
   X09: 'generation_digest_mismatch_driver',
   X10: 'disposable_host_epoch_driver',
@@ -235,6 +235,11 @@ function assertResourceBindings(action, target) {
         !target.allowedBrowserIds.includes(action.browserId))) {
     fail('browser_not_owned', `${action.actionId} browser is not development-owned`);
   }
+  if (action.displayName !== undefined &&
+      (!Array.isArray(target.allowedDisplayNames) ||
+        !target.allowedDisplayNames.includes(action.displayName))) {
+    fail('display_not_owned', `${action.actionId} display is not development-owned`);
+  }
 }
 
 function assertCommandBinding(actionId, field, binding) {
@@ -331,6 +336,45 @@ function reviewedBrowserBinding(action, target) {
     url = 'about:blank';
   } else if (action.caseId === 'A15' && dimension('control_transport') === 'cli') {
     url = `${target.localFixtureOrigin}/${target.campaignRunId}/markers/${encodeURIComponent(action.actionId)}`;
+  } else if (action.caseId === 'X06') {
+    const fixture = target.desktopFixtureBindingsByActionId[action.actionId];
+    if (!fixture ||
+        fixture.windowState !== dimension('window_state') ||
+        typeof fixture.browserId !== 'string' ||
+        typeof fixture.profilePath !== 'string' ||
+        typeof fixture.displayName !== 'string' ||
+        typeof fixture.locatorId !== 'string') {
+      fail('reviewed_live_target_binding_invalid',
+        `W7 X06 action ${action.actionId} requires its exact staged desktop fixture`);
+    }
+    return {
+      ...action,
+      targetId: target.targetId,
+      campaignRunId: target.campaignRunId,
+      stimulusKind: action.requiredStimulus,
+      browserId: fixture.browserId,
+      profilePath: fixture.profilePath,
+      displayName: fixture.displayName,
+      command: {
+        executable: target.developmentBinary,
+        args: [
+          '--json',
+          '--session', target.sessionName,
+          'desktop', 'locate',
+          '--browser-id', fixture.browserId,
+          '--locator-id', fixture.locatorId,
+          '--max-candidates', '32',
+        ],
+      },
+      evidenceCommand: {
+        executable: target.developmentBinary,
+        args: ['--json', '--session', target.sessionName, 'service', 'status'],
+      },
+      logCommand: {
+        executable: '/usr/bin/journalctl',
+        args: ['--user-unit', target.daemonUnit, '--since', target.evidenceSince, '--output=json'],
+      },
+    };
   } else {
     return null;
   }
@@ -380,6 +424,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
     'runtimeProfile',
     'sessionName',
     'localFixtureOrigin',
+    'desktopFixtureBindingsByActionId',
   ];
   for (const field of requiredTargetFields) {
     if (target[field] === undefined || target[field] === null || target[field] === '') {
@@ -421,7 +466,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
           args: ['--user-unit', target.daemonUnit, '--since', target.evidenceSince, '--output=json'],
         },
       };
-    } else if (['A13', 'X07'].includes(action.caseId)) {
+    } else if (action.caseId === 'A13') {
       const unit = action.caseId === 'A13' &&
         action.requiredStimulus === 'daemon_transition'
         ? target.daemonUnit
@@ -832,7 +877,9 @@ export function createP158W7LiveDevelopmentAdapterBundle({
       hookIds: concreteLive
         ? (caseId === 'A07'
             ? ['w7.evidence', 'w7.logs', 'w7.process']
-            : ['w7.evidence', 'w7.logs', 'w7.systemd'])
+            : (caseId === 'A13'
+                ? ['w7.evidence', 'w7.logs', 'w7.systemd']
+                : ['w7.display', 'w7.evidence', 'w7.logs']))
         : (partial ? ['w7.browser', 'w7.evidence', 'w7.logs'] : []),
       implementedActionCount: concreteLive
         ? actionCounts.get(caseId)
