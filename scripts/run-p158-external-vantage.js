@@ -1275,6 +1275,7 @@ export function projectHandoffResolution(data) {
   return {
     status: data.status ?? null,
     resolved: data.resolved === true,
+    reopenRequired: data.reopenRequired === true,
     handoffId: data.handoffId ?? null,
     handoffUrl: data.handoffUrl ?? null,
     browserId: data.browserId ?? null,
@@ -1346,9 +1347,34 @@ async function waitForAuthoritativeHandoffResolution(resolutions, startIndex, ti
   while (Date.now() < deadline) {
     const ready = resolutions.slice(startIndex).find(durableHandoffResolutionReady);
     if (ready) return ready;
+    const terminal = resolutions.slice(startIndex).map(classifyHandoffResolutionFailure).find(Boolean);
+    if (terminal) {
+      const error = new Error(terminal.message);
+      error.code = terminal.code;
+      error.details = terminal.details;
+      throw error;
+    }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
   }
   throw new Error('Authoritative ready handoff resolution was not observed before timeout');
+}
+
+export function classifyHandoffResolutionFailure(resolution) {
+  if (resolution?.status === 'closed' && resolution.reopenRequired === true) {
+    return {
+      code: 'handoff_target_closed_operator_action_required',
+      message: 'The durable handoff target is closed and requires explicit operator reopening',
+      details: { resolutionStatus: 'closed', reopenRequired: true },
+    };
+  }
+  if (resolution?.status && !['ready', 'converging'].includes(resolution.status)) {
+    return {
+      code: 'handoff_resolution_terminal',
+      message: 'The durable handoff reached a terminal non-ready resolution',
+      details: { resolutionStatus: String(resolution.status).slice(0, 64), reopenRequired: false },
+    };
+  }
+  return null;
 }
 
 function durableHandoffResolutionReady(resolution) {
@@ -1751,6 +1777,10 @@ function safeExternalFailureDetails(value) {
   for (const key of ['streamSignInExpired', 'cdpStreamConnecting']) {
     if (typeof value[key] === 'boolean') details[key] = value[key];
   }
+  if (['closed', 'not_found', 'blocked', 'failed', 'unavailable'].includes(value.resolutionStatus)) {
+    details.resolutionStatus = value.resolutionStatus;
+  }
+  if (typeof value.reopenRequired === 'boolean') details.reopenRequired = value.reopenRequired;
   return Object.keys(details).length > 0 ? details : null;
 }
 

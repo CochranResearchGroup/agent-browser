@@ -1678,3 +1678,32 @@ workstation-transaction finding. The only remaining convergence finding is
 `operator_journey_not_ready`, with the exact next action
 `reprove_operator_journey`. That is the evidence the repeated external
 readiness run is intended to establish.
+
+The first replacement dispatch was canceled because its manually expanded
+expected commit value did not match `git rev-parse HEAD`. The workflow's exact
+commit gate prevented browser execution from becoming campaign evidence. The
+corrected E12 dispatch then reached both authenticated clients, but both stopped
+before presentation capture because the durable handoff reported
+`status=closed` with `reopenRequired=true`. Video evidence shows the intended
+operator gate, `This browser tab was closed`, rather than a stream failure.
+No service failure was appended because the backend correctly returned a
+non-error closed state.
+
+This exposed another runner-observability gap: it waited thirty seconds for a
+ready response and emitted a generic timeout instead of preserving the
+terminal closed-state classification. The runner now projects
+`reopenRequired`, stops immediately on a terminal non-ready resolution, and
+records `handoff_target_closed_operator_action_required` with bounded status
+fields. It does not click the reopen control or bypass the operator boundary.
+
+The operator preparation step then explicitly reopened the exact retained
+handoff target through the authenticated service action. The response reports
+`status=ready`, `resolved=true`, `reopenedClosedTab=true`, ready operator and
+presentation states, and the expected retained browser identity. This is test
+preparation under the campaign's existing authority, not an automatic runner
+repair.
+
+Revised next action: validate and commit the closed-handoff failure
+classification, then dispatch one readiness observation against the prepared
+open target. If either independent client still fails, preserve the artifacts
+and pause for the newly classified blocker. Do not begin calibration yet.

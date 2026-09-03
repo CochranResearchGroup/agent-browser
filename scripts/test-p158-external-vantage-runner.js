@@ -15,6 +15,7 @@ import {
   buildExternalCalibrationSchedule,
   canonicalHash,
   classifyRenderedStreamFailure,
+  classifyHandoffResolutionFailure,
   externalVantageFailureRecord,
   findInternalUrlLeaks,
   projectHandoffResolution,
@@ -224,6 +225,18 @@ const projectedResolution = projectHandoffResolution({
 assert.equal(projectedResolution.status, 'ready');
 assert.equal(projectedResolution.urlObservations.length, 2);
 assert.doesNotMatch(JSON.stringify(projectedResolution), /must-never-survive-projection|password/);
+const closedResolution = projectHandoffResolution({
+  status: 'closed',
+  resolved: false,
+  reopenRequired: true,
+  handoffId: 'must-not-be-projected-into-failure-details',
+});
+assert.deepEqual(classifyHandoffResolutionFailure(closedResolution), {
+  code: 'handoff_target_closed_operator_action_required',
+  message: 'The durable handoff target is closed and requires explicit operator reopening',
+  details: { resolutionStatus: 'closed', reopenRequired: true },
+});
+assert.equal(classifyHandoffResolutionFailure({ status: 'converging' }), null);
 
 const receipts = [
   receipt('external-runner-human', 'runner-human'),
