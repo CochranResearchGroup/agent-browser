@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-final-analysis.v1.schema.json",
+  "title": "Plan 0158 sealed campaign final analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planId", "runId", "analyzedAt", "inputSha256", "repairAttempted", "effectsAttempted", "integrity", "independentAudits", "performance", "dashboardReconciliation", "resultSet", "architectureAssessments", "regressionAssignments", "p157Acceptance", "findings", "remediationGraph", "resultSetSha256", "remediationGraphSha256", "reportSha256"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-final-analysis.v1" },
+    "planId": { "const": "P158" },
+    "runId": { "$ref": "#/$defs/id" },
+    "analyzedAt": { "type": "string", "format": "date-time" },
+    "inputSha256": { "$ref": "#/$defs/sha256" },
+    "repairAttempted": { "const": false },
+    "effectsAttempted": { "const": false },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "independentAudits": { "$ref": "#/$defs/audits" },
+    "performance": { "$ref": "#/$defs/performance" },
+    "dashboardReconciliation": { "type": "array", "items": { "$ref": "#/$defs/rail" } },
+    "resultSet": { "$ref": "#/$defs/resultSet" },
+    "architectureAssessments": { "type": "array", "items": { "$ref": "#/$defs/architecture" } },
+    "regressionAssignments": { "type": "array", "items": { "$ref": "#/$defs/regression" } },
+    "p157Acceptance": { "type": "array", "items": { "$ref": "#/$defs/p157" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "remediationGraph": { "$ref": "#/$defs/remediationGraph" },
+    "resultSetSha256": { "$ref": "#/$defs/sha256" },
+    "remediationGraphSha256": { "$ref": "#/$defs/sha256" },
+    "reportSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullableString": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+    "nonnegative": { "type": "integer", "minimum": 0 },
+    "integrity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["passed", "manifestSha256", "ledgerHeadSha256", "ledgerRecordCount", "artifactCount", "validArtifactCount", "policyViolationCount", "exclusionViolationCount"],
+      "properties": {
+        "passed": { "type": "boolean" }, "manifestSha256": { "$ref": "#/$defs/sha256" }, "ledgerHeadSha256": { "$ref": "#/$defs/sha256" },
+        "ledgerRecordCount": { "$ref": "#/$defs/nonnegative" }, "artifactCount": { "$ref": "#/$defs/nonnegative" }, "validArtifactCount": { "$ref": "#/$defs/nonnegative" },
+        "policyViolationCount": { "$ref": "#/$defs/nonnegative" }, "exclusionViolationCount": { "$ref": "#/$defs/nonnegative" }
+      }
+    },
+    "loggingAudit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputSha256", "passed", "findingCount", "envelopeCount", "missingRecordCount", "sensitiveValueLeakCount", "captureGapCount"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "passed": { "type": "boolean" }, "findingCount": { "$ref": "#/$defs/nonnegative" }, "envelopeCount": { "$ref": "#/$defs/nonnegative" }, "missingRecordCount": { "$ref": "#/$defs/nonnegative" }, "sensitiveValueLeakCount": { "$ref": "#/$defs/nonnegative" }, "captureGapCount": { "$ref": "#/$defs/nonnegative" } }
+    },
+    "handoffAudit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputSha256", "passed", "findingCount", "urlObservationCount", "ingressCheckCount", "reconnectCount"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "passed": { "type": "boolean" }, "findingCount": { "$ref": "#/$defs/nonnegative" }, "urlObservationCount": { "$ref": "#/$defs/nonnegative" }, "ingressCheckCount": { "$ref": "#/$defs/nonnegative" }, "reconnectCount": { "$ref": "#/$defs/nonnegative" } }
+    },
+    "rail": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputSha256", "expectedRailRowCount", "observedRailRowCount", "missingRailRowCount", "duplicateRailRowCount", "staleRailRowCount", "wrongRailRowCount"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "expectedRailRowCount": { "$ref": "#/$defs/nonnegative" }, "observedRailRowCount": { "$ref": "#/$defs/nonnegative" }, "missingRailRowCount": { "$ref": "#/$defs/nonnegative" }, "duplicateRailRowCount": { "$ref": "#/$defs/nonnegative" }, "staleRailRowCount": { "$ref": "#/$defs/nonnegative" }, "wrongRailRowCount": { "$ref": "#/$defs/nonnegative" } }
+    },
+    "timing": {
+      "type": "object", "additionalProperties": false,
+      "required": ["interaction", "p50Ms", "p95Ms", "p99Ms", "worstMs", "p95BudgetMs", "budgetMiss"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "interaction": { "type": "string" }, "p50Ms": { "type": "number" }, "p95Ms": { "type": "number" }, "p99Ms": { "type": "number" }, "worstMs": { "type": "number" }, "p95BudgetMs": { "type": "number" }, "budgetMiss": { "type": "boolean" } }
+    },
+    "slopes": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputSha256", "heapBytesPerMinute", "domNodesPerMinute", "listenersPerMinute", "cpuMillisecondsPerMinute", "networkBytesPerMinute", "longTasksPerMinute", "browserProcessesPerMinute", "xvfbProcessesPerMinute", "routeAllocationsPerMinute", "profileLeasesPerMinute", "retainedSessionsPerMinute", "unresolvedJobsPerMinute"],
+      "properties": {
+        "inputSha256": { "$ref": "#/$defs/sha256" }, "heapBytesPerMinute": { "type": "number" }, "domNodesPerMinute": { "type": "number" }, "listenersPerMinute": { "type": "number" }, "cpuMillisecondsPerMinute": { "type": "number" }, "networkBytesPerMinute": { "type": "number" }, "longTasksPerMinute": { "type": "number" }, "browserProcessesPerMinute": { "type": "number" }, "xvfbProcessesPerMinute": { "type": "number" }, "routeAllocationsPerMinute": { "type": "number" }, "profileLeasesPerMinute": { "type": "number" }, "retainedSessionsPerMinute": { "type": "number" }, "unresolvedJobsPerMinute": { "type": "number" }
+      }
+    },
+    "dashboardAudit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputSha256", "passed", "findingCount", "expectedRailRowCount", "observedRailRowCount", "missingRailRowCount", "duplicateRailRowCount", "staleRailRowCount", "wrongRailRowCount", "timingDistributions", "resourceSlopes"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "passed": { "type": "boolean" }, "findingCount": { "$ref": "#/$defs/nonnegative" }, "expectedRailRowCount": { "$ref": "#/$defs/nonnegative" }, "observedRailRowCount": { "$ref": "#/$defs/nonnegative" }, "missingRailRowCount": { "$ref": "#/$defs/nonnegative" }, "duplicateRailRowCount": { "$ref": "#/$defs/nonnegative" }, "staleRailRowCount": { "$ref": "#/$defs/nonnegative" }, "wrongRailRowCount": { "$ref": "#/$defs/nonnegative" }, "timingDistributions": { "type": "array", "items": { "$ref": "#/$defs/timing" } }, "resourceSlopes": { "$ref": "#/$defs/slopes" } }
+    },
+    "audits": {
+      "type": "object", "additionalProperties": false, "required": ["logging", "externalHandoff", "dashboard"],
+      "properties": { "logging": { "type": "array", "items": { "$ref": "#/$defs/loggingAudit" } }, "externalHandoff": { "type": "array", "items": { "$ref": "#/$defs/handoffAudit" } }, "dashboard": { "type": "array", "items": { "$ref": "#/$defs/dashboardAudit" } } }
+    },
+    "correlation": { "type": "object", "additionalProperties": false, "required": ["metric", "coefficient"], "properties": { "metric": { "enum": ["latencyMs", "failure"] }, "coefficient": { "oneOf": [{ "type": "number", "minimum": -1, "maximum": 1 }, { "type": "null" }] } } },
+    "performance": { "type": "object", "additionalProperties": false, "required": ["timings", "resourceSlopes", "timeoutDistribution", "pressureCorrelations"], "properties": { "timings": { "type": "array", "items": { "$ref": "#/$defs/timing" } }, "resourceSlopes": { "type": "array", "items": { "$ref": "#/$defs/slopes" } }, "timeoutDistribution": { "type": "array", "items": { "$ref": "#/$defs/timing" } }, "pressureCorrelations": { "type": "array", "items": { "$ref": "#/$defs/correlation" } } } },
+    "resultCounts": { "type": "object", "additionalProperties": false, "required": ["passed", "reproduced_historical_failure", "new_product_failure", "harness_failure", "inconclusive", "skipped_blocked", "safety_stopped"], "properties": { "passed": { "$ref": "#/$defs/nonnegative" }, "reproduced_historical_failure": { "$ref": "#/$defs/nonnegative" }, "new_product_failure": { "$ref": "#/$defs/nonnegative" }, "harness_failure": { "$ref": "#/$defs/nonnegative" }, "inconclusive": { "$ref": "#/$defs/nonnegative" }, "skipped_blocked": { "$ref": "#/$defs/nonnegative" }, "safety_stopped": { "$ref": "#/$defs/nonnegative" } } },
+    "result": { "type": "object", "additionalProperties": false, "required": ["recordId", "wallTime", "scheduleId", "caseId", "attemptId", "repetition", "seed", "environmentIds", "resultState", "effectState", "retryDisposition", "firstFailureSignature", "blockerCode", "causalIds"], "properties": { "recordId": { "$ref": "#/$defs/id" }, "wallTime": { "type": "string", "format": "date-time" }, "scheduleId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "attemptId": { "$ref": "#/$defs/id" }, "repetition": { "type": "integer", "minimum": 1 }, "seed": { "type": "integer", "minimum": 0 }, "environmentIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "resultState": { "enum": ["passed", "reproduced_historical_failure", "new_product_failure", "harness_failure", "inconclusive", "skipped_blocked", "safety_stopped"] }, "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] }, "retryDisposition": { "enum": ["not_applicable", "prohibited_opportunistic_retry", "predetermined_distinct_attempt"] }, "firstFailureSignature": { "$ref": "#/$defs/nullableString" }, "blockerCode": { "$ref": "#/$defs/nullableString" }, "causalIds": { "type": "array", "items": { "$ref": "#/$defs/id" } } } },
+    "cluster": { "type": "object", "additionalProperties": false, "required": ["outcomeClass", "signature", "attemptIds", "caseIds", "causalIds"], "properties": { "outcomeClass": { "enum": ["product", "infrastructure", "harness", "safety_stop", "inconclusive", "passed", "blocked"] }, "signature": { "type": "string" }, "attemptIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "caseIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "causalIds": { "type": "array", "items": { "$ref": "#/$defs/id" } } } },
+    "timelineEvent": { "type": "object", "additionalProperties": false, "required": ["recordId", "recordType", "wallTime", "monotonicTimeNanoseconds"], "properties": { "recordId": { "$ref": "#/$defs/id" }, "recordType": { "type": "string" }, "wallTime": { "type": "string", "format": "date-time" }, "monotonicTimeNanoseconds": { "type": "integer", "minimum": 0 } } },
+    "timeline": { "type": "object", "additionalProperties": false, "required": ["attemptId", "caseId", "resultState", "earliestDivergenceRecordId", "events"], "properties": { "attemptId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "resultState": { "type": "string" }, "earliestDivergenceRecordId": { "$ref": "#/$defs/id" }, "events": { "type": "array", "items": { "$ref": "#/$defs/timelineEvent" } } } },
+    "historical": { "type": "object", "additionalProperties": false, "required": ["familyId", "caseIds", "terminalAttemptCount", "reproducedAttemptCount", "blockedAttemptCount", "reproductionRate"], "properties": { "familyId": { "$ref": "#/$defs/id" }, "caseIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }, "terminalAttemptCount": { "$ref": "#/$defs/nonnegative" }, "reproducedAttemptCount": { "$ref": "#/$defs/nonnegative" }, "blockedAttemptCount": { "$ref": "#/$defs/nonnegative" }, "reproductionRate": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] } } },
+    "crossTabRow": { "type": "object", "additionalProperties": false, "required": ["value", "total", "reproduced", "productFailures"], "properties": { "value": { "type": "string" }, "total": { "$ref": "#/$defs/nonnegative" }, "reproduced": { "$ref": "#/$defs/nonnegative" }, "productFailures": { "$ref": "#/$defs/nonnegative" } } },
+    "crossTabs": { "type": "object", "additionalProperties": false, "required": ["seed", "concurrency", "transport", "profile", "runtimeGeneration", "routeState", "networkProfile", "timeWindow"], "properties": { "seed": { "$ref": "#/$defs/crossTab" }, "concurrency": { "$ref": "#/$defs/crossTab" }, "transport": { "$ref": "#/$defs/crossTab" }, "profile": { "$ref": "#/$defs/crossTab" }, "runtimeGeneration": { "$ref": "#/$defs/crossTab" }, "routeState": { "$ref": "#/$defs/crossTab" }, "networkProfile": { "$ref": "#/$defs/crossTab" }, "timeWindow": { "$ref": "#/$defs/crossTab" } } },
+    "crossTab": { "type": "array", "items": { "$ref": "#/$defs/crossTabRow" } },
+    "resultSet": { "type": "object", "additionalProperties": false, "required": ["runId", "candidateSha256", "manifestSha256", "ledgerHeadSha256", "resultCounts", "results", "clusters", "timelines", "historicalReproduction", "reproductionCrossTabs"], "properties": { "runId": { "$ref": "#/$defs/id" }, "candidateSha256": { "$ref": "#/$defs/sha256" }, "manifestSha256": { "$ref": "#/$defs/sha256" }, "ledgerHeadSha256": { "$ref": "#/$defs/sha256" }, "resultCounts": { "$ref": "#/$defs/resultCounts" }, "results": { "type": "array", "items": { "$ref": "#/$defs/result" } }, "clusters": { "type": "array", "items": { "$ref": "#/$defs/cluster" } }, "timelines": { "type": "array", "items": { "$ref": "#/$defs/timeline" } }, "historicalReproduction": { "type": "array", "items": { "$ref": "#/$defs/historical" } }, "reproductionCrossTabs": { "$ref": "#/$defs/crossTabs" } } },
+    "architecture": { "type": "object", "additionalProperties": false, "required": ["criterionId", "boundary", "assessment", "findingCodes"], "properties": { "criterionId": { "$ref": "#/$defs/id" }, "boundary": { "type": "string", "minLength": 1 }, "assessment": { "enum": ["supported", "contradicted", "insufficient_evidence"] }, "findingCodes": { "type": "array", "items": { "type": "string" } } } },
+    "regression": { "type": "object", "additionalProperties": false, "required": ["findingId", "seam"], "properties": { "findingId": { "$ref": "#/$defs/id" }, "seam": { "enum": ["focused_contract_or_integration", "causal_envelope_contract", "provider_free_harness_contract"] } } },
+    "p157": { "type": "object", "additionalProperties": false, "required": ["criterionId", "statement", "status", "evidenceAttemptIds"], "properties": { "criterionId": { "$ref": "#/$defs/id" }, "statement": { "type": "string", "minLength": 1 }, "status": { "enum": ["proven", "disproven", "untested"] }, "evidenceAttemptIds": { "type": "array", "items": { "$ref": "#/$defs/id" } } } },
+    "finding": { "type": "object", "additionalProperties": false, "required": ["findingId", "code", "category", "disposition", "criterion", "evidenceIds", "consequence", "reproducer", "confidence", "recommendedOwner", "dependsOnCodes"], "properties": { "findingId": { "$ref": "#/$defs/id" }, "code": { "type": "string", "minLength": 1 }, "category": { "enum": ["product", "infrastructure", "logging", "harness", "safety_stop", "inconclusive", "blocked"] }, "disposition": { "enum": ["blocking", "nonblocking_backlog", "needs_evidence", "rejected"] }, "criterion": { "type": "string", "pattern": "^W10\\.(?:[1-9]|1[0-2])$" }, "evidenceIds": { "type": "array", "items": { "type": "string" } }, "consequence": { "type": "string", "minLength": 1 }, "reproducer": { "type": "string", "minLength": 1 }, "confidence": { "enum": ["low", "medium", "high"] }, "recommendedOwner": { "$ref": "#/$defs/id" }, "dependsOnCodes": { "type": "array", "items": { "type": "string" } } } },
+    "node": { "type": "object", "additionalProperties": false, "required": ["nodeId", "findingId", "category", "disposition", "owner"], "properties": { "nodeId": { "$ref": "#/$defs/id" }, "findingId": { "$ref": "#/$defs/id" }, "category": { "type": "string" }, "disposition": { "enum": ["blocking", "nonblocking_backlog", "needs_evidence"] }, "owner": { "$ref": "#/$defs/id" } } },
+    "edge": { "type": "object", "additionalProperties": false, "required": ["fromNodeId", "toNodeId", "reason"], "properties": { "fromNodeId": { "$ref": "#/$defs/id" }, "toNodeId": { "$ref": "#/$defs/id" }, "reason": { "const": "explicit_finding_dependency" } } },
+    "remediationGraph": { "type": "object", "additionalProperties": false, "required": ["nodes", "edges"], "properties": { "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } }, "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } } } }
+  }
+}
