@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 
 import { createP158CaseAdapter } from './p158-execution-schedule.js';
 import { sha256 } from './p158-campaign-controller.js';
+import { compileP158W7AgentOrchestration } from './p158-w7-agent-orchestration.js';
 
 export const P158_W7_CASE_IDS = Object.freeze([
   ...Array.from({ length: 15 }, (_, index) => `A${String(index + 1).padStart(2, '0')}`),
@@ -865,6 +866,8 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   schedule,
   target,
   primitives,
+  agentWorkflowManifest = null,
+  agentWorkflowDrivers = null,
   additionalAdapters = [],
 }) {
   const reviewed = assessP158W7ReviewedLiveDispatcher({ schedule, target });
@@ -891,9 +894,24 @@ export function createP158W7LiveDevelopmentAdapterBundle({
       return structuredClone(plan);
     },
   });
+  const agentOrchestration = agentWorkflowManifest === null
+    ? null
+    : compileP158W7AgentOrchestration({
+        schedule,
+        target,
+        actionPlans: enumerateP158W7ActionPlans({ schedule }),
+        manifest: agentWorkflowManifest,
+        drivers: agentWorkflowDrivers,
+      });
+  const agentConcreteCaseIds = new Set(agentOrchestration?.concreteCaseIds ?? []);
+  const concreteCaseIds = new Set([
+    ...P158_W7_REVIEWED_LIVE_CASE_IDS,
+    ...agentConcreteCaseIds,
+  ]);
   const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
   const sourceSha256 = w7SourceSha256();
   const explicitBlockedAdapters = Object.entries(P158_W7_LIVE_HOOK_GAPS)
+    .filter(([caseId]) => !concreteCaseIds.has(caseId))
     .map(([caseId, missingHook]) => {
       const contract = contracts.get(caseId);
       const blocker = deepFreeze({
@@ -922,20 +940,23 @@ export function createP158W7LiveDevelopmentAdapterBundle({
     enumerateP158W7ActionPlans({ schedule }).filter((action) => action.caseId === caseId).length,
   ]));
   const adapterBindings = P158_W7_CASE_IDS.map((caseId) => {
-    const concreteLive = P158_W7_REVIEWED_LIVE_CASE_IDS.includes(caseId);
+    const concreteLive = concreteCaseIds.has(caseId);
+    const agentConcrete = agentConcreteCaseIds.has(caseId);
     const partial = ['A09', 'A15'].includes(caseId);
     return deepFreeze({
       caseId,
       mode: concreteLive ? 'concrete_live' : 'explicit_blocked',
       providerFree: false,
-      sourcePath: W7_SOURCE_PATH,
-      sourceSha256,
+      sourcePath: agentConcrete ? agentOrchestration.driverSource.sourcePath : W7_SOURCE_PATH,
+      sourceSha256: agentConcrete ? agentOrchestration.driverSource.sourceSha256 : sourceSha256,
       hookIds: concreteLive
-        ? (caseId === 'A07'
+        ? (agentConcrete
+            ? ['w7.agent_existing_seam_workflow']
+            : (caseId === 'A07'
             ? ['w7.evidence', 'w7.logs', 'w7.process']
             : (caseId === 'A13'
                 ? ['w7.evidence', 'w7.logs', 'w7.systemd']
-                : ['w7.display', 'w7.evidence', 'w7.logs']))
+                : ['w7.display', 'w7.evidence', 'w7.logs'])))
         : (partial ? ['w7.browser', 'w7.evidence', 'w7.logs'] : []),
       implementedActionCount: concreteLive
         ? actionCounts.get(caseId)
@@ -950,16 +971,23 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   });
   const adapters = [
     ...concrete.adapters,
+    ...(agentOrchestration?.adapters ?? []),
     ...explicitBlockedAdapters,
     ...additionalAdapters,
   ];
+  const w7ByCase = new Map([
+    ...concrete.w7Adapters,
+    ...(agentOrchestration?.adapters ?? []),
+    ...explicitBlockedAdapters,
+  ].map((adapter) => [adapter.caseId, adapter]));
   return {
     adapters,
-    w7Adapters: [...concrete.w7Adapters, ...explicitBlockedAdapters],
-    effects: concrete.effects,
+    w7Adapters: P158_W7_CASE_IDS.map((caseId) => w7ByCase.get(caseId)),
+    effects: { ...concrete.effects, ...(agentOrchestration?.effects ?? {}) },
     executedActionIds: concrete.executedActionIds,
     adapterBindings: deepFreeze(adapterBindings),
     reviewedLiveDispatcher: reviewed,
+    agentOrchestration,
     ready: true,
   };
 }
