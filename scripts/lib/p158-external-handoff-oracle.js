@@ -62,6 +62,15 @@ const FORBIDDEN_URL_ROLES = new Set([
   'health_url',
 ]);
 
+const RAW_GUACAMOLE_OPERATOR_ROLES = new Set([
+  'starting_handoff',
+  'location_header',
+  'form_action',
+  'reconnect_target',
+  'copied_action',
+  'error_action',
+]);
+
 const CHECK_FINDINGS = Object.freeze({
   dns: 'dns_failure',
   tls: 'tls_failure',
@@ -189,7 +198,9 @@ export function classifyOperatorUrl(url, { role = 'location_header', baseUrl, re
   if (allHostClasses.has('rfc1918')) findingCodes.push('private_network_url_leak');
   if (allHostClasses.has('link_local')) findingCodes.push('link_local_url_leak');
   if (allHostClasses.has('local_domain')) findingCodes.push('local_domain_url_leak');
-  if (allHostClasses.has('raw_guacamole')) findingCodes.push('raw_guacamole_url_leak');
+  if (allHostClasses.has('raw_guacamole') && RAW_GUACAMOLE_OPERATOR_ROLES.has(role)) {
+    findingCodes.push('raw_guacamole_url_leak');
+  }
   if (FORBIDDEN_URL_ROLES.has(role)) findingCodes.push('forbidden_role_url_leak');
   if (role === 'starting_handoff') {
     const segments = parsed.pathname.split('/').filter(Boolean);

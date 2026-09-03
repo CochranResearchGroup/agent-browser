@@ -8,6 +8,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import {
+  EXTERNAL_HANDOFF_FINDING_CODES,
+  EXTERNAL_URL_ROLES,
   auditExternalHandoffSession,
   classifyOperatorUrl,
 } from './lib/p158-external-handoff-oracle.js';
@@ -918,7 +920,16 @@ async function executeExternalVantageProbe({
     context = null;
     writeSanitizedHar(networkEntries, join(outputDir, 'network.redacted.har'));
     const leaks = findInternalUrlLeaks(urlEvidence);
-    if (leaks.length) throw new Error(`Internal URL evidence detected in ${leaks.length} observations`);
+    if (leaks.length) {
+      const error = new Error(`Internal URL evidence detected in ${leaks.length} observations`);
+      error.code = 'external_url_policy_violation';
+      error.details = {
+        urlFindingCount: leaks.length,
+        urlFindingRoles: [...new Set(leaks.map((finding) => finding.role))].sort(),
+        urlFindingCodes: [...new Set(leaks.flatMap((finding) => finding.findingCodes))].sort(),
+      };
+      throw error;
+    }
     const expectedIdentity = { ...configuredIdentity, pixelHash: initial.identity.pixelHash };
     if (configuredIdentity.pixelHash && configuredIdentity.pixelHash !== initial.identity.pixelHash) {
       throw new Error('Configured pixel hash does not match captured pixels');
@@ -1081,7 +1092,6 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     urlEvidence.push({ evidenceId: `${label}-target`, role: 'reconnect_target', url: handoff.href });
   }
   const screenshotPath = join(outputDir, `${label}.png`);
-  await page.screenshot({ path: screenshotPath, fullPage: false });
   const markerPath = join(outputDir, `${label}-pixel-marker.png`);
   const pixelHash = await waitForExpectedPixelMarker({
     page,
@@ -1090,6 +1100,7 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     pixelMarkerRegion,
     expectedPixelHash: expectedIdentity.pixelHash,
   });
+  await page.screenshot({ path: screenshotPath, fullPage: false });
   const identity = identityFromResolution(resolution, expectedIdentity);
   identity.pixelHash = pixelHash;
   const screenshot = {
@@ -1834,6 +1845,19 @@ function safeExternalFailureDetails(value) {
     details.resolutionStatus = value.resolutionStatus;
   }
   if (typeof value.reopenRequired === 'boolean') details.reopenRequired = value.reopenRequired;
+  if (Number.isSafeInteger(value.urlFindingCount) && value.urlFindingCount >= 0) {
+    details.urlFindingCount = value.urlFindingCount;
+  }
+  if (Array.isArray(value.urlFindingRoles)) {
+    details.urlFindingRoles = value.urlFindingRoles
+      .filter((item) => EXTERNAL_URL_ROLES.includes(item))
+      .slice(0, EXTERNAL_URL_ROLES.length);
+  }
+  if (Array.isArray(value.urlFindingCodes)) {
+    details.urlFindingCodes = value.urlFindingCodes
+      .filter((item) => EXTERNAL_HANDOFF_FINDING_CODES.includes(item))
+      .slice(0, EXTERNAL_HANDOFF_FINDING_CODES.length);
+  }
   return Object.keys(details).length > 0 ? details : null;
 }
 
@@ -1863,7 +1887,7 @@ function withoutKey(value, omittedKey) {
 export async function aggregateExternalVantageDirectory(inputRoot, outputPath, runId, jobResults = {}) {
   const receipts = [];
   if (existsSync(inputRoot)) {
-    for (const path of listFiles(inputRoot).filter((candidate) => /(^|\/)receipt\.json$/.test(candidate))) {
+    for (const path of listFiles(inputRoot).filter((candidate) => /receipt\.json$/.test(candidate))) {
       receipts.push(JSON.parse(readFileSync(path, 'utf8')));
     }
   }

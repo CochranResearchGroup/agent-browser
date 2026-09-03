@@ -266,11 +266,26 @@ assert.equal(
 
 const leaks = findInternalUrlLeaks([
   { evidenceId: 'public', role: 'iframe_src', url: 'https://external.example.test/frame' },
+  { evidenceId: 'public-guac-frame', role: 'iframe_src', url: 'https://external.example.test/guacamole/#/client/frame' },
+  { evidenceId: 'public-guac-socket', role: 'websocket_endpoint', url: 'wss://external.example.test/guacamole/websocket-tunnel' },
   { evidenceId: 'loopback', role: 'location_header', url: 'http://127.0.0.1:4948/' },
   { evidenceId: 'private', role: 'websocket_endpoint', url: 'wss://10.1.2.3/socket' },
   { evidenceId: 'raw-provider', role: 'reconnect_target', url: 'https://external.example.test/guacamole/#/client/raw' },
 ]);
 assert.deepEqual(leaks.map((item) => item.evidenceId), ['loopback', 'private', 'raw-provider']);
+
+const urlPolicyFailure = new Error('Internal URL evidence detected in 3 observations');
+urlPolicyFailure.code = 'external_url_policy_violation';
+urlPolicyFailure.details = {
+  urlFindingCount: 3,
+  urlFindingRoles: ['location_header', 'reconnect_target', 'websocket_endpoint'],
+  urlFindingCodes: ['loopback_url_leak', 'private_network_url_leak', 'raw_guacamole_url_leak'],
+};
+assert.deepEqual(externalVantageFailureRecord(urlPolicyFailure, env), {
+  code: 'external_url_policy_violation',
+  message: 'Internal URL evidence detected in 3 observations',
+  details: urlPolicyFailure.details,
+});
 
 const projectedResolution = projectHandoffResolution({
   status: 'ready',
@@ -446,6 +461,29 @@ try {
   assert.match(failureReceipt.artifacts[0].sha256, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(JSON.stringify(failureReceipt), /never-print-me|handoff-secret/);
 
+  const failureDownloads = join(fixtureRoot, 'failure-downloads');
+  mkdirSync(join(failureDownloads, 'human'), { recursive: true });
+  mkdirSync(join(failureDownloads, 'slow'), { recursive: true });
+  writeFileSync(
+    join(failureDownloads, 'human', 'failure-receipt.json'),
+    JSON.stringify({ ...failureReceipt, clientId: 'external-runner-human' }),
+  );
+  writeFileSync(
+    join(failureDownloads, 'slow', 'failure-receipt.json'),
+    JSON.stringify({ ...failureReceipt, clientId: 'external-runner-slow' }),
+  );
+  const failedReceiptAggregate = await aggregateExternalVantageDirectory(
+    failureDownloads,
+    join(fixtureRoot, 'failure-aggregate', 'receipt.json'),
+    'p158-test-run',
+    { 'human-controller': 'failure', 'slow-concurrency-client': 'failure' },
+  );
+  assert.equal(failedReceiptAggregate.observedReceiptCount, 2);
+  assert.deepEqual(
+    failedReceiptAggregate.observedClientIds,
+    ['external-runner-human', 'external-runner-slow'],
+  );
+
   const aggregatePath = join(fixtureRoot, 'aggregate', 'receipt.json');
   const failedAggregate = await aggregateExternalVantageDirectory(
     join(fixtureRoot, 'missing-downloads'),
@@ -459,6 +497,16 @@ try {
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
 }
+
+const captureVisitSource = runnerSource.slice(
+  runnerSource.indexOf('async function captureVisit'),
+  runnerSource.indexOf('async function waitForExpectedPixelMarker'),
+);
+assert.ok(
+  captureVisitSource.indexOf('const pixelHash = await waitForExpectedPixelMarker')
+    < captureVisitSource.indexOf("await page.screenshot({ path: screenshotPath"),
+  'the full screenshot must preserve the marker-ready state, not the transient pre-convergence state',
+);
 
 console.log('Plan 0158 external vantage runner provider-free checks passed');
 

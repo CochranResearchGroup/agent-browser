@@ -1901,3 +1901,45 @@ Revised next action: commit the two E16 blocker repairs, publish one isolated
 development candidate, run the three-launch smoke and provider-required doctor,
 and explicitly restore the retained handoff if installation closes it. Then
 dispatch one external readiness observation from the exact installed commit.
+
+E17 ran from installed source commit `051c66d5ad17a41bc6de2fad0ae57098ed7ec103`
+as workflow run `33817245594`. Both external clients reached the public
+dashboard, resolved the same durable handoff, and rendered the exact expected
+synthetic pixel marker on initial and reconnect observations. The slow client
+also rendered the exact marker from its concurrent page. All five marker crops
+have SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+This clears the E16 tab-strip interaction failure and proves that the public
+ingress, authenticated handoff, Guacamole data plane, reconnect path, retained
+browser identity, and synthetic content were usable during the run.
+
+Both clients nevertheless failed the URL oracle. The human client reported
+eight flagged observations and the slow client reported eighteen. Their
+redacted HARs contain 210 and 492 requests respectively, all on the reviewed
+public dashboard origin. Direct `/guacamole/` resource paths are present in
+those public-origin requests. This is distinct from E16: the repaired public
+resolver response omits provider route fields, while the external data plane
+still uses a Guacamole path for its iframe and transport. Plan 0158 requires
+raw Guacamole to be rejected when supplied as an operator handoff, but it does
+not require a public authenticated iframe or WebSocket transport to disguise
+its implementation path. The current oracle applies the raw-provider finding
+to every URL role and therefore makes the already accepted public Guacamole
+data-plane topology impossible to pass.
+
+E17 also exposed two evidence-quality defects. The failure receipts retain only
+the number of URL findings, not their safe role and finding-code breakdown. The
+aggregate scans only files named exactly `receipt.json`, so it reported zero
+observations even though two complete `failure-receipt.json` artifacts were
+downloaded. Finally, the ordinary screenshot is captured before the marker
+convergence loop, so it can show the transient no-stream dashboard while the
+subsequent marker crop proves that the iframe became usable.
+
+Revised next action: repair the oracle so public `/guacamole/` iframe and WSS
+data-plane observations remain subject to protocol, host, DNS, and TLS checks
+but are not misclassified as operator handoffs. Preserve rejection for a raw
+Guacamole starting URL, redirect, reconnect target, copied action, error
+action, or other operator-navigable link. Add safe URL-role and finding-code
+details to failure receipts, aggregate both successful and failed receipts,
+and capture the ordinary screenshot after marker convergence. Develop each
+change red-green, then dispatch one fresh readiness epoch without changing the
+handoff or expected identity.
