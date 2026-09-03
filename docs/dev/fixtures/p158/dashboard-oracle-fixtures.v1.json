@@ -60,6 +60,10 @@
       "deepLinkRequestedId": "browser-001",
       "deepLinkResolvedId": "browser-001"
     },
+    "clientSelections": [
+      {"clientId":"external-client-a","expectedSelectedResourceId":"browser-001","observedSelectedResourceId":"browser-001","expectedInspectorResourceId":"browser-001","observedInspectorResourceId":"browser-001"},
+      {"clientId":"external-client-b","expectedSelectedResourceId":"browser-001","observedSelectedResourceId":"browser-001","expectedInspectorResourceId":"browser-001","observedInspectorResourceId":"browser-001"}
+    ],
     "actions": [
       {
         "actionId": "open-view",
@@ -449,6 +453,16 @@
       "expectedFindingCodes": [
         "inspector_record_mismatch"
       ]
+    },
+    {
+      "fixtureId": "defect-multi-client-selection-leakage",
+      "description": "One external dashboard client selection leaks into another client's immutable selection state.",
+      "density": "normal",
+      "mutation": {
+        "kind": "multi_client_selection_leakage",
+        "parameters": {"targetId":"browser-001","ordinal":46,"clientAId":"external-client-a","clientBId":"external-client-b","expectedClientAResourceId":"browser-001","expectedClientBResourceId":"browser-002"}
+      },
+      "expectedFindingCodes": ["multi_client_selection_leakage"]
     },
     {
       "fixtureId": "defect-selection-recovery-invalid",
