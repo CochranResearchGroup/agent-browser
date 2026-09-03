@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "agent-browser.p158-a08-profile-identity-replay.v1",
+  "fixtureClass": "redacted_production_shaped",
+  "containsTenantData": false,
+  "containsUrls": false,
+  "identities": {
+    "profileId": "p158-a08-synthetic-profile",
+    "otherProfileId": "p158-a08-synthetic-other-profile",
+    "sessionId": "p158-a08-retained-session",
+    "browserId": "session:p158-a08-retained-session",
+    "targetId": "p158-a08-synthetic-target"
+  },
+  "variants": {
+    "unproven": {
+      "expectedFailure": "existing_session_profile_identity_unproven",
+      "runtimeOwnerMode": "missing",
+      "browserProfileMode": "matching"
+    },
+    "inconsistent": {
+      "expectedFailure": "existing_session_profile_identity_inconsistent",
+      "runtimeOwnerMode": "ready_effect_capable",
+      "browserProfileMode": "cross_link_mismatch"
+    }
+  },
+  "actions": [
+    "launch",
+    "remote_view_open",
+    "tab_switch",
+    "view_focus"
+  ]
+}
