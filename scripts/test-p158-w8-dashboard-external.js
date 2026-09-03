@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import { sha256 } from './lib/p158-campaign-controller.js';
-import { buildP158DashboardServiceState } from './lib/p158-w8-dashboard-live.js';
+import {
+  buildP158DashboardExternalProof,
+  buildP158DashboardServiceState,
+} from './lib/p158-w8-dashboard-live.js';
 import {
   buildP158DashboardScenarioPlan,
   sealP158DashboardScenarioReceipt,
@@ -103,8 +106,21 @@ expectCode('external_runner_invalid', () => buildP158DashboardGithubRunnerAttest
   GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'self-hosted', RUNNER_OS: 'Linux',
   RUNNER_ARCH: 'X64', GITHUB_RUN_ID: '15800304', GITHUB_RUN_ATTEMPT: '1',
 }));
-const result = sealP158DashboardExternalResult({ manifest, scenarioReceipt, runnerAttestation });
+const projection = {
+  externalProof: buildP158DashboardExternalProof({ publicUrl, runnerAttestation }),
+};
+const result = sealP158DashboardExternalResult({
+  manifest, scenarioReceipt, runnerAttestation, projection,
+});
 assert.equal(validateP158DashboardExternalResult({ result, manifest }), result);
+expectCode('external_result_invalid', () => sealP158DashboardExternalResult({
+  manifest,
+  scenarioReceipt,
+  runnerAttestation,
+  projection: {
+    externalProof: { ...projection.externalProof, publicUrlSha256: sha256('https://foreign.example.test') },
+  },
+}));
 expectCode('external_result_invalid', () => validateP158DashboardExternalResult({
   result: { ...result, actionId: 'foreign-action' }, manifest,
 }));

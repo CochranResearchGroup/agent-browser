@@ -94,10 +94,12 @@ try {
     outsideServiceNetworkNamespace: true,
     reviewedRevision: 'external-runner-test-001',
   };
-  assert.equal(validateP158ExternalPlaywrightRunner({
+  const externalRunner = {
     endpoint: 'wss://playwright-runner.example.test/connect',
     attestation: { ...runnerBody, attestationSha256: sha256(runnerBody) },
-  }).endpoint, 'wss://playwright-runner.example.test/connect');
+  };
+  assert.equal(validateP158ExternalPlaywrightRunner(externalRunner).endpoint,
+    'wss://playwright-runner.example.test/connect');
   assert.throws(
     () => validateP158ExternalPlaywrightRunner({
       endpoint: 'ws://127.0.0.1:9222/connect',
@@ -244,6 +246,7 @@ try {
         performance: [{ durationMs: 900, domInteractiveMs: 500, loadEventEndMs: 850 }],
       };
       return {
+        externalRunner,
         page: {
           evaluate: async () => structuredClone(capture),
           screenshot: async ({ path }) => {
@@ -299,7 +302,37 @@ try {
   assert.equal(d09.churnReceipt.completedOperationCount, 32);
   assert.equal(d01.oracleBinding.passed, true);
   assert.equal(d09.oracleBinding.passed, true);
+  const d01Root = campaignPlan.roots.find((root) => root.actionId === d01.actionId);
+  assert.equal(d01.projection.externalProof.publicUrlSha256,
+    sha256(`${externalIngress.publicOperatorUrl}/p158/${encodeURIComponent(d01Root.target.runId)}/${encodeURIComponent(d01.actionId)}`));
+  assert(!JSON.stringify(receipts).includes('handoffUrlSha256'));
   assert(lifecycle.indexOf(`churn:${actions[1].actionId}`) < lifecycle.indexOf(`stop:${actions[1].actionId}`));
+
+  const localSelfClaim = await executeP158DashboardCampaignAction({
+    campaignPlan,
+    preparation,
+    freezeState: 'frozen',
+    actionId: actions[0].actionId,
+    effects: {
+      ...effects,
+      openExternalPage: async (request) => {
+        const handle = await effects.openExternalPage(request);
+        return {
+          ...handle,
+          externalRunner: undefined,
+          externalProof: {
+            offHost: true,
+            outsideServiceHost: true,
+            outsideServiceNetworkNamespace: true,
+            publicHttps: true,
+          },
+        };
+      },
+    },
+  });
+  assert.equal(localSelfClaim.resultState, 'harness_failure');
+  assert.equal(localSelfClaim.firstFailure.code, 'external_runner_invalid');
+  assert.equal(localSelfClaim.projection, null);
 
   const aggregate = aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts });
   assert.equal(aggregate.success, true);
@@ -344,10 +377,6 @@ try {
           expectedRuntimeHostPid: request.expectedRuntimeHostPid,
           processIdentitySha256: request.processIdentitySha256,
           reviewedRevision: request.reviewedRevision,
-          externalProof: {
-            offHost: true, outsideServiceNetworkNamespace: true, publicHttps: true,
-            operatorVisibleState: 'ready', handoffUrlSha256: sha256('foreign-root'),
-          },
         };
         return { ...body, selectionReceiptSha256: sha256(body) };
       },

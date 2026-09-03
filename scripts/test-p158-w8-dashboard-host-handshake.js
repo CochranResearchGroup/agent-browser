@@ -16,7 +16,10 @@ import {
 } from './lib/p158-w8-dashboard-host-handshake.js';
 import { buildP158DashboardIngressSelectorRequest } from './lib/p158-w8-dashboard-campaign.js';
 import { buildP158DashboardGithubRunnerAttestation, sealP158DashboardExternalResult } from './lib/p158-w8-dashboard-external.js';
-import { buildP158DashboardPreseedPlan } from './lib/p158-w8-dashboard-live.js';
+import {
+  buildP158DashboardExternalProof,
+  buildP158DashboardPreseedPlan,
+} from './lib/p158-w8-dashboard-live.js';
 import { sealP158DashboardScenarioReceipt } from './lib/p158-w8-dashboard-scenarios.js';
 
 const candidate = {
@@ -111,14 +114,21 @@ function successExternalResult(manifest) {
     retryAttempted: false,
     garbageCollectionAttempted: false,
   });
+  const runnerAttestation = buildP158DashboardGithubRunnerAttestation({
+    GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux',
+    RUNNER_ARCH: 'X64', GITHUB_RUN_ID: workflowRunId, GITHUB_RUN_ATTEMPT: String(workflowRunAttempt),
+  });
   return sealP158DashboardExternalResult({
     manifest,
     scenarioReceipt,
-    runnerAttestation: buildP158DashboardGithubRunnerAttestation({
-      GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux',
-      RUNNER_ARCH: 'X64', GITHUB_RUN_ID: workflowRunId, GITHUB_RUN_ATTEMPT: String(workflowRunAttempt),
-    }),
-    projection: { stateSha256: manifest.materializationReceipt.stateSha256 },
+    runnerAttestation,
+    projection: {
+      stateSha256: manifest.materializationReceipt.stateSha256,
+      externalProof: buildP158DashboardExternalProof({
+        publicUrl: `${externalIngress.publicOperatorUrl}${manifest.publicPath}`,
+        runnerAttestation,
+      }),
+    },
     dashboardFixture: { independentlyDerived: true },
     oracleBinding: { passed: true },
   });

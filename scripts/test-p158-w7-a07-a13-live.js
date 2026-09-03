@@ -64,7 +64,7 @@ function tab() {
 }
 
 function fakeDriver({ wrongBrowserAt = null, sameSupervisorPidAt = null,
-  sameDaemonAt = null, missingTabAt = null, throwAt = null } = {}) {
+  sameDaemonAt = null, daemonIdentityFailureAt = null, missingTabAt = null, throwAt = null } = {}) {
   let session = retainedIdentity.sourceSession;
   let generation = retainedIdentity.ownerGeneration;
   let supervisorPid = 9000;
@@ -90,6 +90,11 @@ function fakeDriver({ wrongBrowserAt = null, sameSupervisorPidAt = null,
     calls,
     async daemonIdentity(current, requestId) {
       observe('daemon-identity', requestId);
+      if (daemonIdentityFailureAt && requestId.includes(daemonIdentityFailureAt)) {
+        throw Object.assign(new Error('daemon identity unavailable'), {
+          code: 'a13_daemon_identity_unavailable', operationCorrelationId: requestId,
+        });
+      }
       assert.equal(current, session);
       return structuredClone(daemonIdentity);
     },
@@ -308,6 +313,10 @@ for (const [options, attemptId, expectedState, failureCode] of [
   [{ throwAt: 'pre-tabs' }, 'A13-E1-r001', 'inconclusive', 'a13_command_failed'],
   [{ throwAt: 'handoff-resume' }, 'A13-E1-r001', 'reproduced_historical_failure',
     'a13_command_failed'],
+  [{ daemonIdentityFailureAt: 'pre-daemon-identity' }, 'A13-E1-r001', 'inconclusive',
+    'a13_daemon_identity_unavailable'],
+  [{ daemonIdentityFailureAt: 'candidate-daemon-identity' }, 'A13-E1-r001',
+    'reproduced_historical_failure', 'a13_daemon_identity_unavailable'],
 ]) {
   const run = await runCampaign(options, (attempt) => attempt.attemptId === attemptId);
   assert.equal(run.results.at(-1).resultState, expectedState);

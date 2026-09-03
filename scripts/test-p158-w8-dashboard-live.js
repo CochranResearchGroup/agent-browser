@@ -8,6 +8,7 @@ import {
   P158_DASHBOARD_DENSE_COUNTS,
   P158W8DashboardLiveError,
   auditP158DashboardLiveProjection,
+  buildP158DashboardExternalProof,
   buildP158DashboardPreseedPlan,
   buildP158DashboardServiceState,
   captureP158DashboardLiveProjection,
@@ -189,13 +190,18 @@ try {
     evaluate: async () => structuredClone(capture),
     screenshot: async ({ path }) => writeFileSync(path, 'synthetic-dashboard-pixels'),
   };
-  const externalProof = {
+  const runnerBody = {
+    schemaVersion: 'agent-browser.p158-external-playwright-runner-attestation.v1',
+    endpointSha256: sha256('wss://runner.example.test/connect'),
     offHost: true,
+    outsideServiceHost: true,
     outsideServiceNetworkNamespace: true,
-    publicHttps: true,
-    operatorVisibleState: 'ready',
-    handoffUrlSha256: sha256('https://public.example.test/remote-view/opaque'),
+    reviewedRevision: 'external-runner-test-001',
   };
+  const externalProof = buildP158DashboardExternalProof({
+    publicUrl: 'https://public.example.test/p158/run/action',
+    runnerAttestation: { ...runnerBody, attestationSha256: sha256(runnerBody) },
+  });
   const projection = await captureP158DashboardLiveProjection({
     page,
     materializationReceipt: built.receipt,

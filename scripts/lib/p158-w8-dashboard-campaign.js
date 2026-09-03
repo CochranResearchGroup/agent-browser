@@ -6,6 +6,7 @@ import { sha256 } from './p158-campaign-controller.js';
 import { generateDenseDashboardFixture } from './p158-dashboard-oracle.js';
 import {
   auditP158DashboardLiveProjection,
+  buildP158DashboardExternalProof,
   buildP158DashboardServiceState,
   captureP158DashboardLiveProjection,
   materializeP158DashboardPreseedPlan,
@@ -541,11 +542,12 @@ export async function executeP158DashboardCampaignAction({
     const publicUrl = validateIngressSelectorReceipt({
       root, processIdentities: started.processIdentities, selected, operation: 'select',
     });
-    const externalProof = {
-      offHost: true, outsideServiceNetworkNamespace: true, publicHttps: true,
-      operatorVisibleState: 'ready', handoffUrlSha256: sha256(selected.selectionReceiptSha256),
-    };
     pageHandle = await effects.openExternalPage({ publicUrl, root: structuredClone(root) });
+    const externalRunner = validateP158ExternalPlaywrightRunner(pageHandle?.externalRunner ?? {});
+    const externalProof = buildP158DashboardExternalProof({
+      publicUrl,
+      runnerAttestation: externalRunner.attestation,
+    });
     if (scenarioPlan) {
       scenarioReceipt = await effects.exerciseScenario({
         pageHandle,

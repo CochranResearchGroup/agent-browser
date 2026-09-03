@@ -405,13 +405,18 @@ async function runTransition({ manifest, schedule, attempt, driver, receiptStore
     const directTransportFailure = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT']
       .includes(error?.code);
     const commandFailure = error?.code === 'a13_command_failed' || directTransportFailure;
-    const resultState = ['a13_effect_time_ownership_mismatch', 'a13_prior_transition_receipt_missing',
+    const daemonProofFailure = ['a13_daemon_identity_unavailable', 'a13_daemon_process_unavailable',
+      'a13_daemon_process_identity_mismatch', 'a13_daemon_identity_invalid'].includes(error?.code);
+    const resultState = daemonProofFailure
+      ? (effectObserved ? 'reproduced_historical_failure' :
+        (error?.code === 'a13_daemon_identity_unavailable' ? 'inconclusive' : 'safety_stopped'))
+      : (['a13_effect_time_ownership_mismatch', 'a13_prior_transition_receipt_missing',
       'a13_prior_transition_failed'].includes(error?.code) ? 'safety_stopped'
       : (commandFailure
         ? (effectObserved ? 'reproduced_historical_failure' : 'inconclusive')
         : (error?.code === 'a13_command_response_invalid' && effectObserved
           ? 'new_product_failure'
-          : (productCodes.has(error?.code) ? 'reproduced_historical_failure' : 'harness_failure')));
+          : (productCodes.has(error?.code) ? 'reproduced_historical_failure' : 'harness_failure'))));
     const receipt = {
       schemaVersion: 'agent-browser.p158-w7-a13-transition-receipt.v1',
       campaignRunId: manifest.campaignRunId, caseId: 'A13', attemptId: attempt.attemptId,

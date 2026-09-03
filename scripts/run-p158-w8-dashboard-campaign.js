@@ -22,6 +22,7 @@ import {
 } from './lib/p158-w8-dashboard-scenarios.js';
 import {
   auditP158DashboardLiveProjection,
+  buildP158DashboardExternalProof,
   captureP158DashboardLiveProjection,
 } from './lib/p158-w8-dashboard-live.js';
 import {
@@ -586,7 +587,7 @@ function createLiveEffects(executionInput) {
     openExternalPage: async ({ publicUrl }) => {
       const endpoint = process.env.AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS;
       if (!endpoint) throw new Error('AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS is required for off-host capture');
-      validateP158ExternalPlaywrightRunner({
+      const externalRunner = validateP158ExternalPlaywrightRunner({
         endpoint,
         attestation: executionInput.externalRunnerAttestation,
       });
@@ -634,6 +635,7 @@ function createLiveEffects(executionInput) {
       }
       return {
         page,
+        externalRunner,
         openClient,
         clientPage: (clientId) => {
           const client = clients.get(clientId);
@@ -713,13 +715,7 @@ async function main() {
         publicUrl,
         publicPath: manifest.publicPath,
         selectionReceiptSha256: manifest.selectionReceiptSha256,
-        externalProof: {
-          offHost: runnerAttestation.offHost,
-          outsideServiceNetworkNamespace: runnerAttestation.outsideServiceNetworkNamespace,
-          publicHttps: true,
-          operatorVisibleState: 'ready',
-          handoffUrlSha256: sha256(manifest.selectionReceiptSha256),
-        },
+        externalProof: buildP158DashboardExternalProof({ publicUrl, runnerAttestation }),
         scenarioPlan: manifest.scenarioPlan,
       };
       const scenarioReceipt = manifest.caseId === 'D03'

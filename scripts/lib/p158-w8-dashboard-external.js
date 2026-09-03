@@ -23,6 +23,33 @@ function without(value, field) {
   return Object.fromEntries(Object.entries(value ?? {}).filter(([key]) => key !== field));
 }
 
+function validGithubRunnerAttestation(runnerAttestation) {
+  const { attestationSha256, ...body } = runnerAttestation ?? {};
+  return runnerAttestation?.schemaVersion === 'agent-browser.p158-dashboard-github-runner-attestation.v1' &&
+    runnerAttestation.provider === 'github_actions' && runnerAttestation.runnerEnvironment === 'github-hosted' &&
+    runnerAttestation.runnerOs === 'Linux' && ['X64', 'ARM64'].includes(runnerAttestation.runnerArch) &&
+    SHA256.test(runnerAttestation.runIdSha256 ?? '') && Number.isInteger(runnerAttestation.runAttempt) &&
+    runnerAttestation.runAttempt > 0 && runnerAttestation.offHost === true &&
+    runnerAttestation.outsideServiceHost === true &&
+    runnerAttestation.outsideServiceNetworkNamespace === true && attestationSha256 === sha256(body);
+}
+
+function validateProjectionExternalProof({ projection, manifest, runnerAttestation }) {
+  const { proofSha256, ...proofBody } = projection?.externalProof ?? {};
+  if (projection?.externalProof?.schemaVersion !== 'agent-browser.p158-dashboard-external-proof.v1' ||
+      projection.externalProof.source !== 'validated_external_runner' ||
+      projection.externalProof.runnerAttestationSchemaVersion !== runnerAttestation.schemaVersion ||
+      projection.externalProof.runnerAttestationSha256 !== runnerAttestation.attestationSha256 ||
+      projection.externalProof.publicUrlSha256 !== manifest.publicUrlSha256 ||
+      projection.externalProof.offHost !== true || projection.externalProof.outsideServiceHost !== true ||
+      projection.externalProof.outsideServiceNetworkNamespace !== true ||
+      projection.externalProof.publicHttps !== true ||
+      projection.externalProof.operatorVisibleState !== 'ready' ||
+      proofSha256 !== sha256(proofBody)) {
+    fail('external_result_invalid', 'External projection proof is not bound to its runner and dashboard URL');
+  }
+}
+
 /** Seal one synthetic-only dashboard action for manual off-host execution. */
 export function buildP158DashboardExternalManifest({
   expectedCommit,
@@ -119,6 +146,7 @@ export function buildP158DashboardGithubRunnerAttestation(environment) {
     runIdSha256: sha256(environment.GITHUB_RUN_ID),
     runAttempt: Number(environment.GITHUB_RUN_ATTEMPT),
     offHost: true,
+    outsideServiceHost: true,
     outsideServiceNetworkNamespace: true,
   };
   return { ...body, attestationSha256: sha256(body) };
@@ -140,11 +168,10 @@ export function sealP158DashboardExternalResult({
   }
   let scenarioOracle = null;
   if (failure === null) {
-    const { attestationSha256, ...attestationBody } = runnerAttestation ?? {};
-    if (runnerAttestation?.offHost !== true || runnerAttestation?.outsideServiceNetworkNamespace !== true ||
-        attestationSha256 !== sha256(attestationBody)) {
+    if (!validGithubRunnerAttestation(runnerAttestation)) {
       fail('external_runner_invalid', 'Successful external capture lacks GitHub-hosted runner proof');
     }
+    validateProjectionExternalProof({ projection, manifest, runnerAttestation });
     scenarioOracle = auditP158DashboardScenarioReceipt({
       plan: manifest.scenarioPlan,
       receipt: scenarioReceipt,
@@ -187,13 +214,15 @@ export function validateP158DashboardExternalResult({ result, manifest }) {
   }
   if (result.success) {
     auditP158DashboardScenarioReceipt({ plan: manifest.scenarioPlan, receipt: result.scenarioReceipt });
-    const { attestationSha256, ...attestationBody } = result.runnerAttestation ?? {};
     if (result.resultState !== 'passed' || result.failure !== null || result.scenarioOracle?.passed !== true ||
-        result.runnerAttestation?.offHost !== true ||
-        result.runnerAttestation?.outsideServiceNetworkNamespace !== true ||
-        attestationSha256 !== sha256(attestationBody)) {
+        !validGithubRunnerAttestation(result.runnerAttestation)) {
       fail('external_result_invalid', 'Successful external result lacks its exact scenario oracle');
     }
+    validateProjectionExternalProof({
+      projection: result.projection,
+      manifest,
+      runnerAttestation: result.runnerAttestation,
+    });
   } else if (result.resultState !== 'harness_failure' || !result.failure?.code) {
     fail('external_result_invalid', 'Failed external result lacks an append-only failure classification');
   }

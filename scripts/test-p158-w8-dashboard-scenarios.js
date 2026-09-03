@@ -24,6 +24,20 @@ import {
   sealP158DashboardScenarioReceipt,
 } from './lib/p158-w8-dashboard-scenarios.js';
 
+const externalRunnerEndpoint = 'wss://playwright-runner.example.test/connect';
+const externalRunnerBody = {
+  schemaVersion: 'agent-browser.p158-external-playwright-runner-attestation.v1',
+  endpointSha256: sha256(externalRunnerEndpoint),
+  offHost: true,
+  outsideServiceHost: true,
+  outsideServiceNetworkNamespace: true,
+  reviewedRevision: 'external-runner-scenario-test-001',
+};
+const externalRunner = {
+  endpoint: externalRunnerEndpoint,
+  attestation: { ...externalRunnerBody, attestationSha256: sha256(externalRunnerBody) },
+};
+
 function root(caseId, value) {
   const disposableRoot = `/tmp/p158-dashboard-scenario-${caseId.toLowerCase()}-${value.replaceAll('_', '-')}`;
   return {
@@ -309,6 +323,7 @@ try {
         performance: [{ durationMs: 50, domInteractiveMs: 30, loadEventEndMs: 45 }],
       };
       return {
+        externalRunner,
         page: {
           evaluate: async () => structuredClone(capture),
           screenshot: async ({ path }) => {

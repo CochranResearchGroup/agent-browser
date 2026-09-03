@@ -332,6 +332,63 @@ function collectionIdentity(snapshot) {
   };
 }
 
+/** Build tamper-evident dashboard evidence from an already validated external runner receipt. */
+export function buildP158DashboardExternalProof({ publicUrl, runnerAttestation }) {
+  let parsed;
+  try {
+    parsed = new URL(publicUrl);
+  } catch {
+    fail('external_ingress_unproven', 'Dashboard external proof requires a public HTTPS URL');
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const { attestationSha256, ...attestationBody } = runnerAttestation ?? {};
+  if (parsed.protocol !== 'https:' || hostname === 'localhost' || hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') || /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.)/u.test(hostname) ||
+      /^172\.(?:1[6-9]|2\d|3[01])\./u.test(hostname) || hostname === '::1' ||
+      ![
+        'agent-browser.p158-external-playwright-runner-attestation.v1',
+        'agent-browser.p158-dashboard-github-runner-attestation.v1',
+      ].includes(runnerAttestation?.schemaVersion) || runnerAttestation.offHost !== true ||
+      runnerAttestation.outsideServiceHost !== true ||
+      runnerAttestation.outsideServiceNetworkNamespace !== true ||
+      attestationSha256 !== sha256(attestationBody)) {
+    fail('external_ingress_unproven', 'Dashboard external proof requires a validated off-host runner receipt');
+  }
+  const body = {
+    schemaVersion: 'agent-browser.p158-dashboard-external-proof.v1',
+    source: 'validated_external_runner',
+    runnerAttestationSchemaVersion: runnerAttestation.schemaVersion,
+    runnerAttestationSha256: attestationSha256,
+    publicUrlSha256: sha256(parsed.href),
+    offHost: true,
+    outsideServiceHost: true,
+    outsideServiceNetworkNamespace: true,
+    publicHttps: true,
+    operatorVisibleState: 'ready',
+  };
+  return { ...body, proofSha256: sha256(body) };
+}
+
+/** Validate the runner-bound proof and, when supplied, bind it to the exact public dashboard URL. */
+export function validateP158DashboardExternalProof({ externalProof, publicUrl = null }) {
+  const { proofSha256, ...body } = externalProof ?? {};
+  if (externalProof?.schemaVersion !== 'agent-browser.p158-dashboard-external-proof.v1' ||
+      externalProof.source !== 'validated_external_runner' || externalProof.offHost !== true ||
+      externalProof.outsideServiceHost !== true ||
+      externalProof.outsideServiceNetworkNamespace !== true || externalProof.publicHttps !== true ||
+      externalProof.operatorVisibleState !== 'ready' ||
+      ![
+        'agent-browser.p158-external-playwright-runner-attestation.v1',
+        'agent-browser.p158-dashboard-github-runner-attestation.v1',
+      ].includes(externalProof.runnerAttestationSchemaVersion) ||
+      !/^[a-f0-9]{64}$/.test(externalProof.runnerAttestationSha256 ?? '') ||
+      !/^[a-f0-9]{64}$/.test(externalProof.publicUrlSha256 ?? '') || proofSha256 !== sha256(body) ||
+      (publicUrl !== null && externalProof.publicUrlSha256 !== sha256(new URL(publicUrl).href))) {
+    fail('external_ingress_unproven', 'Dashboard capture is not bound to a validated public off-host runner');
+  }
+  return structuredClone(externalProof);
+}
+
 export async function captureP158DashboardLiveProjection({
   page,
   materializationReceipt,
@@ -341,11 +398,7 @@ export async function captureP158DashboardLiveProjection({
   if (!page || typeof page.evaluate !== 'function' || typeof page.screenshot !== 'function') {
     fail('playwright_page_missing', 'Dashboard capture requires a Playwright page');
   }
-  if (externalProof?.offHost !== true || externalProof?.outsideServiceNetworkNamespace !== true ||
-      externalProof?.publicHttps !== true || externalProof?.operatorVisibleState !== 'ready' ||
-      !/^[a-f0-9]{64}$/.test(externalProof?.handoffUrlSha256 ?? '')) {
-    fail('external_ingress_unproven', 'Dashboard capture is not bound to public off-host ingress');
-  }
+  validateP158DashboardExternalProof({ externalProof });
   const capture = await page.evaluate(async () => {
     const endpoints = [
       'profiles?limit=100',
