@@ -1833,3 +1833,35 @@ Revised next action: commit this E15c diagnostic checkpoint and dispatch one
 E15d readiness observation from the exact repository head. Treat another
 pre-execution configuration rejection as a preparation-system defect requiring
 repair, not as permission for repeated blind secret edits.
+
+E15d was the first replacement to reach external dashboard capture. Its slow
+client proved the new iframe-relative marker contract end to end: the preserved
+400 by 100 crop is the intended solid synthetic blue and its SHA-256 exactly
+equals the configured digest. That client then failed on its second page. The
+human-paced client also failed before a marker crop. Both failures reported a
+zero-iframe condition.
+
+The screenshots preserve materially different dashboard states. The
+human-paced page selected a detected non-owned copy of the fixture tab and
+reported no embeddable stream. The slow client's first page selected the exact
+service-owned browser and rendered Guacamole; its later page reported
+`readiness failed` with no iframe. The dashboard also continued to display the
+`explicit_profile_conflicts_with_current_owner` action result on the owned
+workspace. These remain product and dashboard-accuracy findings; the exact
+marker success means the external route, Guacamole principal, iframe-relative
+geometry, and digest are no longer speculative blockers.
+
+The runner contained a separate deterministic observability defect. Despite
+its documented twenty-second marker convergence window, it counted iframes
+once before that window and immediately threw a generic failure when the count
+was zero. It therefore could neither tolerate a transient dashboard projection
+nor emit the typed no-stream evidence required by this campaign. A provider-free
+red test now proves that zero iframes remain eligible to converge while two
+iframes fail closed. The repair re-evaluates the iframe and its bounds during
+the marker loop, and a terminal zero-iframe state is recorded as
+`external_stream_not_embeddable` with bounded diagnostics.
+
+Revised next action: validate and commit the bounded runner repair, then run one
+E16 readiness observation. If either page remains without an iframe for the
+full convergence budget, pause on the typed dashboard/product defect and repair
+that defect rather than altering the already-proven marker or route identity.

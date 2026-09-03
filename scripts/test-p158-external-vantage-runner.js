@@ -20,6 +20,7 @@ import {
   findInternalUrlLeaks,
   projectHandoffResolution,
   pixelMarkerClipForIframe,
+  remoteViewIframeClipObservation,
   redactOperatorUrl,
   runExternalVantageProbe,
   validateExternalCalibrationLeadTime,
@@ -165,6 +166,11 @@ assert.equal(classifyRenderedStreamFailure({
   iframePaths: ['/guacamole/'],
   observedPixelHash: 'a'.repeat(64),
 }).code, 'external_stream_identity_marker_missing');
+assert.equal(classifyRenderedStreamFailure({
+  bodyText: 'No embeddable stream',
+  iframePaths: [],
+  observedPixelHash: null,
+}).code, 'external_stream_not_embeddable');
 assert.deepEqual(
   pixelMarkerClipForIframe(
     { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },
@@ -178,6 +184,31 @@ assert.throws(
     { x: 310, y: 337, width: 1110, height: 641 },
   ),
   /does not fit the rendered remote-view iframe/,
+);
+assert.equal(
+  remoteViewIframeClipObservation(
+    { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },
+    0,
+    null,
+  ),
+  null,
+  'a transient zero-iframe dashboard render must remain eligible to converge',
+);
+assert.deepEqual(
+  remoteViewIframeClipObservation(
+    { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },
+    1,
+    { x: 10, y: 20, width: 1000, height: 700 },
+  ),
+  { x: 110, y: 220, width: 80, height: 40 },
+);
+assert.throws(
+  () => remoteViewIframeClipObservation(
+    { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },
+    2,
+    { x: 10, y: 20, width: 1000, height: 700 },
+  ),
+  /exactly one iframe, observed 2/,
 );
 assert.equal(
   validateExternalVantageConfiguration({ env, clientId: 'external-runner-human', paceProfile: 'human_controller' }).handoff.origin,

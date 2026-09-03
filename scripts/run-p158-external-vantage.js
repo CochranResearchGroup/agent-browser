@@ -1127,18 +1127,18 @@ async function waitForExpectedPixelMarker({
 }) {
   const deadline = Date.now() + timeoutMs;
   let observedPixelHash = null;
-  let screenshotClip = pixelMarkerRegion;
-  if (pixelMarkerRegion.coordinateSpace === 'remote-view-iframe') {
-    const frames = page.locator('iframe');
-    const frameCount = await frames.count();
-    if (frameCount !== 1) {
-      throw new Error(`Remote pixel marker requires exactly one iframe, observed ${frameCount}`);
-    }
-    const iframeBox = await frames.first().boundingBox();
-    if (!iframeBox) throw new Error('Remote-view iframe has no rendered bounds');
-    screenshotClip = pixelMarkerClipForIframe(pixelMarkerRegion, iframeBox);
-  }
   do {
+    let screenshotClip = pixelMarkerRegion;
+    if (pixelMarkerRegion.coordinateSpace === 'remote-view-iframe') {
+      const frames = page.locator('iframe');
+      const frameCount = await frames.count();
+      const iframeBox = frameCount === 1 ? await frames.first().boundingBox() : null;
+      screenshotClip = remoteViewIframeClipObservation(pixelMarkerRegion, frameCount, iframeBox);
+      if (!screenshotClip) {
+        await page.waitForTimeout(500);
+        continue;
+      }
+    }
     await page.screenshot({ path: markerPath, clip: screenshotClip });
     observedPixelHash = sha256File(markerPath);
     if (observedPixelHash === expectedPixelHash) return observedPixelHash;
@@ -1151,6 +1151,15 @@ async function waitForExpectedPixelMarker({
   error.code = diagnostic.code;
   error.details = diagnostic.details;
   throw error;
+}
+
+export function remoteViewIframeClipObservation(region, iframeCount, iframeBox) {
+  if (iframeCount === 0) return null;
+  if (iframeCount !== 1) {
+    throw new Error(`Remote pixel marker requires exactly one iframe, observed ${iframeCount}`);
+  }
+  if (!iframeBox) return null;
+  return pixelMarkerClipForIframe(region, iframeBox);
 }
 
 export function pixelMarkerClipForIframe(region, iframeBox) {
@@ -1193,6 +1202,8 @@ export function classifyRenderedStreamFailure({ bodyText, iframePaths, observedP
     code = 'external_stream_not_rendered';
   } else if (paths.some((path) => path !== '/guacamole/' && path !== '/guacamole')) {
     code = 'external_stream_route_invalid';
+  } else if (paths.length === 0) {
+    code = 'external_stream_not_embeddable';
   }
   return {
     code,
