@@ -123,12 +123,15 @@ function validateDependencies(input) {
   if (input.scheduler !== undefined && typeof input.scheduler?.waitUntil !== 'function') {
     fail('invalid_scheduler', 'scheduler.waitUntil must be a function');
   }
+  if (input.schedulePlanner !== undefined && typeof input.schedulePlanner !== 'function') {
+    fail('invalid_scheduler', 'schedulePlanner must be a function');
+  }
   if (input.safetyStop !== undefined && typeof input.safetyStop !== 'function') {
     fail('invalid_safety_stop', 'safetyStop must be a function');
   }
 }
 
-function actionPlans(targets, clientIds, viewerReceipts, startedMs) {
+function actionPlans(targets, clientIds, viewerReceipts, startedMs, schedulePlanner) {
   const plans = [];
   let ordinal = 0;
   for (const [kind, count] of ACTION_COUNTS) {
@@ -138,11 +141,25 @@ function actionPlans(targets, clientIds, viewerReceipts, startedMs) {
         ? targets[(actionOrdinal - 1) % targets.length]
         : targets.find((entry) => entry.environmentId === 'E2');
       const viewer = viewerReceipts[(actionOrdinal - 1) % viewerReceipts.length];
+      const defaultPlannedAt = new Date(
+        startedMs + Math.floor(((ordinal - 1) * C01_WORKLOAD.durationMinutes * 60_000) / TOTAL_ACTIONS),
+      ).toISOString();
+      const plannedAt = schedulePlanner
+        ? schedulePlanner({ kind, ordinal, actionOrdinal, defaultPlannedAt })
+        : defaultPlannedAt;
+      if (!Number.isFinite(Date.parse(plannedAt))) {
+        fail('invalid_scheduler', 'schedulePlanner returned an invalid wall time', {
+          kind,
+          ordinal,
+          actionOrdinal,
+          plannedAt,
+        });
+      }
       plans.push({
         ordinal,
         actionOrdinal,
         kind,
-        plannedAt: new Date(startedMs + Math.floor(((ordinal - 1) * C01_WORKLOAD.durationMinutes * 60_000) / TOTAL_ACTIONS)).toISOString(),
+        plannedAt,
         target: clone(target),
         clientId: kind === 'service_command'
           ? clientIds[(actionOrdinal - 1) % clientIds.length]
@@ -220,9 +237,15 @@ export async function runC01Calibration(input) {
   if (!Number.isFinite(startedMs) || !Number.isFinite(startedMonotonicTimeNanoseconds)) {
     fail('invalid_clock', 'Injected clock returned an invalid start time');
   }
-  validateViewerReceipts(viewerReceipts, targets, startedMs);
+  const receiptNotAfter = input.externalReceiptNotAfter === undefined
+    ? startedMs
+    : Date.parse(input.externalReceiptNotAfter);
+  if (!Number.isFinite(receiptNotAfter) || receiptNotAfter < startedMs) {
+    fail('invalid_external_viewer_receipts', 'External receipt custody horizon is invalid');
+  }
+  validateViewerReceipts(viewerReceipts, targets, receiptNotAfter);
   validateClientSeparation(clientIds, viewerReceipts);
-  const plans = actionPlans(targets, clientIds, viewerReceipts, startedMs);
+  const plans = actionPlans(targets, clientIds, viewerReceipts, startedMs, input.schedulePlanner);
   const observations = [];
   let activeSafetyStop = null;
 
