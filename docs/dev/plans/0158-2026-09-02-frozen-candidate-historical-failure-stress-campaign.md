@@ -1943,3 +1943,27 @@ details to failure receipts, aggregate both successful and failed receipts,
 and capture the ordinary screenshot after marker convergence. Develop each
 change red-green, then dispatch one fresh readiness epoch without changing the
 handoff or expected identity.
+
+E18 ran from commit `115f91b41eb84b630a67b89189f5bedb548ce082` as
+workflow run `33818219471`. Both external clients reached the public dashboard
+and rendered the exact expected synthetic marker, but both terminated with an
+expected-tab identity mismatch. The repaired aggregate correctly retained both
+failure receipts and their client identities, and the post-convergence full
+screenshot showed the live fixture rather than a transient no-stream state.
+
+The mismatch was a dispatch-preparation defect, not a retained-browser or
+presentation regression. The workflow binds both probe jobs to the
+`p158-external-vantage` GitHub environment. Its environment-level
+`P158_DEV_EXPECTED_IDENTITY_JSON` secret takes precedence over a repository-level
+secret with the same name. Preparation refreshed only the repository-level
+secret, so E18 compared the live browser against the stale environment value.
+The secret value itself remains unlogged. This failure demonstrates that an
+apparently successful secret update is not sufficient evidence unless it
+targets the workflow's effective scope.
+
+Revised next action: rebuild the expected identity from current authoritative
+development state without printing it, update
+`P158_DEV_EXPECTED_IDENTITY_JSON` in the exact `p158-external-vantage`
+environment, and dispatch a fresh readiness epoch from the exact pushed
+commit. Treat environment scope as a required pre-dispatch invariant for every
+future external-vantage run.
