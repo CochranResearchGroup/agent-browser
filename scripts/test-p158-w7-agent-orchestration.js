@@ -244,10 +244,11 @@ const integrated = createP158W7LiveDevelopmentAdapterBundle({
   },
   agentWorkflowManifest: { ...manifest, targetSha256: sha256(integratedTarget) },
   agentWorkflowDrivers: drivers,
+  liveHookManifestSha256: '99'.repeat(32),
 });
 assert.equal(integrated.w7Adapters.length, 25);
-assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'concrete_live').length, 3);
-assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'explicit_blocked').length, 22);
+assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'concrete_live').length, 0);
+assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'explicit_blocked').length, 25);
 assert.deepEqual(integrated.adapterBindings.filter((entry) => ['A11', 'A12', 'A14'].includes(entry.caseId))
   .map((entry) => [entry.caseId, entry.mode]), [
   ['A11', 'explicit_blocked'], ['A12', 'explicit_blocked'], ['A14', 'explicit_blocked'],

@@ -441,7 +441,7 @@ for (const adapter of reviewedBundle.w8Adapters) {
   });
   assert.equal(result.resultState, 'skipped_blocked');
   assert.equal(result.effectState, 'not_started');
-  assert.equal(result.retryDisposition, 'prohibited');
+  assert.equal(result.retryDisposition, 'prohibited_opportunistic_retry');
   assert.equal(result.repairAttempted, false);
   assert.equal(result.retryAttempted, false);
   assert.equal(result.garbageCollectionAttempted, false);
@@ -579,7 +579,7 @@ try {
     });
     assert.equal(outcome.resultState, 'passed');
     assert.equal(outcome.actionCount, outcome.actionIds.length);
-    assert.equal(outcome.effectState, 'completed');
+    assert.equal(outcome.effectState, 'verified_effect');
   }
   const blockedD01 = await concreteAdapters.get('D01').execute({
     attempt: schedule.attempts.find((entry) => entry.caseId === 'D01'),

@@ -291,14 +291,19 @@ const reviewedBundle = createP158W7LiveDevelopmentAdapterBundle({
   target,
   primitives: reviewedPrimitives,
   additionalAdapters: otherAdapters,
+  liveHookManifestSha256: '99'.repeat(32),
 });
 assert.equal(reviewedBundle.ready, true);
 assert.equal(reviewedPrimitives.calls.length, 0);
 assert.equal(reviewedBundle.adapterBindings.length, 25);
 assert.equal(reviewedBundle.adapterBindings.filter((binding) =>
-  binding.mode === 'concrete_live').length, 3);
+  binding.mode === 'concrete_live').length, 0);
 assert.equal(reviewedBundle.adapterBindings.filter((binding) =>
-  binding.mode === 'explicit_blocked').length, 22);
+  binding.mode === 'explicit_blocked').length, 25);
+assert(reviewedBundle.w7Adapters.every((adapter) =>
+  adapter.executionMode === 'explicit_blocked' && adapter.effectsAllowed === false &&
+  adapter.providerFree === false && adapter.liveHookManifestSha256 === '99'.repeat(32) &&
+  /^[a-f0-9]{64}$/.test(adapter.liveBindingSha256)));
 assert(reviewedBundle.adapterBindings.every((binding) =>
   binding.providerFree === false && /^[a-f0-9]{64}$/.test(binding.sourceSha256)));
 assert.equal(assessP158AdapterReadiness({

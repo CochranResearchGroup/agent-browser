@@ -869,7 +869,11 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   agentWorkflowManifest = null,
   agentWorkflowDrivers = null,
   additionalAdapters = [],
+  liveHookManifestSha256,
 }) {
+  if (!/^[a-f0-9]{64}$/u.test(liveHookManifestSha256 ?? '')) {
+    fail('live_hook_manifest_unproven', 'W7 live adapters require the exact frozen live-hook manifest digest');
+  }
   const reviewed = assessP158W7ReviewedLiveDispatcher({ schedule, target });
   const liveBindings = new Map(reviewed.bindings
     .filter((binding) => P158_W7_REVIEWED_LIVE_CASE_IDS.includes(binding.caseId))
@@ -904,10 +908,11 @@ export function createP158W7LiveDevelopmentAdapterBundle({
         drivers: agentWorkflowDrivers,
       });
   const agentConcreteCaseIds = new Set(agentOrchestration?.concreteCaseIds ?? []);
-  const concreteCaseIds = new Set([
-    ...P158_W7_REVIEWED_LIVE_CASE_IDS,
-    ...agentConcreteCaseIds,
-  ]);
+  // Reviewed command shapes are not sufficient ownership proof. Until frozen
+  // candidate/environment receipts bind and are revalidated against each PID,
+  // unit, profile, display, browser, and target at effect time, every W7 case
+  // remains explicit_blocked.
+  const concreteCaseIds = new Set([...agentConcreteCaseIds]);
   const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
   const sourceSha256 = w7SourceSha256();
   const explicitBlockedAdapters = Object.entries(P158_W7_LIVE_HOOK_GAPS)
@@ -928,7 +933,8 @@ export function createP158W7LiveDevelopmentAdapterBundle({
           resultState: 'skipped_blocked',
           blocker,
           effectState: 'not_started',
-          retryDisposition: 'prohibited',
+          requestedEffects: [],
+          retryDisposition: 'prohibited_opportunistic_retry',
           repairAttempted: false,
           retryAttempted: false,
           garbageCollectionAttempted: false,
@@ -969,20 +975,36 @@ export function createP158W7LiveDevelopmentAdapterBundle({
       },
     });
   });
-  const adapters = [
-    ...concrete.adapters,
-    ...(agentOrchestration?.adapters ?? []),
-    ...explicitBlockedAdapters,
-    ...additionalAdapters,
-  ];
-  const w7ByCase = new Map([
+  const undecoratedW7ByCase = new Map([
     ...concrete.w7Adapters,
     ...(agentOrchestration?.adapters ?? []),
     ...explicitBlockedAdapters,
   ].map((adapter) => [adapter.caseId, adapter]));
+  const w7Adapters = P158_W7_CASE_IDS.map((caseId) => {
+    const adapter = undecoratedW7ByCase.get(caseId);
+    const binding = adapterBindings.find((entry) => entry.caseId === caseId);
+    return deepFreeze({
+      ...adapter,
+      executionMode: binding.mode,
+      providerFree: false,
+      effectsAllowed: binding.effectsAllowed,
+      sourcePath: binding.sourcePath,
+      sourceSha256: binding.sourceSha256,
+      liveHookManifestSha256,
+      liveBindingSha256: sha256(binding),
+      liveHookIds: [...binding.hookIds],
+      blocker: binding.blocker === null ? null : {
+        ...binding.blocker,
+        sourcePath: binding.sourcePath,
+        sourceSha256: binding.sourceSha256,
+      },
+    });
+  });
+  const w7ByCase = new Map(w7Adapters.map((adapter) => [adapter.caseId, adapter]));
+  const adapters = [...w7Adapters, ...additionalAdapters];
   return {
     adapters,
-    w7Adapters: P158_W7_CASE_IDS.map((caseId) => w7ByCase.get(caseId)),
+    w7Adapters,
     effects: { ...concrete.effects, ...(agentOrchestration?.effects ?? {}) },
     executedActionIds: concrete.executedActionIds,
     adapterBindings: deepFreeze(adapterBindings),
