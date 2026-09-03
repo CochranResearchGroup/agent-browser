@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-logging-audit-report.v1.schema.json",
+  "title": "Plan 0158 logging completeness audit report",
+  "description": "Machine-readable reconciliation of causal logging envelopes across ingress, response, job, event, trace, incident, and dashboard surfaces. The auditor diagnoses and records defects without attempting repair.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "planId",
+    "auditId",
+    "runId",
+    "inputSha256",
+    "auditedAt",
+    "repairAttempted",
+    "summary",
+    "envelopes",
+    "findings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-logging-audit-report.v1" },
+    "planId": { "const": "P158" },
+    "auditId": { "$ref": "#/$defs/id" },
+    "runId": { "$ref": "#/$defs/id" },
+    "inputSha256": { "$ref": "#/$defs/sha256" },
+    "auditedAt": { "type": "string", "format": "date-time" },
+    "repairAttempted": { "const": false },
+    "summary": { "$ref": "#/$defs/summary" },
+    "envelopes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/envelopeAudit" }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "surfaceRole": {
+      "enum": [
+        "ingress_request",
+        "immediate_response",
+        "durable_job",
+        "terminal_event",
+        "trace_outcome",
+        "incident",
+        "dashboard_projection"
+      ]
+    },
+    "findingCode": {
+      "enum": [
+        "missing_record",
+        "duplicate_terminal",
+        "conflicting_projection",
+        "timestamp_inversion",
+        "null_failure",
+        "null_provenance",
+        "one_transport_only",
+        "broken_parent",
+        "effect_retry_conflict",
+        "sensitive_value_leak",
+        "capture_gap"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "envelopeCount",
+        "completeEnvelopeCount",
+        "incompleteEnvelopeCount",
+        "expectedRecordCount",
+        "observedRecordCount",
+        "missingRecordCount",
+        "duplicateTerminalCount",
+        "conflictingProjectionCount",
+        "timestampInversionCount",
+        "nullFailureCount",
+        "nullProvenanceCount",
+        "oneTransportOnlyCount",
+        "brokenParentCount",
+        "effectRetryConflictCount",
+        "sensitiveValueLeakCount",
+        "captureGapCount"
+      ],
+      "properties": {
+        "envelopeCount": { "$ref": "#/$defs/count" },
+        "completeEnvelopeCount": { "$ref": "#/$defs/count" },
+        "incompleteEnvelopeCount": { "$ref": "#/$defs/count" },
+        "expectedRecordCount": { "$ref": "#/$defs/count" },
+        "observedRecordCount": { "$ref": "#/$defs/count" },
+        "missingRecordCount": { "$ref": "#/$defs/count" },
+        "duplicateTerminalCount": { "$ref": "#/$defs/count" },
+        "conflictingProjectionCount": { "$ref": "#/$defs/count" },
+        "timestampInversionCount": { "$ref": "#/$defs/count" },
+        "nullFailureCount": { "$ref": "#/$defs/count" },
+        "nullProvenanceCount": { "$ref": "#/$defs/count" },
+        "oneTransportOnlyCount": { "$ref": "#/$defs/count" },
+        "brokenParentCount": { "$ref": "#/$defs/count" },
+        "effectRetryConflictCount": { "$ref": "#/$defs/count" },
+        "sensitiveValueLeakCount": { "$ref": "#/$defs/count" },
+        "captureGapCount": { "$ref": "#/$defs/count" }
+      },
+      "additionalProperties": false
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "envelopeAudit": {
+      "type": "object",
+      "required": [
+        "envelopeId",
+        "requestId",
+        "operatorVisible",
+        "incidentExpected",
+        "expectedSurfaceRoles",
+        "observedSurfaceRoles",
+        "sourceRecordCount",
+        "state",
+        "findingIds"
+      ],
+      "properties": {
+        "envelopeId": { "$ref": "#/$defs/id" },
+        "requestId": { "$ref": "#/$defs/id" },
+        "operatorVisible": { "type": "boolean" },
+        "incidentExpected": { "type": "boolean" },
+        "expectedSurfaceRoles": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/surfaceRole" }
+        },
+        "observedSurfaceRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/surfaceRole" }
+        },
+        "sourceRecordCount": { "$ref": "#/$defs/count" },
+        "state": { "enum": ["complete", "incomplete", "conflicting", "leaking"] },
+        "findingIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "findingId",
+        "code",
+        "severity",
+        "envelopeId",
+        "requestId",
+        "surfaceRoles",
+        "recordIds",
+        "message",
+        "expected",
+        "observed",
+        "repairAttempted"
+      ],
+      "properties": {
+        "findingId": { "$ref": "#/$defs/id" },
+        "code": { "$ref": "#/$defs/findingCode" },
+        "severity": { "enum": ["blocking", "nonblocking", "needs_evidence"] },
+        "envelopeId": { "$ref": "#/$defs/id" },
+        "requestId": { "$ref": "#/$defs/id" },
+        "surfaceRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/surfaceRole" }
+        },
+        "recordIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "expected": {},
+        "observed": {},
+        "syntheticCanaryId": { "$ref": "#/$defs/id" },
+        "repairAttempted": { "const": false }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-logging-causal-fixtures.v1.schema.json",
+  "title": "Plan 0158 synthetic causal logging fixtures",
+  "description": "Production-shaped but wholly synthetic normalized logging records and their exact expected audit findings.",
+  "type": "object",
+  "required": ["schemaVersion", "planId", "syntheticOnly", "canaries", "fixtures"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-logging-causal-fixtures.v1" },
+    "planId": { "const": "P158" },
+    "syntheticOnly": { "const": true },
+    "canaries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/canary" }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 12,
+      "items": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+    "surfaceRole": {
+      "enum": ["ingress_request", "immediate_response", "durable_job", "terminal_event", "trace_outcome", "incident", "dashboard_projection"]
+    },
+    "findingCode": {
+      "enum": ["missing_record", "duplicate_terminal", "conflicting_projection", "timestamp_inversion", "null_failure", "null_provenance", "one_transport_only", "broken_parent", "effect_retry_conflict", "sensitive_value_leak", "capture_gap"]
+    },
+    "canary": {
+      "type": "object",
+      "required": ["canaryId", "value", "fieldClass"],
+      "properties": {
+        "canaryId": { "$ref": "#/$defs/id" },
+        "value": { "type": "string", "minLength": 12 },
+        "fieldClass": { "enum": ["credential", "bearer_token", "cookie", "private_page_body", "vault_content"] }
+      },
+      "additionalProperties": false
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["fixtureId", "description", "operatorVisible", "incidentExpected", "expectedSurfaceRoles", "records", "expectedFindingCodes"],
+      "properties": {
+        "fixtureId": { "$ref": "#/$defs/id" },
+        "description": { "type": "string", "minLength": 1 },
+        "operatorVisible": { "type": "boolean" },
+        "incidentExpected": { "type": "boolean" },
+        "expectedSurfaceRoles": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/surfaceRole" }
+        },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/normalizedRecord" }
+        },
+        "expectedFindingCodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/findingCode" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "normalizedRecord": {
+      "type": "object",
+      "required": [
+        "surfaceRole",
+        "transport",
+        "recordId",
+        "requestId",
+        "timestamp",
+        "parentId",
+        "terminal",
+        "state",
+        "phase",
+        "effectState",
+        "retryDisposition",
+        "failure",
+        "provenance",
+        "captureState",
+        "captureGap",
+        "capturedValues"
+      ],
+      "properties": {
+        "surfaceRole": { "$ref": "#/$defs/surfaceRole" },
+        "transport": { "enum": ["cli", "http", "mcp", "service", "dashboard"] },
+        "recordId": { "$ref": "#/$defs/id" },
+        "requestId": { "$ref": "#/$defs/nullableId" },
+        "jobId": { "$ref": "#/$defs/nullableId" },
+        "eventId": { "$ref": "#/$defs/nullableId" },
+        "traceId": { "$ref": "#/$defs/nullableId" },
+        "incidentId": { "$ref": "#/$defs/nullableId" },
+        "causalIds": { "$ref": "#/$defs/causalIds" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "parentId": { "$ref": "#/$defs/nullableId" },
+        "parentIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "terminal": { "type": "boolean" },
+        "state": { "enum": ["accepted", "succeeded", "failed", "cancelled", "timed_out", "rejected"] },
+        "phase": { "enum": ["ingress", "queue_admission", "scheduler_admission", "dispatch", "execution", "commit", "finalize"] },
+        "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
+        "retryDisposition": { "enum": ["do_not_retry", "inspect_before_retry", "retry_same_request", "refresh_access_plan"] },
+        "failure": {
+          "oneOf": [
+            { "$ref": "#/$defs/failure" },
+            { "type": "null" }
+          ]
+        },
+        "provenance": {
+          "oneOf": [
+            { "$ref": "#/$defs/provenance" },
+            { "type": "null" }
+          ]
+        },
+        "captureState": { "enum": ["complete", "partial", "missing", "redacted"] },
+        "captureGap": { "type": ["string", "null"], "minLength": 1 },
+        "capturedValues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capturedValue" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "captureState": { "enum": ["partial", "missing"] } }, "required": ["captureState"] },
+          "then": {
+            "properties": { "captureGap": { "type": "string", "minLength": 1 } }
+          },
+          "else": {
+            "properties": { "captureGap": { "type": "null" } }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "causalIds": {
+      "type": "object",
+      "required": ["requestId", "jobId", "eventId", "traceId", "incidentId"],
+      "properties": {
+        "requestId": { "$ref": "#/$defs/nullableId" },
+        "jobId": { "$ref": "#/$defs/nullableId" },
+        "eventId": { "$ref": "#/$defs/nullableId" },
+        "traceId": { "$ref": "#/$defs/nullableId" },
+        "incidentId": { "$ref": "#/$defs/nullableId" }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": ["schemaVersion", "code", "axis", "phase", "effectState", "retryDisposition", "recommendedAction"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.service-failure-recourse.v1" },
+        "code": { "type": "string", "minLength": 1 },
+        "axis": { "enum": ["service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"] },
+        "phase": { "enum": ["process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"] },
+        "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
+        "retryDisposition": { "enum": ["do_not_retry", "inspect_before_retry", "retry_same_request", "refresh_access_plan"] },
+        "recommendedAction": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["schemaVersion", "requestId", "jobId", "traceId", "runtimeLaneId", "profileId", "action"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.service-request-provenance.v1" },
+        "requestId": { "$ref": "#/$defs/id" },
+        "jobId": { "$ref": "#/$defs/id" },
+        "traceId": { "$ref": "#/$defs/nullableId" },
+        "clientSubjectId": { "$ref": "#/$defs/nullableId" },
+        "identityAssurance": { "enum": ["self-declared", "authenticated-ingress", "registered-capability", "operator", "unknown"] },
+        "connectionInstanceId": { "$ref": "#/$defs/nullableId" },
+        "runtimeEnvironmentId": { "$ref": "#/$defs/nullableId" },
+        "runtimeLaneId": { "$ref": "#/$defs/nullableId" },
+        "profileId": { "$ref": "#/$defs/nullableId" },
+        "browserId": { "$ref": "#/$defs/nullableId" },
+        "sessionId": { "$ref": "#/$defs/nullableId" },
+        "tabId": { "$ref": "#/$defs/nullableId" },
+        "action": { "$ref": "#/$defs/id" },
+        "policyRevision": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "capturedValue": {
+      "type": "object",
+      "required": ["fieldClass", "value", "redacted"],
+      "properties": {
+        "fieldClass": { "enum": ["error_message", "response_body", "log_field", "screenshot_metadata", "private_field"] },
+        "value": { "type": "string" },
+        "redacted": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
