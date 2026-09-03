@@ -465,6 +465,10 @@ export function auditLoggingCompleteness(input, options = {}) {
 
   for (const group of groups) {
     const { expected, request, specific } = expectedSurfacesFor(group, normalized.expectations);
+    const controllerOnlyBlocked = expected.controller_transition === 1 &&
+      expected.pre_execution_blocker === 1 && expected.event === 1 &&
+      expected.request === 0 && expected.immediate_response === 0 && expected.job === 0 &&
+      expected.trace === 0;
     const groupFindingStart = findings.length;
     for (const surface of LOGGING_SURFACES) {
       const observedRecords = relevantSurfaceRecords(group, surface);
@@ -532,6 +536,7 @@ export function auditLoggingCompleteness(input, options = {}) {
     const outcomeRecords = group.records.filter(
       (record) =>
         record.terminal &&
+        record.original.captureState !== 'missing' &&
         ['immediate_response', 'job', 'event', 'trace', 'dashboard_projection'].includes(record.surface),
     );
     const effects = [...new Set(outcomeRecords.map((record) => record.effectState).filter(Boolean))].sort();
@@ -548,7 +553,8 @@ export function auditLoggingCompleteness(input, options = {}) {
       });
     }
 
-    const nullFailureRecords = outcomeRecords.filter((record) => record.failed && record.failure === null);
+    const nullFailureRecords = controllerOnlyBlocked ? []
+      : outcomeRecords.filter((record) => record.failed && record.failure === null);
     if (nullFailureRecords.length > 0) {
       addFinding(findings, {
         code: 'null_failure',
@@ -558,7 +564,8 @@ export function auditLoggingCompleteness(input, options = {}) {
         details: { recordIds: nullFailureRecords.map((record) => record.id).sort() },
       });
     }
-    const nullProvenanceRecords = outcomeRecords.filter((record) => record.provenance === null);
+    const nullProvenanceRecords = controllerOnlyBlocked ? []
+      : outcomeRecords.filter((record) => record.provenance === null);
     if (nullProvenanceRecords.length > 0) {
       addFinding(findings, {
         code: 'null_provenance',
@@ -624,10 +631,6 @@ export function auditLoggingCompleteness(input, options = {}) {
     const outcomeTransports = [
       ...new Set(group.records.filter((record) => record.transport).map((record) => record.transport)),
     ].sort();
-    const controllerOnlyBlocked = expected.controller_transition === 1 &&
-      expected.pre_execution_blocker === 1 && expected.event === 1 &&
-      expected.request === 0 && expected.immediate_response === 0 && expected.job === 0 &&
-      expected.trace === 0;
     if (
       (expectedTransports.length > 1 && outcomeTransports.length <= 1) ||
       (!controllerOnlyBlocked && expectedTransports.length === 0 &&

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-logging-evidence-corpus.v1.schema.json",
+  "title": "Plan 0158 live logging evidence corpus",
+  "description": "One self-hashed, read-only logging evidence corpus for an exact campaign environment and phase.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "planId", "syntheticOnly", "runId", "candidateSha256", "phaseId",
+    "environmentId", "environmentSealSha256", "sourceBinding", "window", "capturedAt",
+    "inputIdentitySha256", "fixtureCount", "fixtures", "redactionPolicy", "effectsAttempted", "repairAttempted",
+    "retryAttempted", "corpusSha256"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-logging-evidence-corpus.v1" },
+    "planId": { "const": "P158" },
+    "syntheticOnly": { "const": false },
+    "runId": { "$ref": "#/$defs/id" },
+    "candidateSha256": { "$ref": "#/$defs/sha256" },
+    "phaseId": { "enum": ["W7", "W8", "W9"] },
+    "environmentId": { "$ref": "#/$defs/id" },
+    "environmentSealSha256": { "$ref": "#/$defs/sha256" },
+    "sourceBinding": {
+      "type": "object",
+      "required": ["sourcePath", "sourceSha256"],
+      "properties": {
+        "sourcePath": { "const": "scripts/lib/p158-logging-evidence-harvester.js" },
+        "sourceSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "window": {
+      "type": "object",
+      "required": ["startedAt", "completedAt"],
+      "properties": {
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "inputIdentitySha256": { "$ref": "#/$defs/sha256" },
+    "fixtureCount": { "type": "integer", "minimum": 1 },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "p158-logging-causal-fixtures.v1.schema.json#/$defs/fixture" }
+    },
+    "redactionPolicy": {
+      "type": "object",
+      "required": ["mode", "excludedFieldNames", "rawSensitiveMaterialDisposition"],
+      "properties": {
+        "mode": { "const": "allowlist_projection" },
+        "excludedFieldNames": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "rawSensitiveMaterialDisposition": { "const": "reject" }
+      },
+      "additionalProperties": false
+    },
+    "effectsAttempted": { "const": false },
+    "repairAttempted": { "const": false },
+    "retryAttempted": { "const": false },
+    "corpusSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
