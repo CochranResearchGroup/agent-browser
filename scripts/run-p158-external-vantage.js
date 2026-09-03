@@ -691,6 +691,7 @@ export async function runExternalVantageProbe({
       env, clientId, paceProfile, mode, outputDir, w8ActionManifest,
     });
   } catch (error) {
+    const failureRecord = externalVantageFailureRecord(error, env);
     const failure = {
       schemaVersion: EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
       planId: 'P158',
@@ -702,10 +703,7 @@ export async function runExternalVantageProbe({
       repairAttempted: false,
       retryCount: 0,
       failedAt: new Date().toISOString(),
-      failure: {
-        code: 'external_vantage_probe_failed',
-        message: safeErrorMessage(error, env),
-      },
+      failure: failureRecord,
       calibrationTiming: failureCalibrationTiming(env),
       artifacts: artifactReceipts(outputDir),
     };
@@ -1082,11 +1080,13 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   const screenshotPath = join(outputDir, `${label}.png`);
   await page.screenshot({ path: screenshotPath, fullPage: false });
   const markerPath = join(outputDir, `${label}-pixel-marker.png`);
-  await page.screenshot({ path: markerPath, clip: pixelMarkerRegion });
-  const pixelHash = sha256File(markerPath);
-  if (pixelHash !== expectedIdentity.pixelHash) {
-    throw new Error('Rendered remote pixel marker digest does not match the prepared marker contract');
-  }
+  const pixelHash = await waitForExpectedPixelMarker({
+    page,
+    screenshotPath,
+    markerPath,
+    pixelMarkerRegion,
+    expectedPixelHash: expectedIdentity.pixelHash,
+  });
   const identity = identityFromResolution(resolution, expectedIdentity);
   identity.pixelHash = pixelHash;
   const screenshot = {
@@ -1111,6 +1111,69 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     formActionCount: formActions.length,
     formSurfaceAbsent: formActions.length === 0,
     serviceBrowserObservation: serviceBrowserObservationFromResolution(resolution, readyAt),
+  };
+}
+
+async function waitForExpectedPixelMarker({
+  page,
+  screenshotPath,
+  markerPath,
+  pixelMarkerRegion,
+  expectedPixelHash,
+  timeoutMs = 20_000,
+}) {
+  const deadline = Date.now() + timeoutMs;
+  let observedPixelHash = null;
+  do {
+    await page.screenshot({ path: markerPath, clip: pixelMarkerRegion });
+    observedPixelHash = sha256File(markerPath);
+    if (observedPixelHash === expectedPixelHash) return observedPixelHash;
+    await page.waitForTimeout(500);
+  } while (Date.now() < deadline);
+
+  await page.screenshot({ path: screenshotPath, fullPage: false });
+  const diagnostic = await renderedStreamDiagnostic(page, observedPixelHash);
+  const error = new Error('The external dashboard did not render the prepared remote pixel marker');
+  error.code = diagnostic.code;
+  error.details = diagnostic.details;
+  throw error;
+}
+
+async function renderedStreamDiagnostic(page, observedPixelHash) {
+  const bodyText = (await page.locator('body').innerText().catch(() => '')).slice(0, 20_000);
+  const iframePaths = await page.locator('iframe').evaluateAll((frames) => frames.map((frame) => {
+    try {
+      const url = new URL(frame.src);
+      return url.pathname;
+    } catch {
+      return 'invalid';
+    }
+  }));
+  return classifyRenderedStreamFailure({ bodyText, iframePaths, observedPixelHash });
+}
+
+export function classifyRenderedStreamFailure({ bodyText, iframePaths, observedPixelHash }) {
+  const normalizedText = String(bodyText || '').toLowerCase();
+  const paths = Array.isArray(iframePaths) ? iframePaths : [];
+  let code = 'external_stream_identity_marker_missing';
+  if (normalizedText.includes('stream sign-in expired')) {
+    code = 'external_stream_auth_failed';
+  } else if (normalizedText.includes('connecting to cdp stream')) {
+    code = 'external_stream_not_rendered';
+  } else if (paths.some((path) => path !== '/guacamole/' && path !== '/guacamole')) {
+    code = 'external_stream_route_invalid';
+  }
+  return {
+    code,
+    details: {
+      iframeCount: paths.length,
+      iframePathClasses: paths.map((path) => (
+        path === '/guacamole/' || path === '/guacamole' ? 'guacamole' : 'unexpected'
+      )),
+      observedPixelHash,
+      streamSignInExpired: normalizedText.includes('stream sign-in expired'),
+      cdpStreamConnecting: normalizedText.includes('connecting to cdp stream'),
+    },
   };
 }
 
@@ -1657,6 +1720,38 @@ function safeErrorMessage(error, env) {
     // Invalid secret input is already represented by a typed failure receipt.
   }
   return message.slice(0, 1000);
+}
+
+export function externalVantageFailureRecord(error, env) {
+  const typedCode = typeof error?.code === 'string' && /^[a-z0-9_]+$/.test(error.code)
+    ? error.code
+    : 'external_vantage_probe_failed';
+  const details = safeExternalFailureDetails(error?.details);
+  return {
+    code: typedCode,
+    message: safeErrorMessage(error, env),
+    ...(details ? { details } : {}),
+  };
+}
+
+function safeExternalFailureDetails(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const details = {};
+  if (Number.isSafeInteger(value.iframeCount) && value.iframeCount >= 0) {
+    details.iframeCount = value.iframeCount;
+  }
+  if (Array.isArray(value.iframePathClasses)) {
+    details.iframePathClasses = value.iframePathClasses
+      .filter((item) => item === 'guacamole' || item === 'unexpected')
+      .slice(0, 10);
+  }
+  if (typeof value.observedPixelHash === 'string' && /^[a-f0-9]{64}$/.test(value.observedPixelHash)) {
+    details.observedPixelHash = value.observedPixelHash;
+  }
+  for (const key of ['streamSignInExpired', 'cdpStreamConnecting']) {
+    if (typeof value[key] === 'boolean') details[key] = value[key];
+  }
+  return Object.keys(details).length > 0 ? details : null;
 }
 
 function failureCalibrationTiming(env) {

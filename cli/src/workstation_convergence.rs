@@ -528,6 +528,13 @@ fn terminal_upgrade_state(value: &Value) -> bool {
     )
 }
 
+fn development_runtime_observation(runtime_monitor: &Value) -> bool {
+    runtime_monitor
+        .get("state")
+        .and_then(Value::as_str)
+        .is_some_and(|state| state.starts_with("development_"))
+}
+
 pub(crate) fn observe_installed_workstation(
     runtime_inventory: &Value,
     session_supervisors: &Value,
@@ -537,6 +544,7 @@ pub(crate) fn observe_installed_workstation(
     dashboard_ingress: &Value,
     profile_policy_migration: &Value,
 ) -> WorkstationConvergenceObservedState {
+    let development_runtime = development_runtime_observation(runtime_monitor);
     let access_findings = profile_policy_migration
         .get("entries")
         .and_then(Value::as_array)
@@ -574,11 +582,16 @@ pub(crate) fn observe_installed_workstation(
                 .and_then(Value::as_u64)
                 == Some(0),
         runtime_monitor_ready: bool_at(runtime_monitor, "/ready"),
-        selected_generation_ready: bool_at(
-            workstation_upgrade,
-            "/readiness/selectedGenerationReady",
-        ),
-        transaction_terminal: terminal_upgrade_state(workstation_upgrade),
+        selected_generation_ready: if development_runtime {
+            bool_at(runtime_multiplicity, "/steadyState")
+                && runtime_multiplicity
+                    .get("selectedGenerationId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|generation| !generation.is_empty())
+        } else {
+            bool_at(workstation_upgrade, "/readiness/selectedGenerationReady")
+        },
+        transaction_terminal: development_runtime || terminal_upgrade_state(workstation_upgrade),
         dashboard_ingress_ready: bool_at(dashboard_ingress, "/dashboardIngressReady"),
         operator_journey_ready: bool_at(dashboard_ingress, "/operatorJourneyReady"),
         access_findings,
@@ -595,12 +608,16 @@ pub(crate) fn convergence_receipt_from_runtime_health(
     dashboard_ingress: &Value,
     profile_policy_migration: &Value,
 ) -> Result<WorkstationConvergenceReceipt, String> {
-    let owner = WorkstationConvergenceOwner::installed(
+    let selected_generation = if development_runtime_observation(runtime_monitor) {
+        runtime_multiplicity
+            .get("selectedGenerationId")
+            .and_then(Value::as_str)
+    } else {
         workstation_upgrade
             .get("selectedGenerationId")
             .and_then(Value::as_str)
-            .map(str::to_string),
-    );
+    };
+    let owner = WorkstationConvergenceOwner::installed(selected_generation.map(str::to_string));
     let observed = observe_installed_workstation(
         runtime_inventory,
         session_supervisors,
@@ -756,6 +773,46 @@ mod tests {
         assert!(receipt.ready);
         assert_eq!(receipt.state, "converged");
         assert_eq!(receipt.dashboard_health.runtime.state, "ready");
+    }
+
+    #[test]
+    fn development_runtime_without_upgrade_history_uses_live_selected_generation() {
+        let inventory = json!({"staleCount": 0});
+        let supervisors = json!({"ready": true});
+        let multiplicity = json!({
+            "steadyState": true,
+            "selectedGenerationId": "development-generation-a",
+            "counts": {"runtimeHosts": 1, "legacyDaemons": 0}
+        });
+        let monitor = json!({"ready": true, "state": "development_live_observation"});
+        let upgrade = json!({
+            "selectedGenerationId": null,
+            "readiness": {"selectedGenerationReady": false},
+            "latestTransaction": null
+        });
+        let ingress = json!({"dashboardIngressReady": true, "operatorJourneyReady": false});
+
+        let receipt = convergence_receipt_from_runtime_health(
+            &inventory,
+            &supervisors,
+            &multiplicity,
+            &monitor,
+            &upgrade,
+            &ingress,
+            &Value::Null,
+        )
+        .unwrap();
+
+        assert_eq!(
+            receipt.executable_next_action.as_deref(),
+            Some("reprove_operator_journey")
+        );
+        assert!(receipt
+            .dashboard_health
+            .convergence
+            .findings
+            .iter()
+            .all(|finding| finding.code != "workstation_transaction_not_converged"));
     }
 
     #[test]

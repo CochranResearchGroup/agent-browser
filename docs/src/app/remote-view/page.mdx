@@ -250,6 +250,12 @@ Use each URL only for its documented audience.
   </tbody>
 </table>
 
+When the dashboard itself is hosted, a loopback Guacamole iframe is made
+browser-reachable by rebasing only its recognized <code>/guacamole/</code> path
+onto the configured public origin. The dashboard never embeds its own bare root
+as a fallback and never publishes that internal iframe URL as the operator
+handoff.
+
 ## Validate from two external clients
 
 Plan 0158 uses the manually dispatched **Plan 0158 External Vantage** GitHub

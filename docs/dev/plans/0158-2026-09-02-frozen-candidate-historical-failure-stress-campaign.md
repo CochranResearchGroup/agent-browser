@@ -1606,3 +1606,75 @@ Revised next action: commit this W6 readiness checkpoint and dispatch the
 registered external-vantage workflow in readiness mode against that exact
 branch commit. Preserve its two independent off-host artifacts and aggregate
 receipt for the remaining W6 calibration gate.
+
+### W6 External Readiness Run And Blocking Presentation Diagnosis
+
+The first two-client external readiness dispatch ran against exact commit
+`0a905c7cdbd12c366fdf2313772c388784a8c052`. Both independent GitHub-hosted
+clients reached the authenticated durable handoff and preserved screenshots,
+pixel crops, video, and failure receipts. Neither client produced the prepared
+synthetic marker, so the aggregate correctly remained unsuccessful and no
+automatic retry or repair occurred.
+
+The original receipt classified both failures as a pixel digest mismatch. The
+preserved visual evidence proved that this was only the downstream symptom:
+
+- one client displayed `Stream sign-in expired` inside the remote viewport;
+- the other remained at `Connecting to CDP stream`;
+- both marker crops contained dashboard chrome instead of remote browser
+  pixels; and
+- the dashboard simultaneously reported a workstation transaction convergence
+  action even though live runtime lifecycle evidence showed one current host,
+  one selected generation, no legacy daemon, and a current healthy monitor.
+
+The presentation root cause is deterministic. When the service supplied a
+loopback Guacamole frame plus a bare public dashboard origin, the dashboard
+used the bare public origin as the iframe source. That recursively loaded the
+dashboard or login surface instead of the Guacamole client. The repaired URL
+selector rebases only a recognized `/guacamole/` path onto the public origin,
+continues to prefer an explicit non-loopback dashboard embed, preserves local
+embedding for local dashboards, and rejects arbitrary loopback projection.
+
+The external runner now waits up to twenty seconds for the exact prepared
+marker after authoritative server resolution. On timeout it preserves the
+final screenshot and emits a typed failure distinguishing expired stream auth,
+non-rendering CDP, invalid iframe routing, and a genuine identity-marker
+mismatch. Receipts contain only bounded URL-free diagnostics such as iframe
+path class and marker digest. The no-repair and zero-retry invariants remain
+unchanged.
+
+The convergence warning had a separate cause. Development runtime health used
+the production workstation-upgrade store under the isolated pseudo-home, where
+no production-style upgrade transaction or selected payload exists. That made
+an absent transaction look unfinished despite current live multiplicity proving
+the selected development generation. Development convergence now derives its
+selected generation from the current single-host multiplicity observation and
+treats the production upgrade transaction as not applicable. It still requires
+dashboard ingress and operator-journey evidence, so the next truthful action is
+`reprove_operator_journey`, not `resume_workstation_transaction`.
+
+Provider-free regression coverage now includes hosted Guacamole path rebasing,
+arbitrary loopback rejection, four external stream-failure classifications,
+typed failure-receipt preservation, and development convergence without
+production upgrade history.
+
+Revised next action: complete focused and selected validation, publish one
+isolated development candidate, verify live runtime health no longer reports a
+workstation transaction defect, then repeat the external readiness dispatch
+once. Do not start the twenty-minute calibration until both clients render the
+prepared pixels and the remaining operator-journey state is coherent.
+
+Candidate generation `0.28.0-eb821699e652` is now installed in the isolated
+development runtime with production unchanged. Three disposable browser
+launches passed. The provider-required doctor passes when invoked with the
+reviewed external-ingress binding. One earlier doctor invocation omitted those
+two required binding inputs and correctly reported the provider configuration
+as absent; this was a harness invocation error with no runtime mutation or
+browser effect.
+
+Authenticated live health now reports one current runtime host, one executable
+generation, no legacy daemon, a fresh development live observation, and no
+workstation-transaction finding. The only remaining convergence finding is
+`operator_journey_not_ready`, with the exact next action
+`reprove_operator_journey`. That is the evidence the repeated external
+readiness run is intended to establish.

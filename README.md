@@ -2975,10 +2975,12 @@ route. Do not collapse these into one URL: local iframe tests may need
 `127.0.0.1`, while remote operators should still receive the public ingress.
 The dashboard preserves local iframe URLs when it is itself served from a local
 origin. When the dashboard is served from a hosted origin, it does not embed a
-loopback `frameUrl`; it selects `dashboardEmbedUrl`, `publicOperatorUrl`, or
-`AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL` from the service-owned stream metadata
-instead. Configure those values through route descriptors or environment
-variables rather than hardcoding a deployment hostname into dashboard code.
+loopback `frameUrl`. It uses an explicit non-loopback `dashboardEmbedUrl` when
+present, or rebases only the recognized `/guacamole/` path onto the configured
+public origin. It never substitutes the bare public dashboard root as an iframe
+or projects an arbitrary loopback path. Configure route values through route
+descriptors or environment variables rather than hardcoding a deployment
+hostname into dashboard code.
 Use the shared display override only for trusted low-contention workloads,
 because focus and native-window state become shared mutable resources.
 Set `AGENT_BROWSER_REMOTE_VIEW_PROVIDER=rdp_gateway` when the URL points to an

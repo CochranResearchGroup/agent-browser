@@ -6050,6 +6050,9 @@ operatorVisible.state=ready before claiming the handoff is visible to the
 operator. operatorVisible also includes selected target evidence and route,
 display, browser, tab, stream, and Guacamole component states. A visible
 browser with the wrong selected URL reports operatorVisible.state=wrong_tab.
+Hosted dashboards rebase only a recognized loopback /guacamole/ iframe path
+onto the configured public origin. The resulting iframe URL is internal
+presentation plumbing and is never the durable operator handoff.
 Repeat opens on the same route reuse a live same-origin target when available
 and report tabAcquisitionDecision plus duplicateTargetCleanup evidence.
 If the display and tab are ready but the Guacamole operator route is not,

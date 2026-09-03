@@ -74,6 +74,34 @@ assert.equal(
   viewStreamDashboardFrameUrl(route, 'https://dashboard.example.test/'),
   route.routeDescriptor.dashboardEmbedUrl,
 );
+const loopbackOnlyExternalRoute = {
+  ...route,
+  frameUrl: 'http://127.0.0.1:8093/guacamole/#/client/route-a',
+  externalUrl: null,
+  routeDescriptor: {
+    localEmbedUrl: 'http://127.0.0.1:8093/guacamole/#/client/route-a',
+    publicOperatorUrl: 'https://agent-browser.example.test',
+    dashboardEmbedUrl: 'http://127.0.0.1:8093/guacamole/#/client/route-a',
+  },
+};
+assert.equal(
+  viewStreamDashboardFrameUrl(loopbackOnlyExternalRoute, 'https://agent-browser.example.test/remote-view/opaque'),
+  'https://agent-browser.example.test/guacamole/#/client/route-a',
+  'external dashboards must rebase the internal Guacamole path onto the public origin',
+);
+assert.equal(
+  viewStreamDashboardFrameUrl({
+    ...loopbackOnlyExternalRoute,
+    frameUrl: 'http://127.0.0.1:8093/not-guacamole',
+    routeDescriptor: {
+      ...loopbackOnlyExternalRoute.routeDescriptor,
+      localEmbedUrl: 'http://127.0.0.1:8093/not-guacamole',
+      dashboardEmbedUrl: 'http://127.0.0.1:8093/not-guacamole',
+    },
+  }, 'https://agent-browser.example.test/remote-view/opaque'),
+  null,
+  'arbitrary loopback paths must never be projected through public ingress',
+);
 
 const daemonStream = {
   id: 'daemon-stream:qbo-soylei',

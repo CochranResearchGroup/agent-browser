@@ -118,7 +118,9 @@ export function viewStreamDashboardFrameUrl(stream?: ServiceViewStream | null, d
   if (dashboardIsLocal) return localEmbedUrl || dashboardEmbedUrl || publicUrl || null;
 
   if (dashboardEmbedUrl && !isLoopbackUrl(dashboardEmbedUrl, dashboardHref)) return dashboardEmbedUrl;
-  if (frameUrl && isLoopbackUrl(frameUrl, dashboardHref) && publicUrl) return publicUrl;
+  if (frameUrl && isLoopbackUrl(frameUrl, dashboardHref)) {
+    return rebaseGuacamoleUrlForPublicIngress(frameUrl, publicUrl);
+  }
   return frameUrl || publicUrl || dashboardEmbedUrl || null;
 }
 
@@ -308,5 +310,26 @@ function isLoopbackUrl(value: string | null | undefined, base?: string | null): 
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
   } catch {
     return false;
+  }
+}
+
+/** Projects only a recognized internal Guacamole route through the configured public origin. */
+function rebaseGuacamoleUrlForPublicIngress(
+  internalUrl: string,
+  publicUrl: string | null,
+): string | null {
+  if (!publicUrl) return null;
+  try {
+    const internal = new URL(internalUrl);
+    const external = new URL(publicUrl);
+    if (internal.pathname !== "/guacamole" && !internal.pathname.startsWith("/guacamole/")) {
+      return null;
+    }
+    external.pathname = internal.pathname;
+    external.search = internal.search;
+    external.hash = internal.hash;
+    return external.href;
+  } catch {
+    return null;
   }
 }

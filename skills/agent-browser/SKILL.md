@@ -1672,6 +1672,11 @@ own origin by proxying to an active session stream server when available and
 falling back to CLI-backed read-only service views where possible. Prefer this
 same-origin path for dashboard and ingress use so the operator's browser does
 not need direct access to per-session localhost ports.
+For a hosted dashboard, an internal loopback Guacamole iframe is projected only
+by rebasing its `/guacamole/` path onto the configured public origin. A bare
+public dashboard origin and arbitrary loopback paths are not valid iframe
+substitutes. This projected iframe remains internal presentation plumbing and
+must never be copied or returned as the operator handoff URL.
 
 MCP `agent-browser://profiles/{profile_id}/allocation` returns the same one-profile allocation row as HTTP `GET /api/service/profiles/<id>/allocation` for agents that need lease, holder, conflict, browser ownership, browser health, recommended-action, and readiness state without fetching the full profile collection. The dashboard profile allocation view names the retained owner browser, shared service/agent/task clients, lease conflicts, tab count, and duplicate-launch guidance for shared runtime profiles.
 

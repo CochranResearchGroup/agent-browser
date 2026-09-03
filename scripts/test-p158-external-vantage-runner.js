@@ -14,6 +14,8 @@ import {
   buildExternalCalibrationDescriptor,
   buildExternalCalibrationSchedule,
   canonicalHash,
+  classifyRenderedStreamFailure,
+  externalVantageFailureRecord,
   findInternalUrlLeaks,
   projectHandoffResolution,
   redactOperatorUrl,
@@ -121,6 +123,43 @@ const env = {
   RUNNER_OS: 'Linux',
   RUNNER_ARCH: 'X64',
 };
+const typedStreamFailure = new Error('The external dashboard did not render the prepared remote pixel marker');
+typedStreamFailure.code = 'external_stream_auth_failed';
+typedStreamFailure.details = {
+  iframeCount: 1,
+  iframePathClasses: ['unexpected'],
+  streamSignInExpired: true,
+};
+assert.deepEqual(externalVantageFailureRecord(typedStreamFailure, env), {
+  code: 'external_stream_auth_failed',
+  message: 'The external dashboard did not render the prepared remote pixel marker',
+  details: typedStreamFailure.details,
+});
+assert.equal(externalVantageFailureRecord(new Error('plain failure'), env).code, 'external_vantage_probe_failed');
+const unsafeDetailsFailure = new Error('bounded');
+unsafeDetailsFailure.code = 'external_stream_route_invalid';
+unsafeDetailsFailure.details = { rawUrl: env.P158_DEV_HANDOFF_URL, pageText: 'private content' };
+assert.equal('details' in externalVantageFailureRecord(unsafeDetailsFailure, env), false);
+assert.equal(classifyRenderedStreamFailure({
+  bodyText: 'Stream sign-in expired.',
+  iframePaths: ['/'],
+  observedPixelHash: 'a'.repeat(64),
+}).code, 'external_stream_auth_failed');
+assert.equal(classifyRenderedStreamFailure({
+  bodyText: 'Connecting to CDP stream',
+  iframePaths: [],
+  observedPixelHash: 'a'.repeat(64),
+}).code, 'external_stream_not_rendered');
+assert.equal(classifyRenderedStreamFailure({
+  bodyText: 'Workspace ready',
+  iframePaths: ['/'],
+  observedPixelHash: 'a'.repeat(64),
+}).code, 'external_stream_route_invalid');
+assert.equal(classifyRenderedStreamFailure({
+  bodyText: 'Workspace ready',
+  iframePaths: ['/guacamole/'],
+  observedPixelHash: 'a'.repeat(64),
+}).code, 'external_stream_identity_marker_missing');
 assert.equal(
   validateExternalVantageConfiguration({ env, clientId: 'external-runner-human', paceProfile: 'human_controller' }).handoff.origin,
   'https://external.example.test',
