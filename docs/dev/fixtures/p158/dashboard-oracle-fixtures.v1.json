@@ -76,9 +76,7 @@
       "accessHealth": "healthy",
       "acquisitionHealth": "healthy",
       "displayedAxes": [],
-      "convergenceActionIds": [
-        "refresh-status"
-      ]
+      "convergenceActionIds": []
     },
     "handoffUrls": [
       "https://remote.example.test/remote-view/handoff-dashboard"
@@ -258,6 +256,16 @@
           "idNamespace": "p158-dense",
           "labelCardinality": 8
         }
+      },
+      "expectedFindingCodes": []
+    },
+    {
+      "fixtureId": "warning-typed-convergence-clean",
+      "description": "Typed convergence failure displays only the convergence axis and exactly one executable action.",
+      "density": "normal",
+      "mutation": {
+        "kind": "typed_convergence_warning",
+        "parameters": {}
       },
       "expectedFindingCodes": []
     },
