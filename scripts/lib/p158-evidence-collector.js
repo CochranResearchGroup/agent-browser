@@ -49,6 +49,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-campaign-controller.js',
   'scripts/lib/p158-campaign-preparation.js',
   'scripts/lib/p158-dashboard-oracle.js',
+  'scripts/lib/p158-evidence-collector.js',
   'scripts/lib/p158-external-handoff-oracle.js',
   'scripts/lib/p158-final-analyzer.js',
   'scripts/lib/p158-execution-schedule.js',
@@ -56,6 +57,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-calibration-runner.js',
   'scripts/lib/p158-distributed-calibration.js',
   'scripts/lib/p158-w7-development-adapters.js',
+  'scripts/lib/p158-w7-agent-orchestration.js',
   'scripts/lib/p158-w8-hd-adapters.js',
   'scripts/lib/p158-w9-campaign-orchestrator.js',
   'scripts/lib/p158-w9-concrete-drivers.js',
@@ -79,12 +81,14 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-logging-auditor.js',
   'scripts/test-p158-synthetic-visual-fixture.js',
   'scripts/test-p158-w7-development-adapters.js',
+  'scripts/test-p158-w7-agent-orchestration.js',
   'scripts/test-p158-w8-hd-adapters.js',
   'scripts/test-p158-w9-campaign-orchestrator.js',
   'scripts/test-p158-w9-concrete-drivers.js',
 ]);
 
 export const P158_REQUIRED_LIVE_HOOK_IDS = Object.freeze([
+  'w7.agent_existing_seam_workflow',
   'w7.browser', 'w7.cli', 'w7.display', 'w7.evidence', 'w7.logs', 'w7.process',
   'w7.shutdown', 'w7.systemd', 'w8.dashboard_capture', 'w8.dashboard_execute',
   'w8.external_workflow', 'w8.playwright', 'w8.stimulus', 'w9.browser_crash',
@@ -284,10 +288,24 @@ export function validateP158LiveHookManifest({
           binding.sourceSha256) {
       fail('live_hook_source_unsealed', `${binding.caseId} adapter source is absent from the frozen aggregate`);
     }
+    const adapterBindingSha256 = digest(binding);
+    const exactAdapterBlocker = binding.blocker === null ? null : {
+      ...binding.blocker,
+      sourcePath: binding.sourcePath,
+      sourceSha256: binding.sourceSha256,
+    };
     if (!contract || binding.adapterId !== contract.adapterId ||
         binding.executionContractSha256 !== contract.executionContractSha256 ||
         binding.hookIds.some((hookId) => !hookIds.includes(hookId)) ||
-        adapter?.adapterId !== binding.adapterId) {
+        !adapter || adapter.caseId !== binding.caseId || adapter.adapterId !== binding.adapterId ||
+        adapter.executionContractSha256 !== binding.executionContractSha256 ||
+        adapter.executionMode !== binding.mode || adapter.providerFree !== false ||
+        adapter.effectsAllowed !== binding.effectsAllowed ||
+        adapter.sourcePath !== binding.sourcePath || adapter.sourceSha256 !== binding.sourceSha256 ||
+        adapter.liveHookManifestSha256 !== manifest.manifestSha256 ||
+        adapter.liveBindingSha256 !== adapterBindingSha256 ||
+        digest(adapter.liveHookIds ?? []) !== digest(binding.hookIds) ||
+        digest(adapter.blocker ?? null) !== digest(exactAdapterBlocker)) {
       fail('provider_free_hooks_prohibited', `${binding.caseId} adapter is not bound to its classified live-hook manifest entry`);
     }
     if (binding.mode === 'explicit_blocked' && (binding.effectsAllowed !== false ||
@@ -462,6 +480,7 @@ export function collectP158PreparationEvidence({
   };
   delete candidate.candidateSha256;
   candidate.candidateSha256 = canonicalCandidateDigest(candidate);
+  const preExecutionBlockers = new Map();
   if (liveHookManifest) {
     validateP158LiveHookManifest({
       manifest: liveHookManifest,
@@ -471,6 +490,15 @@ export function collectP158PreparationEvidence({
       adapters,
       repoRoot,
     });
+    for (const binding of liveHookManifest.adapterBindings) {
+      if (binding.mode === 'explicit_blocked') {
+        preExecutionBlockers.set(binding.caseId, {
+          ...structuredClone(binding.blocker),
+          sourcePath: binding.sourcePath,
+          sourceSha256: binding.sourceSha256,
+        });
+      }
+    }
     const liveHookBytes = Buffer.from(canonicalJson(liveHookManifest));
     artifacts.push({
       artifactId: 'freeze-artifact-20',
@@ -533,7 +561,10 @@ export function collectP158PreparationEvidence({
         scheduleSha256: compiled.executionSchedule.scheduleSha256,
         attemptCount: compiled.executionSchedule.attemptCount,
       },
-      schedule: structuredClone(compiled.controllerSchedule),
+      schedule: compiled.controllerSchedule.map((attempt) => ({
+        ...structuredClone(attempt),
+        preExecutionBlocker: structuredClone(preExecutionBlockers.get(attempt.caseId) ?? null),
+      })),
       scheduledTeardown: structuredClone(config.scheduledTeardown),
     },
   };

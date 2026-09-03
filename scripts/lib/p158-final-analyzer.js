@@ -205,7 +205,7 @@ function terminalResults(manifest, records, findings) {
       retryDisposition: record.payload.retryDisposition,
       firstFailureSignature: record.payload.firstFailureSignature,
       blockerCode: record.payload.blocker?.code ?? record.payload.blocker?.lostPrerequisite ?? null,
-      causalIds: clone(record.payload.causalIds ?? []),
+      causalIds: clone(record.payload.causalIds ?? {}),
     });
   }
   const missing = [...scheduled.keys()].filter((attemptId) => !seen.has(attemptId));
@@ -276,7 +276,7 @@ function buildClusters(results) {
     const cluster = clusters.get(key);
     cluster.attemptIds.push(result.attemptId);
     cluster.caseIds.add(result.caseId);
-    for (const causalId of result.causalIds ?? []) cluster.causalIds.add(causalId);
+    for (const causalId of Object.values(result.causalIds ?? {})) cluster.causalIds.add(causalId);
   }
   return [...clusters.values()].map((cluster) => ({
     ...cluster,
@@ -383,7 +383,7 @@ function historicalReproduction(registry, results) {
   });
 }
 
-function summarizeIndependentAudits(input, analyzedAt, findings) {
+function summarizeIndependentAudits(input, analyzedAt, findings, results) {
   const logging = (input.loggingEvidence ?? []).map((fixtureSet, index) => auditCausalEnvelopes({
     fixtureSet,
     options: { runId: input.runId, auditId: `${input.runId}:w10:logging:${index}`, auditedAt: analyzedAt },
@@ -397,6 +397,7 @@ function summarizeIndependentAudits(input, analyzedAt, findings) {
     fixture,
     options: { auditId: `${input.runId}:w10:dashboard:${index}`, auditedAt: analyzedAt },
   }));
+  verifyCampaignLoggingBindings(input, results, logging, findings);
   for (const [kind, reports] of Object.entries({ logging, handoff, dashboard })) {
     if (reports.length === 0) {
       addFinding(findings, {
@@ -452,6 +453,124 @@ function summarizeIndependentAudits(input, analyzedAt, findings) {
       resourceSlopes: { inputSha256: report.inputSha256, ...report.resourceSlopes },
     })),
   };
+}
+
+const REQUIRED_LOGGING_SURFACE_ROLES = Object.freeze([
+  'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+]);
+
+function addLoggingBindingFinding(findings, {
+  code, disposition, evidenceIds, consequence, reproducer,
+}) {
+  addFinding(findings, {
+    code,
+    category: 'logging',
+    disposition,
+    criterion: 'W10.2',
+    evidenceIds,
+    consequence,
+    reproducer,
+    recommendedOwner: 'campaign-harness',
+  });
+}
+
+function verifyCampaignLoggingBindings(input, results, loggingReports, findings) {
+  const expectations = Array.isArray(input.loggingExpectations) ? input.loggingExpectations : [];
+  const expectedByAttempt = new Map();
+  for (const expectation of expectations) {
+    if (!expectedByAttempt.has(expectation?.attemptId)) expectedByAttempt.set(expectation?.attemptId, []);
+    expectedByAttempt.get(expectation?.attemptId).push(expectation);
+  }
+  const envelopesByRequest = new Map();
+  for (const report of loggingReports) {
+    for (const envelope of report.envelopes ?? []) {
+      if (!envelopesByRequest.has(envelope.requestId)) envelopesByRequest.set(envelope.requestId, []);
+      envelopesByRequest.get(envelope.requestId).push(envelope);
+    }
+  }
+  const resultIds = new Set(results.map((result) => result.attemptId));
+  for (const expectation of expectations.filter((entry) => !resultIds.has(entry?.attemptId))) {
+    addLoggingBindingFinding(findings, {
+      code: 'logging_expectation_unscheduled',
+      disposition: 'blocking',
+      evidenceIds: [expectation?.attemptId ?? 'missing-attempt-id'],
+      consequence: 'A logging expectation is not bound to a terminal scheduled attempt.',
+      reproducer: 'Compare the sealed logging expectation index with the terminal attempt ledger.',
+    });
+  }
+  for (const result of results) {
+    const attemptExpectations = expectedByAttempt.get(result.attemptId) ?? [];
+    if (attemptExpectations.length === 0) {
+      addLoggingBindingFinding(findings, {
+        code: 'logging_expectation_missing',
+        disposition: 'needs_evidence',
+        evidenceIds: [result.attemptId],
+        consequence: 'The terminal attempt has no sealed declaration of its expected causal logging measurements.',
+        reproducer: `Add the frozen logging expectation for ${result.attemptId} and rerun W10.`,
+      });
+      continue;
+    }
+    const seenRequestIds = new Set();
+    for (const expectation of attemptExpectations) {
+      const requestId = expectation?.requestId;
+      const expectedRoles = [...new Set(expectation?.expectedSurfaceRoles ?? [])].sort();
+      const requiredRoles = [
+        ...REQUIRED_LOGGING_SURFACE_ROLES,
+        ...(expectation?.incidentExpected === true ? ['incident'] : []),
+        ...(expectation?.operatorVisible === true ? ['dashboard_projection'] : []),
+      ].sort();
+      const invalid = typeof requestId !== 'string' || requestId.length === 0 ||
+        seenRequestIds.has(requestId) || result.causalIds?.requestId !== requestId ||
+        expectation?.incidentExpected !== (expectedRoles.includes('incident')) ||
+        expectation?.operatorVisible !== (expectedRoles.includes('dashboard_projection')) ||
+        requiredRoles.some((role) => !expectedRoles.includes(role));
+      seenRequestIds.add(requestId);
+      if (invalid) {
+        addLoggingBindingFinding(findings, {
+          code: 'logging_expectation_invalid',
+          disposition: 'blocking',
+          evidenceIds: [result.attemptId, requestId ?? 'missing-request-id'],
+          consequence: 'The logging expectation is duplicate, incomplete, or not joined by an immutable terminal causal ID.',
+          reproducer: `Validate the sealed logging expectation for ${result.attemptId}.`,
+        });
+        continue;
+      }
+      const envelopes = envelopesByRequest.get(requestId) ?? [];
+      if (envelopes.length === 0) {
+        addLoggingBindingFinding(findings, {
+          code: 'logging_attempt_envelope_missing',
+          disposition: 'needs_evidence',
+          evidenceIds: [result.attemptId, requestId],
+          consequence: 'No audited causal envelope matches the terminal attempt request ID.',
+          reproducer: `Locate or explicitly record the missing causal measurements for request ${requestId}.`,
+        });
+        continue;
+      }
+      if (envelopes.length !== 1) {
+        addLoggingBindingFinding(findings, {
+          code: 'logging_attempt_envelope_ambiguous',
+          disposition: 'blocking',
+          evidenceIds: [result.attemptId, requestId, ...envelopes.map((entry) => entry.envelopeId)],
+          consequence: 'More than one audited envelope claims the same immutable request ID.',
+          reproducer: `Reconcile duplicate envelope ownership for request ${requestId}.`,
+        });
+        continue;
+      }
+      const envelope = envelopes[0];
+      const auditedExpectedRoles = [...envelope.expectedSurfaceRoles].sort();
+      if (stableP158AnalysisHash(expectedRoles) !== stableP158AnalysisHash(auditedExpectedRoles) ||
+          envelope.incidentExpected !== expectation.incidentExpected ||
+          envelope.operatorVisible !== expectation.operatorVisible) {
+        addLoggingBindingFinding(findings, {
+          code: 'logging_expected_surface_mismatch',
+          disposition: 'blocking',
+          evidenceIds: [result.attemptId, requestId, envelope.envelopeId],
+          consequence: 'The logging auditor evaluated a weaker or different surface contract than the sealed attempt expectation.',
+          reproducer: `Compare expected and audited surface roles for request ${requestId}.`,
+        });
+      }
+    }
+  }
 }
 
 function correlation(pairs, rightField) {
@@ -598,7 +717,7 @@ export function analyzeP158SealedCampaign({
     reproducer: 'Run the exclusion scanner against the sealed metadata and raw logging indexes.',
     recommendedOwner: 'evidence-custody',
   });
-  const independentAudits = summarizeIndependentAudits(input, analyzedAt, findings);
+  const independentAudits = summarizeIndependentAudits(input, analyzedAt, findings, results);
   for (const intervention of ledger.records.filter((record) => record.recordType === 'external_intervention')) {
     addFinding(findings, {
       code: 'external_intervention', category: 'infrastructure', disposition: 'blocking', criterion: 'W10.1',

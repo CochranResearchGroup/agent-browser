@@ -486,6 +486,7 @@ export function compileP158ControllerScheduleInput({ registry, seed, adapters })
       environmentIds: [...attempt.environmentIds],
       seed: attempt.seed,
       dependsOn: [...attempt.dependsOnAttemptIds],
+      preExecutionBlocker: null,
     })),
   };
 }
@@ -535,6 +536,9 @@ export function createP158AdapterExecutor({ schedule, adapters, effects = {} }) 
       const adapter = adapterByCase.get(attempt.caseId);
       const requestedEffects = [];
       const requestEffect = async (requestedEffectId, payload = {}) => {
+        if (adapter.executionMode === 'explicit_blocked' || adapter.effectsAllowed === false) {
+          fail('blocked_adapter_effect_prohibited', `${attemptId} is frozen as zero-effect explicit_blocked`);
+        }
         if (!attempt.declaredEffectIds.includes(requestedEffectId)) {
           fail('undeclared_effect_prohibited', `${requestedEffectId} is not declared for ${attemptId}`, {
             declaredEffectIds: attempt.declaredEffectIds,
@@ -564,6 +568,12 @@ export function createP158AdapterExecutor({ schedule, adapters, effects = {} }) 
         fail('adapter_result_invalid', `${attempt.adapterId} returned an invalid terminal result`, {
           resultState: result?.resultState ?? null,
         });
+      }
+      if (adapter.executionMode === 'explicit_blocked' && (
+        result.resultState !== 'skipped_blocked' || result.effectState !== 'not_started' ||
+        sha256(result.blocker ?? null) !== sha256(adapter.blocker ?? null) || requestedEffects.length !== 0
+      )) {
+        fail('explicit_blocked_result_invalid', `${attempt.adapterId} did not return its exact frozen zero-effect blocker`);
       }
       const outcome = { ...structuredClone(result), requestedEffects };
       outcomes.set(attemptId, outcome);

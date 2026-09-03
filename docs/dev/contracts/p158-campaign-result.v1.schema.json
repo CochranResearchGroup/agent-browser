@@ -142,7 +142,7 @@
         "safety_stopped"
       ]
     },
-    "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
+    "effectState": { "enum": ["not_started", "no_effect", "effect_uncertain", "verified_effect"] },
     "retryDisposition": {
       "enum": ["not_applicable", "prohibited_opportunistic_retry", "predetermined_distinct_attempt"]
     },
@@ -264,7 +264,7 @@
         },
         "blocker": {
           "oneOf": [
-            { "$ref": "#/$defs/blocker" },
+            { "$ref": "#/$defs/terminalBlocker" },
             { "type": "null" }
           ]
         },
@@ -279,7 +279,7 @@
       "allOf": [
         {
           "if": { "properties": { "resultState": { "const": "skipped_blocked" } }, "required": ["resultState"] },
-          "then": { "properties": { "blocker": { "$ref": "#/$defs/blocker" }, "effectState": { "const": "no_effect" } } },
+          "then": { "properties": { "blocker": { "$ref": "#/$defs/terminalBlocker" }, "effectState": { "enum": ["not_started", "no_effect"] } } },
           "else": { "properties": { "blocker": { "type": "null" } } }
         },
         {
@@ -310,6 +310,23 @@
         }
       },
       "additionalProperties": false
+    },
+    "preExecutionBlocker": {
+      "type": "object",
+      "required": ["code", "detail", "sourcePath", "sourceSha256"],
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "sourcePath": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$" },
+        "sourceSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "terminalBlocker": {
+      "oneOf": [
+        { "$ref": "#/$defs/blocker" },
+        { "$ref": "#/$defs/preExecutionBlocker" }
+      ]
     },
     "safetyStop": {
       "type": "object",

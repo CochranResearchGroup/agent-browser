@@ -100,7 +100,7 @@ function cleanEvidence({
       firstFailureSignature,
       blocker: null,
       safetyStop: null,
-      causalIds: ['request-a01'],
+      causalIds: { requestId: 'request-good' },
     },
   });
   const teardown = ledgerRecord({
@@ -159,6 +159,15 @@ function cleanEvidence({
     analyzedAt: '2026-09-03T02:00:00.000Z',
   };
   if (includeRawAudits) {
+    input.loggingExpectations = [{
+      attemptId: 'A01-E0-r001',
+      requestId: 'request-good',
+      incidentExpected: false,
+      operatorVisible: false,
+      expectedSurfaceRoles: [
+        'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+      ],
+    }];
     input.loggingEvidence = [{
       ...clone(loggingCorpus),
       fixtures: loggingCorpus.fixtures.filter((fixture) => fixture.fixtureId === 'logging-good-complete'),
@@ -245,6 +254,50 @@ runTest('detects broken ledger ancestry and refuses to call it intact', () => {
   const report = analyze(input);
   assert.equal(report.integrity.passed, false);
   assert(report.findings.some((finding) => finding.code === 'ledger_chain_invalid'));
+});
+
+runTest('does not let an unrelated clean logging envelope satisfy a terminal attempt', () => {
+  const input = cleanEvidence();
+  input.loggingExpectations[0].requestId = 'request-for-this-attempt';
+  input.ledgerRecords[0].payload.causalIds = { requestId: 'request-for-this-attempt' };
+  input.ledgerRecords[0].sha256 = stableP158AnalysisHash(input.ledgerRecords[0]);
+  input.ledgerRecords[1].previousRecordSha256 = input.ledgerRecords[0].sha256;
+  input.ledgerRecords[1].sha256 = stableP158AnalysisHash(input.ledgerRecords[1]);
+  input.ledgerRecords[2].previousRecordSha256 = input.ledgerRecords[1].sha256;
+  input.ledgerRecords[2].payload.ledgerHeadSha256 = input.ledgerRecords[1].sha256;
+  input.ledgerRecords[2].sha256 = stableP158AnalysisHash(input.ledgerRecords[2]);
+  const report = analyze(input);
+  assert(report.findings.some((finding) => finding.code === 'logging_attempt_envelope_missing'));
+});
+
+runTest('requires every attempt to declare its expected causal logging measurements', () => {
+  const input = cleanEvidence();
+  delete input.loggingExpectations;
+  const report = analyze(input);
+  assert(report.findings.some((finding) => finding.code === 'logging_expectation_missing'));
+});
+
+runTest('retains explicitly missing response job event trace incident and dashboard measurements', () => {
+  const input = cleanEvidence();
+  const fixture = input.loggingEvidence[0].fixtures[0];
+  fixture.operatorVisible = true;
+  fixture.incidentExpected = true;
+  fixture.expectedSurfaceRoles.push('incident', 'dashboard_projection');
+  fixture.records = fixture.records.filter((record) =>
+    !['immediate_response', 'durable_job', 'terminal_event', 'trace_outcome'].includes(record.surfaceRole));
+  input.loggingExpectations[0] = {
+    ...input.loggingExpectations[0],
+    incidentExpected: true,
+    operatorVisible: true,
+    expectedSurfaceRoles: [
+      'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+      'incident', 'dashboard_projection',
+    ],
+  };
+  const report = analyze(input);
+  assert(report.findings.some((finding) => finding.code === 'logging:missing_record'));
+  assert.equal(report.independentAudits.logging[0].missingRecordCount, 6);
+  assert(!report.findings.some((finding) => finding.code === 'logging_attempt_envelope_missing'));
 });
 
 process.stdout.write('P158 W10 final analyzer provider-free self-test passed\n');

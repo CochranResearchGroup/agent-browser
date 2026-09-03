@@ -176,7 +176,9 @@ function makeLiveHookContext(context) {
   };
   candidate.candidateSha256 = canonicalCandidateDigest(candidate);
   const aggregateEntries = new Map(aggregate.manifest.entries.map((entry) => [entry.path, entry]));
-  const sourceFor = (hookId) => hookId.startsWith('w7.')
+  const sourceFor = (hookId) => hookId === 'w7.agent_existing_seam_workflow'
+    ? 'scripts/lib/p158-w7-agent-orchestration.js'
+    : hookId.startsWith('w7.')
     ? 'scripts/lib/p158-w7-development-adapters.js'
     : hookId.startsWith('w8.external') || hookId === 'w8.playwright'
       ? 'scripts/run-p158-external-vantage.js'
@@ -251,6 +253,13 @@ function makeLiveHookContext(context) {
     executionMode: 'concrete_live',
     providerFree: false,
     effectsAllowed: true,
+    sourcePath: sourcePathForCase(adapter.caseId),
+    sourceSha256: aggregateEntries.get(sourcePathForCase(adapter.caseId)).sha256,
+    liveHookIds: hookIdsFor(adapter.caseId),
+    blocker: null,
+    liveBindingSha256: sha256(Buffer.from(`${JSON.stringify(canonicalizeForTest(
+      body.adapterBindings.find((binding) => binding.caseId === adapter.caseId),
+    ))}\n`)),
     liveHookManifestSha256: manifest.manifestSha256,
   }));
   return { manifest, adapters };
@@ -272,6 +281,11 @@ function explicitlyBlockLiveCase(live, caseId) {
     code: 'live_hook_not_implemented',
     detail: `${caseId} is frozen as an explicit zero-effect blocker`,
   };
+  const exactAdapterBlocker = {
+    ...blocker,
+    sourcePath: binding.sourcePath,
+    sourceSha256: binding.sourceSha256,
+  };
   binding.mode = 'explicit_blocked';
   binding.implementedActionCount = 0;
   binding.blockedActionCount = live.manifest.adapterBindings.find(
@@ -288,10 +302,18 @@ function explicitlyBlockLiveCase(live, caseId) {
         ...adapter,
         executionMode: 'explicit_blocked',
         effectsAllowed: false,
-        blocker,
+        liveHookIds: binding.hookIds,
+        blocker: exactAdapterBlocker,
+        liveBindingSha256: sha256(Buffer.from(`${JSON.stringify(canonicalizeForTest(binding))}\n`)),
         liveHookManifestSha256: manifest.manifestSha256,
       }
-    : { ...adapter, liveHookManifestSha256: manifest.manifestSha256 });
+    : {
+        ...adapter,
+        liveBindingSha256: sha256(Buffer.from(`${JSON.stringify(canonicalizeForTest(
+          manifest.adapterBindings.find((entry) => entry.caseId === adapter.caseId),
+        ))}\n`)),
+        liveHookManifestSha256: manifest.manifestSha256,
+      });
   return { manifest, adapters };
 }
 
@@ -313,11 +335,34 @@ await runTest('builds a deterministic aggregate over the frozen P158 source set'
     'package.json',
     'pnpm-lock.yaml',
     'docs/dev/contracts/p158-live-hook-manifest.v1.schema.json',
+    'scripts/lib/p158-evidence-collector.js',
     'scripts/lib/p158-w7-development-adapters.js',
     'scripts/lib/p158-w8-hd-adapters.js',
     'scripts/lib/p158-w9-campaign-orchestrator.js',
   ]) {
     assert(paths.has(requiredPath), `aggregate omitted ${requiredPath}`);
+  }
+});
+
+await runTest('rejects a same-ID adapter without the sealed executable binding', async () => {
+  const context = makeContext('same-id-adapter-substitution');
+  try {
+    const live = makeLiveHookContext(context);
+    const substituted = live.adapters.map((adapter, index) => index === 0
+      ? { ...context.adapters[0], adapterId: adapter.adapterId, caseId: adapter.caseId }
+      : adapter);
+    assert.throws(
+      () => collectP158PreparationEvidence({
+        config: context.config,
+        repoRoot,
+        baseDir: context.root,
+        adapters: substituted,
+        liveHookManifest: live.manifest,
+      }),
+      (error) => error?.code === 'provider_free_hooks_prohibited',
+    );
+  } finally {
+    context.cleanup();
   }
 });
 
@@ -520,6 +565,14 @@ await runTest('persists only prepared and frozen state behind the explicit freez
     assert.equal(validateCampaignManifest(manifest), true,
       schemaAjv.errorsText(validateCampaignManifest.errors));
     assert.equal(manifest.schedule.length, 1592);
+    const blockedAttempts = manifest.schedule.filter((attempt) => attempt.caseId === 'A01');
+    assert(blockedAttempts.length > 0);
+    assert(blockedAttempts.every((attempt) =>
+      attempt.preExecutionBlocker?.code === 'live_hook_not_implemented' &&
+      attempt.preExecutionBlocker.sourcePath === 'scripts/lib/p158-w7-development-adapters.js' &&
+      /^[a-f0-9]{64}$/.test(attempt.preExecutionBlocker.sourceSha256)));
+    assert(manifest.schedule.filter((attempt) => attempt.caseId !== 'A01')
+      .every((attempt) => attempt.preExecutionBlocker === null));
     assert(manifest.artifactBindings.some((binding) => binding.kind === 'execution_schedule'));
     assert(manifest.artifactBindings.some((binding) => binding.kind === 'live_hook_manifest'));
     const records = readdirSync(join(context.freezeRoot, 'ledger'))

@@ -165,21 +165,38 @@ function inspectArtifacts(artifacts, findings, campaignMode) {
 function inspectExecutionSchedule(input, artifacts, findings, executionContext, controllerSnapshot) {
   if (input.campaignMode !== 'live') return;
   const artifact = artifacts.byId.get(input.executionScheduleSeal?.artifactId);
+  const liveHookArtifact = artifacts.entries.find((entry) => entry.binding.kind === 'live_hook_manifest');
   let persisted = null;
+  let liveHookManifest = null;
   try {
     persisted = artifact ? JSON.parse(artifact.bytes.toString('utf8')) : null;
+    liveHookManifest = liveHookArtifact
+      ? JSON.parse(liveHookArtifact.bytes.toString('utf8'))
+      : null;
   } catch {
     persisted = null;
+    liveHookManifest = null;
   }
+  const blockerByCase = new Map((liveHookManifest?.adapterBindings ?? [])
+    .filter((binding) => binding.mode === 'explicit_blocked')
+    .map((binding) => [binding.caseId, {
+      ...clone(binding.blocker),
+      sourcePath: binding.sourcePath,
+      sourceSha256: binding.sourceSha256,
+    }]));
+  const bindPreExecutionBlockers = (attempts) => attempts?.map((attempt) => ({
+    ...attempt,
+    preExecutionBlocker: clone(blockerByCase.get(attempt.caseId) ?? null),
+  })) ?? null;
   const seal = input.executionScheduleSeal;
-  const expectedAttempts = persisted?.attempts?.map((attempt) => ({
+  const expectedAttempts = bindPreExecutionBlockers(persisted?.attempts?.map((attempt) => ({
     caseId: attempt.caseId,
     attemptId: attempt.attemptId,
     environmentId: attempt.environmentId,
     environmentIds: attempt.environmentIds,
     seed: attempt.seed,
     dependsOn: attempt.dependsOnAttemptIds,
-  })) ?? null;
+  })));
   let independentlyCompiled = null;
   try {
     independentlyCompiled = compileP158ControllerScheduleInput({
@@ -206,7 +223,7 @@ function inspectExecutionSchedule(input, artifacts, findings, executionContext, 
     Array.isArray(input.schedule) &&
     input.schedule.length === 1592 &&
     digest(input.schedule) === digest(expectedAttempts) &&
-    digest(input.schedule) === digest(independentlyCompiled.controllerSchedule);
+    digest(input.schedule) === digest(bindPreExecutionBlockers(independentlyCompiled.controllerSchedule));
   if (!valid) {
     addFinding(findings, 'execution_schedule_mismatch', 'executionScheduleSeal', {
       caseCount: 54,

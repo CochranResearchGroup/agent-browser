@@ -275,6 +275,7 @@ assert.deepEqual(bridged.controllerSchedule[0], {
   environmentIds: bridged.executionSchedule.attempts[0].environmentIds,
   seed: bridged.executionSchedule.attempts[0].seed,
   dependsOn: bridged.executionSchedule.attempts[0].dependsOnAttemptIds,
+  preExecutionBlocker: null,
 });
 
 for (const [code, mutate] of [
@@ -326,6 +327,41 @@ await expectRejection('undeclared_effect_prohibited', () =>
 assert.equal(undeclaredExecutor.outcomes.get('A01-E0-r001').resultState, 'harness_failure');
 await expectRejection('opportunistic_retry_prohibited', () =>
   undeclaredExecutor.executeAttempt('A01-E0-r001'));
+
+const frozenBlocker = {
+  code: 'live_case_hook_missing', detail: 'No reviewed live hook exists',
+  sourcePath: 'scripts/lib/p158-w7-development-adapters.js', sourceSha256: 'ab'.repeat(32),
+};
+const explicitlyBlocked = compileReady('explicit-blocked-seed');
+explicitlyBlocked.adapters = explicitlyBlocked.adapters.map((adapter) => adapter.caseId === 'A01'
+  ? {
+      ...adapter,
+      executionMode: 'explicit_blocked',
+      effectsAllowed: false,
+      blocker: frozenBlocker,
+      execute: async () => ({
+        resultState: 'skipped_blocked', effectState: 'not_started', blocker: frozenBlocker,
+      }),
+    }
+  : adapter);
+const blockedExecutor = createP158AdapterExecutor(explicitlyBlocked);
+const blockedOutcome = await blockedExecutor.executeAttempt('A01-E0-r001');
+assert.equal(blockedOutcome.resultState, 'skipped_blocked');
+assert.deepEqual(blockedOutcome.requestedEffects, []);
+
+const effectingBlocked = compileReady('effecting-blocked-seed', {
+  A01: async ({ requestEffect }) => {
+    await requestEffect('p158.effect.A01.declared');
+    return { resultState: 'skipped_blocked', effectState: 'not_started', blocker: frozenBlocker };
+  },
+});
+effectingBlocked.adapters = effectingBlocked.adapters.map((adapter) => adapter.caseId === 'A01'
+  ? { ...adapter, executionMode: 'explicit_blocked', effectsAllowed: false, blocker: frozenBlocker }
+  : adapter);
+await expectRejection('blocked_adapter_effect_prohibited', () => createP158AdapterExecutor({
+  ...effectingBlocked,
+  effects: { 'p158.effect.A01.declared': async () => ({ observed: true }) },
+}).executeAttempt('A01-E0-r001'));
 
 console.log(JSON.stringify({
   ok: true,

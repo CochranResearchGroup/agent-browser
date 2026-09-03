@@ -329,6 +329,21 @@ function deriveAttemptSeed(runSeed, caseId, attemptId, environmentId) {
   );
 }
 
+function normalizePreExecutionBlocker(blocker, attemptId) {
+  if (blocker === undefined || blocker === null) return null;
+  if (typeof blocker !== 'object' || Array.isArray(blocker) ||
+      typeof blocker.code !== 'string' || blocker.code.length === 0 ||
+      typeof blocker.detail !== 'string' || blocker.detail.length === 0 ||
+      typeof blocker.sourcePath !== 'string' || blocker.sourcePath.length === 0 ||
+      !/^[a-f0-9]{64}$/u.test(blocker.sourceSha256 ?? '') ||
+      Object.keys(blocker).some((field) => !['code', 'detail', 'sourcePath', 'sourceSha256'].includes(field))) {
+    fail('INVALID_PRE_EXECUTION_BLOCKER', 'A pre-execution blocker must carry exact frozen code, detail, and source identity', {
+      attemptId,
+    });
+  }
+  return clone(blocker);
+}
+
 function topologicalCaseOrder(registry) {
   const cases = new Map((registry.cases ?? []).map((entry) => [entry.id, entry]));
   const pending = new Set(cases.keys());
@@ -391,6 +406,7 @@ export function buildDeterministicSchedule({ registry, schedule, seed }) {
       seed:
         attempt.seed ?? deriveAttemptSeed(seed, attempt.caseId, attempt.attemptId, environmentId),
       dependsOn: [...new Set(attempt.dependsOn ?? registryCases.get(attempt.caseId).dependsOn ?? [])].sort(),
+      preExecutionBlocker: normalizePreExecutionBlocker(attempt.preExecutionBlocker, attempt.attemptId),
       suppliedIndex,
     };
   });
@@ -458,6 +474,7 @@ function manifestScheduleAttempt(attempt) {
     stimuli: attempt.stimuli,
     evidenceProfile: attempt.evidenceProfile,
     externalIngressRequired: attempt.externalIngressRequired,
+    preExecutionBlocker: attempt.preExecutionBlocker,
   };
 }
 
@@ -851,21 +868,37 @@ export class CampaignController {
         blockedBy: dependencies.blockedBy,
       });
     }
+    const frozenBlocker = scheduled.preExecutionBlocker;
+    if (frozenBlocker && attemptResult.resultState !== 'skipped_blocked') {
+      fail('PRE_EXECUTION_BLOCKED_RESULT_REQUIRED', 'A frozen pre-execution blocker requires skipped_blocked', {
+        attemptId: scheduled.attemptId,
+      });
+    }
     if (attemptResult.resultState === 'skipped_blocked') {
-      if (dependencies.blockedBy.length === 0) {
+      if (dependencies.blockedBy.length === 0 && !frozenBlocker) {
         fail('BLOCKED_PROPAGATION_MISMATCH', 'skipped_blocked requires a lost declared prerequisite', {
           attemptId: scheduled.attemptId,
         });
       }
-      const reported = [...new Set(attemptResult.blockedBy ?? dependencies.blockedBy)].sort();
-      if (
-        reported.length !== dependencies.blockedBy.length ||
-        reported.some((dependency, index) => dependency !== dependencies.blockedBy[index])
-      ) {
-        fail('BLOCKED_PROPAGATION_MISMATCH', 'skipped_blocked must name the exact lost prerequisites', {
-          expected: dependencies.blockedBy,
-          actual: reported,
-        });
+      if (frozenBlocker) {
+        if (sha256(attemptResult.blocker ?? null) !== sha256(frozenBlocker) ||
+            attemptResult.effectState !== 'not_started' ||
+            !Array.isArray(attemptResult.requestedEffects) || attemptResult.requestedEffects.length !== 0) {
+          fail('PRE_EXECUTION_BLOCKER_MISMATCH', 'skipped_blocked must match the exact frozen blocker and prove zero effects', {
+            attemptId: scheduled.attemptId,
+          });
+        }
+      } else {
+        const reported = [...new Set(attemptResult.blockedBy ?? dependencies.blockedBy)].sort();
+        if (
+          reported.length !== dependencies.blockedBy.length ||
+          reported.some((dependency, index) => dependency !== dependencies.blockedBy[index])
+        ) {
+          fail('BLOCKED_PROPAGATION_MISMATCH', 'skipped_blocked must name the exact lost prerequisites', {
+            expected: dependencies.blockedBy,
+            actual: reported,
+          });
+        }
       }
     }
     const blocksDependents = attemptResult.blocksDependents ?? false;
@@ -890,7 +923,7 @@ export class CampaignController {
         })
         .find((candidate) => candidate?.blocksDependents)
       : null;
-    const blocker = blockingResult
+    const dependencyBlocker = blockingResult
       ? {
           blockedByCaseId: blockingResult.caseId,
           blockedByAttemptId: blockingResult.attemptId,
@@ -899,6 +932,7 @@ export class CampaignController {
           observationArtifactIds: blockingResult.evidence?.artifactIds ?? [],
         }
       : null;
+    const blocker = frozenBlocker ?? dependencyBlocker;
     const terminalPayload = {
       kind: 'attempt_terminal',
       attempt: attemptIdentity(scheduled),
@@ -925,9 +959,10 @@ export class CampaignController {
       environmentId: scheduled.environmentId,
       seed: scheduled.seed,
       scheduleIndex: scheduled.scheduleIndex,
-      blockedBy: blocker
+      blockedBy: dependencyBlocker && !frozenBlocker
         ? { caseId: blocker.blockedByCaseId, attemptId: blocker.blockedByAttemptId }
         : null,
+      preExecutionBlocker: frozenBlocker,
       blocksDependents,
       recordId: record.recordId,
       firstFailureSignature: terminalPayload.firstFailureSignature,

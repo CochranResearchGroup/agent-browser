@@ -420,6 +420,59 @@ await runTest('blocks dependents while independent cases continue', async () => 
   }
 });
 
+await runTest('rejects an arbitrary skipped result without a frozen or propagated blocker', async () => {
+  const fixture = createFixture('arbitrary-skip', {
+    schedule: [{ caseId: 'A01', attemptId: 'A01-001', environmentId: 'E0', dependsOn: [] }],
+  });
+  try {
+    await fixture.prepare();
+    await fixture.controller.freeze();
+    await fixture.controller.startExecution();
+    await expectControllerError(() => fixture.controller.recordAttempt({
+      caseId: 'A01', attemptId: 'A01-001', resultState: 'skipped_blocked',
+      effectState: 'not_started', requestedEffects: [],
+    }), 'blocked_propagation_mismatch');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+await runTest('terminalizes only the exact frozen zero-effect pre-execution blocker', async () => {
+  const blocker = {
+    code: 'live_case_hook_missing',
+    detail: 'No reviewed live effect hook exists for this case',
+    sourcePath: 'scripts/lib/p158-w8-hd-adapters.js',
+    sourceSha256: 'ab'.repeat(32),
+  };
+  const fixture = createFixture('pre-execution-blocker', {
+    schedule: [{
+      caseId: 'A01', attemptId: 'A01-001', environmentId: 'E0', dependsOn: [],
+      preExecutionBlocker: blocker,
+    }],
+  });
+  try {
+    await fixture.prepare();
+    await fixture.controller.freeze();
+    await fixture.controller.startExecution();
+    await expectControllerError(() => fixture.controller.recordAttempt({
+      caseId: 'A01', attemptId: 'A01-001', resultState: 'skipped_blocked',
+      effectState: 'not_started', requestedEffects: [],
+      blocker: { ...blocker, detail: 'substituted blocker' },
+    }), 'pre_execution_blocker_mismatch');
+    await fixture.controller.recordAttempt({
+      caseId: 'A01', attemptId: 'A01-001', resultState: 'skipped_blocked',
+      effectState: 'not_started', requestedEffects: [], blocker,
+    });
+    const terminal = validatePersistedCampaign(fixture.runRoot).ledger
+      .map((entry) => entry.record)
+      .find((record) => record.recordType === 'attempt_terminal');
+    assert.deepEqual(terminal.payload.blocker, blocker);
+    assert.equal(terminal.payload.effectState, 'not_started');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 await runTest('does not block a usable prerequisite after an observed failure', async () => {
   const fixture = createFixture('nonblocking-failure');
   try {
