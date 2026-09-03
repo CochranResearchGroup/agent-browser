@@ -13,6 +13,7 @@ import {
   createP158DevelopmentCommandPrimitives,
   createP158W7DevelopmentAdapterBundle,
   createP158W7LiveDevelopmentAdapterBundle,
+  assessP158W7ReviewedLiveDispatcher,
   validateP158W7LiveBindingManifest,
   enumerateP158W7ActionPlans,
   P158_W7_CASE_IDS,
@@ -24,6 +25,14 @@ const registry = JSON.parse(fs.readFileSync(new URL(
   import.meta.url,
 ), 'utf8'));
 const preliminary = compileP158ExecutionSchedule({ registry, seed: 'p158-w7-adapter-seed' });
+const preliminaryW7Plans = enumerateP158W7ActionPlans({ schedule: preliminary });
+const a07BrowserBindingsByActionId = Object.fromEntries(preliminaryW7Plans
+  .filter((action) => action.caseId === 'A07')
+  .map((action, index) => [action.actionId, {
+    pid: 5000 + index,
+    browserId: `p158-a07-browser-${index + 1}`,
+    profilePath: `/tmp/p158-development-run-01/profiles/a07-${index + 1}`,
+  }]));
 const target = Object.freeze({
   targetId: 'p158-development-target-01',
   campaignRunId: 'p158-development-run-01',
@@ -34,16 +43,32 @@ const target = Object.freeze({
   foreign: false,
   tenantDataPresent: false,
   redactedComparisonOnly: true,
+  disposableRoot: '/tmp/p158-development-run-01',
+  browserBindingsByActionId: a07BrowserBindingsByActionId,
+  daemonUnit: 'agent-browser-development.service',
+  supervisorUnit: 'agent-browser-development-supervisor.service',
+  evidenceSince: '2026-09-02T00:00:00Z',
   allowedExecutables: [
     '/usr/bin/printf',
     '/usr/bin/journalctl',
     '/opt/agent-browser-dev',
     '/usr/bin/systemctl',
+    '/usr/bin/ps',
     '/opt/p158/bin/p158-w7-driver',
     '/opt/p158/bin/p158-evidence',
   ],
-  allowedSystemdUnits: ['agent-browser-development.service'],
-  allowedProcessIds: [4242],
+  allowedSystemdUnits: [
+    'agent-browser-development.service',
+    'agent-browser-development-supervisor.service',
+  ],
+  allowedProcessIds: [
+    4242,
+    ...Object.values(a07BrowserBindingsByActionId).map((binding) => binding.pid),
+  ],
+  allowedBrowserIds: Object.values(a07BrowserBindingsByActionId)
+    .map((binding) => binding.browserId),
+  allowedProfilePaths: Object.values(a07BrowserBindingsByActionId)
+    .map((binding) => binding.profilePath),
 });
 
 function recordingPrimitives(overrides = {}) {
@@ -133,6 +158,28 @@ assert.equal(liveActionPlans.filter((action) =>
   action.caseId === 'X08' && action.requiredStimulus === 'full_shutdown').length, 2);
 assert.equal(liveActionPlans.filter((action) =>
   action.caseId === 'X10' && action.requiredStimulus === 'host_restart').length, 1);
+const reviewedLive = assessP158W7ReviewedLiveDispatcher({ schedule, target });
+assert.equal(reviewedLive.ready, false);
+assert.deepEqual(reviewedLive.implementedCaseIds, ['A07', 'A13', 'X07']);
+assert.equal(reviewedLive.blockerCount, 22);
+assert.equal(reviewedLive.effectsExecuted, false);
+assert.equal(reviewedLive.implementedActionCount,
+  liveActionPlans.filter((action) => ['A07', 'A13', 'X07'].includes(action.caseId)).length);
+assert(reviewedLive.bindings.every((binding) =>
+  binding.targetId === target.targetId && binding.campaignRunId === target.campaignRunId));
+assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A07')
+  .every((binding) =>
+    binding.process.pid === target.browserBindingsByActionId[binding.actionId].pid &&
+    binding.browserId === target.browserBindingsByActionId[binding.actionId].browserId &&
+    binding.profilePath === target.browserBindingsByActionId[binding.actionId].profilePath &&
+    binding.process.signal === 'SIGKILL'));
+assert.equal(new Set(reviewedLive.bindings.filter((binding) => binding.caseId === 'A07')
+  .map((binding) => binding.process.pid)).size,
+liveActionPlans.filter((action) => action.caseId === 'A07').length);
+assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
+  .some((binding) => binding.systemd.unit === target.daemonUnit));
+assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
+  .some((binding) => binding.systemd.unit === target.supervisorUnit));
 const liveBindingManifest = {
   schemaVersion: 'agent-browser.p158-w7-live-bindings.v1',
   actions: liveActionPlans.map((action) => ({
@@ -184,7 +231,8 @@ assert.throws(
     additionalAdapters: otherAdapters,
   }),
   (error) => error instanceof P158W7AdapterError &&
-    error.code === 'live_w7_dispatcher_implementation_unproven',
+    error.code === 'live_w7_case_hooks_missing' &&
+    error.details.blockers.length === 22,
 );
 assert.throws(
   () => validateP158W7LiveBindingManifest({

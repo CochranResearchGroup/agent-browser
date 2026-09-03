@@ -10,6 +10,33 @@ export const P158_W7_CASE_IDS = Object.freeze([
   ...Array.from({ length: 10 }, (_, index) => `X${String(index + 1).padStart(2, '0')}`),
 ]);
 
+export const P158_W7_REVIEWED_LIVE_CASE_IDS = Object.freeze(['A07', 'A13', 'X07']);
+
+export const P158_W7_LIVE_HOOK_GAPS = Object.freeze({
+  A01: 'multi_client_identity_load_driver',
+  A02: 'shared_browser_concurrency_driver',
+  A03: 'same_label_connection_driver',
+  A04: 'acl_matrix_fixture_driver',
+  A05: 'acl_barrier_transition_driver',
+  A06: 'revocation_eviction_barrier_driver',
+  A08: 'identity_proof_fixture_driver',
+  A09: 'cdp_target_pathology_driver',
+  A10: 'owned_foreign_inventory_churn_driver',
+  A11: 'scheduler_terminal_fault_driver',
+  A12: 'effect_boundary_lock_timeout_driver',
+  A14: 'development_scoped_full_shutdown_driver',
+  A15: 'cross_transport_history_marker_driver',
+  X01: 'development_xvfb_orphan_driver',
+  X02: 'display_allocator_race_driver',
+  X03: 'display_evidence_fault_driver',
+  X04: 'owned_foreign_display_exhaustion_driver',
+  X05: 'x11_authority_matrix_driver',
+  X06: 'desktop_locator_fixture_driver',
+  X08: 'development_install_handoff_shutdown_driver',
+  X09: 'generation_digest_mismatch_driver',
+  X10: 'disposable_host_epoch_driver',
+});
+
 const CASE_SPECS = Object.freeze({
   A01: { hook: 'cli', stimuli: [] },
   A02: { hook: 'browser', stimuli: [] },
@@ -190,6 +217,16 @@ function assertResourceBindings(action, target) {
         !target.allowedProcessIds.includes(action.process.pid))) {
     fail('process_not_owned', `${action.actionId} process is not development-owned`);
   }
+  if (action.profilePath !== undefined &&
+      (!Array.isArray(target.allowedProfilePaths) ||
+        !target.allowedProfilePaths.includes(action.profilePath))) {
+    fail('profile_not_owned', `${action.actionId} profile is not development-owned`);
+  }
+  if (action.browserId !== undefined &&
+      (!Array.isArray(target.allowedBrowserIds) ||
+        !target.allowedBrowserIds.includes(action.browserId))) {
+    fail('browser_not_owned', `${action.actionId} browser is not development-owned`);
+  }
 }
 
 function assertCommandBinding(actionId, field, binding) {
@@ -262,6 +299,113 @@ export function enumerateP158W7ActionPlans({ schedule }) {
     fail('duplicate_planned_action_id', 'W7 action IDs are not globally unique');
   }
   return deepFreeze(structuredClone(actions));
+}
+
+function reviewedEvidenceCommands(target, unit = target.daemonUnit) {
+  return {
+    evidenceCommand: {
+      executable: '/usr/bin/systemctl',
+      args: ['--user', 'show', unit, '--property=ActiveState,SubState,MainPID'],
+    },
+    logCommand: {
+      executable: '/usr/bin/journalctl',
+      args: ['--user-unit', unit, '--since', target.evidenceSince, '--output=json'],
+    },
+  };
+}
+
+export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
+  assertDevelopmentTarget(target);
+  const requiredTargetFields = [
+    'disposableRoot',
+    'browserBindingsByActionId',
+    'daemonUnit',
+    'supervisorUnit',
+    'evidenceSince',
+  ];
+  for (const field of requiredTargetFields) {
+    if (target[field] === undefined || target[field] === null || target[field] === '') {
+      fail('reviewed_live_target_binding_missing', `W7 reviewed dispatcher requires ${field}`);
+    }
+  }
+  if (!target.disposableRoot.startsWith('/tmp/') ||
+      !target.disposableRoot.includes(target.campaignRunId)) {
+    fail('reviewed_live_target_binding_invalid',
+      'W7 disposable root must be campaign-bound under /tmp');
+  }
+  const expected = enumerateP158W7ActionPlans({ schedule });
+  const bindings = [];
+  for (const action of expected.filter((entry) =>
+    P158_W7_REVIEWED_LIVE_CASE_IDS.includes(entry.caseId))) {
+    let binding;
+    if (action.caseId === 'A07') {
+      const browser = target.browserBindingsByActionId[action.actionId];
+      if (!Number.isInteger(browser?.pid) || browser.pid < 2 ||
+          typeof browser.browserId !== 'string' ||
+          typeof browser.profilePath !== 'string' ||
+          !browser.profilePath.startsWith(`${target.disposableRoot}/`)) {
+        fail('reviewed_live_target_binding_invalid',
+          `W7 A07 action ${action.actionId} requires an exact disposable browser binding`);
+      }
+      binding = {
+        ...action,
+        targetId: target.targetId,
+        campaignRunId: target.campaignRunId,
+        stimulusKind: 'browser_crash',
+        browserId: browser.browserId,
+        profilePath: browser.profilePath,
+        process: { pid: browser.pid, signal: 'SIGKILL' },
+        evidenceCommand: {
+          executable: '/usr/bin/ps',
+          args: ['-o', 'pid=,ppid=,lstart=,args=', '-p', String(browser.pid)],
+        },
+        logCommand: {
+          executable: '/usr/bin/journalctl',
+          args: ['--user-unit', target.daemonUnit, '--since', target.evidenceSince, '--output=json'],
+        },
+      };
+    } else {
+      const unit = action.caseId === 'A13' &&
+        action.requiredStimulus === 'daemon_transition'
+        ? target.daemonUnit
+        : target.supervisorUnit;
+      binding = {
+        ...action,
+        targetId: target.targetId,
+        campaignRunId: target.campaignRunId,
+        stimulusKind: action.requiredStimulus,
+        systemd: { unit, verb: 'restart', executable: '/usr/bin/systemctl' },
+        ...reviewedEvidenceCommands(target, unit),
+      };
+    }
+    const {
+      allowedStimuli: _allowedStimuli,
+      requiredStimulus: _requiredStimulus,
+      ...exactBinding
+    } = binding;
+    assertCommandBinding(action.actionId, 'evidenceCommand', exactBinding.evidenceCommand);
+    assertCommandBinding(action.actionId, 'logCommand', exactBinding.logCommand);
+    assertActionPlan(action.caseId, exactBinding, target);
+    bindings.push(deepFreeze(exactBinding));
+  }
+  const blockers = Object.entries(P158_W7_LIVE_HOOK_GAPS).map(([caseId, missingHook]) => ({
+    caseId,
+    code: 'live_case_hook_missing',
+    missingHook,
+    affectedActionCount: expected.filter((action) => action.caseId === caseId).length,
+  }));
+  return deepFreeze({
+    schemaVersion: 'agent-browser.p158-w7-reviewed-live-dispatcher-readiness.v1',
+    scheduleSha256: schedule.scheduleSha256,
+    targetSha256: sha256(target),
+    ready: blockers.length === 0,
+    implementedCaseIds: [...P158_W7_REVIEWED_LIVE_CASE_IDS],
+    implementedActionCount: bindings.length,
+    blockerCount: blockers.length,
+    blockers,
+    bindings,
+    effectsExecuted: false,
+  });
 }
 
 export function validateP158W7LiveBindingManifest({ schedule, target, manifest }) {
@@ -560,6 +704,7 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   bindingManifest,
   additionalAdapters = [],
 }) {
+  const reviewed = assessP158W7ReviewedLiveDispatcher({ schedule, target });
   const validation = validateP158W7LiveBindingManifest({
     schedule,
     target,
@@ -568,11 +713,13 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   void primitives;
   void additionalAdapters;
   fail(
-    validation.blockerCode,
-    'W7 caller-authored bindings are structurally complete, but no reviewed live dispatcher implements every A/X stimulus',
+    reviewed.ready ? validation.blockerCode : 'live_w7_case_hooks_missing',
+    'W7 live freeze remains blocked until every A/X case has a reviewed development-only dispatcher hook',
     {
       bindingManifestSha256: validation.manifest.manifestSha256,
       actionCount: validation.manifest.actionCount,
+      implementedCaseIds: reviewed.implementedCaseIds,
+      blockers: reviewed.blockers,
     },
   );
 }
