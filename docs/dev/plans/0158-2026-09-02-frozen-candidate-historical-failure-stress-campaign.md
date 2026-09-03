@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_candidate_installed_provider_ready_remote_view_checkout_failure_reproduced_freeze_open`
+Execution state: `w6_terminal_blocker_after_two_repairs_evidence_closure_required`
 
 Lane: P157
 
@@ -1162,3 +1162,70 @@ URL. The latter two also faithfully retain the current, incorrect
 `service_operation_failed` and `effect_uncertain` normalization, so the
 postmortem can compare the journal projection with the stronger rollback and
 shutdown evidence in the Service trace.
+
+### W6 Bounded Blocking-Repair Traversals
+
+The first blocking repair is source commit `0cfd2a54`. A deterministic
+regression reproduced the live Route 1 and Route 2 state shape: provider
+observation had refreshed the physical route projection while the pool row and
+current-boot acquisition lease still proved the coordinator's exact pending
+browser, session, route, display, and pool ownership. The planner now accepts
+only that fully matching lease and continues to reject a foreign lease. The
+same repair carries the typed route-bound blocker and compensation state across
+the legacy compatibility error seam. Installed development generation
+`0.28.0-588ac9f49ffe` passed three disposable browser launches and the
+provider-required development doctor.
+
+Fresh epoch `Plan158Epoch2` then advanced beyond
+`route_pool_entry_unavailable` and failed as job `r411067` at the next checkout
+guard with `route_pool_contention`. The warm provider route was `ready` with no
+browser or session owner, but the guard rendered the missing owner as
+`unknown` and treated the physical provider display identity as a foreign
+active checkout. Rollback closed the new browser and restored the acquisition.
+The repaired journal correctly recorded `code=checkout_failed`,
+`axis=presentation`, `phase=finalize`, and `effectState=no_effect`; it no longer
+degraded completed compensation to `service_operation_failed` and
+`effect_uncertain`.
+
+The second blocking repair is source commit `1e7089d0`. A new red-green
+regression proves that an ownerless warm provider route may be claimed only
+when the requested allocation and a current-boot pending acquisition lease
+both match the exact browser, session, route, and display. Foreign lease
+contention remains fail-closed. Installed development generation
+`0.28.0-762a1be44f18` passed three disposable browser launches and the complete
+provider-required development doctor.
+
+Fresh epoch `Plan158Epoch3` advanced beyond both prior checkout defects and
+failed as job `r570050` with the third distinct sequence blocker,
+`presentation_bound_slot_missing`. Its newly launched browser was closed and
+the route, pool entry, and acquisition lease were restored. The Service job
+and terminal outcome again retain `checkout_failed`, `presentation`,
+`finalize`, and `no_effect` plus exact request, subject, connection, profile,
+runtime-lane, and session provenance. No durable handoff URL was minted and no
+external workflow was dispatched.
+
+The third blocker localizes the remaining identity disagreement. Checkout asks
+`PresentationCapacityAuthority::activate_bound_browser()` for route
+`development-route-1` plus logical acquisition display
+`remote-view-display:development-route-1`, while the warm presentation slot is
+bound to the provider inventory display `development-display-1`. The current
+Service route pool contains both legacy route-id rows such as
+`development-route-1`, whose target carries no provider display-allocation
+identity, and canonical slot rows such as `development-slot-1`, whose target is
+bound to `development-display-1`. Deterministic B-tree selection chooses the
+legacy available row first. The first planner repair correctly recognizes the
+exact pending lease; the second guard repair exposes rather than resolves this
+upstream duplicate-row selection and migration defect. W10 must therefore
+review whether that second repair remains safe and useful after canonical
+route-pool migration, rather than assuming it is independently sufficient.
+
+The two-traversal repair budget is exhausted. Do not repair
+`presentation_bound_slot_missing` inside Plan 0158. Stop isolated browser
+execution, mark every remaining scheduled case `skipped_blocked` against job
+`r570050`, record scheduled teardown as terminal, and seal a terminal-blocked
+campaign closure without inventing execution evidence. W10 may start only
+after that closure satisfies the analyzer's exact terminal-attempt and teardown
+inventory. The final review must include the three checkout divergences, the
+successful failure-normalization repair, the access-plan retained-service
+epoch friction, and the Cargo/sccache process-pressure observations as separate
+causal findings.
