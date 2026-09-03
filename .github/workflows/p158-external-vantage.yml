@@ -161,6 +161,10 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.w8_action_manifest_artifact_run_id }}
 
+      - name: Delay single-viewer readiness client
+        if: inputs.probe_mode == 'readiness'
+        run: sleep 45
+
       - name: Capture slow concurrency evidence
         env:
           P158_RUN_ID: ${{ inputs.campaign_run_id }}

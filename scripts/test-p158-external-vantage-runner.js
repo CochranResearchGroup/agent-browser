@@ -19,6 +19,7 @@ import {
   externalVantageFailureRecord,
   findInternalUrlLeaks,
   projectHandoffResolution,
+  pixelMarkerClipForIframe,
   redactOperatorUrl,
   runExternalVantageProbe,
   validateExternalCalibrationLeadTime,
@@ -44,6 +45,7 @@ assert.match(workflow, /P158_DEV_DASHBOARD_PASSWORD: \$\{\{ secrets\.P158_DEV_DA
 assert.equal((workflow.match(/P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON:/g) || []).length, 2);
 assert.match(workflow, /--pace-profile human_controller/);
 assert.match(workflow, /--pace-profile slow_concurrency/);
+assert.match(workflow, /Delay single-viewer readiness client[\s\S]*sleep 45/);
 assert.match(workflow, /probe_mode:[\s\S]*default: calibration/);
 assert.match(workflow, /calibration_start_at:[\s\S]*RFC3339 UTC start/);
 assert.equal((workflow.match(/P158_CALIBRATION_START_AT:/g) || []).length, 2);
@@ -107,7 +109,9 @@ const env = {
   P158_DEV_DASHBOARD_USERNAME: 'operator',
   P158_DEV_DASHBOARD_PASSWORD: 'never-print-me',
   P158_DEV_EXPECTED_IDENTITY_JSON: JSON.stringify(identity()),
-  P158_DEV_PIXEL_MARKER_REGION_JSON: JSON.stringify({ x: 100, y: 200, width: 80, height: 40 }),
+  P158_DEV_PIXEL_MARKER_REGION_JSON: JSON.stringify({
+    coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
+  }),
   P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: JSON.stringify({
     fixtureId: 'synthetic-pixel-marker-v1',
     syntheticOnly: true,
@@ -161,6 +165,20 @@ assert.equal(classifyRenderedStreamFailure({
   iframePaths: ['/guacamole/'],
   observedPixelHash: 'a'.repeat(64),
 }).code, 'external_stream_identity_marker_missing');
+assert.deepEqual(
+  pixelMarkerClipForIframe(
+    { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },
+    { x: 310, y: 337, width: 1110, height: 641 },
+  ),
+  { x: 410, y: 537, width: 80, height: 40 },
+);
+assert.throws(
+  () => pixelMarkerClipForIframe(
+    { coordinateSpace: 'remote-view-iframe', x: 1000, y: 600, width: 200, height: 100 },
+    { x: 310, y: 337, width: 1110, height: 641 },
+  ),
+  /does not fit the rendered remote-view iframe/,
+);
 assert.equal(
   validateExternalVantageConfiguration({ env, clientId: 'external-runner-human', paceProfile: 'human_controller' }).handoff.origin,
   'https://external.example.test',

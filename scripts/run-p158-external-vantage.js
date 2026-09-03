@@ -110,6 +110,9 @@ export function validateExternalVantageConfiguration({ env, clientId, paceProfil
   if (pixelMarkerRegion.width < 1 || pixelMarkerRegion.height < 1) {
     throw new Error('Pixel marker region must have positive dimensions');
   }
+  if (!['viewport', 'remote-view-iframe'].includes(pixelMarkerRegion.coordinateSpace || 'viewport')) {
+    throw new Error('Pixel marker region has invalid coordinateSpace');
+  }
   if (
     pixelMarkerRegion.x + pixelMarkerRegion.width > 1440 ||
     pixelMarkerRegion.y + pixelMarkerRegion.height > 1000
@@ -1124,8 +1127,19 @@ async function waitForExpectedPixelMarker({
 }) {
   const deadline = Date.now() + timeoutMs;
   let observedPixelHash = null;
+  let screenshotClip = pixelMarkerRegion;
+  if (pixelMarkerRegion.coordinateSpace === 'remote-view-iframe') {
+    const frames = page.locator('iframe');
+    const frameCount = await frames.count();
+    if (frameCount !== 1) {
+      throw new Error(`Remote pixel marker requires exactly one iframe, observed ${frameCount}`);
+    }
+    const iframeBox = await frames.first().boundingBox();
+    if (!iframeBox) throw new Error('Remote-view iframe has no rendered bounds');
+    screenshotClip = pixelMarkerClipForIframe(pixelMarkerRegion, iframeBox);
+  }
   do {
-    await page.screenshot({ path: markerPath, clip: pixelMarkerRegion });
+    await page.screenshot({ path: markerPath, clip: screenshotClip });
     observedPixelHash = sha256File(markerPath);
     if (observedPixelHash === expectedPixelHash) return observedPixelHash;
     await page.waitForTimeout(500);
@@ -1137,6 +1151,23 @@ async function waitForExpectedPixelMarker({
   error.code = diagnostic.code;
   error.details = diagnostic.details;
   throw error;
+}
+
+export function pixelMarkerClipForIframe(region, iframeBox) {
+  const clip = {
+    x: iframeBox.x + region.x,
+    y: iframeBox.y + region.y,
+    width: region.width,
+    height: region.height,
+  };
+  if (
+    region.x < 0 || region.y < 0 || region.width < 1 || region.height < 1 ||
+    region.x + region.width > iframeBox.width ||
+    region.y + region.height > iframeBox.height
+  ) {
+    throw new Error('Pixel marker region does not fit the rendered remote-view iframe');
+  }
+  return clip;
 }
 
 async function renderedStreamDiagnostic(page, observedPixelHash) {

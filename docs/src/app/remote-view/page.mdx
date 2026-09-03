@@ -275,13 +275,18 @@ dashboard username and password, expected retained identity JSON, a prepared
 synthetic pixel-marker screenshot region, and a synthetic-only visual capture
 attestation as secrets. The attestation binds a reviewed redaction receipt and
 proves forbidden private fields were excluded before capture. The expected
-pixel hash binds the exact crop of externally rendered remote pixels. Dispatch
-it with the frozen campaign run ID, exact full candidate commit SHA, and one
+pixel hash binds the exact crop of externally rendered remote pixels. Marker
+coordinates use the rendered remote-view iframe as their origin, not the
+surrounding dashboard viewport, so dashboard banners and rail layout cannot
+move the crop away from the synthetic fixture. A readiness probe paces its two
+independent clients to respect a single-viewer provider; it does not mistake
+expected viewer displacement for stream failure. Dispatch it with the frozen
+campaign run ID, exact full candidate commit SHA, and one
 shared RFC3339 UTC calibration start at least 30 minutes in the future.
 
 The workflow starts two separate GitHub-hosted Ubuntu clients. One performs
-human-paced pointer, keyboard, focus, and scroll observations. The other holds
-a second page concurrently and uses slower pacing. Both authenticate without
+human-paced pointer, keyboard, focus, and scroll observations. The other uses
+slower pacing and, during calibration, holds a second page concurrently. Both authenticate without
 printing credentials, open and reconnect the same durable URL,
 and collect DNS, TLS, redirects, cookie metadata, WebSocket, iframe, form
 action, reconnect, console, network, performance, screenshot, and timing

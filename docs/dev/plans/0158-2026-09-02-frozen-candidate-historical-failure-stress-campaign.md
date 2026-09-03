@@ -1750,3 +1750,37 @@ prepare the retained handoff if installation closes it. Dispatch exactly one
 new external readiness observation only after local forward-auth readback
 shows the route-authorized Guacamole principal while retaining the dashboard
 actor. Continue to keep production read-only.
+
+Commit `51c3f59b` passed 13 dashboard-auth tests, 89 route-host tests, 55
+access-plan tests, five shared-local tests, workspace clippy with warnings
+denied, development runtime and workstation fixtures, remote-view docs, and
+the docs build. Development generation `0.28.0-80d2a0ca8448` installed with
+production unchanged, passed three browser launches and the provider-required
+doctor, and projected the route-authorized provider principal while preserving
+the signed-in dashboard actor. The retained handoff was explicitly reopened
+after installation and returned ready operator and presentation states.
+
+E14 then proved the Guacamole principal repair externally: the human-paced
+artifact visibly rendered the exact synthetic fixture through the hosted RDP
+iframe. It nevertheless failed the configured pixel digest because the frozen
+fixture's page-relative coordinates were incorrectly applied to the outer
+dashboard viewport. Its 960 by 320 crop contained dashboard banners and browser
+chrome, not the blue fixture marker. The second external job also displaced
+the first on the provider's declared single-viewer connection and was itself
+displaced by the human job, producing the expected Guacamole ownership-change
+surface. Neither condition is a browser, route, or Guacamole grant failure.
+
+These are campaign-harness blockers. The bounded repair interprets an explicit
+`remote-view-iframe` marker coordinate space relative to the sole rendered
+iframe while retaining the synthetic-only attestation and exact pixel digest.
+The readiness workflow delays the slow client by 45 seconds so two independent
+off-host observations do not race on a provider that advertises one active
+viewer. This sequencing applies only to readiness; concurrent calibration
+still requires an explicit takeover schedule or separate route and must not be
+claimed ready from this change.
+
+Revised next action: validate and commit the external harness repair, rotate
+only the protected synthetic marker region and expected-identity digest to the
+new iframe-relative crop, explicitly reprepare the retained handoff, and run
+one E15 readiness observation. Do not start calibration or conceal E14's two
+failed receipts.
