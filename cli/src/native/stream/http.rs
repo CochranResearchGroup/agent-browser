@@ -439,7 +439,12 @@ pub(super) async fn handle_http_request(
             ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
-                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    write_json_value(
+                        &mut stream,
+                        "400 Bad Request",
+                        service_request_rejection_response(&err),
+                    )
+                    .await;
                     return;
                 }
             };
@@ -1892,6 +1897,12 @@ fn service_request_command(body: &str) -> Result<Value, String> {
     service_request_command_with_state(body, None)
 }
 
+fn service_request_rejection_response(error: &str) -> Value {
+    let mut response = json!({"success": false, "error": error});
+    crate::native::service_failure::attach_service_failure_recourse(&mut response);
+    response
+}
+
 fn service_request_command_with_state(
     body: &str,
     service_state: Option<&ServiceState>,
@@ -2031,13 +2042,10 @@ pub(crate) fn service_request_adapter_fixture_for_session(
         effective_session,
     ) {
         Ok(command) => Ok(command),
-        Err(message) => {
-            let (status, body) = json_result_parts(Err(message), "400 Bad Request");
-            Err(json!({
-                "status": status,
-                "body": serde_json::from_str::<Value>(&body).unwrap(),
-            }))
-        }
+        Err(message) => Err(json!({
+            "status": "400 Bad Request",
+            "body": service_request_rejection_response(&message),
+        })),
     }
 }
 
@@ -5358,6 +5366,23 @@ mod tests {
         .unwrap_err();
 
         assert!(error.contains("requires serviceName, agentName, and taskName"));
+    }
+
+    #[test]
+    fn service_request_rejection_response_exposes_route_conflict_recourse() {
+        let response =
+            service_request_rejection_response("service_access_plan_route_browser_conflict");
+
+        assert_eq!(response["success"], false);
+        assert_eq!(
+            response["failure"]["code"],
+            "service_access_plan_route_browser_conflict"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "refresh_access_plan_and_use_exact_route"
+        );
     }
 
     #[test]

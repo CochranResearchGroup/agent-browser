@@ -6430,7 +6430,7 @@ fn service_request_command_with_state_and_authority(
                 &issue,
             ),
         );
-        JsonRpcError::invalid_params(issue.message())
+        JsonRpcError::invalid_service_request(issue.message())
     })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
@@ -11247,6 +11247,19 @@ impl JsonRpcError {
         }
     }
 
+    fn invalid_service_request(message: &str) -> Self {
+        let mut response = json!({"success": false, "error": message});
+        crate::native::service_failure::attach_service_failure_recourse(&mut response);
+        Self {
+            code: -32602,
+            message: "Invalid params",
+            data: Some(json!({
+                "message": message,
+                "failure": response["failure"],
+            })),
+        }
+    }
+
     fn method_not_found(method: &str) -> Self {
         Self {
             code: -32601,
@@ -14019,17 +14032,22 @@ mod tests {
             "action": "navigate",
             "args": ["--top-level"]
         });
+        let error = service_request_adapter_fixture(&request).unwrap_err();
+        assert_eq!(error["jsonrpc"], "2.0");
+        assert_eq!(error["id"], "fixture");
+        assert_eq!(error["error"]["code"], -32602);
+        assert_eq!(error["error"]["message"], "Invalid params");
         assert_eq!(
-            service_request_adapter_fixture(&request).unwrap_err(),
-            json!({
-                "jsonrpc": "2.0",
-                "id": "fixture",
-                "error": {
-                    "code": -32602,
-                    "message": "Invalid params",
-                    "data": {"message": "unknown service request field: args"}
-                }
-            })
+            error["error"]["data"]["message"],
+            "unknown service request field: args"
+        );
+        assert_eq!(
+            error["error"]["data"]["failure"]["effectState"],
+            "effect_uncertain"
+        );
+        assert_eq!(
+            error["error"]["data"]["failure"]["hardStops"],
+            json!(["blind_retry"])
         );
 
         let (_, command) = service_request_command(&json!({

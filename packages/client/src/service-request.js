@@ -99,6 +99,23 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestOptions} ServiceViewerLeaseRequestOptions
  */
 
+export class ServiceRequestHttpError extends Error {
+  /**
+   * @param {number} status
+   * @param {any} response
+   */
+  constructor(status, response) {
+    const failure = getServiceFailureRecourse(response);
+    const code = failure?.code ?? response?.error ?? 'service_request_failed';
+    super(`agent-browser service request failed: ${status} (${code})`);
+    this.name = 'ServiceRequestHttpError';
+    this.status = status;
+    this.code = code;
+    this.failure = failure;
+    this.response = response;
+  }
+}
+
 export {
   SERVICE_REQUEST_ACTIONS,
   SERVICE_REQUEST_BOOLEAN_FIELDS,
@@ -1719,11 +1736,12 @@ export async function postServiceRequest({ baseUrl, request, profileCapability, 
     signal,
   });
 
+  const payload = await response.json();
   if (!response.ok) {
-    throw new Error(`agent-browser service request failed: ${response.status}`);
+    throw new ServiceRequestHttpError(response.status, payload);
   }
 
-  return response.json();
+  return payload;
 }
 
 /**

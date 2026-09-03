@@ -51,6 +51,7 @@ import {
   isServiceCdpFreeActionAvailable,
   isServiceRemoteViewOpenOperatorVisibleReady,
   postServiceRequest,
+  ServiceRequestHttpError,
   probeServiceTab,
   requestServiceFileTransfer,
   captureServiceNetwork,
@@ -1553,6 +1554,42 @@ async function main() {
     authorization: 'Bearer private-profile-capability',
   });
   assert.deepEqual(postRecorder.calls[0].body, request);
+
+  const routeConflictFailure = {
+    schemaVersion: 'agent-browser.service-failure-recourse.v1',
+    code: 'service_access_plan_route_browser_conflict',
+    axis: 'profile_lease',
+    phase: 'launch_admission',
+    effectState: 'no_effect',
+    retryDisposition: 'refresh_access_plan',
+    recommendedAction: 'refresh_access_plan_and_use_exact_route',
+    reuseAllowed: false,
+    safeNextActions: ['refresh_access_plan', 'submit_exact_planned_route'],
+    hardStops: ['blind_retry', 'launch_duplicate_profile_lane'],
+  };
+  await assert.rejects(
+    postServiceRequest({
+      baseUrl: 'http://127.0.0.1:4849',
+      request,
+      fetch: async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          success: false,
+          error: routeConflictFailure.code,
+          failure: routeConflictFailure,
+        }),
+      }),
+    }),
+    (error) => {
+      assert.ok(error instanceof ServiceRequestHttpError);
+      assert.equal(error.status, 400);
+      assert.equal(error.code, routeConflictFailure.code);
+      assert.deepEqual(error.failure, routeConflictFailure);
+      assert.equal(error.response.success, false);
+      return true;
+    },
+  );
 
   const viewportFailure = {
     id: 'viewport-job-1',

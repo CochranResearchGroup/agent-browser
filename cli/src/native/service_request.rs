@@ -407,7 +407,7 @@ impl ServiceRequestIssue {
         &self.message
     }
 
-    pub(crate) fn code(&self) -> &'static str {
+    pub(crate) fn code(&self) -> &str {
         match self.kind {
             ServiceRequestIssueKind::InvalidRequest => "invalid_request",
             ServiceRequestIssueKind::MissingAction => "missing_action",
@@ -420,7 +420,11 @@ impl ServiceRequestIssue {
             ServiceRequestIssueKind::ForbiddenCdpExecution => "forbidden_cdp_execution",
             ServiceRequestIssueKind::InvalidServiceTabHandle => "invalid_service_tab_handle",
             ServiceRequestIssueKind::InvalidBoundedRecipe => "invalid_bounded_recipe",
-            ServiceRequestIssueKind::RouteHintFailure => "route_hint_failure",
+            ServiceRequestIssueKind::RouteHintFailure => match self.message.as_str() {
+                "service_access_plan_route_browser_conflict"
+                | "service_access_plan_route_session_conflict" => self.message.as_str(),
+                _ => "route_hint_failure",
+            },
             ServiceRequestIssueKind::MissingAccountablePrincipal => "missing_accountable_principal",
         }
     }
@@ -2523,6 +2527,26 @@ mod tests {
             record.references.request_id.as_deref(),
             Some("mcp-service-request-tab-new-fixture")
         );
+    }
+
+    #[test]
+    fn route_conflict_failure_record_preserves_the_exact_actionable_code() {
+        for code in [
+            "service_access_plan_route_browser_conflict",
+            "service_access_plan_route_session_conflict",
+        ] {
+            let issue = ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, code);
+            let record = service_request_rejection_failure_record(
+                "http_service_request",
+                Some("tab_new"),
+                "request-route-conflict",
+                "shared-profile-route",
+                &issue,
+            );
+
+            assert_eq!(issue.code(), code);
+            assert_eq!(record.code, code);
+        }
     }
 
     #[test]

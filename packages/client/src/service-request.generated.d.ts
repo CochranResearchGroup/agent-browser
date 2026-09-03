@@ -2197,6 +2197,13 @@ export declare function createServiceRequestMcpToolCall(input: ServiceRequest): 
 export declare function postServiceRequest<TRequest extends ServiceRequest>(
   options: ServiceRequestHttpOptions<TRequest>,
 ): Promise<ServiceRequestResponse<ServiceRequestDataForAction<TRequest["action"]>>>;
+export declare class ServiceRequestHttpError extends Error {
+  constructor(status: number, response: ServiceRequestResponse);
+  status: number;
+  code: string;
+  response: ServiceRequestResponse;
+  failure: ServiceFailureRecourse | null;
+}
 export declare class ServiceOperationError extends Error {
   constructor(response: ServiceRequestResponse);
   response: ServiceRequestResponse;
