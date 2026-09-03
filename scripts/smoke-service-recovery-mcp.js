@@ -7,9 +7,9 @@ import {
   closeSession,
   createMcpStdioClient,
   createSmokeContext,
+  httpJson,
   parseJsonOutput,
   runCli,
-  sendRawCommand,
 } from './smoke-utils.js';
 
 const context = createSmokeContext({
@@ -87,7 +87,22 @@ try {
   const opened = parseJsonOutput(openResult.stdout, 'open');
   assert(opened.success === true, `Open command failed: ${openResult.stdout}${openResult.stderr}`);
 
-  const launch = await sendRawCommand(context, {
+  const streamStatusResult = await runCli(context, ['--json', '--session', session, 'stream', 'status']);
+  let stream = parseJsonOutput(streamStatusResult.stdout, 'stream status');
+  assert(
+    stream.success === true,
+    `stream status failed: ${streamStatusResult.stdout}${streamStatusResult.stderr}`,
+  );
+  if (!stream.data?.enabled) {
+    const streamResult = await runCli(context, ['--json', '--session', session, 'stream', 'enable']);
+    stream = parseJsonOutput(streamResult.stdout, 'stream enable');
+    assert(stream.success === true, `stream enable failed: ${streamResult.stdout}${streamResult.stderr}`);
+  }
+
+  const port = stream.data?.port;
+  assert(Number.isInteger(port) && port > 0, `stream enable did not return a port: ${JSON.stringify(stream)}`);
+
+  const launch = await httpJson(port, 'POST', '/api/command', {
     id: 'service-recovery-mcp-smoke-launch',
     action: 'launch',
     headless: true,
@@ -109,7 +124,7 @@ try {
   assert(initialize.capabilities?.tools, 'MCP tools capability missing');
   notify('notifications/initialized');
 
-  const pidResponse = await sendRawCommand(context, {
+  const pidResponse = await httpJson(port, 'POST', '/api/command', {
     id: 'service-recovery-mcp-smoke-browser-pid',
     action: 'browser_pid',
     ...traceFields,
