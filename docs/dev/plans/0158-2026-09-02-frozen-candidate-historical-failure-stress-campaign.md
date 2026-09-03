@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_blocking_repair_active_presentation_slot_identity`
+Execution state: `w6_blocking_repair_candidate_validation_active`
 
 Lane: P157
 
@@ -1249,3 +1249,60 @@ terminal or a genuine stop condition above is recorded. The final review must
 include every checkout divergence, the successful failure-normalization
 repair, the access-plan retained-service epoch friction, and the Cargo/sccache
 process-pressure observations as separate causal findings.
+
+### W6 Last30Days X Shared-Profile Admission Finding
+
+Production tick `tick-98e14987fc5e9a7b7b63f8b8ea1abb95` added a distinct
+read-only observation after the third checkout repair. Three consecutive X
+`tab_new` requests from Service `last30days`, agent `x-scraper`, and task
+`x-feed` failed before execution with
+`existing_session_profile_identity_unproven`. The same authenticated Profile
+and retained browser subsequently supported successful LinkedIn and Reddit
+acquisition. This isolates the failure to Agent Browser request admission and
+lifecycle routing rather than Profile health, authentication, or scraper
+content. The exact source is
+`docs/dev/notes/2026-09-03-last30days-x-shared-profile-identity-rejection-handoff.md`,
+integrated as commit `4f0ac55f`.
+
+Readback exposed two coupled product defects. First, request normalization
+treated any complete client-supplied `browserId` and `sessionName` pair as
+self-validating and bypassed the current access plan. Second, automatic shared-
+Profile attachment rejected every command that already carried either route
+hint, so even an exact access-plan route could not select the retained browser
+and fell through to legacy identity proof. The production failures also
+retained null provenance, failure, and terminal-outcome fields, confirming the
+historical logging defect on a current real client. No production retry,
+Profile mutation, browser replacement, or cleanup was performed.
+
+Blocking repair commit `34c7d85a` makes complete `tab_new` route hints pass
+through the access plan, rejects browser or session contradictions before
+effects, and uses a matching pair to constrain attachment to the exact retained
+browser and owning session. Route conflicts now report no effect, require a
+fresh access plan, expose an executable `service_access_plan` next action, and
+forbid blind retry and duplicate Profile launch. A production-shaped terminal
+test preserves the Last30Days service, agent, task, Profile, browser, and
+session provenance across the response, durable job, and terminal event.
+
+The repair was developed red-green. Before the implementation, the
+normalization test accepted a contradictory complete route and the runtime
+test returned no retained target for an exact route. Afterward, both route
+conflict axes, exact retained selection, and terminal logging pass. The full
+44-test access-plan slice, 17-test failure and journal slice, clippy with
+warnings denied, formatting, generated-client contracts, documentation build,
+and all six selected workstation and Guacamole installation fixtures pass.
+
+This finding maps to frozen family F01 and cases A01, A02, A03, A08, A13, and
+X10; it does not expand the scheduled case count. A01 must exercise at least
+two serial self-declared clients against the same retained shared Profile using
+fresh access-plan output, assert that both requests reuse the exact physical
+browser without identity choreography, and correlate every terminal envelope.
+One deliberately stale browser pair and one deliberately stale session pair
+must fail before browser effects with the new typed recourse. This provider-
+free and E1 obligation is folded into the adversarial battery rather than
+treated as evidence that the complete live sequence has passed.
+
+Next action: build, install, and identify a fresh isolated development
+candidate containing `34c7d85a`; run the development browser smoke,
+provider-required doctor, and exact shared-Profile serial regression under a
+new epoch. If those pass, resume the external-handoff readiness sequence and
+the remaining W6 calibration gates. Production remains read-only.
