@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w5_dashboard_oracle_complete_w6_candidate_preparation_ready`
+Execution state: `w6_preparation_contract_complete_candidate_publication_ready`
 
 Lane: P157
 
@@ -746,3 +746,48 @@ Next action: execute W6 only. Publish and install one isolated development
 candidate, prepare distinct E1 and E2 environments, prove genuinely external
 ingress, capture calibration, and seal candidate and environment digests before
 any campaign case starts.
+
+## W6 Preflight Checkpoint: Preparation And External-Ingress Contract Complete
+
+State transition: `dashboard_oracle_complete -> w6_preflight_complete`.
+
+Acceptance state: W6 remains open. No new candidate has been installed and the
+campaign is not frozen or executing.
+
+Progress classification: `outcome_progress`.
+
+The first W6 readiness audit found that the prior development provider called
+a loopback HTTP address its public operator URL. It also found that the
+campaign manifest could not seal E1 and E2 identities, calibration, artifact
+receipts, or an actual zero-start freeze instant. Executing W6 against those
+contracts would have produced ambiguous evidence.
+
+The prerequisite repair now provides:
+
+- a reviewed public HTTPS operator origin and external-ingress revision as one
+  atomic, fail-closed development-provider binding;
+- a v2 provider manifest that retains loopback only as a local diagnostic URL
+  and carries the external binding into route authority;
+- manifest-bound installation, runtime, provider, ingress, external-vantage,
+  handoff, calibration, and fixture artifacts;
+- exact E1 and E2 environment seals, including two distinct off-host client
+  identities and all eight external ingress observation classes;
+- a canonical candidate digest and aggregate fixture digest;
+- an immutable `campaign-freeze.json` receipt with the actual wall and
+  monotonic freeze time and zero started case and attempt counts; and
+- a no-repair preparation orchestrator with 26 isolated fail-closed fixtures.
+
+`pnpm test:p158-campaign-preparation` passes all exact classifications, strict
+schemas, persisted bytes and hashes, nested W4 validation, freeze ordering,
+calibration chronology, deterministic output, input immutability, and the
+zero-start gate.
+
+The provisional binary built before these source corrections was not installed
+and is not a candidate. W6 still requires one fresh build and isolated install,
+external runner evidence, the exact 20-minute C01 calibration, environment
+sealing, and controller freeze.
+
+Next action: rebuild from the clean checkpoint, install only into the
+development pseudo-home, configure the reviewed public HTTPS binding, prove E1
+and E2 including two off-host clients, calibrate, and freeze without starting a
+campaign case.

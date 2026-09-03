@@ -132,6 +132,13 @@ fixtures include clean empty, sparse, normal, dense, and typed-convergence
 controls. The dense control materially generates 22,600 resources and 600 rail
 rows for the exact 100 Profile, 500 browser, 2,000 tab, 10,000 job, and 10,000
 event inventory.
+Plan 0158 W6 preflight is complete. The readiness audit rejected the prior
+loopback HTTP operator URL and incomplete freeze manifest before installation.
+The development provider now requires one reviewed public HTTPS origin plus an
+external-ingress revision, and the campaign controller can seal exact E1/E2,
+artifact, calibration, fixture, external-vantage, and zero-start freeze
+evidence. Twenty-six adversarial preparation fixtures are green. W6 remains
+open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Plan
 
@@ -140,10 +147,10 @@ event inventory.
 
 ### Next Recommendation
 
-Execute Plan 0158 W6. Publish and install exactly one isolated development
-candidate, prepare distinct E1 and E2 environments, prove E2 external ingress,
-capture calibration, and freeze all candidate and environment digests before
-starting a campaign case.
+Continue Plan 0158 W6 from the clean preflight checkpoint. Rebuild and install
+one isolated development candidate, configure its reviewed public HTTPS
+binding, prove E2 through two off-host clients, run the exact calibration, and
+freeze all digests with zero started campaign cases.
 
 ## P156 | Full Runtime Shutdown Replacement
 

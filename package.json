@@ -109,6 +109,7 @@
     "test:p158-logging-auditor": "node scripts/test-p158-logging-auditor.js",
     "test:p158-external-handoff-oracle": "node scripts/test-p158-external-handoff-oracle.js",
     "test:p158-dashboard-oracle": "node scripts/test-p158-dashboard-oracle.js",
+    "test:p158-campaign-preparation": "node scripts/test-p158-campaign-preparation.js",
     "test:service-status-fixed-input-harness": "node scripts/test-service-status-fixed-input-harness.js",
     "test:service-client-exports": "pnpm --filter agent-browser-service-client-example exec node test-client-exports.mjs",
     "test:service-request-client": "node scripts/test-service-request-client.js",
