@@ -40,6 +40,7 @@
         "attempt_observation",
         "attempt_terminal",
         "safety_observation",
+        "artifact_recorded",
         "external_intervention",
         "scheduled_teardown_terminal",
         "evidence_seal",
@@ -60,6 +61,7 @@
         { "$ref": "#/$defs/attemptObservation" },
         { "$ref": "#/$defs/attemptTerminal" },
         { "$ref": "#/$defs/safetyObservation" },
+        { "$ref": "#/$defs/artifactRecorded" },
         { "$ref": "#/$defs/externalIntervention" },
         { "$ref": "#/$defs/teardownTerminal" },
         { "$ref": "#/$defs/evidenceSeal" },
@@ -96,6 +98,10 @@
     {
       "if": { "properties": { "recordType": { "const": "safety_observation" } }, "required": ["recordType"] },
       "then": { "properties": { "payload": { "$ref": "#/$defs/safetyObservation" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "artifact_recorded" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/artifactRecorded" } } }
     },
     {
       "if": { "properties": { "recordType": { "const": "external_intervention" } }, "required": ["recordType"] },
@@ -309,6 +315,17 @@
         "violation": { "type": "boolean" },
         "consecutiveViolations": { "type": "integer", "minimum": 0 },
         "terminal": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "artifactRecorded": {
+      "type": "object",
+      "required": ["kind", "artifactId", "capturePurpose", "terminal"],
+      "properties": {
+        "kind": { "const": "artifact_recorded" },
+        "artifactId": { "$ref": "#/$defs/id" },
+        "capturePurpose": { "type": "string", "minLength": 1 },
+        "terminal": { "const": false }
       },
       "additionalProperties": false
     },
