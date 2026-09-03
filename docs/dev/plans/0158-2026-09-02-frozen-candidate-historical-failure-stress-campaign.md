@@ -1339,3 +1339,36 @@ The failed E1 attempts remain evidence; no retry was made against their old
 candidate identity. Next action: build and install a new isolated candidate
 containing `8f4cd76f`, then restart the serial shared-Profile scenario from a
 fresh disposable Profile and attempt identity. Production remains read-only.
+
+Development generation `0.28.0-4066392e7fa1` then passed installation,
+production-unchanged comparison, three browser smokes, skill synchronization,
+and the provider-required doctor. Under fresh E6 identity, self-declared client
+A launched one browser on its deterministic `shared-profile-*` session. A
+differently labeled self-declared client B received
+`reuse_existing_browser`, reused that exact physical browser and session, and
+created a distinct attributable tab. Both terminal responses recorded
+`verified_effect` plus complete subject, connection, Profile, browser, session,
+request, and job provenance.
+
+The two required stale-route probes each ran once and failed before effects
+with their exact browser-conflict and session-conflict codes. They exposed a
+third sequence-blocking API defect: HTTP returned only the legacy error string,
+and the generated client discarded even that body in favor of a generic HTTP
+status exception. The classifier contained correct recourse, but neither the
+immediate HTTP nor MCP client could consume it. Pre-job journal normalization
+also collapsed the exact conflict to generic `route_hint_failure`.
+
+Blocking repair commit `e631da26` projects structured recourse on HTTP and MCP
+normalization failures, preserves exact route-conflict codes in the append-only
+journal, and gives generated-client callers a typed `ServiceRequestHttpError`
+carrying status, code, response, and failure. Route-conflict responses now
+state no effect, require access-plan refresh, expose the safe exact-route next
+step, and forbid blind retry or duplicate Profile launch. Focused HTTP, MCP,
+journal, complete Service-client, generated-type, clippy, formatting, and diff
+validation pass. The failed E6 stale-route responses remain preserved as
+pre-repair evidence.
+
+Next action: build and install a fresh isolated candidate containing
+`e631da26`, then repeat only the stale browser and stale session probes under a
+new attempt identity to verify immediate recourse and exact durable logging.
+Do not repeat the already successful E6 client A and B browser effects.
