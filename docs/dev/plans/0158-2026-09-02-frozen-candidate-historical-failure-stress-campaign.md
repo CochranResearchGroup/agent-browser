@@ -1707,3 +1707,46 @@ Revised next action: validate and commit the closed-handoff failure
 classification, then dispatch one readiness observation against the prepared
 open target. If either independent client still fails, preserve the artifacts
 and pause for the newly classified blocker. Do not begin calibration yet.
+
+The E13 replacement observation reached both independent external clients
+after the explicit reopen. Both resolved one `/guacamole/` iframe without an
+expired-auth or CDP-connecting signature, but neither rendered the prepared
+identity marker. The preserved human-paced video exposes the exact provider
+message: the requested connection does not exist. The dashboard selected the
+expected Plan 158 workspace, and its only convergence warning was the truthful
+operator-journey gate. This confirms the hosted iframe-path and false runtime
+warning repairs while isolating a new provider-authentication blocker.
+
+Read-only provider and database inspection proves that Guacamole connection 1,
+its managed route, and its display are ready. The frame token also names that
+exact connection. The dashboard forward-auth response instead projected the
+authenticated dashboard username `codex` as `Remote-User`. Guacamole had
+auto-created that principal with zero connection permissions, while the stable
+development operator principal held all six managed connection grants. The
+route therefore appeared nonexistent only because dashboard authentication
+was incorrectly coupled to Guacamole authorization.
+
+The bounded repair separates those identities. Forward auth preserves the
+real dashboard actor in `X-Agent-Browser-User`; only `/guacamole/` requests use
+the stable route-authorized provider principal from
+`AGENT_BROWSER_GUACAMOLE_HEADER_USER` as `Remote-User`. Development runtime
+publication now derives and installs that value from the same operator user
+used by provider provisioning. Invalid principal syntax fails closed. The
+provider-free regressions cover the separated headers, non-Guacamole behavior,
+invalid-principal rejection, and generated development systemd environment.
+
+The newly delivered Last30Days handoff at commit `6f198a8b` is byte-identical
+to the intake note already integrated at `4f0ac55f`; it introduces no new
+request evidence or repair requirement. It does, however, sharpen the rollout
+finding: the branch contains provider-free fixes for the exact X route-hint
+and shared-local admission defects, while the production runtime that served
+tick `tick-98e14987fc5e9a7b7b63f8b8ea1abb95` did not. A green development
+candidate is not production acceptance.
+
+Revised next action: complete the selected documentation, Rust, development
+runtime, and Last30Days shared-profile regression gates; publish one new
+isolated candidate; re-run the provider-required doctor; and explicitly
+prepare the retained handoff if installation closes it. Dispatch exactly one
+new external readiness observation only after local forward-auth readback
+shows the route-authorized Guacamole principal while retaining the dashboard
+actor. Continue to keep production read-only.

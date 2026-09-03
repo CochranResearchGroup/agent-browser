@@ -2034,6 +2034,7 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID` | Service-owned remote-view route identifier |
 | `AGENT_BROWSER_GUACAMOLE_CONNECTION_ID` | Guacamole connection id or route token for RDP gateway streams |
 | `AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME` | Human-readable Guacamole connection name for RDP gateway streams |
+| `AGENT_BROWSER_GUACAMOLE_HEADER_USER` | Stable route-authorized provider principal used for Guacamole header authentication |
 | `AGENT_BROWSER_REMOTE_VIEW_PROVIDER` | Remote-view provider label for `remote_headed` records |
 | `AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER` | Remote control-input provider label for `remote_headed` records |
 
@@ -2242,6 +2243,15 @@ mode-0600 bootstrap credential file at
 runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
 an isolated directory when a fixture must not read or rewrite the user-scoped
 auth store, bootstrap credentials, or managed environment file.
+
+Authenticated dashboard identity and Guacamole route identity are separate.
+For a hosted Guacamole request, forward authentication keeps the signed-in
+dashboard actor in `X-Agent-Browser-User` for audit and supplies the stable
+provider principal from `AGENT_BROWSER_GUACAMOLE_HEADER_USER` as
+`Remote-User`. The workstation installer and isolated development publisher
+set that principal to the user granted the managed Guacamole connections.
+Do not grant every dashboard login duplicate Guacamole connection rows merely
+to make an embedded view load.
 
 Dashboard sections have stable paths, so refreshes and shared links keep the
 selected area instead of returning to the home view. Use `/service` for the

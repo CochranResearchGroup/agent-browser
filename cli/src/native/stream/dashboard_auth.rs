@@ -282,17 +282,19 @@ pub(super) fn verify_forward_auth_response(
     _secure_cookie: bool,
 ) -> DashboardAuthResponse {
     match authenticate_headers(headers) {
-        Ok(Some(identity)) => DashboardAuthResponse {
-            status: "204 No Content".to_string(),
-            content_type: "text/plain; charset=utf-8",
-            headers: vec![
-                ("Remote-User".to_string(), identity.username.clone()),
-                ("Remote-Name".to_string(), identity.display_name.clone()),
-                ("Remote-Groups".to_string(), identity.role.clone()),
-                ("X-Agent-Browser-User".to_string(), identity.username),
-            ],
-            body: Vec::new(),
-        },
+        Ok(Some(identity)) => authenticated_forward_auth_response(
+            headers,
+            identity,
+            std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
+                .ok()
+                .as_deref(),
+        )
+        .unwrap_or_else(|err| {
+            json_response(
+                "500 Internal Server Error",
+                json!({"success": false, "error": err}),
+            )
+        }),
         Ok(None) => {
             let next = forwarded_request_target(headers).unwrap_or_else(|| "/".to_string());
             let location = forwarded_login_location(headers, &next);
@@ -318,6 +320,46 @@ pub(super) fn verify_forward_auth_response(
             json!({"success": false, "error": err}),
         ),
     }
+}
+
+/// Preserve the authenticated dashboard actor while selecting the stable
+/// provider principal required by Guacamole header authentication. Dashboard
+/// usernames are not Guacamole authorization identities and may legitimately
+/// have no provider route grants.
+fn authenticated_forward_auth_response(
+    headers: &[(String, String)],
+    identity: DashboardAuthIdentity,
+    guacamole_header_user: Option<&str>,
+) -> Result<DashboardAuthResponse, String> {
+    let forwarded_path = header_value(headers, "x-forwarded-uri").unwrap_or("/");
+    let guacamole_request = forwarded_path == "/guacamole"
+        || forwarded_path.starts_with("/guacamole/")
+        || forwarded_path.starts_with("/guacamole?");
+    let remote_user = if guacamole_request {
+        guacamole_header_user
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(identity.username.as_str())
+    } else {
+        identity.username.as_str()
+    };
+    if !remote_user
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "._@-".contains(character))
+    {
+        return Err("Guacamole header user contains unsupported characters".to_string());
+    }
+    Ok(DashboardAuthResponse {
+        status: "204 No Content".to_string(),
+        content_type: "text/plain; charset=utf-8",
+        headers: vec![
+            ("Remote-User".to_string(), remote_user.to_string()),
+            ("Remote-Name".to_string(), identity.display_name),
+            ("Remote-Groups".to_string(), identity.role),
+            ("X-Agent-Browser-User".to_string(), identity.username),
+        ],
+        body: Vec::new(),
+    })
 }
 
 pub(super) fn unauthorized_api_response(secure_cookie: bool) -> DashboardAuthResponse {
@@ -1023,6 +1065,76 @@ mod tests {
             name == "Location"
                 && value == "http://agent-browser.localhost/login?next=%2Fguacamole%2F"
         }));
+    }
+
+    #[test]
+    fn guacamole_forward_auth_uses_provider_principal_and_preserves_dashboard_actor() {
+        let identity = DashboardAuthIdentity {
+            username: "codex".to_string(),
+            display_name: "Codex observer".to_string(),
+            role: DASHBOARD_ROLE_OBSERVER.to_string(),
+        };
+        let headers = vec![(
+            "x-forwarded-uri".to_string(),
+            "/guacamole/#/client/opaque".to_string(),
+        )];
+
+        let response =
+            authenticated_forward_auth_response(&headers, identity, Some("provider-operator"))
+                .unwrap();
+
+        assert!(response
+            .headers
+            .iter()
+            .any(|(name, value)| { name == "Remote-User" && value == "provider-operator" }));
+        assert!(response
+            .headers
+            .iter()
+            .any(|(name, value)| name == "X-Agent-Browser-User" && value == "codex"));
+    }
+
+    #[test]
+    fn non_guacamole_forward_auth_keeps_dashboard_actor_as_remote_user() {
+        let identity = DashboardAuthIdentity {
+            username: "codex".to_string(),
+            display_name: "Codex observer".to_string(),
+            role: DASHBOARD_ROLE_OBSERVER.to_string(),
+        };
+        let headers = vec![(
+            "x-forwarded-uri".to_string(),
+            "/api/runtime/health".to_string(),
+        )];
+
+        let response =
+            authenticated_forward_auth_response(&headers, identity, Some("provider-operator"))
+                .unwrap();
+
+        assert!(response
+            .headers
+            .iter()
+            .any(|(name, value)| name == "Remote-User" && value == "codex"));
+    }
+
+    #[test]
+    fn guacamole_forward_auth_rejects_invalid_provider_principal() {
+        let identity = DashboardAuthIdentity {
+            username: "codex".to_string(),
+            display_name: "Codex observer".to_string(),
+            role: DASHBOARD_ROLE_OBSERVER.to_string(),
+        };
+        let headers = vec![("x-forwarded-uri".to_string(), "/guacamole/".to_string())];
+
+        let error = authenticated_forward_auth_response(
+            &headers,
+            identity,
+            Some("provider operator\nforged"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Guacamole header user contains unsupported characters"
+        );
     }
 
     #[test]

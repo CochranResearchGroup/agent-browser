@@ -256,6 +256,16 @@ onto the configured public origin. The dashboard never embeds its own bare root
 as a fallback and never publishes that internal iframe URL as the operator
 handoff.
 
+Dashboard users and Guacamole provider users are intentionally distinct. The
+forward-auth response retains the authenticated dashboard actor in
+<code>X-Agent-Browser-User</code>, while requests under
+<code>/guacamole/</code> receive the stable route-authorized principal from
+<code>AGENT_BROWSER_GUACAMOLE_HEADER_USER</code> as
+<code>Remote-User</code>. Development publication derives that value from the
+same operator identity used to provision Guacamole route grants. A healthy
+connection row can otherwise appear as “does not exist” when the dashboard
+username has no provider permissions.
+
 ## Validate from two external clients
 
 Plan 0158 uses the manually dispatched **Plan 0158 External Vantage** GitHub

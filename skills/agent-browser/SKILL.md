@@ -2771,6 +2771,15 @@ private registry path only for isolated runtimes. Also set
 `AGENT_BROWSER_DASHBOARD_AUTH_DIR` for isolated dashboard fixtures so they do
 not read or rewrite user-scoped authentication files.
 
+Dashboard login identity is not the Guacamole authorization principal. For
+forward-authenticated `/guacamole/` requests, preserve the signed-in actor in
+`X-Agent-Browser-User` and use the managed provider principal configured by
+`AGENT_BROWSER_GUACAMOLE_HEADER_USER` as `Remote-User`. Development runtime
+publication derives this value from the same operator identity used to grant
+the managed Guacamole connections. A Guacamole page saying that a known
+connection does not exist can therefore indicate principal-to-route grant
+drift even when the connection row and route are healthy.
+
 Stable ingress keeps `POST /api/service/request` attached through the bounded
 `jobTimeoutMs` plus response grace. A delivered request that loses its backend
 response returns `mutation_outcome_unknown` with `retrySafe: false` and no

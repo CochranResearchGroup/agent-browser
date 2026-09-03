@@ -44,6 +44,7 @@ const env = {
   AGENT_BROWSER_DEV_USER_HOME: join(fixture, 'user'),
   AGENT_BROWSER_DEV_RUNTIME_DIR: join(fixture, 'run', 'agent-browser-dev'),
   AGENT_BROWSER_DEV_BROWSER_EXECUTABLE: fakeBrowser,
+  AGENT_BROWSER_DEV_OPERATOR_USER: 'fixture-provider-operator',
   AGENT_BROWSER_DEV_SKIP_SYSTEMD: '1',
 };
 
@@ -129,6 +130,7 @@ try {
   assert.equal(descriptor.presentationProvider.ports.guacamole, 8093);
   assert.equal(descriptor.presentationProvider.warmSlots, 4);
   assert.equal(descriptor.presentationProvider.hardMaxSlots, 6);
+  assert.equal(descriptor.guacamoleHeaderUser, 'fixture-provider-operator');
   assert.equal(descriptor.browserExecutable, fakeBrowser);
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
   for (const source of Object.values(units)) {
@@ -142,6 +144,7 @@ try {
     assert.match(source, /AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=6/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1/);
     assert.match(source, /AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1/);
+    assert.match(source, /AGENT_BROWSER_GUACAMOLE_HEADER_USER=fixture-provider-operator/);
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);

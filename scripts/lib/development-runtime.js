@@ -74,6 +74,10 @@ export function developmentRuntimeDescriptor(env = process.env) {
   );
   const browserExecutable = resolveDevelopmentBrowserExecutable(env, pseudoHome);
   const presentationProvider = developmentPresentationProviderDescriptor(env);
+  const guacamoleHeaderUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  if (!guacamoleHeaderUser || !/^[A-Za-z0-9._@-]+$/.test(guacamoleHeaderUser)) {
+    throw new Error('Development Guacamole header user contains unsupported characters');
+  }
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: 'development',
@@ -86,6 +90,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
     runtimeHostIngressState: join(pseudoHome, '.agent-browser', 'runtime-host-ingress.json'),
     authDir: join(pseudoHome, '.agent-browser', 'dashboard-auth'),
     browserExecutable,
+    guacamoleHeaderUser,
     laneManifest: join(
       pseudoHome,
       '.config',
@@ -127,6 +132,7 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
     `Environment=AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}`,
     `Environment=AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1`,
     `Environment=AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1`,
+    `Environment=AGENT_BROWSER_GUACAMOLE_HEADER_USER=${descriptor.guacamoleHeaderUser}`,
   ].join('\n');
   return {
     'agent-browser-dev-runtime-host.service': `[Unit]

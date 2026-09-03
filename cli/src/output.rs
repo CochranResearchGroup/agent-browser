@@ -5900,6 +5900,8 @@ Environment:
                        Override the dashboard auth directory for an isolated runtime
   AGENT_BROWSER_DASHBOARD_AUTH_FILE
                        Override the dashboard auth store path
+  AGENT_BROWSER_GUACAMOLE_HEADER_USER
+                       Stable route-authorized Guacamole principal used as Remote-User for /guacamole/ forward auth; the dashboard actor remains in X-Agent-Browser-User
   AGENT_BROWSER_DASHBOARD_INGRESS_STATE
                        Override the private dashboard ingress registry path
 
@@ -7442,6 +7444,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID Service-owned remote-view route id
   AGENT_BROWSER_GUACAMOLE_CONNECTION_ID Guacamole connection id or route token for rdp_gateway streams
   AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME Human-readable Guacamole connection name for rdp_gateway streams
+  AGENT_BROWSER_GUACAMOLE_HEADER_USER Stable route-authorized provider principal for /guacamole/ forward auth
   AGENT_BROWSER_REMOTE_VIEW_PROVIDER View stream provider label for remote_headed records
   AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER Control-input provider label for remote_headed records
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
