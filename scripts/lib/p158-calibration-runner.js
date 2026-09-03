@@ -220,6 +220,83 @@ export function canonicalCalibrationArtifact(value) {
   return canonicalJson(value);
 }
 
+export function finalizeC01CalibrationEvidence(input) {
+  const observations = clone(input.observations);
+  if (!Array.isArray(observations) || observations.length !== TOTAL_ACTIONS) {
+    fail('invalid_calibration_evidence', `C01 requires exactly ${TOTAL_ACTIONS} terminal observations`);
+  }
+  const metrics = {
+    serviceCommand: metricFor(observations, 'service_command'),
+    dashboardAction: metricFor(observations, 'dashboard_action'),
+    handoffReconnect: metricFor(observations, 'handoff_reconnect'),
+  };
+  const environmentRelativeBudgets = {
+    agentCommandP95Ms: metrics.serviceCommand.p95Ms,
+    dashboardActionP95Ms: metrics.dashboardAction.p95Ms,
+    handoffReconnectP95Ms: metrics.handoffReconnect.p95Ms,
+  };
+  const failures = observations.filter((entry) => entry.state === 'failed');
+  const safetyStopped = observations.filter((entry) => entry.state === 'safety_stopped');
+  const rawArtifact = makeArtifact(input.calibrationId, 'calibration_raw', input.completedAt, {
+    schemaVersion: 'agent-browser.p158-calibration-raw.v1',
+    calibrationId: input.calibrationId,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    startedMonotonicTimeNanoseconds: input.startedMonotonicTimeNanoseconds,
+    completedMonotonicTimeNanoseconds: input.completedMonotonicTimeNanoseconds,
+    developmentTargets: clone(input.developmentTargets),
+    agentClientIds: clone(input.agentClientIds),
+    externalViewerReceipts: clone(input.externalViewerReceipts),
+    observations,
+  });
+  const summaryArtifact = makeArtifact(input.calibrationId, 'calibration_summary', input.completedAt, {
+    schemaVersion: 'agent-browser.p158-calibration-summary.v1',
+    calibrationId: input.calibrationId,
+    workload: C01_WORKLOAD,
+    plannedActionCount: TOTAL_ACTIONS,
+    passedActionCount: observations.filter((entry) => entry.state === 'passed').length,
+    failedActionCount: failures.length,
+    safetyStoppedActionCount: safetyStopped.length,
+    firstFailure: failures[0] ?? null,
+    safetyStop: clone(input.safetyStop ?? null),
+    metrics,
+    retryAttempted: false,
+    repairAttempted: false,
+  });
+  const budgetArtifact = makeArtifact(input.calibrationId, 'calibration_budget', input.completedAt, {
+    schemaVersion: 'agent-browser.p158-calibration-budget.v1',
+    calibrationId: input.calibrationId,
+    frozen: true,
+    frozenAt: input.completedAt,
+    sourceSummarySha256: summaryArtifact.declaredSha256,
+    environmentRelativeBudgets,
+  });
+  const calibration = {
+    calibrationId: input.calibrationId,
+    environmentIds: REQUIRED_ENVIRONMENTS,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    clean: failures.length === 0 && safetyStopped.length === 0,
+    workload: C01_WORKLOAD,
+    rawArtifactId: rawArtifact.artifactId,
+    rawArtifactSha256: rawArtifact.declaredSha256,
+    summaryArtifactId: summaryArtifact.artifactId,
+    summaryArtifactSha256: summaryArtifact.declaredSha256,
+    budgetArtifactId: budgetArtifact.artifactId,
+    budgetSha256: budgetArtifact.declaredSha256,
+    environmentRelativeBudgets,
+  };
+  calibration.declaredSha256 = canonicalCalibrationDigest(calibration);
+  return {
+    calibration,
+    artifacts: [rawArtifact, summaryArtifact, budgetArtifact],
+    observations,
+    effectsAttempted: observations.some((entry) => entry.attempt === 1),
+    retryAttempted: false,
+    repairAttempted: false,
+  };
+}
+
 export async function runC01Calibration(input) {
   validateTargets(input?.developmentTargets);
   validateClientIds(input?.agentClientIds);
@@ -302,74 +379,16 @@ export async function runC01Calibration(input) {
     });
   }
 
-  const metrics = {
-    serviceCommand: metricFor(observations, 'service_command'),
-    dashboardAction: metricFor(observations, 'dashboard_action'),
-    handoffReconnect: metricFor(observations, 'handoff_reconnect'),
-  };
-  const environmentRelativeBudgets = {
-    agentCommandP95Ms: metrics.serviceCommand.p95Ms,
-    dashboardActionP95Ms: metrics.dashboardAction.p95Ms,
-    handoffReconnectP95Ms: metrics.handoffReconnect.p95Ms,
-  };
-  const failures = observations.filter((entry) => entry.state === 'failed');
-  const safetyStopped = observations.filter((entry) => entry.state === 'safety_stopped');
-  const rawArtifact = makeArtifact(input.calibrationId, 'calibration_raw', completedAt, {
-    schemaVersion: 'agent-browser.p158-calibration-raw.v1',
+  return finalizeC01CalibrationEvidence({
     calibrationId: input.calibrationId,
+    developmentTargets: targets,
+    agentClientIds: clientIds,
+    externalViewerReceipts: viewerReceipts,
     startedAt,
     completedAt,
     startedMonotonicTimeNanoseconds,
     completedMonotonicTimeNanoseconds,
-    developmentTargets: targets,
-    agentClientIds: clientIds,
-    externalViewerReceipts: viewerReceipts,
     observations,
-  });
-  const summaryArtifact = makeArtifact(input.calibrationId, 'calibration_summary', completedAt, {
-    schemaVersion: 'agent-browser.p158-calibration-summary.v1',
-    calibrationId: input.calibrationId,
-    workload: C01_WORKLOAD,
-    plannedActionCount: TOTAL_ACTIONS,
-    passedActionCount: observations.filter((entry) => entry.state === 'passed').length,
-    failedActionCount: failures.length,
-    safetyStoppedActionCount: safetyStopped.length,
-    firstFailure: failures[0] ?? null,
     safetyStop: activeSafetyStop,
-    metrics,
-    retryAttempted: false,
-    repairAttempted: false,
   });
-  const budgetArtifact = makeArtifact(input.calibrationId, 'calibration_budget', completedAt, {
-    schemaVersion: 'agent-browser.p158-calibration-budget.v1',
-    calibrationId: input.calibrationId,
-    frozen: true,
-    frozenAt: completedAt,
-    sourceSummarySha256: summaryArtifact.declaredSha256,
-    environmentRelativeBudgets,
-  });
-  const calibration = {
-    calibrationId: input.calibrationId,
-    environmentIds: REQUIRED_ENVIRONMENTS,
-    startedAt,
-    completedAt,
-    clean: failures.length === 0 && safetyStopped.length === 0,
-    workload: C01_WORKLOAD,
-    rawArtifactId: rawArtifact.artifactId,
-    rawArtifactSha256: rawArtifact.declaredSha256,
-    summaryArtifactId: summaryArtifact.artifactId,
-    summaryArtifactSha256: summaryArtifact.declaredSha256,
-    budgetArtifactId: budgetArtifact.artifactId,
-    budgetSha256: budgetArtifact.declaredSha256,
-    environmentRelativeBudgets,
-  };
-  calibration.declaredSha256 = canonicalCalibrationDigest(calibration);
-  return {
-    calibration,
-    artifacts: [rawArtifact, summaryArtifact, budgetArtifact],
-    observations,
-    effectsAttempted: observations.some((entry) => entry.attempt === 1),
-    retryAttempted: false,
-    repairAttempted: false,
-  };
 }
