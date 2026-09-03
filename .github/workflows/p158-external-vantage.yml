@@ -83,6 +83,15 @@ jobs:
       - name: Install pinned Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Download sealed W8 action manifest for human controller
+        if: inputs.w8_action_manifest_sha256 != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.w8_action_manifest_artifact_name }}
+          path: downloaded-w8-manifest
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.w8_action_manifest_artifact_run_id }}
+
       - name: Capture human-paced external evidence
         env:
           P158_RUN_ID: ${{ inputs.campaign_run_id }}
@@ -100,6 +109,7 @@ jobs:
           --client-id external-runner-human
           --pace-profile human_controller
           --mode ${{ inputs.probe_mode }}
+          --w8-action-manifest downloaded-w8-manifest/p158-w8-external-action-manifest.json
           --output-dir artifacts/external-runner-human
 
       - name: Upload restricted human-controller evidence
@@ -142,6 +152,15 @@ jobs:
       - name: Install pinned Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Download sealed W8 action manifest for slow client
+        if: inputs.w8_action_manifest_sha256 != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.w8_action_manifest_artifact_name }}
+          path: downloaded-w8-manifest
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.w8_action_manifest_artifact_run_id }}
+
       - name: Capture slow concurrency evidence
         env:
           P158_RUN_ID: ${{ inputs.campaign_run_id }}
@@ -159,6 +178,7 @@ jobs:
           --client-id external-runner-slow
           --pace-profile slow_concurrency
           --mode ${{ inputs.probe_mode }}
+          --w8-action-manifest downloaded-w8-manifest/p158-w8-external-action-manifest.json
           --output-dir artifacts/external-runner-slow
 
       - name: Upload restricted slow-client evidence

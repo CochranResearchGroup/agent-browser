@@ -201,6 +201,37 @@ assert.deepEqual(
   aggregate,
   'aggregation must be input-order deterministic',
 );
+const w8ActionIds = ['open', 'interact', 'disconnect', 'reopen'].map((kind) => `H01-E2-r001:action:${kind}`);
+const w8Receipts = receipts.map((item) => ({
+  ...structuredClone(item),
+  w8ActionManifestSha256: 'd'.repeat(64),
+  w8ActionObservations: ['open', 'interact', 'disconnect', 'reopen'].map((runnerAction, index) => ({
+    actionId: w8ActionIds[index],
+    attemptId: 'H01-E2-r001',
+    caseId: 'H01',
+    runnerAction,
+    clientId: item.clientId,
+    viewerId: `viewer-${item.clientId}`,
+    observedAt: `2026-09-03T01:00:0${index}.000Z`,
+    eventKind: ['page_open_ready', 'human_paced_interaction_completed', 'playwright_page_closed', 'same_handoff_reopened_ready'][index],
+    evidenceArtifactId: `${item.clientId}-${runnerAction}`,
+    handoffContinuityObserved: true,
+    retainedIdentityObserved: true,
+    retryAttempted: false,
+    repairAttempted: false,
+  })),
+}));
+const w8Aggregate = aggregateExternalVantageReceipts(w8Receipts, { runId: 'p158-test-run' });
+assert.equal(w8Aggregate.w8ActionManifestSha256, 'd'.repeat(64));
+assert.equal(w8Aggregate.w8ActionObservations.length, 4);
+assert(w8Aggregate.w8ActionObservations.every((entry) => entry.observations.length === 2));
+assert.throws(
+  () => aggregateExternalVantageReceipts([
+    w8Receipts[0],
+    { ...w8Receipts[1], w8ActionObservations: w8Receipts[1].w8ActionObservations.slice(1) },
+  ], { runId: 'p158-test-run' }),
+  /lacks exact H01 observations/,
+);
 
 const calibrationReceipts = receipts.map((item) => {
   const isHuman = item.paceProfile === 'human_controller';

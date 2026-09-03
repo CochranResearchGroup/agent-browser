@@ -333,7 +333,7 @@ export function buildP158W8ExternalActionManifest({
   registry,
   schedule,
   seals,
-  caseIds = ['H01', 'H02'],
+  caseIds = ['H01'],
 }) {
   validateSeals({ registry, schedule, seals });
   const selected = [...new Set(caseIds)].sort();
@@ -746,14 +746,18 @@ export function createP158W8ReviewedLiveAdapterBundle({
   const consumedActionIds = new Set();
   let loadExternalReceipts = null;
   if (externalActionExecution) {
-    const expectedManifest = buildP158W8ExternalActionManifest({ registry, schedule, seals });
+    const expectedManifest = buildP158W8ExternalActionManifest({
+      registry,
+      schedule,
+      seals,
+      caseIds: ['H01'],
+    });
     if (sha256(externalActionExecution.manifest) !== sha256(expectedManifest) ||
         !isAbsolute(externalActionExecution.resultPath ?? '')) {
       fail('external_action_manifest_invalid',
         'Reviewed W8 external execution requires the exact compiled manifest and an absolute result path');
     }
     concreteCaseIds.add('H01');
-    concreteCaseIds.add('H02');
     let cached = null;
     loadExternalReceipts = async () => {
       if (cached) return cached;

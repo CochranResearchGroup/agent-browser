@@ -343,6 +343,34 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
       (w8ManifestDigests.length === 1 && ordered.some((item) => !item.w8ActionManifestSha256))) {
     throw new Error('External vantage clients have conflicting W8 action-manifest bindings');
   }
+  let w8ActionObservations = [];
+  if (w8ManifestDigests.length === 1) {
+    const actionIdSets = ordered.map((receipt) => {
+      const observations = receipt.w8ActionObservations;
+      if (!Array.isArray(observations) || observations.length !== 4 ||
+          new Set(observations.map((entry) => entry.actionId)).size !== 4 ||
+          observations.some((entry) => entry.caseId !== 'H01' ||
+            entry.clientId !== receipt.clientId || entry.retryAttempted !== false ||
+            entry.repairAttempted !== false || !entry.observedAt || !entry.eventKind)) {
+        throw new Error(`External vantage receipt lacks exact H01 observations: ${receipt.clientId}`);
+      }
+      const orderedTimes = ['open', 'interact', 'disconnect', 'reopen'].map((runnerAction) =>
+        Date.parse(observations.find((entry) => entry.runnerAction === runnerAction)?.observedAt));
+      if (orderedTimes.some((value) => !Number.isFinite(value)) ||
+          orderedTimes.some((value, index) => index > 0 && value < orderedTimes[index - 1])) {
+        throw new Error(`External H01 event order is invalid: ${receipt.clientId}`);
+      }
+      return observations.map((entry) => entry.actionId).sort();
+    });
+    if (actionIdSets[0].join(',') !== actionIdSets[1].join(',')) {
+      throw new Error('External H01 runners observed different action sets');
+    }
+    w8ActionObservations = actionIdSets[0].map((actionId) => ({
+      actionId,
+      observations: ordered.map((receipt) => receipt.w8ActionObservations
+        .find((entry) => entry.actionId === actionId)),
+    }));
+  }
   if (
     ordered[0].mode === 'calibration' &&
     ordered.some((receipt) =>
@@ -396,6 +424,7 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
     handoffUrlSha256: ordered[0].handoff.urlSha256,
     retainedIdentitySha256: canonicalHash(expectedIdentity),
     w8ActionManifestSha256: w8ManifestDigests[0] ?? null,
+    w8ActionObservations,
     receiptSha256s: ordered.map((item) => canonicalHash(item)),
     checks: {
       distinctOffHostClients: true,
@@ -416,58 +445,70 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
   return { ...aggregate, aggregateSha256: canonicalHash(aggregate) };
 }
 
-const W8_URL_ROLES = Object.freeze({
-  handoff: 'starting_handoff',
-  location: 'location_header',
-  iframe_src: 'iframe_src',
-  form_action: 'form_action',
-  websocket: 'websocket_endpoint',
-  reconnect: 'reconnect_target',
-  copied_link: 'copied_action',
-  error_action: 'error_action',
-  provider_external_url: 'provider_external_url',
-  route_binding: 'route_binding',
-  local_embed: 'local_embed_url',
-  dashboard_embed: 'dashboard_embed_url',
-  health: 'health_url',
-});
+function validateW8ProbeManifest(manifest, env, mode) {
+  if (!manifest) {
+    if (env.P158_W8_ACTION_MANIFEST_SHA256) {
+      throw new Error('W8 action manifest bytes are required when its digest is bound');
+    }
+    return null;
+  }
+  const { manifestSha256, ...body } = manifest;
+  if (mode !== 'readiness' || manifestSha256 !== campaignSha256(body) ||
+      manifestSha256 !== env.P158_W8_ACTION_MANIFEST_SHA256 ||
+      manifest.schemaVersion !== 'agent-browser.p158-w8-external-action-manifest.v1' ||
+      manifest.caseIds?.join(',') !== 'H01' || manifest.actionCount !== 4 ||
+      !Array.isArray(manifest.actions) || manifest.actions.length !== 4 ||
+      new Set(manifest.actions.map((action) => action.actionId)).size !== 4 ||
+      manifest.actions.some((action) => action.caseId !== 'H01' ||
+        action.executorKind !== 'external_vantage_aggregate_projection')) {
+    throw new Error('External probe W8 manifest is not the exact sealed H01 action set');
+  }
+  const runnerActions = manifest.actions.map((action) => action.assignment?.runner_action);
+  if (runnerActions.join(',') !== 'open,interact,disconnect,reopen') {
+    throw new Error('External probe W8 H01 actions are incomplete or reordered');
+  }
+  return manifest;
+}
 
-function w8UrlProbe(action, publicHandoffUrl) {
-  const role = W8_URL_ROLES[action.assignment?.url_role];
-  if (!role) throw new Error(`Unsupported W8 URL role for ${action.actionId}`);
-  const path = role === 'starting_handoff' ? '/remote-view/p158-synthetic' : '/p158-synthetic';
-  const variant = action.assignment?.host_or_scheme;
-  const values = {
-    public_https: publicHandoffUrl,
-    localhost: `https://localhost${path}`,
-    ipv4_loopback: `https://127.0.0.1${path}`,
-    ipv6_loopback: `https://[::1]${path}`,
-    rfc1918: `https://10.20.30.40${path}`,
-    link_local: `https://169.254.20.30${path}`,
-    dot_local: `https://p158-fixture.local${path}`,
-    raw_guacamole: 'https://public.example/guacamole/#/client/p158-synthetic',
-    non_https: `http://public.example${path}`,
-    public_dns_private_resolution: `https://public.example${path}`,
-  };
-  const url = values[variant];
-  if (!url) throw new Error(`Unsupported W8 host or scheme for ${action.actionId}`);
-  const classification = classifyOperatorUrl(
-    role === 'websocket_endpoint' && variant === 'public_https'
-      ? url.replace(/^https:/, 'wss:')
-      : url,
-    {
-      role,
-      resolvedAddresses: variant === 'public_dns_private_resolution' ? ['10.20.30.40'] : [],
+function buildW8H01ActionObservations({
+  manifest, clientId, viewerId, initial, reconnect, disconnectObservedAt,
+}) {
+  if (!disconnectObservedAt) throw new Error('H01 disconnect event was not observed');
+  const evidence = {
+    open: {
+      observedAt: initial.readyAt,
+      eventKind: 'page_open_ready',
+      evidenceArtifactId: initial.screenshot.artifactId,
     },
-  );
-  return {
-    role,
-    hostOrScheme: variant,
-    hostClass: classification.hostClass,
-    resolvedHostClasses: classification.resolvedHostClasses,
-    findingCodes: classification.findingCodes,
-    acceptedAsOperatorUrl: classification.valid,
+    interact: {
+      observedAt: initial.firstUsablePixelsAt,
+      eventKind: 'human_paced_interaction_completed',
+      evidenceArtifactId: initial.screenshot.artifactId,
+    },
+    disconnect: {
+      observedAt: disconnectObservedAt,
+      eventKind: 'playwright_page_closed',
+      evidenceArtifactId: initial.screenshot.artifactId,
+    },
+    reopen: {
+      observedAt: reconnect.readyAt,
+      eventKind: 'same_handoff_reopened_ready',
+      evidenceArtifactId: reconnect.screenshot.artifactId,
+    },
   };
+  return manifest.actions.map((action) => ({
+    actionId: action.actionId,
+    attemptId: action.attemptId,
+    caseId: action.caseId,
+    runnerAction: action.assignment.runner_action,
+    clientId,
+    viewerId,
+    ...evidence[action.assignment.runner_action],
+    handoffContinuityObserved: true,
+    retainedIdentityObserved: true,
+    retryAttempted: false,
+    repairAttempted: false,
+  }));
 }
 
 export function executeP158W8ExternalActionManifest({
@@ -501,19 +542,21 @@ export function executeP158W8ExternalActionManifest({
     throw new Error('W8 public handoff URL does not match its sealed digest');
   }
   const actionReceipts = manifest.actions.map((action) => {
-    if (!['H01', 'H02'].includes(action.caseId)) {
+    if (action.caseId !== 'H01') {
       throw new Error(`W8 external action executor does not implement ${action.caseId}`);
     }
-    const evidence = action.caseId === 'H01'
-      ? {
-          runnerAction: action.assignment?.runner_action,
-          clientIds: [...aggregate.clientIds],
-          sameDurableHandoff: true,
-          exactRetainedIdentity: true,
-        }
-      : w8UrlProbe(action, publicHandoffUrl);
-    if (action.caseId === 'H01' &&
-        !['open', 'interact', 'disconnect', 'reopen'].includes(evidence.runnerAction)) {
+    const observed = aggregate.w8ActionObservations?.find((entry) => entry.actionId === action.actionId);
+    const evidence = {
+      runnerAction: action.assignment?.runner_action,
+      clientIds: [...aggregate.clientIds],
+      sameDurableHandoff: true,
+      exactRetainedIdentity: true,
+      observations: structuredClone(observed?.observations ?? []),
+    };
+    if (!['open', 'interact', 'disconnect', 'reopen'].includes(evidence.runnerAction) ||
+        evidence.observations.length !== 2 ||
+        evidence.observations.some((entry) => entry.runnerAction !== evidence.runnerAction ||
+          entry.handoffContinuityObserved !== true || entry.retainedIdentityObserved !== true)) {
       throw new Error(`W8 H01 action ${action.actionId} is not a frozen runner action`);
     }
     const body = {
@@ -634,10 +677,19 @@ function validateDistributedActions(receipt) {
   }
 }
 
-export async function runExternalVantageProbe({ env, clientId, paceProfile, mode = 'readiness', outputDir }) {
+export async function runExternalVantageProbe({
+  env,
+  clientId,
+  paceProfile,
+  mode = 'readiness',
+  outputDir,
+  w8ActionManifest = null,
+}) {
   mkdirSync(outputDir, { recursive: true });
   try {
-    return await executeExternalVantageProbe({ env, clientId, paceProfile, mode, outputDir });
+    return await executeExternalVantageProbe({
+      env, clientId, paceProfile, mode, outputDir, w8ActionManifest,
+    });
   } catch (error) {
     const failure = {
       schemaVersion: EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
@@ -664,7 +716,9 @@ export async function runExternalVantageProbe({ env, clientId, paceProfile, mode
   }
 }
 
-async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, outputDir }) {
+async function executeExternalVantageProbe({
+  env, clientId, paceProfile, mode, outputDir, w8ActionManifest,
+}) {
   const {
     handoff,
     expectedIdentity: configuredIdentity,
@@ -674,6 +728,7 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
   } =
     validateExternalVantageConfiguration({ env, clientId, paceProfile, mode });
   if (mode === 'calibration') validateExternalCalibrationLeadTime(calibrationDescriptor);
+  const reviewedW8Manifest = validateW8ProbeManifest(w8ActionManifest, env, mode);
   const startedAt = new Date().toISOString();
   const urlEvidence = [];
   const networkEntries = [];
@@ -767,6 +822,7 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
       events: [],
     };
     let reconnect = null;
+    let disconnectObservedAt = null;
     const reconnectObservations = [];
     if (mode === 'calibration') {
       const calibrationStartMs = Date.parse(calibrationDescriptor.calibrationStartAt);
@@ -830,6 +886,7 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
       }
     } else {
       await page.close();
+      disconnectObservedAt = new Date().toISOString();
       page = await context.newPage();
       attachCapture(page, { urlEvidence, networkEntries, consoleEntries, handoffResolutions });
       reconnect = await captureVisit({
@@ -883,6 +940,16 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
       throw new Error(`External handoff oracle rejected evidence: ${oracle.findings.map((item) => item.code).join(',')}`);
     }
     const viewerId = `external-viewer-${clientId.replace(/^external-runner-/, '')}`;
+    const w8ActionObservations = reviewedW8Manifest
+      ? buildW8H01ActionObservations({
+          manifest: reviewedW8Manifest,
+          clientId,
+          viewerId,
+          initial,
+          reconnect,
+          disconnectObservedAt,
+        })
+      : [];
     const receiptBody = {
       schemaVersion: mode === 'calibration'
         ? EXTERNAL_CALIBRATION_RECEIPT_SCHEMA
@@ -904,6 +971,7 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
       workflowRunId: env.GITHUB_RUN_ID,
       workflowRunAttempt: Number(env.GITHUB_RUN_ATTEMPT),
       w8ActionManifestSha256: env.P158_W8_ACTION_MANIFEST_SHA256 || null,
+      w8ActionObservations,
       runner: runnerEvidence(env),
       runnerIdentity: distributedRunnerIdentity(env),
       outsideServiceHost: true,
@@ -1650,9 +1718,15 @@ async function main(args = process.argv.slice(2), env = process.env) {
     const clientId = takeOption(args, '--client-id');
     const paceProfile = takeOption(args, '--pace-profile');
     const mode = takeOption(args, '--mode');
+    const w8ManifestPath = takeOptionalOption(args, '--w8-action-manifest');
     const outputDir = resolve(takeOption(args, '--output-dir'));
     if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}`);
-    const receipt = await runExternalVantageProbe({ env, clientId, paceProfile, mode, outputDir });
+    const w8ActionManifest = env.P158_W8_ACTION_MANIFEST_SHA256
+      ? JSON.parse(readFileSync(resolve(w8ManifestPath), 'utf8'))
+      : null;
+    const receipt = await runExternalVantageProbe({
+      env, clientId, paceProfile, mode, outputDir, w8ActionManifest,
+    });
     process.stdout.write(`${JSON.stringify({ success: receipt.success, clientId, receiptSha256: canonicalHash(receipt) })}\n`);
     return;
   }
@@ -1693,6 +1767,15 @@ async function main(args = process.argv.slice(2), env = process.env) {
 function takeOption(args, name) {
   const index = args.indexOf(name);
   if (index < 0 || index + 1 >= args.length) throw new Error(`Missing ${name}`);
+  const [value] = args.splice(index + 1, 1);
+  args.splice(index, 1);
+  return value;
+}
+
+function takeOptionalOption(args, name) {
+  const index = args.indexOf(name);
+  if (index < 0) return null;
+  if (index + 1 >= args.length) throw new Error(`Missing ${name}`);
   const [value] = args.splice(index + 1, 1);
   args.splice(index, 1);
   return value;

@@ -446,12 +446,12 @@ const externalManifest = buildP158W8ExternalActionManifest({
   schedule,
   seals: externalSeals,
 });
-assert.deepEqual(externalManifest.caseIds, ['H01', 'H02']);
-assert.equal(externalManifest.actionCount, 264);
-assert.equal(new Set(externalManifest.actions.map((action) => action.actionId)).size, 264);
+assert.deepEqual(externalManifest.caseIds, ['H01']);
+assert.equal(externalManifest.actionCount, 4);
+assert.equal(new Set(externalManifest.actions.map((action) => action.actionId)).size, 4);
 assert.deepEqual(
   [...new Set(externalManifest.actions.map((action) => action.executorKind))].sort(),
-  ['external_url_policy_scan', 'external_vantage_aggregate_projection'],
+  ['external_vantage_aggregate_projection'],
 );
 const aggregateBody = {
   schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
@@ -466,6 +466,24 @@ const aggregateBody = {
   handoffUrlSha256: externalSeals.handoffUrlSha256,
   retainedIdentitySha256: digest('retained-identity'),
   w8ActionManifestSha256: externalManifest.manifestSha256,
+  w8ActionObservations: externalManifest.actions.map((action, actionIndex) => ({
+    actionId: action.actionId,
+    observations: ['external-runner-human', 'external-runner-slow'].map((clientId, clientIndex) => ({
+      actionId: action.actionId,
+      attemptId: action.attemptId,
+      caseId: action.caseId,
+      runnerAction: action.assignment.runner_action,
+      clientId,
+      viewerId: `viewer-${clientIndex + 1}`,
+      observedAt: `2026-09-03T01:00:0${actionIndex}.000Z`,
+      eventKind: ['page_open_ready', 'human_paced_interaction_completed', 'playwright_page_closed', 'same_handoff_reopened_ready'][actionIndex],
+      evidenceArtifactId: `artifact-${clientIndex + 1}-${actionIndex + 1}`,
+      handoffContinuityObserved: true,
+      retainedIdentityObserved: true,
+      retryAttempted: false,
+      repairAttempted: false,
+    })),
+  })),
   receiptSha256s: [digest('human-receipt'), digest('slow-receipt')],
   checks: {
     distinctOffHostClients: true,
@@ -485,8 +503,8 @@ const externalResult = executeP158W8ExternalActionManifest({
   publicHandoffUrl,
   observedAt: '2026-09-03T01:00:00.000Z',
 });
-assert.equal(externalResult.actionCount, 264);
-assert.equal(new Set(externalResult.actionReceipts.map((receipt) => receipt.actionId)).size, 264);
+assert.equal(externalResult.actionCount, 4);
+assert.equal(new Set(externalResult.actionReceipts.map((receipt) => receipt.actionId)).size, 4);
 assert(externalResult.actionReceipts.every((receipt) => receipt.resultState === 'passed'));
 assert(externalResult.actionReceipts.every((receipt) => receipt.attemptNumber === 1));
 assert(externalResult.actionReceipts.every((receipt) => receipt.repairAttempted === false));
@@ -497,15 +515,7 @@ assert.deepEqual(h01Receipts.map((receipt) => receipt.evidence.runnerAction), [
   'open', 'interact', 'disconnect', 'reopen',
 ]);
 assert(h01Receipts.every((receipt) => receipt.evidence.clientIds.length === 2));
-const h02Receipts = externalResult.actionReceipts.filter((receipt) => receipt.caseId === 'H02');
-assert.equal(h02Receipts.length, 260);
-assert.equal(
-  h02Receipts.filter((receipt) => receipt.evidence.hostOrScheme === 'public_https' &&
-    receipt.evidence.findingCodes.length === 0).length,
-  16,
-);
-assert(h02Receipts.filter((receipt) => receipt.evidence.hostOrScheme !== 'public_https')
-  .every((receipt) => receipt.evidence.findingCodes.length > 0));
+assert(h01Receipts.every((receipt) => receipt.evidence.observations.length === 2));
 assert.throws(
   () => executeP158W8ExternalActionManifest({
     manifest: { ...externalManifest, actionCount: 1 },
@@ -528,13 +538,13 @@ try {
   assert.deepEqual(
     concreteBundle.adapterBindings.filter((binding) => binding.mode === 'concrete_live')
       .map((binding) => binding.caseId),
-    ['H01', 'H02'],
+    ['H01'],
   );
   assert.equal(concreteBundle.adapterBindings.find((binding) => binding.caseId === 'H01').implementedActionCount, 4);
-  assert.equal(concreteBundle.adapterBindings.find((binding) => binding.caseId === 'H02').implementedActionCount, 260);
-  assert.equal(concreteBundle.adapterBindings.filter((binding) => binding.mode === 'explicit_blocked').length, 22);
+  assert.equal(concreteBundle.adapterBindings.find((binding) => binding.caseId === 'H02').mode, 'explicit_blocked');
+  assert.equal(concreteBundle.adapterBindings.filter((binding) => binding.mode === 'explicit_blocked').length, 23);
   const concreteAdapters = new Map(concreteBundle.w8Adapters.map((adapter) => [adapter.caseId, adapter]));
-  for (const attempt of schedule.attempts.filter((entry) => ['H01', 'H02'].includes(entry.caseId))) {
+  for (const attempt of schedule.attempts.filter((entry) => entry.caseId === 'H01')) {
     const adapter = concreteAdapters.get(attempt.caseId);
     const outcome = await adapter.execute({
       attempt,
