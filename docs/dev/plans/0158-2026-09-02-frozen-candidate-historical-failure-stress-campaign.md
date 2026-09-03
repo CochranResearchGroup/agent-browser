@@ -1123,3 +1123,11 @@ effect-uncertain. Do not dispatch the external workflow until one durable
 protected environment contains the exact synthetic identity, marker region,
 attestation, and dashboard credentials. The 20-minute calibration and E1/E2
 seal remain downstream of that readiness gate.
+
+Direct journal readback confirms one `guacamole_load` occurrence for each of
+jobs `r925418`, `r729795`, and `r156356`. Each record retains the exact job,
+request, runtime lane, profile, and session correlation without a raw handoff
+URL. The latter two also faithfully retain the current, incorrect
+`service_operation_failed` and `effect_uncertain` normalization, so the
+postmortem can compare the journal projection with the stronger rollback and
+shutdown evidence in the Service trace.
