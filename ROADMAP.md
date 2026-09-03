@@ -100,6 +100,13 @@ Plan 0158 therefore reopens installed acceptance while preserving P157's
 source-complete result. It freezes one candidate and runs diagnostic-only
 agent, external remote-view, handoff, Xvfb, supervisor, dashboard, concurrency,
 performance, soak, and causal-logging stress without repair between failures.
+Plan 0158 W1 is complete. The frozen machine-readable registry contains 11
+historical families, all 49 scenarios and five combined phases, numeric safety
+ceilings, candidate identity requirements, and eight relationship-preserving
+redacted fixture seeds. A read-only production recount confirmed 39 failed or
+timed-out jobs without top-level structured failure or provenance. Existing
+P46 and P67 harnesses are explicitly disqualified from unchanged reuse because
+they repair, reset, retry, reconcile, clean, or permit loopback fallback.
 
 ### Plan
 
@@ -108,8 +115,9 @@ performance, soak, and causal-logging stress without repair between failures.
 
 ### Next Recommendation
 
-Execute Plan 0158 W1. Freeze the historical failure registry and evidence map
-before implementing the campaign harness or touching an installed runtime.
+Execute Plan 0158 W2. Build and provider-free test the append-only controller,
+deterministic scheduler, artifact manifest, fault-injector boundary, safety
+monitor, and terminal result schema. Do not touch an installed runtime yet.
 
 ## P156 | Full Runtime Shutdown Replacement
 

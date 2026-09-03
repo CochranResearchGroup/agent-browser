@@ -103,6 +103,7 @@
     "test:service-client-contract": "node scripts/generate-service-request-client.js --check && node scripts/generate-service-observability-client.js --check",
     "test:service-client-types": "pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --types node ../packages/client/src/service-request.js ../packages/client/src/service-observability.js ../scripts/service-status-v1-compatibility-types.ts ../examples/service-client/service-request-trace.mjs ../examples/service-client/managed-profile-flow.mjs ../examples/service-client/post-seeding-probe.mjs ../examples/service-client/broker-bridge.mjs ../examples/service-client/composed-workflow.mjs",
     "test:p157-contract-oracle": "node scripts/test-p157-contract-oracle.js",
+    "test:p158-historical-failure-registry": "node scripts/test-p158-historical-failure-registry.js",
     "test:service-status-fixed-input-harness": "node scripts/test-service-status-fixed-input-harness.js",
     "test:service-client-exports": "pnpm --filter agent-browser-service-client-example exec node test-client-exports.mjs",
     "test:service-request-client": "node scripts/test-service-request-client.js",

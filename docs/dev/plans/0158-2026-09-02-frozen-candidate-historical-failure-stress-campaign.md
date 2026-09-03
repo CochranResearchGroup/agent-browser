@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `harness_and_oracle_design_not_started`
+Execution state: `w1_registry_frozen_w2_controller_ready`
 
 Lane: P157
 
@@ -568,3 +568,41 @@ causal-log auditor for this closed-world matrix.
 Next action: execute W1 only. Freeze the case registry and evidence sources,
 including an exact mapping from each historical report to one or more case IDs,
 before implementing load generators or touching an installed runtime.
+
+## W1 Checkpoint: Historical Registry Frozen
+
+State transition: `planned -> registry_frozen`.
+
+Acceptance state: W1 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `docs/dev/contracts/p158-historical-failure-registry.v1.json` freezes 11
+  source-backed historical families, all 54 scheduled case or phase IDs,
+  deterministic execution bounds, case dependencies, evidence profiles,
+  candidate identity fields, and numeric resource and performance ceilings;
+- `docs/dev/fixtures/p158/historical-failure-seeds.v1.json` preserves seven
+  redacted production signatures plus the null terminal-envelope defect using
+  synthetic relationship-preserving values;
+- the read-only 200-job production comparison recomputed 34 failed and five
+  timed-out jobs, with all 39 lacking top-level structured failure and
+  provenance; and
+- `pnpm test:p158-historical-failure-registry` validates registry closure,
+  source existence, bidirectional family mappings, the complete case arsenal,
+  dependencies, no-repair rules, and fixture redaction.
+
+Historical harness adjudication: P46 and P67 fixtures and evidence mechanics
+may be adapted, but their reset, repair, retry, reconcile, cleanup, mutable
+summary, and loopback-fallback behaviors may not cross the P158 freeze point.
+P67 rail persistence is not rendered-dashboard proof, and local Chromium is
+not an E2 external-network vantage.
+
+Material blocker: no append-only campaign controller or deterministic
+scheduler exists yet. W1 intentionally produced no runtime or provider effect.
+
+Next action: execute W2 only. Build the monotonic controller, deterministic
+scheduler, atomic artifact manifest, fault-injector interface, safety monitor,
+and terminal result schema against provider-free fixtures.
