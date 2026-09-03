@@ -127,7 +127,7 @@
             "provider_status_receipt", "provider_doctor_receipt", "provider_configuration",
             "external_ingress_deployment", "external_vantage", "external_handoff_oracle_report",
             "calibration_raw", "calibration_summary", "calibration_budget", "fixture_aggregate_manifest",
-            "execution_schedule"
+            "execution_schedule", "live_hook_manifest"
           ]
         },
         "relativePath": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$" },

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-live-hook-manifest.v1.schema.json",
+  "title": "Plan 0158 concrete live-hook manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "planId", "manifestId", "manifestSha256", "capturedAt",
+    "mode", "providerFree", "aggregateSha256", "scheduleSha256", "candidateSha256",
+    "hookBindings", "adapterBindings", "repairAllowed", "retryAllowed", "garbageCollectionAllowed"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-live-hook-manifest.v1" },
+    "planId": { "const": "P158" },
+    "manifestId": { "$ref": "#/$defs/id" },
+    "manifestSha256": { "$ref": "#/$defs/sha256" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "mode": { "const": "concrete_live" },
+    "providerFree": { "const": false },
+    "aggregateSha256": { "$ref": "#/$defs/sha256" },
+    "scheduleSha256": { "$ref": "#/$defs/sha256" },
+    "candidateSha256": { "$ref": "#/$defs/sha256" },
+    "hookBindings": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 18,
+      "items": { "$ref": "#/$defs/hookBinding" }
+    },
+    "adapterBindings": {
+      "type": "array",
+      "minItems": 54,
+      "maxItems": 54,
+      "items": { "$ref": "#/$defs/adapterBinding" }
+    },
+    "repairAllowed": { "const": false },
+    "retryAllowed": { "const": false },
+    "garbageCollectionAllowed": { "const": false }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sourcePath": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$" },
+    "hookBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookId", "implementationKind", "sourcePath", "sourceSha256"],
+      "properties": {
+        "hookId": { "$ref": "#/$defs/id" },
+        "implementationKind": { "const": "concrete_live" },
+        "sourcePath": { "$ref": "#/$defs/sourcePath" },
+        "sourceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "adapterBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId", "adapterId", "executionContractSha256", "mode", "sourcePath",
+        "sourceSha256", "providerFree", "hookIds", "implementedActionCount", "blockedActionCount",
+        "effectsAllowed", "blocker"
+      ],
+      "properties": {
+        "caseId": { "type": "string", "pattern": "^[AHXDC][0-9]{2}$" },
+        "adapterId": { "$ref": "#/$defs/id" },
+        "executionContractSha256": { "$ref": "#/$defs/sha256" },
+        "mode": { "enum": ["concrete_live", "explicit_blocked"] },
+        "sourcePath": { "$ref": "#/$defs/sourcePath" },
+        "sourceSha256": { "$ref": "#/$defs/sha256" },
+        "providerFree": { "const": false },
+        "hookIds": {
+          "type": "array",
+          "minItems": 0,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "implementedActionCount": { "type": "integer", "minimum": 0 },
+        "blockedActionCount": { "type": "integer", "minimum": 0 },
+        "effectsAllowed": { "type": "boolean" },
+        "blocker": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "detail"],
+              "properties": {
+                "code": { "$ref": "#/$defs/id" },
+                "detail": { "type": "string", "minLength": 1, "maxLength": 1000 }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "concrete_live" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "hookIds": { "type": "array", "minItems": 1 },
+              "blockedActionCount": { "type": "integer", "const": 0 },
+              "effectsAllowed": { "type": "boolean", "const": true },
+              "blocker": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "explicit_blocked" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "blockedActionCount": { "type": "integer", "minimum": 1 },
+              "effectsAllowed": { "type": "boolean", "const": false },
+              "blocker": { "type": "object" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

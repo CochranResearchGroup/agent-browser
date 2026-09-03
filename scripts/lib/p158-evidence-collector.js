@@ -21,6 +21,9 @@ import {
 import { compileP158ControllerScheduleInput } from './p158-execution-schedule.js';
 
 export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
+  '.github/workflows/p158-external-vantage.yml',
+  'package.json',
+  'pnpm-lock.yaml',
   'docs/dev/contracts/p158-campaign-freeze.v1.schema.json',
   'docs/dev/contracts/p158-case-execution-contract.v1.schema.json',
   'docs/dev/contracts/p158-campaign-manifest.v1.schema.json',
@@ -35,6 +38,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'docs/dev/contracts/p158-historical-failure-registry.v1.json',
   'docs/dev/contracts/p158-logging-audit-report.v1.schema.json',
   'docs/dev/contracts/p158-logging-causal-fixtures.v1.schema.json',
+  'docs/dev/contracts/p158-live-hook-manifest.v1.schema.json',
   'docs/dev/contracts/service-request.v1.schema.json',
   'docs/dev/fixtures/p158/campaign-preparation.v1.json',
   'docs/dev/fixtures/p158/dashboard-oracle-fixtures.v1.json',
@@ -47,6 +51,40 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-external-handoff-oracle.js',
   'scripts/lib/p158-execution-schedule.js',
   'scripts/lib/p158-logging-auditor.js',
+  'scripts/lib/p158-calibration-runner.js',
+  'scripts/lib/p158-distributed-calibration.js',
+  'scripts/lib/p158-w7-development-adapters.js',
+  'scripts/lib/p158-w8-hd-adapters.js',
+  'scripts/lib/p158-w9-campaign-orchestrator.js',
+  'scripts/generate-p158-campaign-preparation-fixtures.js',
+  'scripts/p158-evidence-collector.js',
+  'scripts/p158-synthetic-visual-fixture.js',
+  'scripts/run-p158-distributed-calibration-live.js',
+  'scripts/run-p158-external-vantage.js',
+  'scripts/test-p158-calibration-runner.js',
+  'scripts/test-p158-campaign-controller.js',
+  'scripts/test-p158-campaign-preparation.js',
+  'scripts/test-p158-dashboard-oracle.js',
+  'scripts/test-p158-distributed-calibration-live.js',
+  'scripts/test-p158-distributed-calibration.js',
+  'scripts/test-p158-evidence-collector.js',
+  'scripts/test-p158-execution-schedule.js',
+  'scripts/test-p158-external-handoff-oracle.js',
+  'scripts/test-p158-external-vantage-runner.js',
+  'scripts/test-p158-historical-failure-registry.js',
+  'scripts/test-p158-logging-auditor.js',
+  'scripts/test-p158-synthetic-visual-fixture.js',
+  'scripts/test-p158-w7-development-adapters.js',
+  'scripts/test-p158-w8-hd-adapters.js',
+  'scripts/test-p158-w9-campaign-orchestrator.js',
+]);
+
+export const P158_REQUIRED_LIVE_HOOK_IDS = Object.freeze([
+  'w7.browser', 'w7.cli', 'w7.display', 'w7.evidence', 'w7.logs', 'w7.process',
+  'w7.shutdown', 'w7.systemd', 'w8.dashboard_capture', 'w8.dashboard_execute',
+  'w8.external_workflow', 'w8.playwright', 'w8.stimulus', 'w9.browser_crash',
+  'w9.external_dashboard_action', 'w9.external_handoff_reconnect',
+  'w9.service_command', 'w9.supervisor_transition',
 ]);
 
 export const P158_SUPPLIED_ARTIFACT_KINDS = Object.freeze([
@@ -94,6 +132,10 @@ function fail(code, message, details) {
 
 function sha256Bytes(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+function digest(value) {
+  return sha256Bytes(Buffer.from(canonicalJson(value)));
 }
 
 function readRegularFile(path, label) {
@@ -157,6 +199,103 @@ export function buildP158AggregateFixtureManifest({ repoRoot }) {
   };
   const bytes = Buffer.from(canonicalJson(manifest));
   return { manifest, bytes, sha256: sha256Bytes(bytes), byteCount: bytes.byteLength };
+}
+
+function withoutField(value, field) {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([key]) => key !== field));
+}
+
+export function validateP158LiveHookManifest({
+  manifest, aggregate, schedule, candidate, adapters, repoRoot,
+}) {
+  if (!manifest) fail('live_hook_manifest_missing', 'Live freeze requires a concrete live-hook manifest');
+  if (manifest.providerFree !== false || manifest.mode !== 'concrete_live' ||
+      manifest.hookBindings?.some((binding) => binding.implementationKind !== 'concrete_live') ||
+      manifest.adapterBindings?.some((binding) => binding.providerFree !== false)) {
+    fail('provider_free_hooks_prohibited', 'Provider-free hooks cannot authorize a live freeze');
+  }
+  const ajv = new Ajv2020({ strict: true, allErrors: true });
+  addFormats(ajv);
+  const schema = parseJson(
+    readRegularFile(
+      resolve(repoRoot, 'docs/dev/contracts/p158-live-hook-manifest.v1.schema.json'),
+      'P158 live-hook manifest schema',
+    ),
+    'P158 live-hook manifest schema',
+  );
+  const validate = ajv.compile(schema);
+  if (!validate(manifest)) {
+    fail('live_hook_manifest_invalid', 'Live-hook manifest violates its schema', { errors: validate.errors });
+  }
+  if (manifest.manifestSha256 !== digest(withoutField(manifest, 'manifestSha256')) ||
+      manifest.aggregateSha256 !== aggregate.sha256 ||
+      manifest.scheduleSha256 !== schedule.scheduleSha256 ||
+      manifest.candidateSha256 !== candidate.candidateSha256) {
+    fail('live_hook_manifest_binding_mismatch', 'Live-hook manifest is not bound to the frozen aggregate, schedule, and candidate');
+  }
+  const aggregateEntries = new Map(aggregate.manifest.entries.map((entry) => [entry.path, entry]));
+  const hookIds = manifest.hookBindings.map((entry) => entry.hookId);
+  const allowedHookIds = new Set(P158_REQUIRED_LIVE_HOOK_IDS);
+  if (new Set(hookIds).size !== hookIds.length || hookIds.some((hookId) => !allowedHookIds.has(hookId))) {
+    fail('live_hook_manifest_invalid', 'Live-hook manifest contains duplicate or unknown hook IDs');
+  }
+  for (const binding of manifest.hookBindings) {
+    if (binding.implementationKind !== 'concrete_live' || binding.sourcePath.includes('/test-') ||
+        binding.sourcePath.startsWith('scripts/test-')) {
+      fail('provider_free_hooks_prohibited', `${binding.hookId} is not a concrete live hook source`);
+    }
+    const aggregateEntry = aggregateEntries.get(binding.sourcePath);
+    const actual = readRegularFile(resolve(repoRoot, binding.sourcePath), `live hook ${binding.hookId}`);
+    if (!aggregateEntry || binding.sourceSha256 !== aggregateEntry.sha256 ||
+        sha256Bytes(actual) !== binding.sourceSha256) {
+      fail('live_hook_source_unsealed', `${binding.hookId} source is absent from the frozen aggregate`);
+    }
+  }
+  const contracts = new Map(schedule.caseContracts.map((entry) => [entry.caseId, entry]));
+  const expectedActionCounts = new Map([...contracts.keys()].map((caseId) => [caseId, 0]));
+  for (const attempt of schedule.attempts) {
+    const allocated = attempt.cardinalityAllocations.reduce(
+      (count, allocation) => count + allocation.actionIds.length,
+      0,
+    );
+    expectedActionCounts.set(
+      attempt.caseId,
+      expectedActionCounts.get(attempt.caseId) + Math.max(1, allocated),
+    );
+  }
+  const adapterObjects = new Map((adapters ?? []).map((entry) => [entry.caseId, entry]));
+  if (manifest.adapterBindings.length !== contracts.size || new Set(
+    manifest.adapterBindings.map((entry) => entry.caseId),
+  ).size !== contracts.size) {
+    fail('live_adapter_manifest_incomplete', 'Live-hook manifest must bind all scheduled case adapters');
+  }
+  for (const binding of manifest.adapterBindings) {
+    const contract = contracts.get(binding.caseId);
+    const adapter = adapterObjects.get(binding.caseId);
+    const sourceEntry = aggregateEntries.get(binding.sourcePath);
+    const expectedActionCount = expectedActionCounts.get(binding.caseId);
+    if (!sourceEntry || binding.sourceSha256 !== sourceEntry.sha256 ||
+        sha256Bytes(readRegularFile(resolve(repoRoot, binding.sourcePath), `adapter ${binding.caseId}`)) !==
+          binding.sourceSha256) {
+      fail('live_hook_source_unsealed', `${binding.caseId} adapter source is absent from the frozen aggregate`);
+    }
+    if (!contract || binding.adapterId !== contract.adapterId ||
+        binding.executionContractSha256 !== contract.executionContractSha256 ||
+        binding.hookIds.some((hookId) => !hookIds.includes(hookId)) ||
+        adapter?.adapterId !== binding.adapterId) {
+      fail('provider_free_hooks_prohibited', `${binding.caseId} adapter is not bound to its classified live-hook manifest entry`);
+    }
+    if (binding.mode === 'explicit_blocked' && (binding.effectsAllowed !== false ||
+        binding.blockedActionCount !== expectedActionCount ||
+        binding.implementedActionCount > expectedActionCount)) {
+      fail('explicit_blocker_binding_mismatch', `${binding.caseId} explicit blocker is not immutable and zero-effect`);
+    }
+    if (binding.mode === 'concrete_live' && (binding.effectsAllowed !== true ||
+        binding.implementedActionCount !== expectedActionCount || binding.blockedActionCount !== 0)) {
+      fail('live_adapter_effect_classification_mismatch', `${binding.caseId} concrete adapter lacks an exact effect classification`);
+    }
+  }
+  return structuredClone(manifest);
 }
 
 function suppliedArtifacts({ artifactFiles, baseDir }) {
@@ -228,7 +367,9 @@ function environmentSeal(environment, candidate, artifacts, externalClientIds) {
   return result;
 }
 
-export function collectP158PreparationEvidence({ config, repoRoot, baseDir = repoRoot, adapters }) {
+export function collectP158PreparationEvidence({
+  config, repoRoot, baseDir = repoRoot, adapters, liveHookManifest,
+}) {
   const configAjv = new Ajv2020({ strict: true, allErrors: true });
   addFormats(configAjv);
   const configSchema = parseJson(
@@ -316,6 +457,28 @@ export function collectP158PreparationEvidence({ config, repoRoot, baseDir = rep
   };
   delete candidate.candidateSha256;
   candidate.candidateSha256 = canonicalCandidateDigest(candidate);
+  if (liveHookManifest) {
+    validateP158LiveHookManifest({
+      manifest: liveHookManifest,
+      aggregate,
+      schedule: compiled.executionSchedule,
+      candidate,
+      adapters,
+      repoRoot,
+    });
+    const liveHookBytes = Buffer.from(canonicalJson(liveHookManifest));
+    artifacts.push({
+      artifactId: 'freeze-artifact-20',
+      kind: 'live_hook_manifest',
+      relativePath: 'freeze/live-hook-manifest.json',
+      capturedAt: liveHookManifest.capturedAt,
+      mediaType: 'application/json',
+      contentEncoding: 'base64',
+      content: liveHookBytes.toString('base64'),
+      declaredSha256: sha256Bytes(liveHookBytes),
+      declaredByteCount: liveHookBytes.byteLength,
+    });
+  }
   const calibration = {
     ...structuredClone(config.calibration),
     rawArtifactId: byKind.get('calibration_raw').artifactId,
@@ -423,7 +586,11 @@ export async function runP158EvidenceCollector({
   runRoot,
   clock,
   adapters,
+  liveHookManifest,
 }) {
+  if (freeze && !liveHookManifest) {
+    fail('live_hook_manifest_missing', 'Live freeze requires a concrete live-hook manifest before collection');
+  }
   if (!freeze && !clock && !Number.isFinite(Date.parse(config.dryRunFrozenAt))) {
     fail('dry_run_time_missing', 'Deterministic dry run requires dryRunFrozenAt');
   }
@@ -431,7 +598,9 @@ export async function runP158EvidenceCollector({
     wallNow: () => config.dryRunFrozenAt,
     monotonicNow: () => 1,
   } : undefined);
-  const collected = collectP158PreparationEvidence({ config, repoRoot, baseDir, adapters });
+  const collected = collectP158PreparationEvidence({
+    config, repoRoot, baseDir, adapters, liveHookManifest,
+  });
   const registry = parseJson(
     readRegularFile(resolve(repoRoot, 'docs/dev/contracts/p158-historical-failure-registry.v1.json'), 'P158 registry'),
     'P158 registry',
@@ -468,6 +637,7 @@ export async function runP158EvidenceCollector({
     executionStarted: false,
     aggregateManifest: collected.aggregate.manifest,
     aggregateSha256: collected.aggregate.sha256,
+    liveHookManifestSha256: liveHookManifest?.manifestSha256 ?? null,
     preparationReport: report,
   };
 }

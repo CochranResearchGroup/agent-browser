@@ -32,7 +32,8 @@ function printHelp() {
   process.stdout.write(`Usage:
   node scripts/p158-evidence-collector.js --aggregate-only
   node scripts/p158-evidence-collector.js --config <path>
-  node scripts/p158-evidence-collector.js --config <path> --freeze --run-root <absolute-path>
+  node scripts/p158-evidence-collector.js --config <path> --freeze --run-root <absolute-path> \\
+    --live-hook-manifest <path>
 
 The default config mode is a provider-free, filesystem-read-only dry run. The
 --freeze flag is required before campaign evidence is persisted. This command
@@ -49,9 +50,10 @@ try {
   const freeze = takeFlag('--freeze');
   const configPath = takeOption('--config');
   const runRoot = takeOption('--run-root');
+  const liveHookManifestPath = takeOption('--live-hook-manifest');
   if (args.length > 0) throw new Error(`Unexpected arguments: ${args.join(' ')}`);
   if (aggregateOnly) {
-    if (freeze || configPath || runRoot) throw new Error('--aggregate-only cannot be combined with config or freeze options');
+    if (freeze || configPath || runRoot || liveHookManifestPath) throw new Error('--aggregate-only cannot be combined with config or freeze options');
     const aggregate = buildP158AggregateFixtureManifest({ repoRoot });
     process.stdout.write(`${JSON.stringify({
       schemaVersion: 'agent-browser.p158-fixture-aggregate-report.v1',
@@ -64,15 +66,21 @@ try {
   }
   if (!configPath) throw new Error('--config is required unless --aggregate-only is used');
   if (freeze && !runRoot) throw new Error('--freeze requires --run-root');
+  if (freeze && !liveHookManifestPath) throw new Error('--freeze requires --live-hook-manifest');
   if (!freeze && runRoot) throw new Error('--run-root is accepted only with --freeze');
+  if (!freeze && liveHookManifestPath) throw new Error('--live-hook-manifest is accepted only with --freeze');
   const absoluteConfigPath = resolve(configPath);
   const config = JSON.parse(readFileSync(absoluteConfigPath, 'utf8'));
+  const liveHookManifest = liveHookManifestPath
+    ? JSON.parse(readFileSync(resolve(liveHookManifestPath), 'utf8'))
+    : undefined;
   const report = await runP158EvidenceCollector({
     config,
     repoRoot,
     baseDir: dirname(absoluteConfigPath),
     freeze,
     runRoot,
+    liveHookManifest,
     clock: config.dryRunFrozenAt && !freeze
       ? {
           wallNow: () => config.dryRunFrozenAt,
