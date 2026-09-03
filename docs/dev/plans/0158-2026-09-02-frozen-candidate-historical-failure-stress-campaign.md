@@ -1585,3 +1585,24 @@ Revised next action: repeat the focused and campaign validation gates, install
 one further isolated candidate, and make one E10 authenticated reopen attempt.
 Do not retry E9. Inspect its distinct terminal job and journal record as
 preserved pre-repair evidence.
+
+The corrected normalized-launch repair passes the focused regression, all 89
+route-host tests, the complete fifteen-case Last30Days battery, formatting,
+and workspace clippy with warnings denied. Development generation
+`0.28.0-d8482cdd4991` then passed installation with production unchanged,
+three disposable launches, skill synchronization, and the complete
+provider-required doctor.
+
+The single authenticated E10 reopen succeeded on the original durable handoff,
+browser, session, and Profile identities. Its terminal job is `succeeded` with
+`effectState=verified_effect` and `retryDisposition=do_not_retry`; the resolver
+reports `status=ready`, `resolved=true`, and `reopenedClosedTab=true`. A
+subsequent read-only resolution reports `operatorVisible.state=ready`,
+`target.state=ready`, and a ready presentation receipt at generation 5. The
+durable handoff URL did not change, and no raw provider URL is promoted as an
+operator handoff.
+
+Revised next action: commit this W6 readiness checkpoint and dispatch the
+registered external-vantage workflow in readiness mode against that exact
+branch commit. Preserve its two independent off-host artifacts and aggregate
+receipt for the remaining W6 calibration gate.
