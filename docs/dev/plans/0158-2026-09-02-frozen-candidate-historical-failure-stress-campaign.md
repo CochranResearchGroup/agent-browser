@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w1_registry_frozen_w2_controller_ready`
+Execution state: `w2_controller_complete_w3_logging_auditor_ready`
 
 Lane: P157
 
@@ -606,3 +606,39 @@ scheduler exists yet. W1 intentionally produced no runtime or provider effect.
 Next action: execute W2 only. Build the monotonic controller, deterministic
 scheduler, atomic artifact manifest, fault-injector interface, safety monitor,
 and terminal result schema against provider-free fixtures.
+
+## W2 Checkpoint: Append-Only Controller Complete
+
+State transition: `registry_frozen -> controller_complete`.
+
+Acceptance state: W2 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-campaign-controller.js` provides the provider-free
+  monotonic controller, deterministic scheduler, exclusive atomic store,
+  append-only typed ledger, safety monitor, teardown gate, evidence seal, and
+  integrity verifier;
+- `docs/dev/contracts/p158-campaign-manifest.v1.schema.json` and
+  `docs/dev/contracts/p158-campaign-result.v1.schema.json` define the frozen
+  manifest and every persisted ledger record;
+- `scripts/test-p158-campaign-controller.js` performs 11 adversarial behavior
+  tests and strict Ajv validation of the actual manifest and every emitted
+  ledger record; and
+- `pnpm test:p158-campaign` passes the registry and controller batteries.
+
+Integration review rejected the initial parallel drafts until actual
+controller output conformed to the schemas. It also corrected an in-memory-only
+terminal-count mutation, removed the incorrect assumption that every non-pass
+loses downstream prerequisites, rejected unknown evidence artifact IDs, and
+aligned the campaign-process safety metric.
+
+Material blocker: the controller preserves evidence but W3's cross-surface
+logging completeness and sensitive-value scanner do not exist yet.
+
+Next action: execute W3 only. Build the logging auditor and synthetic leakage
+scanner against intentionally missing, duplicate, conflicting, reordered,
+null, and leaking fixtures.

@@ -107,6 +107,12 @@ redacted fixture seeds. A read-only production recount confirmed 39 failed or
 timed-out jobs without top-level structured failure or provenance. Existing
 P46 and P67 harnesses are explicitly disqualified from unchanged reuse because
 they repair, reset, retry, reconcile, clean, or permit loopback fallback.
+Plan 0158 W2 is complete. A provider-free monotonic controller now freezes one
+candidate and schedule, rejects opportunistic retries and terminal overwrites,
+propagates only exact lost prerequisites, records environment-scoped safety
+stops, preserves scheduled teardown failure, writes exclusive atomic artifacts
+and a hash-chained typed ledger, and seals only after terminal-count closure.
+Strict schemas validate the actual persisted manifest and every ledger record.
 
 ### Plan
 
@@ -115,9 +121,9 @@ they repair, reset, retry, reconcile, clean, or permit loopback fallback.
 
 ### Next Recommendation
 
-Execute Plan 0158 W2. Build and provider-free test the append-only controller,
-deterministic scheduler, artifact manifest, fault-injector boundary, safety
-monitor, and terminal result schema. Do not touch an installed runtime yet.
+Execute Plan 0158 W3. Build and provider-free test the cross-surface causal
+logging auditor and synthetic sensitive-value scanner. Do not touch an
+installed runtime yet.
 
 ## P156 | Full Runtime Shutdown Replacement
 

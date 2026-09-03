@@ -159,7 +159,29 @@
         },
         "to": { "$ref": "#/$defs/controllerState" },
         "reason": { "type": "string", "minLength": 1 },
-        "terminal": { "type": "boolean" }
+        "terminal": { "type": "boolean" },
+        "resultCounts": {
+          "type": "object",
+          "required": [
+            "passed",
+            "reproduced_historical_failure",
+            "new_product_failure",
+            "harness_failure",
+            "inconclusive",
+            "skipped_blocked",
+            "safety_stopped"
+          ],
+          "properties": {
+            "passed": { "type": "integer", "minimum": 0 },
+            "reproduced_historical_failure": { "type": "integer", "minimum": 0 },
+            "new_product_failure": { "type": "integer", "minimum": 0 },
+            "harness_failure": { "type": "integer", "minimum": 0 },
+            "inconclusive": { "type": "integer", "minimum": 0 },
+            "skipped_blocked": { "type": "integer", "minimum": 0 },
+            "safety_stopped": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },

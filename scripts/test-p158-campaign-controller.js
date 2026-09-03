@@ -117,6 +117,7 @@ function validatePersistedCampaign(runRoot) {
 
   const ledgerRoot = join(runRoot, 'ledger');
   const ledgerFiles = readdirSync(ledgerRoot).sort();
+  const ledger = [];
   assert.ok(ledgerFiles.length > 0, 'campaign ledger is empty');
   let previousBytes = null;
   for (const [index, filename] of ledgerFiles.entries()) {
@@ -129,9 +130,10 @@ function validatePersistedCampaign(runRoot) {
       previousBytes === null ? null : sha256(previousBytes),
       `${filename} does not hash-link to its predecessor`,
     );
+    ledger.push({ filename, record });
     previousBytes = bytes;
   }
-  return { manifest, ledgerFiles };
+  return { manifest, ledger, ledgerFiles };
 }
 
 async function runTest(name, body) {
@@ -249,6 +251,32 @@ await runTest('blocks dependents while independent cases continue', async () => 
   }
 });
 
+await runTest('does not block a usable prerequisite after an observed failure', async () => {
+  const fixture = createFixture('nonblocking-failure');
+  try {
+    await fixture.prepare();
+    await fixture.controller.freeze();
+    await fixture.controller.startExecution();
+    await fixture.controller.recordAttempt({
+      caseId: 'A01',
+      attemptId: 'A01-001',
+      resultState: 'reproduced_historical_failure',
+      evidence: { signature: 'historical_failure_with_prerequisite_still_available' },
+    });
+    await fixture.controller.recordAttempt({
+      caseId: 'A02',
+      attemptId: 'A02-001',
+      resultState: 'passed',
+    });
+    assert.equal(
+      fixture.controller.snapshot().results.find((result) => result.attemptId === 'A02-001').resultState,
+      'passed',
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 await runTest('rejects non-monotonic controller transitions', async () => {
   const fixture = createFixture('monotonic');
   try {
@@ -304,6 +332,15 @@ await runTest('writes artifacts atomically and seals a hash-verifiable manifest'
         content: 'overwrite attempt\n',
       }),
       'artifact_already_exists',
+    );
+    await expectControllerError(
+      () => fixture.controller.recordAttempt({
+        caseId: 'A01',
+        attemptId: 'A01-001',
+        resultState: 'passed',
+        evidence: { artifactIds: ['artifact-does-not-exist'] },
+      }),
+      'unknown_evidence_artifact',
     );
 
     for (const attempt of fixture.controller.snapshot().schedule) {
@@ -447,6 +484,11 @@ await runTest('requires exact terminal-count closure before execution completes'
       3,
       'terminal counts must close over cases plus the scheduled teardown',
     );
+    const persisted = validatePersistedCampaign(fixture.runRoot);
+    const persistedTransition = persisted.ledger
+      .map((entry) => entry.record)
+      .find((record) => record.recordType === 'controller_transition' && record.controllerState === 'execution_terminal');
+    assert.deepEqual(persistedTransition.payload.resultCounts, transition.payload.resultCounts);
   } finally {
     fixture.cleanup();
   }

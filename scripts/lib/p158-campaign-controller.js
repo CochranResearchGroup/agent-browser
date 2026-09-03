@@ -45,7 +45,7 @@ const RESOURCE_SAMPLE_FIELDS = Object.freeze([
   ],
   ['artifactBytes', 'artifactQuotaBytes', 'maximum'],
   ['filesystemUsedPercent', 'filesystemMaximumUsedPercent', 'maximum'],
-  ['processCount', 'campaignProcessCount', 'maximum'],
+  ['campaignProcessCount', 'campaignProcessCount', 'maximum'],
   ['chromeProcessCount', 'chromeProcessCount', 'maximum'],
   ['xvfbProcessCount', 'xvfbProcessCount', 'maximum'],
   ['allocatedDisplayCount', 'allocatedDisplayCount', 'maximum'],
@@ -583,7 +583,7 @@ export class CampaignController {
     }
   }
 
-  async #transition(expected, next, reason) {
+  async #transition(expected, next, reason, details = {}) {
     this.#assertState(expected);
     this.#assertFrozenInputsUnchanged();
     await this.writer.appendEvent('controller_transition', {
@@ -592,6 +592,7 @@ export class CampaignController {
       to: next,
       reason,
       terminal: next === 'analyzed',
+      ...clone(details),
     }, { controllerState: next });
     this.state = next;
   }
@@ -765,11 +766,17 @@ export class CampaignController {
         });
       }
     }
-    const blocksDependents =
-      attemptResult.blocksDependents ?? attemptResult.resultState !== 'passed';
-    const evidenceArtifacts = (attemptResult.evidence?.artifactIds ?? [])
+    const blocksDependents = attemptResult.blocksDependents ?? false;
+    const requestedArtifactIds = attemptResult.evidence?.artifactIds ?? [];
+    const evidenceArtifacts = requestedArtifactIds
       .map((artifactId) => this.writer.artifacts.find((artifact) => artifact.artifactId === artifactId))
       .filter(Boolean);
+    if (evidenceArtifacts.length !== requestedArtifactIds.length) {
+      const knownArtifactIds = new Set(evidenceArtifacts.map((artifact) => artifact.artifactId));
+      fail('UNKNOWN_EVIDENCE_ARTIFACT', 'Terminal evidence must reference existing append-only artifacts', {
+        unknownArtifactIds: requestedArtifactIds.filter((artifactId) => !knownArtifactIds.has(artifactId)),
+      });
+    }
     const blockingResult = dependencies.blockedBy.length > 0
       ? this.schedule
         .flatMap((candidate) => {
@@ -1068,8 +1075,12 @@ export class CampaignController {
       counts[state] = [...this.results.values()].filter((result) => result.resultState === state).length;
       return counts;
     }, {});
-    await this.#transition('executing', 'execution_terminal', 'all attempts and scheduled teardown are terminal');
-    this.writer.events.at(-1).payload.resultCounts = resultCounts;
+    await this.#transition(
+      'executing',
+      'execution_terminal',
+      'all attempts and scheduled teardown are terminal',
+      { resultCounts },
+    );
     return this.snapshot();
   }
 
