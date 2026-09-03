@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_terminal_blocker_after_two_repairs_evidence_closure_required`
+Execution state: `w6_blocking_repair_active_presentation_slot_identity`
 
 Lane: P157
 
@@ -538,10 +538,15 @@ W10 remediation ledger. A sequence-blocking defect adds one bounded edge from
 the affected work unit to `pause -> seal partial epoch -> diagnose -> repair ->
 validate -> install new candidate -> resume blocked sequence`. The campaign
 controller owns that edge. Each traversal preserves the failed epoch and uses
-new candidate, environment, case-attempt, and evidence identities. After two
-blocking repair traversals, another sequence blocker ends execution as
-terminally blocked and proceeds to W10 with the missing cases explicit rather
-than opening an unbounded repair loop.
+new candidate, environment, case-attempt, and evidence identities. Blocking
+repair traversals are not consumable approval tokens and have no arbitrary
+numeric stop. Continue sequential diagnosis, red-green repair, validation,
+installation, and new-epoch retry while the blocker has a deterministic,
+safe, in-scope repair seam. Stop only when continued work would cross a safety,
+scope, authority, or resource ceiling; evidence can no longer be preserved; or
+the blocker cannot be made deterministic after the bounded diagnosis loop.
+That stop proceeds to W10 with the missing cases explicit rather than hiding
+the incomplete sequence or repairing indefinitely without a pass/fail signal.
 
 ## Final Deep Review Protocol
 
@@ -1230,13 +1235,17 @@ exposure through build-failure logging, identify the exact upstream and wrapper
 redaction owners, and require operator credential-rotation review. A passing
 rebuild does not erase the exposure.
 
-The two-traversal repair budget is exhausted. Do not repair
-`presentation_bound_slot_missing` inside Plan 0158. Stop isolated browser
-execution, mark every remaining scheduled case `skipped_blocked` against job
-`r570050`, record scheduled teardown as terminal, and seal a terminal-blocked
-campaign closure without inventing execution evidence. W10 may start only
-after that closure satisfies the analyzer's exact terminal-attempt and teardown
-inventory. The final review must include the three checkout divergences, the
-successful failure-normalization repair, the access-plan retained-service
-epoch friction, and the Cargo/sccache process-pressure observations as separate
-causal findings.
+The former two-traversal repair counter was an artificial campaign stop, not a
+safety or authority boundary, and is superseded by the operator's direction to
+keep repairing until this sequence is unblocked. Job `r570050` remains sealed
+as the failed third epoch. Repair `presentation_bound_slot_missing` through a
+deterministic regression at the route-pool selection and provider-inventory
+seam, validate and install a new isolated candidate, and resume under a fresh
+epoch and attempt identity. Repeat that evidence-preserving loop for any later
+sequence blocker while a safe deterministic in-scope repair remains. Do not
+mark unexecuted cases `skipped_blocked` merely because a repair count was
+reached. W10 still begins only after the scheduled deterministic inventory is
+terminal or a genuine stop condition above is recorded. The final review must
+include every checkout divergence, the successful failure-normalization
+repair, the access-plan retained-service epoch friction, and the Cargo/sccache
+process-pressure observations as separate causal findings.

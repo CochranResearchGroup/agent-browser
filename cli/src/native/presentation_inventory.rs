@@ -284,15 +284,34 @@ impl PresentationProviderInventory {
             })
             .map(|(id, entry)| (id.clone(), entry.clone()))
             .collect::<BTreeMap<_, _>>();
+        let mut checked_out_slots_by_route = BTreeMap::new();
+        for entry in checked_out_slots.values() {
+            if checked_out_slots_by_route
+                .insert(entry.route_id.clone(), entry.clone())
+                .is_some()
+            {
+                return Err(format!(
+                    "presentation_provider_checked_out_route_ambiguous:{}",
+                    entry.route_id
+                ));
+            }
+        }
+        let provider_route_ids = self
+            .routes
+            .iter()
+            .filter(|route| route.state == "ready")
+            .map(|route| route.route_id.as_str())
+            .collect::<BTreeSet<_>>();
         state
             .remote_view_routes
             .retain(|_, route| route.route_source != "provider_inventory");
         state
             .display_allocations
             .retain(|_, display| !has_provider_inventory_readiness(display.readiness.as_ref()));
-        state
-            .route_pool
-            .retain(|_, entry| !has_provider_inventory_readiness(entry.readiness.as_ref()));
+        state.route_pool.retain(|_, entry| {
+            !has_provider_inventory_readiness(entry.readiness.as_ref())
+                && !provider_route_ids.contains(entry.route_id.as_str())
+        });
         for provider_route in self.routes.iter().filter(|route| route.state == "ready") {
             let display_name = provider_route.display_name.clone().ok_or_else(|| {
                 format!(
@@ -376,11 +395,14 @@ impl PresentationProviderInventory {
                 }),
                 provider_mode: "simultaneous_view".to_string(),
                 state: "available".to_string(),
-                current_route_allocation_id: Some(route_id),
+                current_route_allocation_id: Some(route_id.clone()),
                 readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
                 ..RoutePoolEntry::default()
             };
-            if let Some(existing) = checked_out_slots.get(&provider_route.slot_id) {
+            if let Some(existing) = checked_out_slots
+                .get(&provider_route.slot_id)
+                .or_else(|| checked_out_slots_by_route.get(&route_id))
+            {
                 slot.state = existing.state.clone();
                 slot.current_route_allocation_id = existing.current_route_allocation_id.clone();
                 slot.readiness = existing.readiness.clone();
@@ -755,6 +777,11 @@ mod tests {
             .get_mut("development-slot-1")
             .unwrap()
             .state = "checked_out".to_string();
+        let mut legacy_slot = state.route_pool.remove("development-slot-1").unwrap();
+        legacy_slot.id = "development-route-1".to_string();
+        state
+            .route_pool
+            .insert("development-route-1".to_string(), legacy_slot);
 
         inventory
             .overlay_service_state(&mut state, config.clone())
@@ -797,6 +824,63 @@ mod tests {
             None
         );
         assert_eq!(state.route_pool["development-slot-1"].state, "available");
+    }
+
+    #[test]
+    fn provider_inventory_replaces_legacy_pool_row_for_same_route() {
+        let inventory = PresentationProviderInventory::from_json(
+            &serde_json::json!({
+                "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+                "environment": "development",
+                "routes": [{
+                    "routeId": "development-route-1",
+                    "slotId": "development-slot-1",
+                    "user": "agent-browser-rdp-dev-1",
+                    "connectionId": "41",
+                    "connectionName": "Agent Browser Dev RDP Route 1",
+                    "displayReservationId": "development-display-1",
+                    "displayName": ":21",
+                    "lifecycle": "warm",
+                    "state": "ready"
+                }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut state = ServiceState {
+            route_pool: BTreeMap::from([(
+                "development-route-1".to_string(),
+                RoutePoolEntry {
+                    id: "development-route-1".to_string(),
+                    route_id: "development-route-1".to_string(),
+                    state: "available".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        inventory
+            .overlay_service_state(
+                &mut state,
+                PresentationCapacityConfig {
+                    warm_minimum: 1,
+                    hard_maximum: 2,
+                    human_priority_reserve: 1,
+                    recovery_reserve: 1,
+                    max_queue_depth: 64,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            state.route_pool.keys().cloned().collect::<Vec<_>>(),
+            vec!["development-slot-1"]
+        );
+        assert_eq!(
+            state.route_pool["development-slot-1"].target["displayAllocationId"],
+            "development-display-1"
+        );
     }
 
     #[test]
