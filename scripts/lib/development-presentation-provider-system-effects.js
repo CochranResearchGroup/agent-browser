@@ -40,6 +40,11 @@ export function developmentPresentationProviderSystemPreflight({
   } catch (error) {
     checks.push(check('isolation', false, error instanceof Error ? error.message : String(error)));
   }
+  checks.push(check(
+    'external-ingress',
+    descriptor.externalIngress.configured === true,
+    descriptor.externalIngress,
+  ));
   const docker = run('docker', ['info', '--format', '{{.ServerVersion}}']);
   checks.push(check('docker', docker.status === 0, docker.status === 0 ? docker.stdout.trim() : commandError(docker)));
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||

@@ -70,6 +70,10 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
     service: 'agent-browser-dev',
     pathPrefix: '/guacamole',
     upstream: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole`,
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    publicOperatorUrl: descriptor.publicOperatorUrl,
+    reviewedRevision: descriptor.externalIngress.reviewedRevision,
+    bindingSha256: descriptor.externalIngress.bindingSha256,
     publishAfter: 'provider-ready',
   };
   const desired = {
@@ -85,6 +89,9 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
       warmSlots: descriptor.warmSlots,
       hardMaxSlots: descriptor.hardMaxSlots,
       routes: descriptor.routes,
+      localDiagnosticUrl: descriptor.localDiagnosticUrl,
+      publicOperatorUrl: descriptor.publicOperatorUrl,
+      externalIngress: descriptor.externalIngress,
     },
     ingress,
   };
@@ -110,6 +117,9 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
 export function stageDevelopmentPresentationProviderBundle({ env = process.env } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (descriptor.externalIngress.configured !== true) {
+    throw new Error('Development provider staging requires a reviewed public HTTPS external-ingress binding');
+  }
   const configured = existsSync(descriptor.manifest);
   if (configured) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
@@ -215,6 +225,9 @@ export function applyDevelopmentPresentationProvider({
   if (!effects) throw new Error('Development presentation provider effect adapter is required');
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (descriptor.externalIngress.configured !== true) {
+    throw new Error('Development provider apply requires a reviewed public HTTPS external-ingress binding');
+  }
   if (existsSync(descriptor.manifest)) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
     const expected = developmentPresentationProviderManifest(descriptor);
@@ -753,6 +766,8 @@ export function writeProviderAuthority(descriptor, observation) {
         publicOperatorUrl: descriptor.publicOperatorUrl,
         healthUrl: frameUrl,
         externalUrl: descriptor.publicOperatorUrl,
+        externalIngressRevision: descriptor.externalIngress.reviewedRevision,
+        externalIngressBindingSha256: descriptor.externalIngress.bindingSha256,
       },
       state: displays.get(route.displayReservationId)?.ready === true ? 'ready' : 'absent',
     };
@@ -761,6 +776,8 @@ export function writeProviderAuthority(descriptor, observation) {
   writeFileAtomic(descriptor.inventoryPath, `${JSON.stringify({
     schemaVersion: 'agent-browser.development-presentation-inventory.v1',
     environment: 'development',
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    externalIngress: descriptor.externalIngress,
     routes: inventory,
   }, null, 2)}\n`, 0o600);
   writeFileAtomic(

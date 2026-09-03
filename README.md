@@ -69,6 +69,8 @@ pnpm build:dashboard
 pnpm build:development-candidate
 pnpm development-runtime:install
 pnpm development-runtime:doctor
+export AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL=https://agent-browser-dev.example.test
+export AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION=<reviewed-ingress-revision>
 pnpm development-runtime:provider-plan
 pnpm development-runtime:provider-stage
 pnpm development-runtime:provider-preflight
@@ -136,7 +138,13 @@ Development presentation-provider status is included in the development
 doctor. An absent provider is reported as unconfigured and remains nonblocking
 for dashboard-only work. Once configured, exact namespace or manifest drift is
 blocking. Set `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` only for a
-provider-backed acceptance run. Review the provider plan, stage its secret-free
+provider-backed acceptance run. Before staging, set
+`AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL` to the reviewed public HTTPS origin and
+`AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION` to its immutable Cooper deployment
+revision or reviewed receipt ID. Both values are required together. The provider
+manifest and route inventory retain their deterministic binding digest. The
+loopback dashboard address remains a local diagnostic only and is never an
+operator handoff. Review the provider plan, stage its secret-free
 artifacts, and pass preflight before using the explicit apply command above.
 Ingress publication remains deferred until the provider-ready checkpoint.
 Provider doctor success proves provider readiness; Service Status must also

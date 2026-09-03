@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA,
+  developmentExternalIngressBinding,
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
   developmentPresentationProviderManifestCompatible,
@@ -39,7 +40,12 @@ import {
 
 const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-dev-provider-'));
 const userHome = join(fixture, 'user');
-const env = { ...process.env, AGENT_BROWSER_DEV_USER_HOME: userHome };
+const env = {
+  ...process.env,
+  AGENT_BROWSER_DEV_USER_HOME: userHome,
+  AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test/',
+  AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+};
 
 try {
   const descriptor = developmentPresentationProviderDescriptor(env);
@@ -66,13 +72,70 @@ try {
   assert.equal(descriptor.ports.guacamole, 8093);
   assert.equal(descriptor.ports.guacd, 4823);
   assert.equal(descriptor.ports.postgres, 55433);
-  assert.equal(descriptor.publicOperatorUrl, 'http://127.0.0.1:4948');
+  assert.equal(descriptor.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(descriptor.publicOperatorUrl, 'https://agent-browser-dev.example.test');
+  assert.deepEqual(descriptor.externalIngress, {
+    configured: true,
+    publicOperatorUrl: 'https://agent-browser-dev.example.test',
+    reviewedRevision: 'cooper-test-revision-001',
+    bindingSha256: developmentExternalIngressBinding(env).bindingSha256,
+  });
+  assert.equal(descriptor.externalIngress.bindingSha256.length, 64);
+  const unconfiguredDescriptor = developmentPresentationProviderDescriptor({
+    ...env,
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+  });
+  assert.equal(unconfiguredDescriptor.publicOperatorUrl, null);
+  assert.equal(unconfiguredDescriptor.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(unconfiguredDescriptor.externalIngress.configured, false);
+  const unconfiguredIngressEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+  };
+  assert.throws(
+    () => stageDevelopmentPresentationProviderBundle({ env: unconfiguredIngressEnv }),
+    /staging requires a reviewed public HTTPS external-ingress binding/,
+  );
+  assert.throws(
+    () => applyDevelopmentPresentationProvider({
+      env: unconfiguredIngressEnv,
+      authorizeEffects: true,
+      effects: {},
+    }),
+    /apply requires a reviewed public HTTPS external-ingress binding/,
+  );
+  for (const publicOperatorUrl of [
+    'http://agent-browser-dev.example.test',
+    'https://127.0.0.1',
+    'https://10.1.2.3',
+    'https://172.20.1.2',
+    'https://192.168.1.2',
+    'https://169.254.2.3',
+    'https://provider.local',
+    'https://user:secret@agent-browser-dev.example.test',
+    'https://agent-browser-dev.example.test/remote-view',
+    'https://agent-browser-dev.example.test?route=1',
+    'https://agent-browser-dev.example.test#route',
+  ]) {
+    assert.throws(() => developmentExternalIngressBinding({
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: publicOperatorUrl,
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+    }), /public HTTPS origin/);
+  }
+  assert.throws(() => developmentExternalIngressBinding({
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test',
+  }), /requires both/);
+  assert.throws(() => developmentExternalIngressBinding({
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
+  }), /requires both/);
   const currentManifest = developmentPresentationProviderManifest(descriptor);
   const legacyManifest = { ...currentManifest };
   delete legacyManifest.publicOperatorUrl;
   assert.equal(
     developmentPresentationProviderManifestCompatible(legacyManifest, currentManifest),
-    true,
+    false,
   );
   assert.equal(
     developmentPresentationProviderManifestCompatible(
@@ -328,6 +391,16 @@ try {
   });
   assert.equal(required.success, false);
   assert.equal(required.status.blocking, true);
+  const requiredWithoutIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...env,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+      AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED: '1',
+    },
+  });
+  assert.equal(requiredWithoutIngress.success, false);
+  assert.match(requiredWithoutIngress.status.isolationError, /no reviewed public HTTPS ingress binding/);
 
   mkdirSync(descriptor.root, { recursive: true });
   writeFileSync(
@@ -441,8 +514,10 @@ try {
   const authorityInventory = JSON.parse(readFileSync(descriptor.inventoryPath, 'utf8'));
   assert.equal(
     authorityInventory.routes[0].routeDescriptor.publicOperatorUrl,
-    'http://127.0.0.1:4948',
+    'https://agent-browser-dev.example.test',
   );
+  assert.equal(authorityInventory.localDiagnosticUrl, 'http://127.0.0.1:4948');
+  assert.equal(authorityInventory.externalIngress.bindingSha256, descriptor.externalIngress.bindingSha256);
   assert.match(
     authorityInventory.routes[0].routeDescriptor.localEmbedUrl,
     /^http:\/\/127\.0\.0\.1:8093\/guacamole\/#\/client\//,

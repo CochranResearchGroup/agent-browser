@@ -1029,6 +1029,13 @@ absent provider is an explicit, nonblocking `unconfigured` state for CDP and
 dashboard work. Provider-backed desktop acceptance must set
 `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and must not reuse
 production Guacamole, XRDP, display, route, database, secret, or cleanup state.
+Before provider staging, set `AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL` to the
+reviewed public HTTPS origin and
+`AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION` to its immutable reviewed Cooper
+deployment revision or receipt ID. The variables are an atomic pair whose
+canonical binding digest is retained in the manifest and route inventory.
+Loopback is exposed only as `localDiagnosticUrl`; never use it as an operator
+handoff.
 Before provider mutation, run `pnpm development-runtime:provider-plan`,
 `pnpm development-runtime:provider-stage`, and
 `pnpm development-runtime:provider-preflight`. Apply only with

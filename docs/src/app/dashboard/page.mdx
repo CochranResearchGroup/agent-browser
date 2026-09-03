@@ -74,6 +74,12 @@ and CDP work. Provider-backed acceptance sets
 manifest exists, namespace or manifest drift is blocking. Development
 Guacamole, XRDP, display, route, database, secret, cleanup, and ingress effects
 remain a separately reviewed operation.
+Before staging, set <code>AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL</code> to the
+reviewed public HTTPS origin and
+<code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code> to the immutable
+reviewed Cooper deployment revision or receipt ID. Both are required together,
+and the provider retains their deterministic binding digest. Loopback remains
+a local diagnostic URL and is never an operator handoff.
 Review and stage those effects with
 <code>pnpm development-runtime:provider-plan</code> and
 <code>pnpm development-runtime:provider-stage</code>, then run

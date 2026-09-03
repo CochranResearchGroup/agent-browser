@@ -8,6 +8,11 @@ const viewport = readFileSync('packages/dashboard/src/components/workspace-remot
 const viewPreferences = readFileSync('packages/dashboard/src/hooks/use-workspace-view-preferences.ts', 'utf8');
 const coordinator = readFileSync('cli/src/native/remote_view/open/coordinator.rs', 'utf8');
 const handoff = readFileSync('cli/src/native/remote_view_handoff.rs', 'utf8');
+const developmentProvider = readFileSync('scripts/lib/development-presentation-provider.js', 'utf8');
+const developmentProviderDeployment = readFileSync(
+  'scripts/lib/development-presentation-provider-deployment.js',
+  'utf8',
+);
 
 assert.match(
   dashboardPage,
@@ -79,6 +84,24 @@ assert.match(
   viewPreferences,
   /get\("view-provider"\)[\s\S]*selectedProvider[\s\S]*readSelectedProvider/,
   'workspace control must carry the provider encoded by the durable handoff route into view preferences',
+);
+
+assert.match(
+  developmentProvider,
+  /publicOperatorUrl:\s*externalIngress\.publicOperatorUrl/,
+  'the development provider must source its operator URL from reviewed external ingress',
+);
+
+assert.doesNotMatch(
+  developmentProvider,
+  /publicOperatorUrl:\s*`http:\/\/127\.0\.0\.1/,
+  'the development provider must never expose loopback as a public operator URL',
+);
+
+assert.match(
+  developmentProviderDeployment,
+  /externalIngressBindingSha256:\s*descriptor\.externalIngress\.bindingSha256/,
+  'development route authority must retain the deterministic external-ingress binding',
 );
 
 console.log('dashboard durable remote-view handoff checks passed');
