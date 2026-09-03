@@ -125,6 +125,13 @@ non-secure URLs across 13 client-visible roles; requires all eight external
 ingress checks; gates pixels on operator readiness; reconciles eight retained
 identity fields; and detects changed handoffs and duplicate cold launches.
 Thirty-six synthetic sessions exercise all 23 finding classes.
+Plan 0158 W5 is complete. The provider-free dashboard oracle now detects 46
+isolated rail, selection, multi-client, warning, URL, stream, browser-evidence,
+accessibility, latency, and resource-growth defect classes. Fifty-one strict
+fixtures include clean empty, sparse, normal, dense, and typed-convergence
+controls. The dense control materially generates 22,600 resources and 600 rail
+rows for the exact 100 Profile, 500 browser, 2,000 tab, 10,000 job, and 10,000
+event inventory.
 
 ### Plan
 
@@ -133,9 +140,10 @@ Thirty-six synthetic sessions exercise all 23 finding classes.
 
 ### Next Recommendation
 
-Execute Plan 0158 W5. Build and provider-free test dashboard truth,
-performance, accessibility, selection, warning-axis, and external-URL probes
-over dense immutable fixtures. Do not touch an installed runtime yet.
+Execute Plan 0158 W6. Publish and install exactly one isolated development
+candidate, prepare distinct E1 and E2 environments, prove E2 external ingress,
+capture calibration, and freeze all candidate and environment digests before
+starting a campaign case.
 
 ## P156 | Full Runtime Shutdown Replacement
 

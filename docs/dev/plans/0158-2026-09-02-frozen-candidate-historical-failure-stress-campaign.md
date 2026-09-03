@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w4_external_oracle_complete_w5_dashboard_probes_ready`
+Execution state: `w5_dashboard_oracle_complete_w6_candidate_preparation_ready`
 
 Lane: P157
 
@@ -708,3 +708,41 @@ do not exist yet.
 Next action: execute W5 only. Build provider-free dashboard rail, selection,
 warning-axis, external URL hygiene, accessibility, and performance probes over
 dense immutable fixtures.
+
+## W5 Checkpoint: Dashboard Truth And Performance Oracle Complete
+
+State transition: `external_oracle_complete -> dashboard_oracle_complete`.
+
+Acceptance state: W5 complete. Installed acceptance remains open and no
+candidate, browser, provider, or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-dashboard-oracle.js` materializes immutable dashboard
+  fixtures and audits rail bijection, stable identity, selection, inspector and
+  action targeting, multi-client isolation, warning axes, handoff URL hygiene,
+  stream convergence, browser evidence, timing distributions, and resource
+  slopes;
+- the two P158 dashboard schemas require strict synthetic inputs, all 46 exact
+  finding counters, deterministic reports, and explicit no-repair evidence;
+- the 51-case corpus includes four clean inventory densities, one clean typed
+  convergence control, and one isolated seed for every finding class; and
+- `pnpm test:p158-dashboard-oracle` proves the exact dense inventory of 100
+  Profiles, 500 browsers, 2,000 tabs, 10,000 jobs, and 10,000 events is
+  materially generated as 22,600 resources and audits cleanly with 600 rail
+  rows.
+
+Integration review corrected false zero resource budgets, dense ordering,
+duplicate-row cascade findings, absent same-label semantics, incomplete
+viewport controls, and missing explicit multi-client leakage coverage. The
+primary agent independently reran W1 through W5 provider-free batteries.
+
+Material blocker: no candidate or isolated E1 and E2 environment has been
+published, calibrated, or frozen. W5 intentionally performed no live effects.
+
+Next action: execute W6 only. Publish and install one isolated development
+candidate, prepare distinct E1 and E2 environments, prove genuinely external
+ingress, capture calibration, and seal candidate and environment digests before
+any campaign case starts.
