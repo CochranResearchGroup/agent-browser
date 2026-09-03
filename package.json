@@ -106,6 +106,7 @@
     "test:p158-historical-failure-registry": "node scripts/test-p158-historical-failure-registry.js",
     "test:p158-campaign-controller": "node scripts/test-p158-campaign-controller.js",
     "test:p158-campaign": "pnpm test:p158-historical-failure-registry && pnpm test:p158-campaign-controller",
+    "test:p158-logging-auditor": "node scripts/test-p158-logging-auditor.js",
     "test:service-status-fixed-input-harness": "node scripts/test-service-status-fixed-input-harness.js",
     "test:service-client-exports": "pnpm --filter agent-browser-service-client-example exec node test-client-exports.mjs",
     "test:service-request-client": "node scripts/test-service-request-client.js",

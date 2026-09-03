@@ -113,6 +113,12 @@ propagates only exact lost prerequisites, records environment-scoped safety
 stops, preserves scheduled teardown failure, writes exclusive atomic artifacts
 and a hash-chained typed ledger, and seals only after terminal-count closure.
 Strict schemas validate the actual persisted manifest and every ledger record.
+Plan 0158 W3 is complete. A provider-free causal auditor now reconciles
+requests, responses, jobs, events, traces, incidents, dashboard projections,
+artifacts, and redaction receipts. Thirteen synthetic envelopes prove exact
+detection of 11 missing, duplicate, conflicting, reordered, null, isolated,
+broken-parent, unsafe-retry, capture-gap, and sensitive-leak classes while
+complete and reordered input stays clean.
 
 ### Plan
 
@@ -121,9 +127,9 @@ Strict schemas validate the actual persisted manifest and every ledger record.
 
 ### Next Recommendation
 
-Execute Plan 0158 W3. Build and provider-free test the cross-surface causal
-logging auditor and synthetic sensitive-value scanner. Do not touch an
-installed runtime yet.
+Execute Plan 0158 W4. Build and provider-free test the external-ingress runner
+and durable-handoff oracle, including unconditional rejection of loopback
+fallback. Do not touch an installed runtime yet.
 
 ## P156 | Full Runtime Shutdown Replacement
 

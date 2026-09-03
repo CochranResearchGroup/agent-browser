@@ -174,6 +174,17 @@ runTest('reports exact closed-world counts for every defect class', () => {
   assert.equal(report.findings.length, findingCodes.length);
 });
 
+runTest('detects historical null envelopes on terminal durable jobs', () => {
+  const nullFailure = fixtureReport(report, 'logging-null-failure').findings[0];
+  const nullProvenance = fixtureReport(report, 'logging-null-provenance').findings[0];
+  assert.equal(nullFailure.code, 'null_failure');
+  assert.deepEqual(nullFailure.surfaceRoles, ['durable_job']);
+  assert.ok(nullFailure.observed.recordIds.includes('nullfail-job'));
+  assert.equal(nullProvenance.code, 'null_provenance');
+  assert.deepEqual(nullProvenance.surfaceRoles, ['durable_job']);
+  assert.ok(nullProvenance.observed.recordIds.includes('nullprov-job'));
+});
+
 runTest('keeps complete and reordered causal envelopes clean across every expected surface', () => {
   const cleanFixtures = fixtureSet.fixtures.filter(
     (fixture) => fixture.expectedFindingCodes.length === 0,

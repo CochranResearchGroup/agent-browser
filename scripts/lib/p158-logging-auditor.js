@@ -521,9 +521,8 @@ export function auditLoggingCompleteness(input, options = {}) {
 
     const outcomeRecords = group.records.filter(
       (record) =>
-        record.surface === 'event' ||
-        record.surface === 'trace' ||
-        (record.surface === 'job' && record.terminal),
+        record.terminal &&
+        ['immediate_response', 'job', 'event', 'trace', 'dashboard_projection'].includes(record.surface),
     );
     const effects = [...new Set(outcomeRecords.map((record) => record.effectState).filter(Boolean))].sort();
     const retries = [...new Set(outcomeRecords.map((record) => record.retryDisposition).filter(Boolean))].sort();

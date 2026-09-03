@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w2_controller_complete_w3_logging_auditor_ready`
+Execution state: `w3_logging_auditor_complete_w4_external_oracle_ready`
 
 Lane: P157
 
@@ -642,3 +642,36 @@ logging completeness and sensitive-value scanner do not exist yet.
 Next action: execute W3 only. Build the logging auditor and synthetic leakage
 scanner against intentionally missing, duplicate, conflicting, reordered,
 null, and leaking fixtures.
+
+## W3 Checkpoint: Logging Completeness Auditor Complete
+
+State transition: `controller_complete -> logging_auditor_complete`.
+
+Acceptance state: W3 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-logging-auditor.js` reconstructs causal envelopes across
+  requests, immediate responses, durable jobs, events, traces, incidents,
+  dashboard projections, artifacts, and redaction receipts;
+- the two P158 logging schemas define the synthetic input and exact audit
+  report contracts;
+- the 13-fixture corpus isolates all 11 required defect classes plus complete
+  and reordered-clean controls; and
+- `pnpm test:p158-logging-auditor` performs strict schema, deterministic,
+  no-mutation, exact-count, per-envelope, surface-correlation, and clean-control
+  checks.
+
+Integration review required report-schema conformance and fixture correlation,
+then expanded terminal inspection to immediate responses, durable jobs, events,
+traces, and dashboard projections. The production-shaped null fixtures now
+prove missing failure and provenance on terminal durable jobs specifically.
+
+Material blocker: no external-ingress runner or durable-handoff URL oracle
+exists yet.
+
+Next action: execute W4 only. Build the provider-free external-ingress and
+durable-handoff oracle, including hard rejection of loopback fallback.
