@@ -1264,8 +1264,10 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&state)
         .unwrap();
+    // Route-bound remote-view execution normalizes its browser effect to a
+    // launch command after reserving the exact display and acquisition lease.
     let remote_view_command = json!({
-        "action": "remote_view_open",
+        "action": "launch",
         "profile": profile_id,
         "serviceName": "development-presentation-provider",
     });

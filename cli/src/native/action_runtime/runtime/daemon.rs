@@ -1185,7 +1185,10 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
         }
     };
     let prepared_remote_display_matches = |display_allocation_id: &str| {
-        command.get("action").and_then(Value::as_str) == Some("remote_view_open")
+        matches!(
+            command.get("action").and_then(Value::as_str),
+            Some("remote_view_open" | "launch")
+        )
             && state
                 .display_allocations
                 .get(display_allocation_id)

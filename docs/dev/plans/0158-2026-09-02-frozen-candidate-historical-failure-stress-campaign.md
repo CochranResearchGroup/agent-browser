@@ -1557,3 +1557,31 @@ formatting, and workspace clippy. If green, install one new isolated candidate
 and perform exactly one fresh explicit reopen attempt through the same durable
 handoff. Require a ready operator-visible result and inspect the new journal
 window before dispatching the external-vantage workflow.
+
+The first bounded repair passed all listed gates and was installed as
+development generation `0.28.0-0fb09e6099a7`; production remained unchanged,
+three launch smokes passed, and the provider-required doctor was fully green.
+The one E9 reopen attempt nevertheless reproduced the same identity error and
+again rolled back with no effect. Inspection found that the initial regression
+modeled the outer `remote_view_open` request, while route-bound execution
+normalizes the browser effect to `action=launch` before calling the daemon.
+The first guard therefore never recognized the real effect command.
+
+The regression now models that normalized launch boundary. It fails with
+`existing_session_profile_identity_inconsistent` against the first repair and
+passes when the prepared-display exception recognizes either the outer
+remote-view action or its normalized launch effect. The exception remains
+conditional on the exact current-boot pending acquisition lease and matching
+browser, session, route, display, and Profile. The completed-lease negative
+control remains rejected.
+
+Two unauthenticated local API probes returned `Login required` while the E9
+harness established a dashboard session. They created no browser effect and
+are harness-authentication failures, not additional reopen attempts. Whether
+authentication denials need a separate security journal surface is retained
+for W10; it does not block the authenticated handoff sequence.
+
+Revised next action: repeat the focused and campaign validation gates, install
+one further isolated candidate, and make one E10 authenticated reopen attempt.
+Do not retry E9. Inspect its distinct terminal job and journal record as
+preserved pre-repair evidence.
