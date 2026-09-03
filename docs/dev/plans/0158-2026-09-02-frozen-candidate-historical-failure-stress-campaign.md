@@ -1454,3 +1454,33 @@ a new isolated candidate, and require development runtime multiplicity to read
 one selected generation. Only then recreate or recover the synthetic durable
 handoff and dispatch the registered readiness workflow under a fresh evidence
 identity.
+
+Installed development generation `0.28.0-105b02603e15` satisfied that exact
+multiplicity assertion and three disposable browser launches. The complete
+provider doctor also passed with six routes and four unique warm displays when
+the already reviewed public URL and ingress revision were supplied. An earlier
+doctor invocation set only the provider-required flag and therefore rendered a
+configuration mismatch against the correctly persisted ingress manifest. That
+failure is an invocation omission, not evidence that installation erased the
+binding.
+
+The dashboard remained in overall convergence attention for a separate
+development-boundary reason. Production installs have a recurring workstation
+maintenance receipt, but isolated development installs intentionally do not
+install the production interlock because it can reconcile route users, prune
+state, and collect generations. The shared status projector nevertheless
+required that absent production receipt even though it had just performed a
+fresh development-scoped dashboard and runtime-host census. The repair maps a
+current steady development census to
+`runtimeMonitor.state=development_live_observation`, explicitly records
+`maintenanceEffectsApplied=false`, and remains fail-closed as
+`development_runtime_drift` when multiplicity is not steady. Production still
+requires its fresh persisted maintenance receipt. The focused regression,
+formatting, and workspace clippy pass.
+
+Revised next action: build and install the second dashboard-warning candidate,
+prove both the multiplicity and live-observation gates make the current
+development runtime lifecycle ready, and only then rebuild the external
+handoff. Preserve the absence of development unattended maintenance as an
+explicit W10 architecture input rather than representing the live observation
+as retention or cleanup work.

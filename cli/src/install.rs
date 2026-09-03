@@ -2308,7 +2308,12 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
                 &json!({ "workstationUpgrade": workstation_upgrade.clone() }),
                 &workstation_upgrade,
             );
-        health["runtimeMonitor"] = crate::workstation_install::runtime_monitor_status_json();
+        let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+            .unwrap_or_else(|_| "production".to_string());
+        health["runtimeMonitor"] = runtime_monitor_status_for_environment(
+            &runtime_environment,
+            &health["runtimeMultiplicity"],
+        );
         health["workstationUpgrade"] = workstation_upgrade;
     }
     #[cfg(test)]
@@ -2366,6 +2371,30 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
     health["runtimeLifecycle"] =
         runtime_lifecycle_status_from_health(&health, runtime_lifecycle_authority_summary(None));
     health
+}
+
+fn runtime_monitor_status_for_environment(
+    runtime_environment: &str,
+    runtime_multiplicity: &Value,
+) -> Value {
+    if runtime_environment != "development" {
+        return crate::workstation_install::runtime_monitor_status_json();
+    }
+
+    let ready = runtime_multiplicity
+        .get("steadyState")
+        .and_then(Value::as_bool)
+        == Some(true);
+    json!({
+        "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+        "ready": ready,
+        "state": if ready { "development_live_observation" } else { "development_runtime_drift" },
+        "fresh": true,
+        "ageSeconds": 0,
+        "maximumAgeSeconds": 0,
+        "observationSource": "current_service_status",
+        "maintenanceEffectsApplied": false,
+    })
 }
 
 fn summarize_runtime_lifecycle_authority(
@@ -5594,6 +5623,21 @@ mod tests {
             health["workstationConvergence"]["schemaVersion"],
             "agent-browser.workstation-convergence-receipt.v1"
         );
+    }
+
+    #[test]
+    fn development_runtime_uses_current_live_convergence_observation() {
+        let ready =
+            runtime_monitor_status_for_environment("development", &json!({"steadyState": true}));
+        assert_eq!(ready["ready"], true);
+        assert_eq!(ready["state"], "development_live_observation");
+        assert_eq!(ready["observationSource"], "current_service_status");
+        assert_eq!(ready["maintenanceEffectsApplied"], false);
+
+        let drifted =
+            runtime_monitor_status_for_environment("development", &json!({"steadyState": false}));
+        assert_eq!(drifted["ready"], false);
+        assert_eq!(drifted["state"], "development_runtime_drift");
     }
 
     #[test]
