@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   P158_W8_CASE_IDS,
   P158_W8_ERROR_CODES,
@@ -9,11 +11,16 @@ import {
   P158_W8_REVIEWED_SOURCE_COVERAGE,
   P158W8AdapterError,
   assessP158W8ReviewedLiveSources,
+  buildP158W8ExternalActionManifest,
   buildP158W8ActionPlan,
   createP158W8AdapterBundle,
   createP158W8ReviewedLiveAdapterBundle,
   sealP158W8Receipt,
 } from './lib/p158-w8-hd-adapters.js';
+import {
+  canonicalHash,
+  executeP158W8ExternalActionManifest,
+} from './run-p158-external-vantage.js';
 import { RETAINED_IDENTITY_FIELDS } from './lib/p158-external-handoff-oracle.js';
 import { generateDenseDashboardFixture } from './lib/p158-dashboard-oracle.js';
 import { sha256 } from './lib/p158-campaign-controller.js';
@@ -431,5 +438,127 @@ assert.throws(
   }),
   (error) => error instanceof P158W8AdapterError && error.code === 'operator_gate_missing',
 );
+
+const publicHandoffUrl = 'https://handoff.public.example/remote-view/p158-test';
+const externalSeals = { ...seals, handoffUrlSha256: sha256(publicHandoffUrl) };
+const externalManifest = buildP158W8ExternalActionManifest({
+  registry,
+  schedule,
+  seals: externalSeals,
+});
+assert.deepEqual(externalManifest.caseIds, ['H01', 'H02']);
+assert.equal(externalManifest.actionCount, 264);
+assert.equal(new Set(externalManifest.actions.map((action) => action.actionId)).size, 264);
+assert.deepEqual(
+  [...new Set(externalManifest.actions.map((action) => action.executorKind))].sort(),
+  ['external_url_policy_scan', 'external_vantage_aggregate_projection'],
+);
+const aggregateBody = {
+  schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
+  planId: 'P158',
+  runId: 'p158-w8-live-test',
+  success: true,
+  repairAttempted: false,
+  retryCount: 0,
+  mode: 'readiness',
+  clientIds: ['external-runner-human', 'external-runner-slow'],
+  runnerIdentitySha256s: [digest('runner-human'), digest('runner-slow')],
+  handoffUrlSha256: externalSeals.handoffUrlSha256,
+  retainedIdentitySha256: digest('retained-identity'),
+  w8ActionManifestSha256: externalManifest.manifestSha256,
+  receiptSha256s: [digest('human-receipt'), digest('slow-receipt')],
+  checks: {
+    distinctOffHostClients: true,
+    sameDurableHandoff: true,
+    exactRetainedIdentity: true,
+    noDuplicateServerBrowserLaunch: true,
+    noInternalUrlLeak: true,
+    allIngressChecks: true,
+    calibrationComplete: null,
+    sharedCalibrationWindow: null,
+  },
+};
+const aggregate = { ...aggregateBody, aggregateSha256: canonicalHash(aggregateBody) };
+const externalResult = executeP158W8ExternalActionManifest({
+  manifest: externalManifest,
+  externalVantageAggregate: aggregate,
+  publicHandoffUrl,
+  observedAt: '2026-09-03T01:00:00.000Z',
+});
+assert.equal(externalResult.actionCount, 264);
+assert.equal(new Set(externalResult.actionReceipts.map((receipt) => receipt.actionId)).size, 264);
+assert(externalResult.actionReceipts.every((receipt) => receipt.resultState === 'passed'));
+assert(externalResult.actionReceipts.every((receipt) => receipt.attemptNumber === 1));
+assert(externalResult.actionReceipts.every((receipt) => receipt.repairAttempted === false));
+assert(externalResult.actionReceipts.every((receipt) => receipt.retryAttempted === false));
+assert(externalResult.actionReceipts.every((receipt) => receipt.garbageCollectionAttempted === false));
+const h01Receipts = externalResult.actionReceipts.filter((receipt) => receipt.caseId === 'H01');
+assert.deepEqual(h01Receipts.map((receipt) => receipt.evidence.runnerAction), [
+  'open', 'interact', 'disconnect', 'reopen',
+]);
+assert(h01Receipts.every((receipt) => receipt.evidence.clientIds.length === 2));
+const h02Receipts = externalResult.actionReceipts.filter((receipt) => receipt.caseId === 'H02');
+assert.equal(h02Receipts.length, 260);
+assert.equal(
+  h02Receipts.filter((receipt) => receipt.evidence.hostOrScheme === 'public_https' &&
+    receipt.evidence.findingCodes.length === 0).length,
+  16,
+);
+assert(h02Receipts.filter((receipt) => receipt.evidence.hostOrScheme !== 'public_https')
+  .every((receipt) => receipt.evidence.findingCodes.length > 0));
+assert.throws(
+  () => executeP158W8ExternalActionManifest({
+    manifest: { ...externalManifest, actionCount: 1 },
+    externalVantageAggregate: aggregate,
+    publicHandoffUrl,
+  }),
+  /manifest is missing, changed/,
+);
+const resultRoot = mkdtempSync(join(tmpdir(), 'p158-w8-external-result-'));
+const resultPath = join(resultRoot, 'result.json');
+writeFileSync(resultPath, `${JSON.stringify(externalResult)}\n`);
+try {
+  const concreteBundle = createP158W8ReviewedLiveAdapterBundle({
+    registry,
+    schedule,
+    seals: externalSeals,
+    externalActionExecution: { manifest: externalManifest, resultPath },
+  });
+  assert.equal(concreteBundle.executionReady, true);
+  assert.deepEqual(
+    concreteBundle.adapterBindings.filter((binding) => binding.mode === 'concrete_live')
+      .map((binding) => binding.caseId),
+    ['H01', 'H02'],
+  );
+  assert.equal(concreteBundle.adapterBindings.find((binding) => binding.caseId === 'H01').implementedActionCount, 4);
+  assert.equal(concreteBundle.adapterBindings.find((binding) => binding.caseId === 'H02').implementedActionCount, 260);
+  assert.equal(concreteBundle.adapterBindings.filter((binding) => binding.mode === 'explicit_blocked').length, 22);
+  const concreteAdapters = new Map(concreteBundle.w8Adapters.map((adapter) => [adapter.caseId, adapter]));
+  for (const attempt of schedule.attempts.filter((entry) => ['H01', 'H02'].includes(entry.caseId))) {
+    const adapter = concreteAdapters.get(attempt.caseId);
+    const outcome = await adapter.execute({
+      attempt,
+      requestEffect: (effectId, payload) => concreteBundle.effects[effectId](payload),
+    });
+    assert.equal(outcome.resultState, 'passed');
+    assert.equal(outcome.actionCount, outcome.actionIds.length);
+    assert.equal(outcome.effectState, 'completed');
+  }
+  const blockedD01 = await concreteAdapters.get('D01').execute({
+    attempt: schedule.attempts.find((entry) => entry.caseId === 'D01'),
+    requestEffect: async () => assert.fail('blocked D01 requested an effect'),
+  });
+  assert.equal(blockedD01.resultState, 'skipped_blocked');
+  const repeatedH01 = schedule.attempts.find((entry) => entry.caseId === 'H01');
+  await assert.rejects(
+    () => concreteAdapters.get('H01').execute({
+      attempt: repeatedH01,
+      requestEffect: (effectId, payload) => concreteBundle.effects[effectId](payload),
+    }),
+    (error) => error instanceof P158W8AdapterError && error.code === 'external_action_result_invalid',
+  );
+} finally {
+  rmSync(resultRoot, { recursive: true, force: true });
+}
 
 process.stdout.write(`Plan 0158 W8 H/D adapters provider-free checks passed (${calls.external.length} external actions, ${reviewed.scheduledActionCount} reviewed live actions blocked)\n`);

@@ -19,6 +19,8 @@ export const EXTERNAL_CALIBRATION_RECEIPT_SCHEMA =
   'agent-browser.p158-external-calibration-receipt.v1';
 export const EXTERNAL_VANTAGE_AGGREGATE_SCHEMA =
   'agent-browser.p158-external-vantage-aggregate.v1';
+export const W8_EXTERNAL_ACTION_RESULT_SCHEMA =
+  'agent-browser.p158-w8-external-action-result.v1';
 export const PINNED_PLAYWRIGHT_VERSION = '1.62.1';
 export const CALIBRATION_DURATION_MS = 20 * 60 * 1000;
 export const CALIBRATION_LATE_TOLERANCE_MS = 30 * 1000;
@@ -57,6 +59,10 @@ export function validateExternalVantageConfiguration({ env, clientId, paceProfil
   if (!['readiness', 'calibration'].includes(mode)) throw new Error(`Unsupported probe mode: ${mode}`);
   if (!/^external-runner-[a-z0-9-]+$/.test(clientId || '')) {
     throw new Error('External vantage client ID must be an immutable external-runner ID');
+  }
+  if (env.P158_W8_ACTION_MANIFEST_SHA256 &&
+      !/^[a-f0-9]{64}$/.test(env.P158_W8_ACTION_MANIFEST_SHA256)) {
+    throw new Error('W8 action manifest binding must be a lowercase SHA-256 digest');
   }
   for (const name of [
     'P158_DEV_HANDOFF_URL',
@@ -330,6 +336,13 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
   if (new Set(ordered.map((item) => item.handoff.urlSha256)).size !== 1) {
     throw new Error('External vantage clients did not use the same durable handoff');
   }
+  const w8ManifestDigests = [...new Set(ordered
+    .map((item) => item.w8ActionManifestSha256)
+    .filter(Boolean))];
+  if (w8ManifestDigests.length > 1 ||
+      (w8ManifestDigests.length === 1 && ordered.some((item) => !item.w8ActionManifestSha256))) {
+    throw new Error('External vantage clients have conflicting W8 action-manifest bindings');
+  }
   if (
     ordered[0].mode === 'calibration' &&
     ordered.some((receipt) =>
@@ -382,6 +395,7 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
     runnerIdentitySha256s: ordered.map((item) => item.runner.runnerIdentitySha256),
     handoffUrlSha256: ordered[0].handoff.urlSha256,
     retainedIdentitySha256: canonicalHash(expectedIdentity),
+    w8ActionManifestSha256: w8ManifestDigests[0] ?? null,
     receiptSha256s: ordered.map((item) => canonicalHash(item)),
     checks: {
       distinctOffHostClients: true,
@@ -400,6 +414,145 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
     },
   };
   return { ...aggregate, aggregateSha256: canonicalHash(aggregate) };
+}
+
+const W8_URL_ROLES = Object.freeze({
+  handoff: 'starting_handoff',
+  location: 'location_header',
+  iframe_src: 'iframe_src',
+  form_action: 'form_action',
+  websocket: 'websocket_endpoint',
+  reconnect: 'reconnect_target',
+  copied_link: 'copied_action',
+  error_action: 'error_action',
+  provider_external_url: 'provider_external_url',
+  route_binding: 'route_binding',
+  local_embed: 'local_embed_url',
+  dashboard_embed: 'dashboard_embed_url',
+  health: 'health_url',
+});
+
+function w8UrlProbe(action, publicHandoffUrl) {
+  const role = W8_URL_ROLES[action.assignment?.url_role];
+  if (!role) throw new Error(`Unsupported W8 URL role for ${action.actionId}`);
+  const path = role === 'starting_handoff' ? '/remote-view/p158-synthetic' : '/p158-synthetic';
+  const variant = action.assignment?.host_or_scheme;
+  const values = {
+    public_https: publicHandoffUrl,
+    localhost: `https://localhost${path}`,
+    ipv4_loopback: `https://127.0.0.1${path}`,
+    ipv6_loopback: `https://[::1]${path}`,
+    rfc1918: `https://10.20.30.40${path}`,
+    link_local: `https://169.254.20.30${path}`,
+    dot_local: `https://p158-fixture.local${path}`,
+    raw_guacamole: 'https://public.example/guacamole/#/client/p158-synthetic',
+    non_https: `http://public.example${path}`,
+    public_dns_private_resolution: `https://public.example${path}`,
+  };
+  const url = values[variant];
+  if (!url) throw new Error(`Unsupported W8 host or scheme for ${action.actionId}`);
+  const classification = classifyOperatorUrl(
+    role === 'websocket_endpoint' && variant === 'public_https'
+      ? url.replace(/^https:/, 'wss:')
+      : url,
+    {
+      role,
+      resolvedAddresses: variant === 'public_dns_private_resolution' ? ['10.20.30.40'] : [],
+    },
+  );
+  return {
+    role,
+    hostOrScheme: variant,
+    hostClass: classification.hostClass,
+    resolvedHostClasses: classification.resolvedHostClasses,
+    findingCodes: classification.findingCodes,
+    acceptedAsOperatorUrl: classification.valid,
+  };
+}
+
+export function executeP158W8ExternalActionManifest({
+  manifest,
+  externalVantageAggregate,
+  publicHandoffUrl,
+  observedAt = new Date().toISOString(),
+}) {
+  const { manifestSha256, ...manifestBody } = manifest ?? {};
+  if (manifest?.schemaVersion !== 'agent-browser.p158-w8-external-action-manifest.v1' ||
+      manifestSha256 !== campaignSha256(manifestBody) || !Array.isArray(manifest.actions) ||
+      manifest.actionCount !== manifest.actions.length ||
+      new Set(manifest.actions.map((action) => action.actionId)).size !== manifest.actions.length ||
+      manifest.repairAllowed !== false || manifest.retryAllowed !== false ||
+      manifest.garbageCollectionAllowed !== false) {
+    throw new Error('W8 external action manifest is missing, changed, or duplicates an action');
+  }
+  const aggregate = externalVantageAggregate;
+  if (aggregate?.schemaVersion !== EXTERNAL_VANTAGE_AGGREGATE_SCHEMA || aggregate.success !== true ||
+      aggregate.aggregateSha256 !== canonicalHash(withoutKey(aggregate, 'aggregateSha256')) ||
+      aggregate.handoffUrlSha256 !== manifest.handoffUrlSha256 ||
+      aggregate.clientIds?.length !== 2 || new Set(aggregate.clientIds).size !== 2 ||
+      aggregate.checks?.distinctOffHostClients !== true || aggregate.checks?.sameDurableHandoff !== true ||
+      aggregate.checks?.exactRetainedIdentity !== true ||
+      aggregate.checks?.noDuplicateServerBrowserLaunch !== true ||
+      aggregate.checks?.noInternalUrlLeak !== true || aggregate.checks?.allIngressChecks !== true ||
+      aggregate.w8ActionManifestSha256 !== manifestSha256) {
+    throw new Error('W8 action execution lacks its exact clean two-runner external-vantage aggregate');
+  }
+  if (hashText(publicHandoffUrl) !== manifest.handoffUrlSha256) {
+    throw new Error('W8 public handoff URL does not match its sealed digest');
+  }
+  const actionReceipts = manifest.actions.map((action) => {
+    if (!['H01', 'H02'].includes(action.caseId)) {
+      throw new Error(`W8 external action executor does not implement ${action.caseId}`);
+    }
+    const evidence = action.caseId === 'H01'
+      ? {
+          runnerAction: action.assignment?.runner_action,
+          clientIds: [...aggregate.clientIds],
+          sameDurableHandoff: true,
+          exactRetainedIdentity: true,
+        }
+      : w8UrlProbe(action, publicHandoffUrl);
+    if (action.caseId === 'H01' &&
+        !['open', 'interact', 'disconnect', 'reopen'].includes(evidence.runnerAction)) {
+      throw new Error(`W8 H01 action ${action.actionId} is not a frozen runner action`);
+    }
+    const body = {
+      schemaVersion: 'agent-browser.p158-w8-external-action-receipt.v1',
+      planId: 'P158',
+      actionId: action.actionId,
+      attemptId: action.attemptId,
+      caseId: action.caseId,
+      environmentIds: [...action.environmentIds],
+      candidateSha256: manifest.candidateSha256,
+      workflowSha256: manifest.workflowSha256,
+      manifestSha256,
+      externalVantageAggregateSha256: aggregate.aggregateSha256,
+      handoffUrlSha256: manifest.handoffUrlSha256,
+      terminalState: 'completed',
+      resultState: 'passed',
+      attemptNumber: 1,
+      observedAt,
+      evidence,
+      repairAttempted: false,
+      retryAttempted: false,
+      garbageCollectionAttempted: false,
+      privateContentCaptured: false,
+      secretInputCaptured: false,
+    };
+    return { ...body, receiptSha256: campaignSha256(body) };
+  });
+  const result = {
+    schemaVersion: W8_EXTERNAL_ACTION_RESULT_SCHEMA,
+    planId: 'P158',
+    manifestSha256,
+    externalVantageAggregateSha256: aggregate.aggregateSha256,
+    actionCount: actionReceipts.length,
+    actionReceipts,
+    repairAttempted: false,
+    retryAttempted: false,
+    garbageCollectionAttempted: false,
+  };
+  return { ...result, resultSha256: campaignSha256(result) };
 }
 
 function validateCalibrationReceipt(calibration) {
@@ -750,6 +903,7 @@ async function executeExternalVantageProbe({ env, clientId, paceProfile, mode, o
       sourceCommit: env.P158_CANDIDATE_COMMIT || null,
       workflowRunId: env.GITHUB_RUN_ID,
       workflowRunAttempt: Number(env.GITHUB_RUN_ATTEMPT),
+      w8ActionManifestSha256: env.P158_W8_ACTION_MANIFEST_SHA256 || null,
       runner: runnerEvidence(env),
       runnerIdentity: distributedRunnerIdentity(env),
       outsideServiceHost: true,
@@ -1516,7 +1670,24 @@ async function main(args = process.argv.slice(2), env = process.env) {
     if (!aggregate.success) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: run-p158-external-vantage.js probe|aggregate ...');
+  if (command === 'w8-actions') {
+    const manifestPath = resolve(takeOption(args, '--manifest'));
+    const aggregatePath = resolve(takeOption(args, '--external-aggregate'));
+    const outputPath = resolve(takeOption(args, '--output'));
+    if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}`);
+    const result = executeP158W8ExternalActionManifest({
+      manifest: JSON.parse(readFileSync(manifestPath, 'utf8')),
+      externalVantageAggregate: JSON.parse(readFileSync(aggregatePath, 'utf8')),
+      publicHandoffUrl: env.P158_DEV_HANDOFF_URL,
+    });
+    mkdirSync(dirname(outputPath), { recursive: true });
+    const serialized = `${JSON.stringify(result, null, 2)}\n`;
+    assertSecretsAbsent(serialized, env);
+    writeFileSync(outputPath, serialized, { mode: 0o600 });
+    process.stdout.write(`${JSON.stringify({ success: true, actionCount: result.actionCount, output: basename(outputPath) })}\n`);
+    return;
+  }
+  throw new Error('Usage: run-p158-external-vantage.js probe|aggregate|w8-actions ...');
 }
 
 function takeOption(args, name) {

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { auditDashboardFixture } from './p158-dashboard-oracle.js';
@@ -86,6 +88,8 @@ export const P158_W8_ERROR_CODES = Object.freeze([
   'dashboard_barrier_missing',
   'dashboard_oracle_failed',
   'external_ingress_missing',
+  'external_action_manifest_invalid',
+  'external_action_result_invalid',
   'frozen_seal_invalid',
   'handoff_digest_mismatch',
   'hook_missing',
@@ -323,6 +327,46 @@ export function buildP158W8ActionPlan({ testCase, attempt, operatorAssisted = { 
 export function sealP158W8Receipt(receipt) {
   const { receiptSha256: _ignored, ...body } = clone(receipt);
   return { ...body, receiptSha256: sha256(body) };
+}
+
+export function buildP158W8ExternalActionManifest({
+  registry,
+  schedule,
+  seals,
+  caseIds = ['H01', 'H02'],
+}) {
+  validateSeals({ registry, schedule, seals });
+  const selected = [...new Set(caseIds)].sort();
+  if (selected.some((caseId) => !['H01', 'H02'].includes(caseId))) {
+    fail('schedule_invalid', 'The reviewed external action runner currently supports only H01 and H02');
+  }
+  const cases = new Map(registry.cases.map((entry) => [entry.id, entry]));
+  const attempts = schedule.attempts.filter((attempt) => selected.includes(attempt.caseId));
+  const actions = attempts.flatMap((attempt) => buildP158W8ActionPlan({
+    testCase: cases.get(attempt.caseId),
+    attempt,
+  }).actions.map((action) => ({
+    ...action,
+    executorKind: action.caseId === 'H01'
+      ? 'external_vantage_aggregate_projection'
+      : 'external_url_policy_scan',
+  })));
+  const body = {
+    schemaVersion: 'agent-browser.p158-w8-external-action-manifest.v1',
+    planId: 'P158',
+    scheduleSha256: schedule.scheduleSha256,
+    registrySha256: schedule.registrySha256,
+    candidateSha256: seals.candidateSha256,
+    workflowSha256: seals.workflowSha256,
+    handoffUrlSha256: seals.handoffUrlSha256,
+    caseIds: selected,
+    actionCount: actions.length,
+    actions,
+    repairAllowed: false,
+    retryAllowed: false,
+    garbageCollectionAllowed: false,
+  };
+  return Object.freeze({ ...body, manifestSha256: sha256(body) });
 }
 
 function validateCommonReceipt({ receipt, action, seals }) {
@@ -685,6 +729,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   schedule,
   seals,
   operatorAssisted = { enabled: false },
+  externalActionExecution = null,
   additionalAdapters = [],
 }) {
   const readiness = assessP158W8ReviewedLiveSources({
@@ -696,9 +741,83 @@ export function createP158W8ReviewedLiveAdapterBundle({
   const sourceSha256 = w8SourceSha256();
   const actionCounts = new Map(readiness.blockers.map((entry) => [entry.caseId, entry.affectedActionCount]));
   const contracts = new Map(schedule.caseContracts.map((entry) => [entry.caseId, entry]));
+  const concreteCaseIds = new Set();
+  const effects = {};
+  const consumedActionIds = new Set();
+  let loadExternalReceipts = null;
+  if (externalActionExecution) {
+    const expectedManifest = buildP158W8ExternalActionManifest({ registry, schedule, seals });
+    if (sha256(externalActionExecution.manifest) !== sha256(expectedManifest) ||
+        !isAbsolute(externalActionExecution.resultPath ?? '')) {
+      fail('external_action_manifest_invalid',
+        'Reviewed W8 external execution requires the exact compiled manifest and an absolute result path');
+    }
+    concreteCaseIds.add('H01');
+    concreteCaseIds.add('H02');
+    let cached = null;
+    loadExternalReceipts = async () => {
+      if (cached) return cached;
+      const result = JSON.parse(await readFile(externalActionExecution.resultPath, 'utf8'));
+      const { resultSha256, ...body } = result;
+      if (result?.schemaVersion !== 'agent-browser.p158-w8-external-action-result.v1' ||
+          result.manifestSha256 !== expectedManifest.manifestSha256 ||
+          resultSha256 !== sha256(body) || result.actionCount !== expectedManifest.actionCount ||
+          !Array.isArray(result.actionReceipts) || result.actionReceipts.length !== result.actionCount) {
+        fail('external_action_result_invalid', 'W8 external workflow result is missing or changed');
+      }
+      cached = new Map(result.actionReceipts.map((receipt) => [receipt.actionId, receipt]));
+      if (cached.size !== expectedManifest.actionCount ||
+          expectedManifest.actions.some((action) => !cached.has(action.actionId))) {
+        fail('external_action_result_invalid', 'W8 external workflow result does not cover the exact action set');
+      }
+      return cached;
+    };
+  }
   const adapters = P158_W8_CASE_IDS.map((caseId) => {
     const contract = contracts.get(caseId);
     if (!contract || contract.phaseId !== 'W8') fail('schedule_invalid', `${caseId} lacks a W8 contract`);
+    if (concreteCaseIds.has(caseId)) {
+      const testCase = registry.cases.find((entry) => entry.id === caseId);
+      const effectId = `p158.effect.${caseId}.reviewed_external`;
+      effects[effectId] = async ({ action }) => {
+        if (consumedActionIds.has(action.actionId)) {
+          fail('external_action_result_invalid', `${action.actionId} was already consumed`);
+        }
+        const receipt = (await loadExternalReceipts()).get(action.actionId);
+        const { receiptSha256, ...body } = receipt ?? {};
+        if (!receipt || receipt.caseId !== action.caseId || receipt.attemptId !== action.attemptId ||
+            receipt.candidateSha256 !== seals.candidateSha256 ||
+            receipt.workflowSha256 !== seals.workflowSha256 || receipt.resultState !== 'passed' ||
+            receipt.terminalState !== 'completed' || receipt.attemptNumber !== 1 ||
+            receipt.repairAttempted !== false || receipt.retryAttempted !== false ||
+            receipt.garbageCollectionAttempted !== false || receiptSha256 !== sha256(body)) {
+          fail('external_action_result_invalid', `${action.actionId} external receipt binding is invalid`);
+        }
+        consumedActionIds.add(action.actionId);
+        return clone(receipt);
+      };
+      return createP158CaseAdapter({
+        caseId,
+        evidenceProfile: contract.evidenceProfile,
+        executionContract: contract.executionContract,
+        execute: async ({ attempt, requestEffect }) => {
+          const plan = buildP158W8ActionPlan({ testCase, attempt });
+          const receipts = [];
+          for (const action of plan.actions) receipts.push(await requestEffect(effectId, { action }));
+          return {
+            resultState: 'passed',
+            actionCount: plan.actionCount,
+            actionIds: plan.actions.map((action) => action.actionId),
+            receiptSha256s: receipts.map((receipt) => receipt.receiptSha256),
+            effectState: 'completed',
+            retryDisposition: 'prohibited',
+            repairAttempted: false,
+            retryAttempted: false,
+            garbageCollectionAttempted: false,
+          };
+        },
+      });
+    }
     const blocker = Object.freeze({
       code: 'live_case_hook_missing',
       detail: P158_W8_LIVE_HOOK_GAPS[caseId],
@@ -722,31 +841,39 @@ export function createP158W8ReviewedLiveAdapterBundle({
   });
   const adapterBindings = P158_W8_CASE_IDS.map((caseId) => Object.freeze({
     caseId,
-    mode: 'explicit_blocked',
+    mode: concreteCaseIds.has(caseId) ? 'concrete_live' : 'explicit_blocked',
     providerFree: false,
     sourcePath: W8_SOURCE_PATH,
     sourceSha256,
     hookIds: Object.freeze(reviewedHookIds(caseId)),
-    implementedActionCount: 0,
-    blockedActionCount: actionCounts.get(caseId),
-    effectsAllowed: false,
-    blocker: Object.freeze({
+    implementedActionCount: concreteCaseIds.has(caseId) ? actionCounts.get(caseId) : 0,
+    blockedActionCount: concreteCaseIds.has(caseId) ? 0 : actionCounts.get(caseId),
+    effectsAllowed: concreteCaseIds.has(caseId),
+    blocker: concreteCaseIds.has(caseId) ? null : Object.freeze({
       code: 'live_case_hook_missing',
       detail: P158_W8_LIVE_HOOK_GAPS[caseId],
     }),
   }));
+  const activeBlockers = readiness.blockers.filter((entry) => !concreteCaseIds.has(entry.caseId));
+  const classifiedReadiness = Object.freeze({
+    ...readiness,
+    concreteCaseIds: Object.freeze([...concreteCaseIds]),
+    explicitlyBlockedCaseIds: Object.freeze(P158_W8_CASE_IDS.filter((caseId) => !concreteCaseIds.has(caseId))),
+    blockerCount: activeBlockers.length,
+    blockers: Object.freeze(activeBlockers),
+  });
   return {
     schemaVersion: 'agent-browser.p158-w8-reviewed-live-adapter-bundle.v1',
     planId: 'P158',
     scheduleSha256: schedule.scheduleSha256,
     registrySha256: schedule.registrySha256,
     ready: true,
-    executionReady: false,
+    executionReady: concreteCaseIds.size > 0,
     adapters: [...adapters, ...additionalAdapters],
     w8Adapters: adapters,
-    effects: {},
+    effects,
     adapterBindings: Object.freeze(adapterBindings),
-    reviewedLiveSources: readiness,
+    reviewedLiveSources: classifiedReadiness,
     reactionaryRepairAllowed: false,
     opportunisticRetryAllowed: false,
     undeclaredGcAllowed: false,

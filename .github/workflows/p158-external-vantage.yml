@@ -27,9 +27,25 @@ on:
         required: true
         default: calibration
         options: [calibration, readiness]
+      w8_action_manifest_sha256:
+        description: Optional sealed W8 external action manifest digest
+        type: string
+        required: false
+        default: ''
+      w8_action_manifest_artifact_run_id:
+        description: Workflow run containing the sealed W8 action manifest artifact
+        type: string
+        required: false
+        default: ''
+      w8_action_manifest_artifact_name:
+        description: Artifact containing p158-w8-external-action-manifest.json
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: p158-external-vantage-${{ inputs.campaign_run_id }}
@@ -78,6 +94,7 @@ jobs:
           P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
           P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
           P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: ${{ secrets.P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON }}
+          P158_W8_ACTION_MANIFEST_SHA256: ${{ inputs.w8_action_manifest_sha256 }}
         run: >-
           node scripts/run-p158-external-vantage.js probe
           --client-id external-runner-human
@@ -136,6 +153,7 @@ jobs:
           P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
           P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
           P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: ${{ secrets.P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON }}
+          P158_W8_ACTION_MANIFEST_SHA256: ${{ inputs.w8_action_manifest_sha256 }}
         run: >-
           node scripts/run-p158-external-vantage.js probe
           --client-id external-runner-slow
@@ -157,6 +175,7 @@ jobs:
     needs: [human-controller, slow-concurrency-client]
     if: always()
     runs-on: ubuntu-latest
+    environment: p158-external-vantage
     timeout-minutes: 10
     steps:
       - name: Checkout exact workflow revision
@@ -195,6 +214,15 @@ jobs:
           path: downloaded/p158-external-runner-slow
         continue-on-error: true
 
+      - name: Download sealed W8 external action manifest
+        if: inputs.w8_action_manifest_sha256 != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.w8_action_manifest_artifact_name }}
+          path: downloaded-w8-manifest
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.w8_action_manifest_artifact_run_id }}
+
       - name: Aggregate exact external-vantage receipt
         env:
           P158_RUN_ID: ${{ inputs.campaign_run_id }}
@@ -205,11 +233,21 @@ jobs:
           --input-root downloaded
           --output aggregate/p158-external-vantage-receipt.json
 
+      - name: Execute sealed W8 external actions
+        if: inputs.w8_action_manifest_sha256 != ''
+        env:
+          P158_DEV_HANDOFF_URL: ${{ secrets.P158_DEV_HANDOFF_URL }}
+        run: >-
+          node scripts/run-p158-external-vantage.js w8-actions
+          --manifest downloaded-w8-manifest/p158-w8-external-action-manifest.json
+          --external-aggregate aggregate/p158-external-vantage-receipt.json
+          --output aggregate/p158-w8-external-action-result.json
+
       - name: Upload aggregate receipt
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: p158-external-vantage-receipt
-          path: aggregate/p158-external-vantage-receipt.json
+          path: aggregate/
           if-no-files-found: error
           retention-days: ${{ inputs.artifact_retention_days }}
