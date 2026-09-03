@@ -206,6 +206,7 @@ function terminalResults(manifest, records, findings) {
       firstFailureSignature: record.payload.firstFailureSignature,
       blockerCode: record.payload.blocker?.code ?? record.payload.blocker?.lostPrerequisite ?? null,
       causalIds: clone(record.payload.causalIds ?? {}),
+      analysisCausalEnvelopes: clone(record.payload.causalEnvelopes ?? []),
     });
   }
   const missing = [...scheduled.keys()].filter((attemptId) => !seen.has(attemptId));
@@ -384,14 +385,86 @@ function historicalReproduction(registry, results) {
 }
 
 function summarizeIndependentAudits(input, analyzedAt, findings, results) {
+  const failureJournalHealth = [];
   for (const [index, corpus] of (input.loggingEvidence ?? []).entries()) {
-    if (corpus?.schemaVersion !== 'agent-browser.p158-logging-evidence-corpus.v1') continue;
+    if (corpus?.schemaVersion !== 'agent-browser.p158-logging-evidence-corpus.v1') {
+      failureJournalHealth.push({
+        captureState: 'not_applicable', recordCount: 0, malformedLineCount: 0,
+        writeFailureCount: 0, findingCount: 0,
+      });
+      continue;
+    }
     const body = without(corpus, ['corpusSha256']);
     if (corpus.corpusSha256 !== stableP158AnalysisHash(body) || corpus.runId !== input.runId ||
         corpus.candidateSha256 !== input.manifest?.candidate?.candidateSha256) {
       integrityFinding(findings, 'logging_evidence_corpus_integrity_invalid', 'W10.2',
         [corpus.corpusSha256 ?? `logging-corpus-${index}`],
         'A live logging corpus is not self-hashed and bound to the sealed campaign identity.');
+    }
+    const journal = corpus.failureJournal;
+    const journalEvidenceId = corpus.corpusSha256 ?? `logging-corpus-${index}`;
+    let journalFindingCount = 0;
+    const journalFinding = (code, disposition, consequence) => {
+      journalFindingCount += 1;
+      addFinding(findings, {
+        code, category: 'logging', disposition, criterion: 'W10.2',
+        evidenceIds: [journalEvidenceId], consequence,
+        reproducer: 'Read the sealed failureJournal member and compare it with the Service failure journal readback.',
+        recommendedOwner: 'observability',
+      });
+    };
+    if (journal?.captureState !== 'complete') {
+      journalFinding('failure_journal_capture_unavailable', 'needs_evidence',
+        'The campaign cannot establish whether product failures were durably journaled.');
+    }
+    if ((journal?.malformedLineCount ?? 0) > 0) {
+      journalFinding('failure_journal_corruption_detected', 'blocking',
+        'Malformed journal lines make one or more failure occurrences unreadable.');
+    }
+    if ((journal?.writeFailureCount ?? 0) > 0) {
+      journalFinding('failure_journal_write_failure', 'blocking',
+        'The service observed failure records that it could not append durably.');
+    }
+    const records = Array.isArray(journal?.records) ? journal.records : [];
+    const occurrenceIds = records.map((record) => record?.occurrenceId);
+    if (records.some((record) => record?.schemaVersion !== 'agent-browser.service-failure-record.v1' ||
+        typeof record?.occurredAt !== 'string' || typeof record?.category !== 'string' ||
+        typeof record?.code !== 'string' || typeof record?.references !== 'object') ||
+        new Set(occurrenceIds).size !== occurrenceIds.length) {
+      journalFinding('failure_journal_record_invalid', 'blocking',
+        'The sealed journal contains an invalid or duplicate failure occurrence.');
+    }
+    failureJournalHealth.push({
+      captureState: journal?.captureState ?? 'unavailable', recordCount: records.length,
+      malformedLineCount: journal?.malformedLineCount ?? 0,
+      writeFailureCount: journal?.writeFailureCount ?? 0, findingCount: journalFindingCount,
+    });
+  }
+  const liveJournals = (input.loggingEvidence ?? []).flatMap((corpus, index) =>
+    corpus?.schemaVersion === 'agent-browser.p158-logging-evidence-corpus.v1'
+      ? [{ index, environmentId: corpus.environmentId,
+        records: Array.isArray(corpus.failureJournal?.records) ? corpus.failureJournal.records : [] }]
+      : []);
+  for (const result of results.filter((entry) =>
+    ['reproduced_historical_failure', 'new_product_failure'].includes(entry.resultState))) {
+    const relevant = liveJournals.filter((entry) => result.environmentIds.includes(entry.environmentId));
+    if (relevant.length === 0) continue;
+    const causalValues = new Set(Object.values(result.causalIds ?? {}).filter((value) =>
+      typeof value === 'string' && value.length > 0));
+    const handoffHash = typeof result.causalIds?.handoffId === 'string'
+      ? `sha256:${createHash('sha256').update(result.causalIds.handoffId).digest('hex')}` : null;
+    const joined = relevant.some((entry) => entry.records.some((record) =>
+      Object.values(record?.references ?? {}).some((value) => causalValues.has(value)) ||
+      (handoffHash !== null && record?.references?.handoffIdHash === handoffHash)));
+    if (!joined) {
+      failureJournalHealth[relevant[0].index].findingCount += 1;
+      addFinding(findings, {
+        code: 'failure_journal_occurrence_missing', category: 'logging', disposition: 'needs_evidence',
+        criterion: 'W10.2', evidenceIds: [result.attemptId, result.recordId],
+        consequence: 'A product failure has no causally joined durable failure-journal occurrence.',
+        reproducer: `Join the sealed journal to ${result.attemptId} using its product-native causal identifiers.`,
+        recommendedOwner: 'observability',
+      });
     }
   }
   const logging = (input.loggingEvidence ?? []).map((fixtureSet, index) => auditCausalEnvelopes({
@@ -432,14 +505,18 @@ function summarizeIndependentAudits(input, analyzedAt, findings, results) {
     }
   }
   return {
-    logging: logging.map((report) => ({
+    logging: logging.map((report, index) => ({
       inputSha256: report.inputSha256,
-      passed: report.findings.length === 0,
-      findingCount: report.findings.length,
+      passed: report.findings.length === 0 && failureJournalHealth[index].findingCount === 0,
+      findingCount: report.findings.length + failureJournalHealth[index].findingCount,
       envelopeCount: report.summary.envelopeCount,
       missingRecordCount: report.summary.missingRecordCount,
       sensitiveValueLeakCount: report.summary.sensitiveValueLeakCount,
       captureGapCount: report.summary.captureGapCount,
+      failureJournalCaptureState: failureJournalHealth[index].captureState,
+      failureJournalRecordCount: failureJournalHealth[index].recordCount,
+      failureJournalMalformedLineCount: failureJournalHealth[index].malformedLineCount,
+      failureJournalWriteFailureCount: failureJournalHealth[index].writeFailureCount,
     })),
     externalHandoff: handoff.map((report) => ({
       inputSha256: report.inputSha256,
@@ -489,6 +566,7 @@ function addLoggingBindingFinding(findings, {
 
 function verifyCampaignLoggingBindings(input, results, loggingReports, findings) {
   const expectations = Array.isArray(input.loggingExpectations) ? input.loggingExpectations : [];
+  const operationGaps = Array.isArray(input.loggingOperationGaps) ? input.loggingOperationGaps : [];
   const expectedByAttempt = new Map();
   for (const expectation of expectations) {
     if (!expectedByAttempt.has(expectation?.attemptId)) expectedByAttempt.set(expectation?.attemptId, []);
@@ -523,9 +601,11 @@ function verifyCampaignLoggingBindings(input, results, loggingReports, findings)
       });
       continue;
     }
-    const seenRequestIds = new Set();
+    const seenOperationCorrelationIds = new Set();
+    const terminalEnvelopes = new Map((result.analysisCausalEnvelopes ?? [])
+      .map((entry) => [entry.expectationId, entry]));
     for (const expectation of attemptExpectations) {
-      const requestId = expectation?.requestId;
+      const operationCorrelationId = expectation?.operationCorrelationId;
       const expectedRoles = [...new Set(expectation?.expectedSurfaceRoles ?? [])].sort();
       const explicitlyBlocked = result.resultState === 'skipped_blocked' &&
         typeof result.blockerCode === 'string' && result.blockerCode.length > 0;
@@ -539,14 +619,66 @@ function verifyCampaignLoggingBindings(input, results, loggingReports, findings)
       const exactBlockedRoles = explicitlyBlocked &&
         stableP158AnalysisHash(expectedRoles) === stableP158AnalysisHash([...requiredRoles].sort()) &&
         expectation?.incidentExpected === false && expectation?.operatorVisible === false;
-      const invalid = typeof requestId !== 'string' || requestId.length === 0 ||
-        seenRequestIds.has(requestId) || result.causalIds?.requestId !== requestId ||
-        expectation?.incidentExpected !== (expectedRoles.includes('incident')) ||
-        expectation?.operatorVisible !== (expectedRoles.includes('dashboard_projection')) ||
+      const roleContractInvalid =
+        expectation?.incidentExpected !== expectedRoles.includes('incident') ||
+        expectation?.operatorVisible !== expectedRoles.includes('dashboard_projection') ||
         (explicitlyBlocked ? !exactBlockedRoles : requiredRoles.some((role) => !expectedRoles.includes(role))) ||
         (!explicitlyBlocked && expectedRoles.some((role) =>
           REQUIRED_BLOCKED_LOGGING_SURFACE_ROLES.includes(role) && role !== 'terminal_event'));
-      seenRequestIds.add(requestId);
+      const terminalEnvelope = terminalEnvelopes.get(expectation.expectationId);
+      const requestId = terminalEnvelope?.observedCausalIds?.requestId ?? null;
+      const operationIdentityInvalid = typeof operationCorrelationId !== 'string' ||
+        operationCorrelationId.length === 0 || seenOperationCorrelationIds.has(operationCorrelationId) ||
+        expectation?.productRequestId !== null ||
+        !['assigned_at_runtime', 'not_applicable'].includes(expectation?.productRequestIdState);
+      seenOperationCorrelationIds.add(operationCorrelationId);
+      if (explicitlyBlocked) {
+        if (operationIdentityInvalid || roleContractInvalid ||
+            expectation.productRequestIdState !== 'not_applicable' || requestId !== null) {
+          addLoggingBindingFinding(findings, {
+            code: 'logging_expectation_invalid', disposition: 'blocking',
+            evidenceIds: [result.attemptId, operationCorrelationId ?? 'missing-operation-correlation-id'],
+            consequence: 'A pre-execution blocker was not represented by an exact controller-only logging contract.',
+            reproducer: `Validate the sealed blocked-operation correlation for ${result.attemptId}.`,
+          });
+        }
+        continue;
+      }
+      if (requestId === null) {
+        const matchingGap = operationGaps.find((gap) => gap.attemptId === result.attemptId &&
+          gap.operationCorrelationId === operationCorrelationId && gap.productRequestId === null &&
+          gap.correlationState === 'product_request_id_unavailable' &&
+          gap.loggingGap?.code === 'product_request_id_not_preserved');
+        if (roleContractInvalid || operationIdentityInvalid ||
+            expectation.productRequestIdState !== 'assigned_at_runtime' ||
+            result.causalIds?.requestId === operationCorrelationId) {
+          addLoggingBindingFinding(findings, {
+            code: 'logging_expectation_invalid', disposition: 'blocking',
+            evidenceIds: [result.attemptId, operationCorrelationId ?? 'missing-operation-correlation-id'],
+            consequence: 'An unavailable product request identity was not represented by an exact sealed operation gap.',
+            reproducer: `Validate the sealed operation correlation for ${result.attemptId}.`,
+          });
+          continue;
+        }
+        addLoggingBindingFinding(findings, {
+          code: 'request_id_correlation_unavailable', disposition: 'needs_evidence',
+          evidenceIds: [result.attemptId, operationCorrelationId],
+          consequence: matchingGap
+            ? 'The product did not preserve a request ID for this frozen campaign operation.'
+            : 'The terminal receipt did not expose a product request ID for this frozen operation.',
+          reproducer: `Inspect the sealed capture gap for ${operationCorrelationId} without substituting a harness ID.`,
+        });
+        addLoggingBindingFinding(findings, {
+          code: 'unobserved_due_to_uncorrelatable_id', disposition: 'needs_evidence',
+          evidenceIds: [result.attemptId, operationCorrelationId],
+          consequence: 'Downstream product logging surfaces cannot be joined to this operation without its product request ID.',
+          reproducer: `Add product-native correlation for ${operationCorrelationId} in successor work.`,
+        });
+        continue;
+      }
+      const invalid = typeof requestId !== 'string' || requestId.length === 0 ||
+        operationIdentityInvalid || roleContractInvalid ||
+        terminalEnvelope?.operationCorrelationId !== operationCorrelationId;
       if (invalid) {
         addLoggingBindingFinding(findings, {
           code: 'logging_expectation_invalid',
@@ -767,7 +899,7 @@ export function analyzeP158SealedCampaign({
     resultCounts: Object.fromEntries(RESULT_STATES.map(
       (state) => [state, results.filter((entry) => entry.resultState === state).length],
     )),
-    results,
+    results: results.map(({ analysisCausalEnvelopes: _analysisCausalEnvelopes, ...result }) => result),
     clusters: buildClusters(results),
     timelines: buildTimelines(results, ledger.records),
     historicalReproduction: historicalReproduction(input.registry, results),

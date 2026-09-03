@@ -11,6 +11,7 @@ import {
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
   developmentPresentationProviderManifestCompatible,
+  developmentPresentationProviderManifestUpgradeCompatible,
   developmentAgentSkillStatus,
   doctorDevelopmentPresentationProvider,
   synchronizeDevelopmentAgentSkill,
@@ -140,6 +141,29 @@ try {
   assert.equal(
     developmentPresentationProviderManifestCompatible(
       { ...legacyManifest, composeProject: 'foreign-provider' },
+      currentManifest,
+    ),
+    false,
+  );
+  const legacyV1Manifest = { ...currentManifest };
+  legacyV1Manifest.schemaVersion = 'agent-browser.development-presentation-provider.v1';
+  delete legacyV1Manifest.localDiagnosticUrl;
+  delete legacyV1Manifest.externalIngress;
+  legacyV1Manifest.publicOperatorUrl = descriptor.localDiagnosticUrl;
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(legacyV1Manifest, currentManifest),
+    true,
+  );
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(
+      { ...legacyV1Manifest, composeProject: 'foreign-provider' },
+      currentManifest,
+    ),
+    false,
+  );
+  assert.equal(
+    developmentPresentationProviderManifestUpgradeCompatible(
+      { ...legacyV1Manifest, publicOperatorUrl: 'http://127.0.0.1:9999' },
       currentManifest,
     ),
     false,

@@ -156,13 +156,17 @@ function findTab(tabs, handle) {
     tab.id === handle.tabId || tab.serviceTabHandle?.tabId === handle.tabId);
 }
 
-function findJob(trace, requestId) {
-  return recordArray(trace, 'jobs').find((job) => job.provenance?.requestId === requestId);
+function findJob(trace, requestId, predicate) {
+  const jobs = recordArray(trace, 'jobs').filter((job) =>
+    (requestId ? job.provenance?.requestId === requestId : predicate(job)));
+  return jobs.length === 1 ? jobs[0] : null;
 }
 
 function assertOpenOracle({ tabs, trace, events, handle, requestId, subjectId, environmentId }) {
   const tab = findTab(tabs, handle);
-  const job = findJob(trace, requestId);
+  const job = findJob(trace, requestId, (candidate) =>
+    candidate.provenance?.clientSubjectId === subjectId &&
+    candidate.provenance?.runtimeEnvironmentId === environmentId);
   if (!tab || !['opening', 'loading', 'ready'].includes(tab.lifecycle) ||
       tab.browserId !== handle.browserId || tab.sessionId !== (handle.sessionName ?? handle.ownerSessionId) ||
       tab.serviceTabHandle?.profileAccess?.subjectId !== subjectId) {
@@ -184,7 +188,9 @@ function assertOpenOracle({ tabs, trace, events, handle, requestId, subjectId, e
 
 function assertReleasedOracle({ tabs, trace, requestId, handle, subjectId }) {
   const tab = findTab(tabs, handle);
-  const job = findJob(trace, requestId);
+  const job = findJob(trace, requestId, (candidate) =>
+    candidate.provenance?.clientSubjectId === subjectId &&
+    candidate.provenance?.action === 'tab_handle_release');
   if (!tab || tab.lifecycle !== 'closed' || !job || job.provenance?.clientSubjectId !== subjectId ||
       job.provenance?.action !== 'tab_handle_release') {
     fail('release_state_oracle_failed', `${requestId} did not close exactly the owned tab`);
@@ -207,8 +213,6 @@ function commonRequest(context, action, subjectId, requestId) {
     clientSubjectId: subjectId,
     identityAssurance: 'self-declared',
     runtimeEnvironmentId: context.environmentId,
-    requestId,
-    traceId: `${requestId}:trace`,
     runtimeProfile: context.fixture.profileId,
     profileId: context.fixture.profileId,
     sessionName: context.fixture.sessionName,
@@ -245,10 +249,10 @@ async function openClient(context, action, subjectId, fetch) {
     throw classifiedError('service_request_failed', `${plannedRequestId} was not successful`,
       'inconclusive', 'no_effect', response);
   }
-  const requestId = typeof response.id === 'string' ? response.id : plannedRequestId;
+  const requestId = typeof response.id === 'string' && response.id.length > 0 ? response.id : null;
   const handle = getServiceTabHandle(response);
   if (!handle?.valid || !handle.tabId || !handle.browserId) {
-    throw classifiedError('service_tab_handle_invalid', `${requestId} returned no valid handle`,
+    throw classifiedError('service_tab_handle_invalid', `${requestId ?? plannedRequestId} returned no valid handle`,
       'harness_failure', 'effect_uncertain');
   }
   let connectionInstanceId;
@@ -262,7 +266,8 @@ async function openClient(context, action, subjectId, fetch) {
     error.effectState ??= 'effect_uncertain';
     throw error;
   }
-  return { handle, connectionInstanceId, openRequestId: requestId };
+  return { handle, connectionInstanceId, openRequestId: requestId,
+    openOperationCorrelationId: plannedRequestId };
 }
 
 async function releaseClient(context, action, subjectId, fetch, opened) {
@@ -287,7 +292,7 @@ async function releaseClient(context, action, subjectId, fetch, opened) {
     throw classifiedError('service_request_failed', `${plannedRequestId} was not successful`,
       'inconclusive', 'no_effect', response);
   }
-  const requestId = typeof response.id === 'string' ? response.id : plannedRequestId;
+  const requestId = typeof response.id === 'string' && response.id.length > 0 ? response.id : null;
   try {
     const evidence = await observe(context.environment.serviceOrigin,
       context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId, fetch);
@@ -296,7 +301,7 @@ async function releaseClient(context, action, subjectId, fetch, opened) {
     error.effectState ??= 'effect_uncertain';
     throw error;
   }
-  return requestId;
+  return { requestId, operationCorrelationId: plannedRequestId };
 }
 
 async function runClient(context, action, index) {
@@ -335,7 +340,7 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
     let terminal;
     try {
       if (client.error) throw client.error;
-      const releaseRequestId = await releaseClient(context, client.action, client.subjectId, client.fetch, client.opened);
+      const released = await releaseClient(context, client.action, client.subjectId, client.fetch, client.opened);
       terminal = {
         schemaVersion: 'agent-browser.p158-w7-action-receipt.v1',
         campaignRunId: manifest.campaignRunId,
@@ -349,7 +354,19 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
         sessionId: client.opened.handle.sessionName ?? client.opened.handle.ownerSessionId,
         tabId: client.opened.handle.tabId,
         openRequestId: client.opened.openRequestId,
-        releaseRequestId,
+        releaseRequestId: released.requestId,
+        openOperationCorrelationId: client.opened.openOperationCorrelationId,
+        releaseOperationCorrelationId: released.operationCorrelationId,
+        requestCorrelations: [
+          { operationCorrelationId: client.opened.openOperationCorrelationId,
+            productRequestId: client.opened.openRequestId },
+          ...(client.foreignProbeOperationCorrelationId ? [{
+            operationCorrelationId: client.foreignProbeOperationCorrelationId,
+            productRequestId: client.foreignProbeRequestId ?? null,
+          }] : []),
+          { operationCorrelationId: released.operationCorrelationId,
+            productRequestId: released.requestId },
+        ],
         state: 'passed',
         attempt: 1,
         observedAt: clock(),
@@ -366,7 +383,19 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
         browserId: client.opened?.handle.browserId ?? null,
         sessionId: client.opened ? (client.opened.handle.sessionName ?? client.opened.handle.ownerSessionId) : null,
         tabId: client.opened?.handle.tabId ?? null, openRequestId: client.opened?.openRequestId ?? null,
-        releaseRequestId: null, state: 'failed', attempt: 1, observedAt: clock(),
+        releaseRequestId: null,
+        openOperationCorrelationId: client.opened?.openOperationCorrelationId ?? null,
+        releaseOperationCorrelationId: null, state: 'failed', attempt: 1, observedAt: clock(),
+        requestCorrelations: [
+          ...(client.opened?.openOperationCorrelationId ? [{
+            operationCorrelationId: client.opened.openOperationCorrelationId,
+            productRequestId: client.opened.openRequestId ?? null,
+          }] : []),
+          ...(client.foreignProbeOperationCorrelationId ? [{
+            operationCorrelationId: client.foreignProbeOperationCorrelationId,
+            productRequestId: client.foreignProbeRequestId ?? null,
+          }] : []),
+        ],
         effectState: failure.effectState,
         failure,
         repairAttempted: false, retryAttempted: false,
@@ -420,6 +449,7 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
           try {
             await revalidateOwnership(context, own.fetch);
             const requestId = `${manifest.campaignRunId}:${own.action.actionId}:foreign-probe`;
+            own.foreignProbeOperationCorrelationId = requestId;
             const response = await postServiceRequest({
               baseUrl: environment.serviceOrigin,
               fetch: own.fetch,
@@ -429,6 +459,8 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
                 serviceTabHandle: foreign.opened.handle,
               },
             });
+            own.foreignProbeRequestId = typeof response?.id === 'string' && response.id.length > 0
+              ? response.id : null;
             if (response?.success !== false || response?.error?.code !== 'profile_access_denied') {
               fail('cross_client_theft_oracle_failed', `${requestId} was not denied`);
             }
@@ -580,6 +612,9 @@ export function createP158W7A01A03LiveBundle({
     });
   });
   const source = freeze({ sourcePath: P158_W7_A01_A03_SOURCE_PATH, sourceSha256: sourceSha256() });
+  const loggingRequestExpectations = enumerateP158W7A01A03LoggingRequests({
+    schedule, campaignRunId: manifest.campaignRunId,
+  });
   return freeze({
     schemaVersion: 'agent-browser.p158-w7-a01-a03-live-bundle.v1',
     freezeEligible: transportFor[LIVE_TRANSPORT_FACTORY] === true,
@@ -592,6 +627,7 @@ export function createP158W7A01A03LiveBundle({
     liveHookManifestSha256: manifest.liveHookManifestSha256,
     environmentSealSha256s: structuredClone(manifest.environmentSealSha256s),
     liveHookIds: [P158_W7_A01_A03_HOOK_ID],
+    loggingRequestExpectations,
     driverSource: source,
     adapterBindingSha256: sha256({
       caseIds: P158_W7_A01_A03_CASE_IDS,
@@ -604,6 +640,25 @@ export function createP158W7A01A03LiveBundle({
       liveHookIds: [P158_W7_A01_A03_HOOK_ID],
     }),
   });
+}
+
+export function enumerateP158W7A01A03LoggingRequests({ schedule, campaignRunId }) {
+  return freeze(schedule.attempts.filter((attempt) => P158_W7_A01_A03_CASE_IDS.includes(attempt.caseId))
+    .flatMap((attempt) => clientActions(schedule, attempt.caseId, attempt.attemptId).flatMap((action) => {
+      const suffixes = ['open', ...(attempt.caseId === 'A03' ? ['foreign-probe'] : []), 'release'];
+      const environmentId = attempt.environmentIds[0];
+      return suffixes.map((suffix) => {
+        const operationCorrelationId = `${campaignRunId}:${action.actionId}:${suffix}`;
+        return {
+          expectationId: operationCorrelationId, operationCorrelationId,
+          productRequestId: null, productRequestIdState: 'assigned_at_runtime',
+          requestKind: suffix === 'foreign-probe'
+            ? 'rejected_request' : 'accepted_request',
+          actionId: action.actionId, attemptId: attempt.attemptId, caseId: attempt.caseId,
+          phaseId: 'W7', environmentId,
+        };
+      });
+    })));
 }
 
 export function p158W7A01A03SourceBinding() {

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-failure-observation.v1.schema.json",
+  "title": "Authenticated client failure observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["category", "stage", "code", "summary", "observationId"],
+  "properties": {
+    "category": { "enum": ["guacamole_load", "handoff_link", "cdp_stream", "dashboard_action"] },
+    "stage": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "action": { "type": "string", "maxLength": 128 },
+    "observationId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "browserId": { "type": "string", "maxLength": 256 },
+    "profileId": { "type": "string", "maxLength": 256 },
+    "sessionId": { "type": "string", "maxLength": 256 },
+    "routeId": { "type": "string", "maxLength": 256 },
+    "displayId": { "type": "string", "maxLength": 256 },
+    "handoffIdHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "streamProvider": { "type": "string", "maxLength": 256 },
+    "elapsedMs": { "type": "integer", "minimum": 0 }
+  }
+}

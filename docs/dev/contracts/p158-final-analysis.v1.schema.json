@@ -43,8 +43,8 @@
     },
     "loggingAudit": {
       "type": "object", "additionalProperties": false,
-      "required": ["inputSha256", "passed", "findingCount", "envelopeCount", "missingRecordCount", "sensitiveValueLeakCount", "captureGapCount"],
-      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "passed": { "type": "boolean" }, "findingCount": { "$ref": "#/$defs/nonnegative" }, "envelopeCount": { "$ref": "#/$defs/nonnegative" }, "missingRecordCount": { "$ref": "#/$defs/nonnegative" }, "sensitiveValueLeakCount": { "$ref": "#/$defs/nonnegative" }, "captureGapCount": { "$ref": "#/$defs/nonnegative" } }
+      "required": ["inputSha256", "passed", "findingCount", "envelopeCount", "missingRecordCount", "sensitiveValueLeakCount", "captureGapCount", "failureJournalCaptureState", "failureJournalRecordCount", "failureJournalMalformedLineCount", "failureJournalWriteFailureCount"],
+      "properties": { "inputSha256": { "$ref": "#/$defs/sha256" }, "passed": { "type": "boolean" }, "findingCount": { "$ref": "#/$defs/nonnegative" }, "envelopeCount": { "$ref": "#/$defs/nonnegative" }, "missingRecordCount": { "$ref": "#/$defs/nonnegative" }, "sensitiveValueLeakCount": { "$ref": "#/$defs/nonnegative" }, "captureGapCount": { "$ref": "#/$defs/nonnegative" }, "failureJournalCaptureState": { "enum": ["complete", "unavailable", "not_applicable"] }, "failureJournalRecordCount": { "$ref": "#/$defs/nonnegative" }, "failureJournalMalformedLineCount": { "$ref": "#/$defs/nonnegative" }, "failureJournalWriteFailureCount": { "$ref": "#/$defs/nonnegative" } }
     },
     "handoffAudit": {
       "type": "object", "additionalProperties": false,

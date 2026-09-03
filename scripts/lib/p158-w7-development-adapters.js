@@ -870,6 +870,8 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   agentWorkflowDrivers = null,
   a01A03LiveBundle = null,
   a04A06LiveBundle = null,
+  a07A13LiveBundle = null,
+  a08LiveBundle = null,
   additionalAdapters = [],
   liveHookManifestSha256,
 }) {
@@ -936,7 +938,39 @@ export function createP158W7LiveDevelopmentAdapterBundle({
        !Array.isArray(a04A06LiveBundle.liveHookIds) || a04A06LiveBundle.liveHookIds.length !== 1)) {
     fail('a04_a06_live_bundle_unproven', 'A05 promotion requires the exact frozen A04-A06 boundary bundle');
   }
-  const specializedBundles = [a01A03LiveBundle, a04A06LiveBundle].filter(Boolean);
+  if (a07A13LiveBundle !== null &&
+      (a07A13LiveBundle.freezeEligible !== true || a07A13LiveBundle.providerFree !== false ||
+       a07A13LiveBundle.liveHookManifestSha256 !== liveHookManifestSha256 ||
+       a07A13LiveBundle.campaignRunId !== target.campaignRunId ||
+       a07A13LiveBundle.candidateSha256 !== target.candidateSha256 ||
+       !/^[a-f0-9]{64}$/u.test(a07A13LiveBundle.ownershipManifestSha256 ?? '') ||
+       !/^[a-f0-9]{64}$/u.test(a07A13LiveBundle.driverSource?.sourceSha256 ?? '') ||
+       a07A13LiveBundle.driverSource?.sourcePath !== 'scripts/lib/p158-w7-a07-a13-live.js' ||
+       JSON.stringify(a07A13LiveBundle.concreteCaseIds) !== JSON.stringify(['A13']) ||
+       !Array.isArray(a07A13LiveBundle.adapters) || a07A13LiveBundle.adapters.length !== 1 ||
+       JSON.stringify(a07A13LiveBundle.liveHookIds) !== JSON.stringify(['w7.a07_a13.retained_generation']) ||
+       !Array.isArray(a07A13LiveBundle.loggingOperationDescriptors) ||
+       a07A13LiveBundle.loggingOperationDescriptors.length !== 211)) {
+    fail('a07_a13_live_bundle_unproven', 'A13 promotion requires the exact frozen retained-generation bundle');
+  }
+  if (a08LiveBundle !== null &&
+      (a08LiveBundle.freezeEligible !== true || a08LiveBundle.providerFree !== false ||
+       a08LiveBundle.liveHookManifestSha256 !== liveHookManifestSha256 ||
+       a08LiveBundle.campaignRunId !== target.campaignRunId ||
+       a08LiveBundle.candidateSha256 !== target.candidateSha256 ||
+       !/^[a-f0-9]{64}$/u.test(a08LiveBundle.replayManifestSha256 ?? '') ||
+       a08LiveBundle.driverSource?.sourcePath !== 'scripts/lib/p158-w7-a08-live.js' ||
+       !/^[a-f0-9]{64}$/u.test(a08LiveBundle.driverSource?.sourceSha256 ?? '') ||
+       JSON.stringify(a08LiveBundle.concreteCaseIds) !== JSON.stringify(['A08']) ||
+       !Array.isArray(a08LiveBundle.adapters) || a08LiveBundle.adapters.length !== 1 ||
+       JSON.stringify(a08LiveBundle.liveHookIds) !==
+         JSON.stringify(['w7.a08.profile_identity_fixture_replay']) ||
+       !Array.isArray(a08LiveBundle.loggingOperationDescriptors) ||
+       a08LiveBundle.loggingOperationDescriptors.length !== 8)) {
+    fail('a08_live_bundle_unproven', 'A08 promotion requires the exact frozen identity replay bundle');
+  }
+  const specializedBundles = [a01A03LiveBundle, a04A06LiveBundle, a07A13LiveBundle,
+    a08LiveBundle].filter(Boolean);
   const specializedByCase = new Map(specializedBundles.flatMap((bundle) =>
     bundle.concreteCaseIds.map((caseId) => [caseId, bundle])));
   const specializedCaseIds = new Set(specializedByCase.keys());
@@ -1020,6 +1054,8 @@ export function createP158W7LiveDevelopmentAdapterBundle({
     ...(agentOrchestration?.adapters ?? []),
     ...(a01A03LiveBundle?.adapters ?? []),
     ...(a04A06LiveBundle?.adapters ?? []),
+    ...(a07A13LiveBundle?.adapters ?? []),
+    ...(a08LiveBundle?.adapters ?? []),
     ...explicitBlockedAdapters,
   ].map((adapter) => [adapter.caseId, adapter]));
   const w7Adapters = P158_W7_CASE_IDS.map((caseId) => {

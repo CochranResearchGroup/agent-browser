@@ -224,6 +224,13 @@ await runTest('classifies complete reviewed C01 through C05 plans as concrete li
   assert.deepEqual(Object.fromEntries(bundle.classification), Object.fromEntries(
     ['C01', 'C02', 'C03', 'C04', 'C05'].map((caseId) => [caseId, { mode: 'concrete_live', blocker: null }])),
   );
+  assert.equal(bundle.loggingRequestExpectations.length, bundle.actions.length);
+  assert.ok(bundle.loggingRequestExpectations.filter((entry) => entry.requestKind === 'dashboard_action')
+    .every((entry) => ['ingress_request', 'immediate_response', 'terminal_event', 'dashboard_projection']
+      .every((role) => entry.expectedSurfaceRoles.includes(role))));
+  assert.ok(bundle.loggingRequestExpectations.filter((entry) => entry.requestKind === 'transition')
+    .every((entry) => ['controller_transition', 'terminal_event', 'trace_outcome']
+      .every((role) => entry.expectedSurfaceRoles.includes(role))));
   const entries = createP158W9FreezeAdapterEntries({
     schedule, bundle, liveHookManifestSha256: '66'.repeat(32),
   });
@@ -319,7 +326,11 @@ await runTest('classifies an unbound C01 live driver as explicit blocked', async
 });
 
 await runTest('executes concrete service, external receipt, and declared transition seams once', async () => {
-  const bundle = makeBundle({ testing: true });
+  const requestHeaders = [];
+  const bundle = makeBundle({ testing: true, fetchOverride: async (url, init) => {
+    requestHeaders.push(init?.headers ?? {});
+    return { ok: true, status: 200, url, json: async () => ({ success: true, data: {} }) };
+  } });
   const service = bundle.actions.find((action) => action.caseId === 'C02' && action.kind === 'service_command');
   const dashboard = bundle.actions.find((action) => action.caseId === 'C02' && action.kind === 'dashboard_action');
   const crash = bundle.actions.find((action) => action.caseId === 'C02' && action.kind === 'declared_browser_crash');
@@ -331,9 +342,13 @@ await runTest('executes concrete service, external receipt, and declared transit
   assert.deepEqual(receipts.map((receipt) => receipt.effectClass),
     ['read_only', 'external_ingress', 'declared_fault']);
   assert.ok(receipts.every((receipt) => receipt.receiptSha256.length === 64 &&
+    receipt.operationCorrelationId === `p158:${target().runId}:${receipt.actionId}:request` &&
+    receipt.productRequestId === null && receipt.correlationState === 'product_request_id_unavailable' &&
     receipt.retryAttempted === false && receipt.repairAttempted === false &&
     receipt.garbageCollectionAttempted === false));
   assert.equal(await bundle.drivers.verifyEvidenceArtifact(receipts[0].evidenceArtifactIds[0]), true);
+  assert.equal(requestHeaders[0]['x-agent-browser-request-id'], undefined,
+    'Service Status does not consume caller correlation headers');
   const teardown = await bundle.drivers.executeScheduledTeardown();
   assert.equal(teardown.effectClass, 'scheduled_teardown');
   assert.equal(await bundle.drivers.verifyEvidenceArtifact(teardown.evidenceArtifactIds[0]), true);

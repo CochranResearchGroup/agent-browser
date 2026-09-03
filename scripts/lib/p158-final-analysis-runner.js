@@ -13,9 +13,13 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const SHA256 = /^[a-f0-9]{64}$/u;
 const STRUCTURED_ANALYSIS_ROLES = new Set([
   'logging_evidence', 'dashboard_fixture', 'external_handoff_session', 'pressure_samples',
-  'evidence_manifest',
+  'logging_operation_gaps', 'analysis_role_assignments', 'evidence_manifest',
 ]);
 const REDACTED = new Set(['[redacted]', '<redacted>', '[excluded]', '<excluded>', '[hashed]', '<hashed>']);
+const REQUIRED_SOURCE_BINDINGS = Object.freeze({
+  'p158.final_analysis_descriptor': 'scripts/lib/p158-final-analysis-descriptor.js',
+  'p158.final_analysis_runner': P158_FINAL_ANALYSIS_RUNNER_SOURCE_PATH,
+});
 
 export class P158FinalAnalysisRunnerError extends Error {
   constructor(code, message, details = undefined) {
@@ -86,6 +90,19 @@ async function loadBoundFile({ runRoot, realRunRoot, binding, field, json = true
     });
   }
   return { binding: clone(binding), bytes, value: json ? parseJson(bytes, field) : null };
+}
+
+async function verifySourceBindings(bindings) {
+  if (!Array.isArray(bindings) || bindings.length !== Object.keys(REQUIRED_SOURCE_BINDINGS).length) {
+    fail('analysis_source_binding_invalid', 'Descriptor and runner source bindings are required');
+  }
+  for (const [hookId, sourcePath] of Object.entries(REQUIRED_SOURCE_BINDINGS)) {
+    const binding = bindings.find((entry) => entry.hookId === hookId);
+    if (binding?.sourcePath !== sourcePath || !SHA256.test(binding?.sourceSha256 ?? '') ||
+        binding.sourceSha256 !== sha256(await readFile(resolve(REPO_ROOT, sourcePath)))) {
+      fail('analysis_source_binding_invalid', `${hookId} source identity changed`);
+    }
+  }
 }
 
 function without(value, fields) {
@@ -212,6 +229,24 @@ function roleValues(artifacts, role) {
   });
 }
 
+function validateLoggingOperationGaps(artifacts, runId) {
+  const matching = artifacts.filter((entry) => entry.binding.analysisRole === 'logging_operation_gaps');
+  if (matching.length !== 1) {
+    fail('logging_operation_gaps_missing', 'Exactly one sealed logging operation-gap artifact is required');
+  }
+  const value = matching[0].value;
+  if (value?.schemaVersion !== 'agent-browser.p158-logging-operation-gaps.v1' ||
+      value.planId !== 'P158' || value.runId !== runId || !Array.isArray(value.operations) ||
+      value.operationGapCount !== value.operations.length ||
+      value.loggingOperationGapsSha256 !== sha256(value.operations) ||
+      value.operations.some((gap) => !['A08', 'A13'].includes(gap.caseId) || gap.phaseId !== 'W7' ||
+        gap.productRequestId !== null || gap.correlationState !== 'product_request_id_unavailable' ||
+        gap.loggingGap?.code !== 'product_request_id_not_preserved')) {
+    fail('logging_operation_gaps_invalid', 'The sealed operation-gap artifact is not canonical');
+  }
+  return clone(value.operations);
+}
+
 function curatedReview(report) {
   const body = {
     schemaVersion: 'agent-browser.p158-redacted-review-candidate.v1',
@@ -294,6 +329,7 @@ export async function runP158FinalAnalysis({ descriptorPath, descriptorSha256,
   if (!pathInside(realRunRoot, await realpath(descriptorPath))) {
     fail('analysis_descriptor_invalid', 'Descriptor resolves outside the campaign root');
   }
+  await verifySourceBindings(descriptor.sourceBindings);
   const store = createFileArtifactStore(descriptor.runRoot);
   const required = ['manifest', 'freeze', 'schedule', 'registry', 'evidenceManifest'];
   const loaded = Object.fromEntries(await Promise.all(required.map(async (field) => [field,
@@ -356,6 +392,7 @@ export async function runP158FinalAnalysis({ descriptorPath, descriptorSha256,
     dashboardFixtures: roleValues(artifacts, 'dashboard_fixture'),
     externalHandoffSessions: roleValues(artifacts, 'external_handoff_session'),
     pressureSamples: roleValues(artifacts, 'pressure_samples'),
+    loggingOperationGaps: validateLoggingOperationGaps(artifacts, loaded.manifest.value.runId),
     loggingExpectations: clone(descriptor.loggingExpectations ?? []),
   };
   const inputSha256 = stableP158AnalysisHash(sealedCampaign);

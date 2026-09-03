@@ -98,19 +98,21 @@ async function startFakeService({
       return json(response, 404, { success: false, error: { code: 'not_found' } });
     }
     const command = await requestBody(request);
-    const requestId = command.requestId;
-    if (requestId === resetRequestId) {
+    const operationId = `p158-a01-a03-run:${command.taskName}:${command.action === 'tab_new' ? 'open' :
+      command.action === 'tab_handle_release' ? 'release' : 'foreign-probe'}`;
+    const requestId = `service-request-${jobs.length + 1}`;
+    if (operationId === resetRequestId) {
       request.socket.destroy();
       return;
     }
-    if (requestId === malformedRequestId) {
+    if (operationId === malformedRequestId) {
       return json(response, 200, { malformed: true });
     }
     const jobId = `job-${jobs.length + 1}`;
     const provenance = {
       requestId,
       jobId,
-      traceId: command.traceId,
+      traceId: `trace-${requestId}`,
       clientSubjectId: command.clientSubjectId,
       identityAssurance: command.identityAssurance,
       connectionInstanceId,
@@ -126,7 +128,7 @@ async function startFakeService({
       action: command.action,
     };
     jobs.push({ id: jobId, state: 'completed', provenance });
-    events.push({ id: `event-${events.length + 1}`, jobId, requestId, traceId: command.traceId,
+    events.push({ id: `event-${events.length + 1}`, jobId, requestId, traceId: `trace-${requestId}`,
       taskName: command.taskName, kind: 'service_request_completed', provenance });
     seenByAction.set(command.action, (seenByAction.get(command.action) ?? 0) + 1);
 
@@ -170,7 +172,7 @@ async function startFakeService({
         browserId,
         targetId: handle.targetId,
         sessionId: command.sessionName,
-        lifecycle: requestId === wrongStateRequestId ? 'closed' : 'ready',
+        lifecycle: operationId === wrongStateRequestId ? 'closed' : 'ready',
         serviceTabHandle: handle,
       });
       return json(response, 200, { id: requestId, success: true, data: { serviceTabHandle: handle } });
@@ -351,6 +353,13 @@ try {
   assert.equal(new Set(store.receipts.map((row) => row.actionId)).size, 670);
   assert(store.receipts.every((row) => row.attempt === 1 && row.repairAttempted === false &&
     row.retryAttempted === false && /^[a-f0-9]{64}$/u.test(row.receiptSha256)));
+  const frozenRequestIds = new Set(bundle.loggingRequestExpectations.map((entry) => entry.operationCorrelationId));
+  assert(store.receipts.every((row) => frozenRequestIds.has(row.openOperationCorrelationId) &&
+    frozenRequestIds.has(row.releaseOperationCorrelationId)),
+  'live operation correlation IDs differ from pre-freeze enumeration');
+  assert(store.receipts.every((row) => row.openRequestId.startsWith('service-request-') &&
+    row.releaseRequestId.startsWith('service-request-')),
+  'live product request IDs must come from Service responses');
   for (const environmentId of ['E0', 'E1']) {
     const a01 = store.receipts.filter((row) => row.caseId === 'A01' && row.environmentId === environmentId);
     assert.equal(a01.length, 125);

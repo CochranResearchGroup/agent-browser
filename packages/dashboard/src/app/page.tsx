@@ -29,6 +29,11 @@ import {
   writeDashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
 import {
+  hashOpaqueIdentifier,
+  installDashboardFetchFailureInstrumentation,
+  reportDashboardFailure,
+} from "@/lib/failure-observation";
+import {
   ServiceDetailInspector,
   ServicePanel,
   type ServiceInspectorActions,
@@ -595,6 +600,14 @@ function RemoteViewHandoffGate({
         jobId: handoffId,
       }, "replace");
     } catch (cause) {
+      void hashOpaqueIdentifier(handoffId).then((handoffIdHash) => reportDashboardFailure({
+        category: "handoff_link",
+        stage: "resolve",
+        code: "handoff_unusable",
+        summary: "The authenticated dashboard could not resolve the durable handoff into a usable view.",
+        action: "service_remote_view_handoff_resolve",
+        handoffIdHash,
+      }));
       setError(cause instanceof Error ? cause.message : "The remote-view handoff could not be resolved.");
     } finally {
       setResolving(false);
@@ -895,6 +908,8 @@ function DashboardExperience({
   useSessionsSync();
   useActivitySync();
   useChatStatusSync();
+
+  useEffect(() => installDashboardFetchFailureInstrumentation(), []);
 
   const sessions = useAtomValue(sessionsAtom);
   const hasSessions = sessions.length > 0;

@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_preparation_contract_complete_candidate_publication_ready`
+Execution state: `w6_candidate_installed_provider_ready_a11_predispatch_live_passed_freeze_open`
 
 Lane: P157
 
@@ -93,11 +93,13 @@ runtime repair occurs inside that review.
 2. Complete fixture creation, synthetic-site deployment, external runner
    provisioning, observability checks, and a single clean baseline before the
    freeze point.
-3. After the freeze point, prohibit source edits, rebuilds, reinstalls,
+3. After the isolated-campaign freeze point, prohibit source edits, rebuilds, reinstalls,
    configuration rewrites, service remedies, incident resolution, garbage
    collection, retained-state pruning, route repair, profile repair, and
    unscheduled process termination until execution is complete and evidence is
-   sealed.
+   sealed. This prohibition applies to E1 and E2 only. It never blocks a
+   production install, repair, or safety intervention; each production change
+   closes one observation epoch and starts another.
 4. Permit only effects named in the case manifest. Controlled browser crashes,
    supervisor transitions, route exhaustion, network degradation, policy
    mutations, eviction, and full shutdown use disposable isolated targets and
@@ -151,13 +153,16 @@ human-paced observer/controller; the other supplies concurrency, reconnect,
 and slow-client pressure. Local dashboard, embed, health, and raw provider URLs
 may be captured as diagnostic fields but can never satisfy an E2 pass.
 
-### E3: Production Read-Only Comparison
+### E3: Production Read-Only Observation Epochs
 
-Freeze a redacted production incident and job sample before execution, then
-compare campaign signatures with those historical records during final
-analysis. E3 performs no launches, closes, reattachments, policy edits,
-remedies, incident resolution, credential interaction, or provider
-navigation.
+Continuously collect privacy-bounded, append-only operational and failure
+records from real production use. Production traffic supplies the eight-hour
+resource-stability and 24-hour handoff-longevity windows when available. The
+campaign does not synthesize production actions or mutate production Profiles,
+ACLs, credentials, tenant data, routes, or browsers. An install, repair,
+restart, or deployment is an explicit epoch boundary, not a reason to suppress
+the work or discard earlier evidence. E3 evidence collection is asynchronous
+and may never delay installation, repair, or emergency intervention.
 
 ## External-Ingress And Handoff Oracle
 
@@ -260,6 +265,17 @@ null failure or provenance, unredacted private values, and outcomes visible in
 only one transport. Logging completeness is reported as exact expected,
 observed, missing, duplicate, conflicting, and redaction-violation counts, not
 as a qualitative claim.
+
+The bounded Service event ring is not the forensic authority. Every failed
+browser launch, Guacamole or remote-view load, unusable durable handoff,
+connected-but-non-streaming CDP feed, and failed dashboard action must also
+produce an append-only `agent-browser.service-failure-record.v1` occurrence.
+Server-observed failures are written at their authoritative terminal boundary.
+Failures visible only to an authenticated external client use the restricted
+failure-observation contract. Raw handoff IDs, operator URLs, credentials,
+headers, page content, query strings, and bearer material are forbidden.
+Journal write failure is itself counted and emitted to the process log so it
+cannot silently erase the primary error.
 
 ## Historical Failure Families
 
@@ -427,8 +443,8 @@ results. They consume the state left by earlier cases rather than repairing it.
 | C01 calibration | 20 minutes, 25 agent clients, two external viewers, one controller, 500 service commands, 50 dashboard actions, and ten handoff reconnects |
 | C02 burst | 100 agent clients, ten dashboard clients, maximum route occupancy, 2,000 service commands, 500 dashboard actions, 100 reconnects, and 20 controlled browser crashes |
 | C03 generation churn | 25 scheduled supervisor transitions interleaved with retained-browser commands, dashboard use, and durable-handoff reopen attempts |
-| C04 eight-hour soak | At least 10,000 agent commands, 2,000 dashboard actions, 200 handoff reconnects, 50 controlled browser crashes, and continuous resource and log capture |
-| C05 24-hour handoff endurance | One unchanged durable handoff, 500 external reconnects, viewer and controller expiry, client restarts, and scheduled network profiles |
+| C04 eight-hour production observation | Observe at least eight continuous hours of real production telemetry, split into explicit runtime epochs when installs or repairs occur; never generate tenant effects or delay intervention |
+| C05 24-hour production handoff observation | Observe durable-handoff health across at least 24 elapsed hours of real use and idle periods; repairs and deployments remain allowed and create analyzable epoch boundaries |
 
 Counts are minimum execution bounds, not success metrics. A safety stop may end
 a phase early, but every unexecuted case must become `safety_stopped` or
@@ -464,7 +480,7 @@ census, and marks remaining dependent work when any predefined guard fires:
 
 - host memory or swap reserve falls below the repository's configured safe
   runtime floor for two consecutive samples;
-- artifact storage exceeds its reserved quota or the filesystem reaches 85
+- artifact storage exceeds its reserved quota or the filesystem reaches 90
   percent utilization;
 - process, display, route, or connection counts exceed the manifest's hard
   ceiling;
@@ -487,14 +503,14 @@ comparisons.
 | --- | --- | --- | --- |
 | W1 | Freeze the historical failure registry, production-shaped redacted fixtures, candidate manifest, resource ceilings, and case dependency graph | none | Every known failure family maps to cases and evidence sources; no open-ended discovery remains in execution |
 | W2 | Build the append-only controller, deterministic scheduler, artifact manifest, fault injectors, safety monitor, and result schema | W1 | Provider-free self-tests prove no overwrite, no opportunistic retry, correct blocked propagation, and reproducible seeds |
-| W3 | Build the cross-surface logging auditor and synthetic sensitive-value scanner | W1, W2 | Deliberately missing, duplicate, conflicting, reordered, null, and leaking records are all detected |
+| W3 | Build the cross-surface logging auditor, durable failure journal, authenticated external-observation intake, and synthetic sensitive-value scanner | W1, W2 | Deliberately missing, duplicate, conflicting, reordered, null, leaking, launch, Guacamole, handoff, CDP-stall, and dashboard-action records are all detected |
 | W4 | Build the external-ingress runner and durable-handoff oracle | W1, W2 | A synthetic good path passes and loopback, private, raw provider, wrong-browser, and duplicate-launch fixtures fail |
 | W5 | Build dashboard truth and performance probes plus large synthetic fixtures | W1, W2, W3 | Left-rail bijection, warning-axis, deep-link, multi-client, accessibility, and performance probes detect seeded defects |
-| W6 | Publish and install one isolated candidate, prepare E1 and E2, capture calibration, then freeze | W2, W3, W4, W5 | Candidate and environment digests are sealed; no test case has started |
+| W6 | Publish and install one isolated candidate, prepare E1 and E2, verify the failure journal, capture calibration, then freeze | W2, W3, W4, W5 | Candidate and environment digests are sealed; the journal survives malformed lines and captures all five named failure surfaces; no test case has started |
 | W7 | Execute A and X scenarios without repair | W6 | Every scheduled A and X attempt is terminal and raw evidence is append-only |
 | W8 | Execute H and D scenarios exclusively through external ingress where operator-visible | W6 | Every scheduled H and D attempt is terminal; every visibility pass has external proof |
-| W9 | Execute C phases, scheduled teardown, and evidence sealing | W7, W8 | Every manifest case is terminal, teardown is recorded, raw artifacts are hashed, and no further execution is permitted |
-| W10 | Deeply analyze findings and publish the redacted review | W9 | Causal clusters, logging gaps, performance distributions, historical reproduction rates, architecture implications, and a bounded remediation backlog are independently checked and source-backed |
+| W9 | Execute C01 through C03, schedule asynchronous C04 and C05 production observation epochs, perform isolated teardown, and seal deterministic evidence | W7, W8 | Every deterministic case is terminal, production observers are independently durable, teardown is recorded, raw artifacts are hashed, and no further isolated execution is permitted |
+| W10 | Deeply analyze deterministic findings and completed production observation epochs, then publish the redacted review | W9 | Causal clusters, logging gaps, performance distributions, historical reproduction rates, epoch-aware architecture implications, and a bounded remediation backlog are independently checked and source-backed; incomplete endurance windows remain explicit evidence gaps and never block installation or repair |
 
 Critical path:
 `W1 -> W2 -> (W3, W4, W5) -> W6 -> (W7, W8) -> W9 -> W10`.
@@ -553,8 +569,9 @@ begins only in separately authorized successor work after W10 closes.
 2. One frozen installed candidate is tested without reactionary source,
    binary, configuration, harness, or runtime repair.
 3. Agent-only, human-simulated external remote-view, display/supervisor,
-   dashboard, combined burst, eight-hour soak, and 24-hour handoff endurance
-   tiers all reach terminal evidence states.
+   dashboard, and combined deterministic tiers reach terminal evidence states.
+   Eight-hour and 24-hour production observations are epoch-aware and may
+   remain explicit evidence gaps without blocking installation or repair.
 4. Every human-visible success is proven through external ingress and the
    durable handoff URL. Zero internal, loopback, private, raw provider, embed,
    health, or route-binding URL is accepted as an operator handoff.
@@ -574,6 +591,10 @@ begins only in separately authorized successor work after W10 closes.
    bearer-material capture, or cross-environment resource use occurs.
 10. W10 produces a source-backed final report, a machine-readable result set,
     and a prioritized remediation graph without performing repairs.
+11. Every failed launch, Guacamole load, handoff use, CDP stream, and dashboard
+    action is either joined to a durable failure-journal occurrence or reported
+    as an exact logging gap. Journal retention never depends on the bounded
+    Service event ring or successful `state.json` reconciliation.
 
 ## Initial Checkpoint
 
@@ -822,3 +843,206 @@ Next action: rebuild from the clean checkpoint, install only into the
 development pseudo-home, configure the reviewed public HTTPS binding, prove E1
 and E2 including two off-host clients, calibrate, and freeze without starting a
 campaign case.
+
+## W6 Preflight Revision: Durable Failure Journal And Nonblocking Endurance
+
+State transition: `w6_preflight_complete -> w6_failure_journal_candidate`.
+
+Acceptance state: W6 remains open. No candidate was installed and no live
+campaign, production mutation, or external dispatch occurred in this revision.
+
+The operator rejected a campaign design in which an eight-hour or 24-hour wait
+could delay installation or repair. C04 and C05 now consume passive,
+privacy-bounded production observation epochs. Deterministic destructive and
+concurrency stimuli remain confined to C01 through C03 in E1 and E2. A
+production install or repair closes the current observation epoch and starts a
+new one without invalidating prior records or blocking the intervention.
+
+The source candidate now adds a forensic journal independent of the bounded
+Service event ring and `state.json`. It records browser-launch and terminal
+service-action failures at server boundaries. Authenticated dashboard clients
+can submit only the four externally observable categories through a strict
+allowlist contract. Dashboard fetch failures, unusable handoffs, Guacamole
+iframe failures, and CDP streams that connect without frames are wired to that
+intake. Handoff IDs are accepted only as SHA-256 identifiers, summaries are
+redacted and bounded, details are capped, records carry boot and runtime
+environment identity, concurrent appends are locked and synced, and malformed
+journal lines do not prevent later readback.
+
+Focused validation at this checkpoint:
+
+- four Rust journal tests pass, covering append behavior, URL and secret
+  redaction, malformed-line recovery, latest-record reads, oversized details,
+  raw-handoff rejection, and client-category confinement; and
+- the optimized dashboard production build passes with the fetch observer,
+  Guacamole observations, durable-handoff observation, and CDP frame watchdog.
+
+Material blocker: the journal changes have not yet passed the full Rust,
+clippy, dashboard contract, documentation, installed-development, and live
+five-surface fault-injection gates. Root filesystem utilization also remains a
+W6 safety input and must be measured before candidate publication.
+
+Next action: finish contract and documentation parity, add exact source and
+live journal coverage to the P158 logging auditor, run the selected validation
+matrix, then reassess W6 publication safety without waiting for C04 or C05.
+
+## W6 Preflight Revision: Last30Days Route-Acquisition Regressions
+
+State transition: `w6_failure_journal_candidate ->
+w6_preparation_contract_complete_last30days_regressions_integrated_w6_publication_blocked`;
+the campaign has not crossed the freeze point.
+
+Acceptance state: the provider-free Last30Days regressions are integrated into
+the P158 harness. Candidate publication, installed development validation, and
+live campaign execution remain open.
+
+The source observation is the committed Last30Days handoff note at commit
+`cc0cd29c` on branch `docs/reddit-handoff-errors-20260902`. It describes five
+bounded Reddit acquisition attempts without contributing credentials, cookies,
+page bodies, raw handoff URLs, or provider data to this repository state. The
+findings map to existing P158 cases and do not add attempts or expand the
+frozen 54-case schedule:
+
+| Finding | Provider-free regression | Existing live case obligations |
+| --- | --- | --- |
+| Route-bearing `tab_new` accepted but launched an unrelated private display | Reject route and display intent before job creation and build a privacy-bounded pre-job failure record | A11 must correlate the rejected ingress with the failure journal; X03 must prove no unrelated display is allocated |
+| A released display-number key described another display and blocked a healthy route | Seed `remote-view-display:10` for released `:11`, request a route targeting `:10`, and require a distinct route-derived allocation identity | X03 must replay the contradiction in E1; H08 must prove planning and route-open failure truth without manual repair |
+| Successful `remote_view_open` did not give the caller an automation capability | Require the valid nested handle to be projected as top-level `serviceTabHandle` | H01 must immediately run one handle-scoped read after external route open; A15 must preserve that handle identity across request, job, trace, target, and release evidence |
+| Direct CLI and authenticated Service authority were confused | Documentation directs protected route acquisition through authenticated `service_request` | A08 and H08 must record explicit Service-required recourse when the direct CLI cannot satisfy protected-profile authority |
+| Pre-job rejection had no durable Service job to inspect | HTTP and MCP normalization failures build an append-only failure-journal occurrence without retaining request bodies | A11 and the W3 logging auditor must count the record, preserve the exact error code, and report a missing journal append as a logging defect |
+
+`scripts/test-p158-last30days-regressions.sh` is now a first-class E0 battery.
+It runs the six exact Rust regressions for route-intent rejection, collision-
+resistant allocation, route-bound dry-run planning, rollback identity, and
+route-open handle projection, then runs the generated-client and remote-view
+documentation contracts. `pnpm test:p158-last30days-regressions` runs that
+battery directly, and `pnpm test:p158-harness` includes it before the logging
+auditor and live-driver contract suites.
+
+This regression battery does not claim the corresponding live cases are
+executable. Current source readiness remains:
+
+| Work unit | Concrete source-bound cases | Still missing or explicitly blocked before execution |
+| --- | --- | --- |
+| W6 | Provider-free preparation, logging, external-ingress, dashboard, evidence, and analysis contracts | Fresh optimized candidate build, isolated development install, five-surface live journal injection, two off-host external clients, 20-minute C01 calibration, exact environment seals, and zero-start freeze receipt |
+| W7 | A01, A02, A03, A05, A08, and A13 have specialized concrete driver bundles | A04, A06, A07, A09, A10, A11, A12, A14, A15, X01 through X05, and X07 through X10 still require complete effect-time materializers or product seams; X06 is exercised with human-visible W8 work |
+| W8 | H01, H03, D01, D03, and D04 have receipt-bound external driver paths | H02 and H04 through H12 plus D02 and D05 through D12 remain explicit-blocked until their external producers and exact oracles exist |
+| W9 | C01 through C05 orchestration, conditional concrete drivers, endurance epoch contracts, teardown, and evidence sealing exist | No W9 phase is executable until W7 and W8 are terminal and its exact distributed, external-receipt, declared-transition, observation-window, and teardown inputs are sealed |
+| W10 | Deterministic analyzer, descriptor, runner, schemas, and provider-free tests exist | It cannot run until W9 seals every scheduled result and the available C04 and C05 production epochs; incomplete endurance epochs remain explicit gaps rather than repair blockers |
+
+The exact retained-allocation quarantine or rekey operation and a general
+retained-target handle-adoption action remain product gaps. They stay visible
+as blocked assertions under X03 and A15 instead of being treated as completed
+by the collision-resistant allocator and route-open handle projection.
+
+Validation at this checkpoint:
+
+- the new E0 regression command passes all six exact Rust tests plus the
+  client and documentation contracts;
+- the complete 1,934-test parallel-safe Rust partition and every serial
+  environment-mutating partition pass across the combined current worktree;
+- clippy with warnings denied, generated Service client checks, the full
+  Service client suite, docs production build, formatting, and diff checks
+  pass; and
+- the user-scoped failure journal remains absent after provider-free tests,
+  proving the tests did not contaminate production evidence.
+
+Resolved blocker: the operator raised the frozen W6 filesystem safety ceiling
+from 85 percent to 90 percent. Root filesystem utilization was 87 percent at
+the revision point, which is inside the revised ceiling. Publication still
+requires a fresh read-only preflight; the prior storage reading no longer
+blocks the isolated candidate.
+
+Next action: implement the remaining A11 live scheduler-rejection and journal
+correlation seam, because it directly exercises the new pre-job failure path.
+Then finish the five-surface live journal calibration, satisfy the W6 storage
+preflight, publish one candidate, and freeze E1 and E2.
+
+## W6 Live Checkpoint: Candidate Installed, External Provider Ready, A11 Partial
+
+State transition: `w6_preparation_contract_complete_last30days_regressions_integrated_w6_publication_blocked ->
+w6_candidate_installed_provider_ready_a11_predispatch_live_passed_freeze_open`.
+
+Acceptance state: W6 remains open. The candidate and external presentation
+provider are installed and ready, but E1 and E2 are not sealed, the 20-minute
+calibration has not run, and the campaign has not crossed the zero-start freeze.
+
+The fresh filesystem preflight measured 73 percent utilization against the
+operator-approved 90 percent ceiling. Development generation
+`0.28.0-2f9d25956e27` is selected with executable SHA-256
+`2f9d25956e274af52dd439c4c37e27b22a83a014504d5abc25ee398f737474e2`.
+Three disposable browser-launch smoke iterations passed, and each development
+installation reported production unchanged.
+
+Live A11 pre-dispatch evidence now proves that one route-bearing `tab_new`
+request is rejected before a correlated job exists and produces exactly one
+failure-journal record with the request identity and expected normalization
+classification. Its receipt SHA-256 is
+`8524ec79173663e65e83aaa1add0681fac3540bfd839e51257383b47ed6523d6`.
+This is a partial A11 probe only. Queue-full, wait-reschedule, cancellation,
+worker-stop, and terminal-persistence-failure boundaries remain unexecuted.
+
+The live probe also exposed a dashboard routing defect: the authenticated
+frontend forwarded `/api/service/request` to a backend-only dashboard that
+could not rediscover itself and returned HTTP 503 before normalization or
+journaling. The candidate now honors the configured backend port and maps all
+authenticated dashboard Service requests to the backend command route. The
+same A11 probe then passed against the installed candidate.
+
+Provider staging exposed a second pre-freeze defect. The reviewed v2 external
+binding correctly rejected the installed v1 loopback authority as drift, but
+offered no exact migration path. Staging and explicit apply now admit only the
+exact additive v1-to-v2 authority upgrade: the old loopback public URL must
+equal the new local diagnostic URL and every remaining provider identity must
+match. Status remains drifted until explicit apply writes v2 authority.
+
+The upgraded provider is ready and binds public operator origin
+`https://agent-browser-dev.ecochran.dyndns.org` to reviewed Cooper revision
+`e70368ddbb2e61ae26a25072975c2953754b7479` with binding SHA-256
+`4f24eefcac1008871c90c8e41804029aff8747c9ee0bc13ad7ebe58ad0539c4d`.
+The provider manifest and route inventory SHA-256 values are respectively
+`177a90339506a8f6bbb44873968923e65e0cac33f3bcbf387a893e50e5d58dd8`
+and `3dc7955d8b8fa7c03ff5eb77b88dc45810f1cc19c3f69467c0b7605220367448`.
+The apply receipt SHA-256 is
+`35971c562177ffef2b02c785afabe87af4f749bbed4db8fd78ac081dd3f560c4`,
+and the apply reported production unchanged.
+
+The Cooper inventory, raw dashboard, local Traefik route, bastion host-header
+route, and public HTTPS root all validated. Public HTML and response headers
+contained no loopback or raw development-port leakage. Unauthenticated public
+`/guacamole/` returned a same-origin login redirect. The bastion publication
+added the reviewed Guacamole path router and restarted only bastion Traefik;
+the bastion operations log records the change. This host-local and bastion
+evidence does not satisfy the two-client off-host W6 requirement.
+
+Validation at this checkpoint includes the full P158 harness after the final
+dashboard routing and provider migration changes, the exact A11
+module tests, the exact Rust pre-dispatch and dashboard backend-port tests,
+clippy with warnings denied, formatting, diff checks, development provider
+fixtures, live provider staging and preflight, provider apply, provider-required
+doctor, route readbacks, and the three-iteration development browser smoke.
+The full 1,934-test Rust partition predates the final dashboard routing repair;
+the exact affected Rust tests, full P158 harness, and clippy passed afterward.
+
+A post-install route-confusion gate and independent CDP streaming smoke then
+found a live host-capacity failure before their product assertions. Two Cargo
+attempts, at eight and four build jobs, failed to spawn Rust or Tokio workers.
+The CDP smoke independently exhausted all three built-in Chrome launch attempts
+with `pthread_create` and zygote fork `EAGAIN`. Kernel evidence identifies the
+Cargo aggregate cgroup's 1,024-task controller as the direct Cargo rejection:
+six completed test or build scopes remained active with 945 tasks, including
+five test scopes retaining Chrome process trees. The user session had about
+6,200 threads at observation time despite ample available memory. The test
+attempts did not kill, garbage collect, restart, or repair those residues.
+This is a new recorded failure and a W6 freeze blocker. The Service action
+failure returned `effect_uncertain` with `blind_retry` prohibited, but the
+temporary smoke root was removed and no durable failure-journal occurrence was
+available afterward. That cleanup behavior is itself a logging-evidence gap.
+
+Next action: preserve this pre-freeze state and diagnose the retained Cargo
+scope and temporary-root evidence-loss findings without broad cleanup. Then
+commit and publish the current source checkpoint so the immutable external
+workflow can execute it, run the two-client off-host readiness and frozen
+20-minute calibration receipts, finish the five-surface live journal
+calibration, and seal exact E1 and E2 identities. Only then may the controller
+write the zero-start freeze receipt.

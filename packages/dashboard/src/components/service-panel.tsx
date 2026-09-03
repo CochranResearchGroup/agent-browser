@@ -43,6 +43,7 @@ import {
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { reportDashboardFailure } from "@/lib/failure-observation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -2662,6 +2663,16 @@ function ViewStreamCard({
           src={stream.url ?? undefined}
           className="h-[420px] w-full bg-black"
           sandbox="allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-popups"
+          onError={() => void reportDashboardFailure({
+            category: stream.provider === "cdp_screencast" ? "cdp_stream" : "guacamole_load",
+            stage: "service_inspector_iframe",
+            code: "view_stream_iframe_load_failed",
+            summary: "The service inspector iframe failed to load its selected view stream.",
+            action: "remote_view_load",
+            routeId: stream.routeId,
+            displayId: stream.displayAllocationId,
+            streamProvider: stream.provider,
+          })}
         />
       ) : (
         <div className="p-3">

@@ -1914,6 +1914,11 @@ pub fn planned_route_bound_handoff_response(
 pub fn opened_route_bound_handoff_response(
     input: RouteBoundHandoffOpenedResponseInput<'_>,
 ) -> Value {
+    let service_tab_handle = input
+        .tab
+        .get("serviceTabHandle")
+        .cloned()
+        .unwrap_or(Value::Null);
     let route_bound_handoff = route_bound_handoff_record(RouteBoundHandoffRecordInput {
         state: "opened",
         intent: input.intent,
@@ -1962,6 +1967,7 @@ pub fn opened_route_bound_handoff_response(
         "browserBuildProof": input.browser_build_proof,
         "launch": input.launch,
         "tab": input.tab,
+        "serviceTabHandle": service_tab_handle,
         "focus": input.focus,
         "checkout": input.checkout,
         "acquisitionLease": input.acquisition_lease,
@@ -4268,7 +4274,14 @@ mod tests {
             "index": 2,
             "targetId": "target-2",
             "url": "https://x.com/home",
-            "profileId": "shared-social"
+            "profileId": "shared-social",
+            "serviceTabHandle": {
+                "browserId": "session:a",
+                "sessionName": "a",
+                "tabId": "target:target-2",
+                "targetId": "target-2",
+                "valid": true
+            }
         });
 
         let response = complete_route_bound_handoff_open(CompleteRouteBoundHandoffOpenInput {
@@ -4308,6 +4321,7 @@ mod tests {
         assert_eq!(response["acquisitionLease"]["state"], "completed");
         assert_eq!(response["acquisitionLease"]["phase"], "checked_out");
         assert_eq!(response["handoffId"], "job-handoff-a");
+        assert_eq!(response["serviceTabHandle"], tab["serviceTabHandle"]);
         assert_eq!(
             response["externalUrl"],
             "https://dashboard.example/remote-view/job-handoff-a"

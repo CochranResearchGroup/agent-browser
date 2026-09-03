@@ -133,25 +133,42 @@ export function enumerateP158W7A08LoggingOperations({ campaignRunId }) {
   if (typeof campaignRunId !== 'string' || campaignRunId.length === 0) {
     fail('campaign_run_id_missing', 'A08 logging enumeration requires a campaign run ID');
   }
-  return freeze(IDENTITY_STATES.flatMap((identityState) => ACTIONS.flatMap((action) =>
-    ['materialize_identity_fixture', action, 'assert_identity_result'].map((operationKind) => {
-      const actionId = cellId(identityState, action);
+  return freeze(IDENTITY_STATES.flatMap((identityState) => ACTIONS.map((operationKind) => {
+      const actionId = cellId(identityState, operationKind);
       const operationCorrelationId = `${campaignRunId}:${actionId}:${operationKind}`;
-      const productSurface = operationKind === action;
       return {
         descriptorId: operationCorrelationId, operationCorrelationId,
         productRequestId: null,
-        correlationState: productSurface
-          ? 'product_request_id_observed_only_if_product_returns_one'
-          : 'product_request_id_not_applicable_to_harness_operation',
+        correlationState: 'product_request_id_unavailable',
         operationKind, actionId, attemptId: 'A08-E1-r001', caseId: 'A08', phaseId: 'W7',
         environmentId: 'E1',
-        loggingGap: productSurface ? {
-          code: 'caller_product_request_id_not_supported_by_selected_command_surface',
-          detail: 'The frozen CLI and MCP adapters generate any product request ID internally.',
-        } : null,
+        loggingGap: {
+          code: 'product_request_id_not_preserved',
+          detail: 'The frozen CLI and MCP adapters generate any product request ID during execution, after this operation descriptor is sealed; a returned ID is retained in the terminal receipt.',
+        },
       };
-    }))));
+    })));
+}
+
+export async function inspectP158W7A08CandidateSurface({ candidate, environment, run = execFile } = {}) {
+  assertExecutable(candidate);
+  if (typeof run !== 'function') fail('a08_candidate_probe_invalid', 'Candidate probe runner is missing');
+  let output;
+  try {
+    output = await run(candidate.binaryPath, ['service', '--help'], {
+      env: environment ?? process.env, maxBuffer: 4 * 1024 * 1024, timeout: 30_000,
+    });
+  } catch (error) {
+    fail('a08_candidate_help_failed', 'Frozen candidate service help failed', {
+      exitCode: Number.isInteger(error?.code) ? error.code : null,
+    });
+  }
+  const stdout = String(output?.stdout ?? '');
+  return freeze({ schemaVersion: 'agent-browser.p158-w7-a08-candidate-surface.v1',
+    candidateSha256: candidate.binarySha256,
+    serviceStateValidatorAvailable: stdout.includes(
+      'agent-browser service state validate --path <absolute-path> --json'),
+    serviceHelpSha256: sha256(stdout) });
 }
 
 export async function prepareP158W7A08ReplayManifest({ campaignRunId, candidate, environment,
@@ -161,6 +178,17 @@ export async function prepareP158W7A08ReplayManifest({ campaignRunId, candidate,
   if (!SHA256.test(scheduleSha256 ?? '') || !SHA256.test(liveHookManifestSha256 ?? '') ||
       !SHA256.test(environmentSealSha256s?.E1 ?? '') || typeof run !== 'function') {
     fail('a08_preparation_binding_invalid', 'A08 preparation is missing frozen source bindings');
+  }
+  const probeEnvironment = { ...process.env, HOME: environment.home,
+    AGENT_BROWSER_HOME: environment.agentHome, XDG_RUNTIME_DIR: environment.xdgRuntimeDir,
+    AGENT_BROWSER_SOCKET_DIR: environment.socketDir,
+    AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development' };
+  const candidateSurface = await inspectP158W7A08CandidateSurface({
+    candidate, environment: probeEnvironment, run,
+  });
+  if (!candidateSurface.serviceStateValidatorAvailable) {
+    fail('a08_candidate_service_state_validator_unavailable',
+      'Frozen candidate does not advertise the read-only Service State validator', candidateSurface);
   }
   const cells = [];
   for (const identityState of IDENTITY_STATES) {
@@ -206,7 +234,8 @@ export async function prepareP158W7A08ReplayManifest({ campaignRunId, candidate,
   const body = { schemaVersion: 'agent-browser.p158-w7-a08-replay-manifest.v1', campaignRunId,
     scheduleSha256, liveHookManifestSha256, environmentSealSha256s: { E1: environmentSealSha256s.E1 },
     candidate: structuredClone(candidate), environment: { ...structuredClone(environment),
-      rootSha256: sha256(environment.root) }, fixtureSourceSha256: fixtureSha256(), cells };
+      rootSha256: sha256(environment.root) }, fixtureSourceSha256: fixtureSha256(),
+    candidateSurface, cells };
   return freeze({ ...body, manifestSha256: sha256(body) });
 }
 
@@ -219,13 +248,17 @@ function validateManifest(manifest, schedule) {
   if (manifest?.schemaVersion !== 'agent-browser.p158-w7-a08-replay-manifest.v1' ||
       manifestSha256 !== sha256(body) || manifest.scheduleSha256 !== schedule.scheduleSha256 ||
       manifest.fixtureSourceSha256 !== fixtureSha256() ||
+      manifest.candidateSurface?.candidateSha256 !== manifest.candidate.binarySha256 ||
+      manifest.candidateSurface?.serviceStateValidatorAvailable !== true ||
+      !SHA256.test(manifest.candidateSurface?.serviceHelpSha256 ?? '') ||
       !SHA256.test(manifest.liveHookManifestSha256 ?? '') ||
       !SHA256.test(manifest.environmentSealSha256s?.E1 ?? '') ||
       !Array.isArray(manifest.cells) || manifest.cells.length !== 8 ||
       new Set(manifest.cells.map((cell) => cell.cellId)).size !== 8 ||
       manifest.cells.some((cell) => !expectedCells.delete(cell.cellId) ||
         cell.expectedFailure !== FAILURE_BY_STATE[cell.identityState] ||
-        !SHA256.test(cell.stateSha256 ?? '') || !SHA256.test(cell.parserReceiptSha256 ?? '') ||
+        !SHA256.test(cell.stateSha256 ?? '') ||
+        !SHA256.test(cell.parserReceiptSha256 ?? '') ||
         ![cell.home, cell.agentHome, cell.socketDir, cell.xdgRuntimeDir]
           .every((path) => isAbsolute(path ?? '') && resolve(path).startsWith(`${resolve(cell.root ??
             join(manifest.environment.root, cell.cellId))}/`)))) {
@@ -250,7 +283,14 @@ function redact(value) {
 
 function extractFailure(value) {
   const text = JSON.stringify(value);
-  return Object.values(FAILURE_BY_STATE).find((code) => text.includes(code)) ?? null;
+  const historical = Object.values(FAILURE_BY_STATE).find((code) => text.includes(code));
+  if (historical) return historical;
+  const payload = candidatePayload(value);
+  if (payload?.success !== false) return null;
+  const error = payload.error;
+  if (typeof error === 'string' && error.length > 0) return error;
+  if (typeof error?.code === 'string' && error.code.length > 0) return error.code;
+  return 'unclassified_product_failure';
 }
 
 function productRequestId(value) {
@@ -265,6 +305,37 @@ function productRequestId(value) {
     const payload = JSON.parse(text);
     return payload?.data?.id ?? payload?.id ?? payload?.data?.jobId ?? payload?.jobId ?? null;
   } catch { return null; }
+}
+
+function candidatePayload(value) {
+  if (value?.response?.stdout && typeof value.response.stdout === 'object') {
+    return value.response.stdout;
+  }
+  if (value?.success !== undefined) return value;
+  const content = value?.response?.jsonrpc?.result?.content;
+  const text = Array.isArray(content) ? content.find((entry) => entry?.type === 'text')?.text : null;
+  if (typeof text !== 'string') return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function actionOracleSatisfied(action, response, liveBrowserCountAfter) {
+  const payload = candidatePayload({ response });
+  const data = payload?.data ?? payload;
+  if (payload?.success !== true || !data || typeof data !== 'object') return false;
+  if (action === 'launch') {
+    return liveBrowserCountAfter > 0 &&
+      (typeof data.url === 'string' || typeof data.title === 'string');
+  }
+  if (action === 'remote_view_open') {
+    return liveBrowserCountAfter > 0 &&
+      (typeof data.browserId === 'string' || data.operatorVisible?.state === 'ready');
+  }
+  if (action === 'tab_switch') {
+    return liveBrowserCountAfter > 0 && data.index === 0;
+  }
+  return action === 'view_focus' && liveBrowserCountAfter > 0 &&
+    (data.broughtToFront === true || data.tabSwitch?.state === 'already_active' ||
+      Number.isInteger(data.tabSwitch?.index));
 }
 
 function safeFailureCode(error) {
@@ -296,14 +367,16 @@ export function createP158W7A08DevelopmentDriver({ manifest, invoke } = {}) {
       const afterState = JSON.parse(afterBytes);
       const liveBrowserCount = (state) => Object.values(state.browsers ?? {}).filter((browser) =>
         Number.isInteger(browser.pid) && browser.pid > 1).length;
+      const liveBrowserCountBefore = liveBrowserCount(beforeState);
+      const liveBrowserCountAfter = liveBrowserCount(afterState);
       return { response, provenance: { requestedAction: cell.action,
         commandSurface: cell.action === 'view_focus' ? 'mcp_service_request' : 'candidate_cli',
         candidateSha256: manifest.candidate.binarySha256,
         fixtureStateSha256: cell.stateSha256, parserReceiptSha256: cell.parserReceiptSha256 },
       effectEvidence: { beforeStateSha256: sha256(beforeBytes), afterStateSha256: sha256(afterBytes),
-        liveBrowserCountBefore: liveBrowserCount(beforeState),
-        liveBrowserCountAfter: liveBrowserCount(afterState),
-        browserEffectObserved: liveBrowserCount(afterState) > liveBrowserCount(beforeState) } };
+        liveBrowserCountBefore, liveBrowserCountAfter,
+        browserEffectObserved: liveBrowserCountAfter > liveBrowserCountBefore,
+        actionOracleSatisfied: actionOracleSatisfied(cell.action, response, liveBrowserCountAfter) } };
     },
   };
   if (!injected) Object.defineProperty(driver, BUILTIN_DRIVER, { value: true });
@@ -349,6 +422,7 @@ function invokeMcp({ binaryPath, cell, environment }) {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let initialized = false;
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
@@ -364,14 +438,40 @@ function invokeMcp({ binaryPath, cell, environment }) {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
-      const newline = stdout.indexOf('\n');
-      if (newline < 0) return;
-      try {
-        const jsonrpc = JSON.parse(stdout.slice(0, newline));
-        finish(resolvePromise, { exitCode: null, jsonrpc,
-          stderrSha256: sha256(stderr) });
-      } catch (error) {
-        finish(reject, Object.assign(error, { code: 'a08_mcp_response_invalid' }));
+      let newline = stdout.indexOf('\n');
+      while (newline >= 0 && !settled) {
+        const line = stdout.slice(0, newline).trim();
+        stdout = stdout.slice(newline + 1);
+        newline = stdout.indexOf('\n');
+        if (!line) continue;
+        let jsonrpc;
+        try { jsonrpc = JSON.parse(line); } catch (error) {
+          finish(reject, Object.assign(error, { code: 'a08_mcp_response_invalid' }));
+          return;
+        }
+        if (!initialized) {
+          if (jsonrpc.id !== 1 || jsonrpc.error || !jsonrpc.result?.capabilities?.tools) {
+            finish(reject, Object.assign(new Error('A08 MCP initialize failed'),
+              { code: 'a08_mcp_initialize_failed' }));
+            return;
+          }
+          initialized = true;
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0',
+            method: 'notifications/initialized' })}\n`);
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call',
+            params: { name: 'service_request', arguments: { action: 'view_focus',
+              serviceName: 'P158SyntheticService', agentName: 'p158-a08', taskName: 'identityReplay',
+              sessionName: cell.sessionId, browserId: `session:${cell.sessionId}`,
+              params: { sessionName: cell.sessionId, browserId: `session:${cell.sessionId}`,
+                index: 0, targetId: 'p158-a08-synthetic-target' } } } })}\n`);
+          continue;
+        }
+        if (jsonrpc.id !== 2) {
+          finish(reject, Object.assign(new Error('A08 MCP response ID changed'),
+            { code: 'a08_mcp_response_id_mismatch' }));
+          return;
+        }
+        finish(resolvePromise, { exitCode: null, jsonrpc, stderrSha256: sha256(stderr) });
       }
     });
     child.on('error', (error) => finish(reject, Object.assign(error,
@@ -380,13 +480,9 @@ function invokeMcp({ binaryPath, cell, environment }) {
       if (!settled) finish(reject, Object.assign(new Error('A08 MCP server exited before response'),
         { code: 'a08_mcp_early_exit', details: { code, signal } }));
     });
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
-      name: 'service_request', arguments: { action: 'view_focus',
-        serviceName: 'P158SyntheticService', agentName: 'p158-a08', taskName: 'identityReplay',
-        sessionName: cell.sessionId, browserId: `session:${cell.sessionId}`,
-        params: { sessionName: cell.sessionId, browserId: `session:${cell.sessionId}`, index: 0,
-          targetId: 'p158-a08-synthetic-target' } },
-    } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-03-26', capabilities: {},
+        clientInfo: { name: 'p158-a08-runner', version: '1' } } })}\n`);
   });
 }
 
@@ -448,22 +544,31 @@ async function executeAttempt({ attempt, manifest, receiptStore, driver, clock }
       const sanitized = redact(response);
       const effectEvidenceValid = response?.effectEvidence?.beforeStateSha256 === cell.stateSha256 &&
         SHA256.test(response?.effectEvidence?.afterStateSha256 ?? '') &&
-        response.effectEvidence.browserEffectObserved === false &&
+        typeof response.effectEvidence.browserEffectObserved === 'boolean' &&
         response?.provenance?.requestedAction === cell.action;
-      const reproduced = observedFailure === cell.expectedFailure && effectEvidenceValid;
+      const payload = candidatePayload(response);
+      const succeeded = payload?.success === true;
+      const reproduced = observedFailure === cell.expectedFailure && effectEvidenceValid &&
+        response.effectEvidence.browserEffectObserved === false;
+      const passed = observedFailure === null && succeeded && effectEvidenceValid &&
+        response.effectEvidence.actionOracleSatisfied === true;
       const resultState = reproduced ? 'reproduced_historical_failure' :
-        (observedFailure === cell.expectedFailure ? 'harness_failure' : 'new_product_failure');
+        (passed ? 'passed' : (effectEvidenceValid && observedFailure !== cell.expectedFailure &&
+          observedFailure !== null ? 'new_product_failure' : 'harness_failure'));
+      const returnedProductRequestId = productRequestId(response);
       terminalBody = { schemaVersion: 'agent-browser.p158-w7-a08-cell-receipt.v1', kind: 'terminal',
         campaignRunId: manifest.campaignRunId, caseId: 'A08', attemptId: attempt.attemptId,
         actionId: cell.cellId, cellId: cell.cellId, environmentId: 'E1', identityState: cell.identityState,
         action: cell.action, expectedFailure: cell.expectedFailure, observedFailure,
         operationCorrelationId,
         responseSha256: sha256(sanitized), responseEvidence: sanitized,
-        productRequestIdSha256: productRequestId(response) ? sha256(productRequestId(response)) : null,
-        productRequestIdState: productRequestId(response) ? 'observed_hashed' : 'not_returned',
+        productRequestId: returnedProductRequestId,
+        productRequestIdSha256: returnedProductRequestId ? sha256(returnedProductRequestId) : null,
+        productRequestIdState: returnedProductRequestId ? 'observed' : 'not_returned',
         stateSha256: cell.stateSha256, parserReceiptSha256: cell.parserReceiptSha256,
-        state: reproduced ? 'passed' : 'failed',
-        resultState, effectState: reproduced ? 'verified_no_browser_effect' : 'effect_uncertain',
+        state: reproduced || passed ? 'passed' : 'failed', resultState,
+        effectState: reproduced ? 'verified_no_browser_effect' :
+          (passed ? 'verified_action_effect' : 'effect_uncertain'),
         observedAt: clock(),
         retryDisposition: 'prohibited_opportunistic_retry', retryAttempted: false,
         repairAttempted: false, garbageCollectionAttempted: false };
@@ -482,16 +587,19 @@ async function executeAttempt({ attempt, manifest, receiptStore, driver, clock }
     await receiptStore.appendTerminal(finalReceipt);
     receipts.push(finalReceipt);
   }
-  const allReproduced = receipts.length === 8 && receipts.every((r) =>
-    r.resultState === 'reproduced_historical_failure');
-  const resultState = allReproduced ? 'reproduced_historical_failure' :
+  const allAccepted = receipts.length === 8 && receipts.every((r) =>
+    ['passed', 'reproduced_historical_failure'].includes(r.resultState));
+  const resultState = allAccepted
+    ? (receipts.some((r) => r.resultState === 'reproduced_historical_failure')
+      ? 'reproduced_historical_failure' : 'passed') :
     (receipts.some((r) => r.resultState === 'safety_stopped') ? 'safety_stopped' :
       (receipts.some((r) => r.resultState === 'harness_failure') ? 'harness_failure' :
         'new_product_failure'));
   return freeze({ resultState, actionCount: receipts.length,
     actionIds: receipts.map((r) => r.actionId), receipts,
     artifactIds: receipts.map((r) => `p158-w7-a08:${r.receiptSha256}`),
-    effectState: allReproduced ? 'verified_no_browser_effect' : 'effect_uncertain',
+    effectState: allAccepted ? (receipts.every((r) => r.effectState === 'verified_no_browser_effect')
+      ? 'verified_no_browser_effect' : 'verified_action_effect') : 'effect_uncertain',
     retryDisposition: 'prohibited_opportunistic_retry', retryAttempted: false,
     repairAttempted: false, garbageCollectionAttempted: false });
 }
@@ -521,8 +629,7 @@ export function createP158W7A08LiveBundle({ schedule, replayManifest, receiptSto
     loggingRequestExpectations: [],
     loggingOperationDescriptors: enumerateP158W7A08LoggingOperations({
       campaignRunId: manifest.campaignRunId }),
-    loggingReadiness: { complete: false,
-      gapCode: 'caller_product_request_id_not_supported_by_selected_command_surface' },
+    loggingReadiness: { complete: false, gapCode: 'product_request_id_not_preserved' },
     adapterBindingSha256: sha256({ caseIds: ['A08'], campaignRunId: manifest.campaignRunId,
       replayManifestSha256: manifest.manifestSha256, candidateSha256: manifest.candidate.binarySha256,
       liveHookManifestSha256: manifest.liveHookManifestSha256,

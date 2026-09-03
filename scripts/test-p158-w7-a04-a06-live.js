@@ -95,11 +95,11 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
       return json(response, 404, { success: false, error: { code: 'not_found' } });
     }
     const command = await body(request);
-    const requestId = command.requestId;
-    const forcedConnection = sameConnectionAction && requestId.includes(sameConnectionAction)
+    const requestId = `service-request-${jobs.length + 1}`;
+    const forcedConnection = sameConnectionAction && command.taskName.includes(sameConnectionAction)
       ? 'connection-forced-same' : socketIds.get(request.socket);
     jobs.push({ id: `job-${jobs.length + 1}`, state: 'completed', provenance: {
-      requestId, traceId: command.traceId, action: command.action,
+      requestId, traceId: `trace-${requestId}`, action: command.action,
       clientSubjectId: command.clientSubjectId, connectionInstanceId: forcedConnection,
       runtimeEnvironmentId: command.runtimeEnvironmentId,
     } });
@@ -133,13 +133,13 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
       const tab = tabs.get(command.serviceTabHandle?.tabId);
       if (!tab) return json(response, 200, { id: requestId, success: false,
         error: { code: 'profile_access_denied' } });
-      if (!retainReleasedTabAction || !requestId.includes(retainReleasedTabAction)) tab.lifecycle = 'closed';
+      if (!retainReleasedTabAction || !command.taskName.includes(retainReleasedTabAction)) tab.lifecycle = 'closed';
       return json(response, 200, { id: requestId, success: true,
         data: { serviceTabHandle: { ...tab.serviceTabHandle, valid: false, leaseState: 'released' } } });
     }
     if (command.action === 'service_profile_policy_mutate') {
       const current = profile.accessPolicy;
-      const conflictCase = bothConflictSucceedAction && requestId.includes(bothConflictSucceedAction);
+      const conflictCase = bothConflictSucceedAction && command.taskName.includes(bothConflictSucceedAction);
       if (command.params.expectedRevision !== current.revision && !conflictCase) {
         return json(response, 200, { id: requestId, success: false,
           error: { code: 'policy_revision_conflict', currentRevision: current.revision } });
@@ -155,7 +155,7 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
       } else {
         outcome = 'restricted';
       }
-      if (wrongOutcomeAction && requestId.includes(wrongOutcomeAction)) outcome = 'unchanged';
+      if (wrongOutcomeAction && command.taskName.includes(wrongOutcomeAction)) outcome = 'unchanged';
       if (outcome === 'drain_started') {
         current.state = 'draining';
         current.drain = { targetMode: target.mode, expectedRevision: current.revision,
@@ -230,14 +230,15 @@ const enumeratedLoggingRequests = enumerateP158W7A05LoggingRequests({
 });
 assert.equal(enumeratedLoggingRequests.length, 40);
 assert.equal(new Set(enumeratedLoggingRequests.map((entry) => entry.expectationId)).size, 40);
-assert.equal(new Set(enumeratedLoggingRequests.map((entry) => entry.requestId)).size, 40);
+assert.equal(new Set(enumeratedLoggingRequests.map((entry) => entry.operationCorrelationId)).size, 40);
 assert.deepEqual(enumerateP158W7A05LoggingRequests({
   schedule, campaignRunId: 'p158-a04-a06-run',
 }), enumeratedLoggingRequests);
-assert.ok(enumeratedLoggingRequests.every((entry) => entry.expectationId === entry.requestId &&
+assert.ok(enumeratedLoggingRequests.every((entry) => entry.expectationId === entry.operationCorrelationId &&
+  entry.productRequestId === null && entry.productRequestIdState === 'assigned_at_runtime' &&
   entry.caseId === 'A05' && entry.phaseId === 'W7' && ['E0', 'E1'].includes(entry.environmentId) &&
   ['accepted_request', 'rejected_request'].includes(entry.requestKind) &&
-  entry.requestId.includes(entry.actionId)));
+  entry.operationCorrelationId.includes(entry.actionId)));
 assert.equal(enumeratedLoggingRequests.filter((entry) => entry.requestKind === 'rejected_request').length, 2);
 assert.ok(enumeratedLoggingRequests.filter((entry) => entry.operationKind === 'fixture-setup')
   .every((entry) => entry.expectedSurfaceRoles === undefined),
@@ -277,9 +278,10 @@ async function runCampaign(serverOptions = {}, select = () => true) {
       results.push(await adapter.execute({ attempt }));
     }
     for (const receipt of receipts) {
-      assert.deepEqual(receipt.requestIds, bundle.loggingRequestExpectations
+      assert.deepEqual(receipt.operationCorrelationIds, bundle.loggingRequestExpectations
         .filter((entry) => entry.attemptId === receipt.attemptId)
-        .map((entry) => entry.requestId));
+        .map((entry) => entry.operationCorrelationId));
+      assert(receipt.productRequestIds.every((requestId) => requestId.startsWith('service-request-')));
     }
     assert.equal(JSON.stringify(frozenManifest), manifestBefore, 'live driver mutated its frozen ownership input');
     return { server, service, bundle, receipts, results };
@@ -296,10 +298,13 @@ assert.equal(clean.results.length, 12);
 assert.ok(clean.results.every((result) => result.resultState === 'passed' && result.actionCount === 1));
 assert.equal(clean.receipts.length, 12);
 assert.deepEqual(clean.bundle.loggingRequestExpectations, enumeratedLoggingRequests);
-assert.deepEqual(clean.server.fixtureSetupRequestIds(), enumeratedLoggingRequests
-  .filter((entry) => entry.operationKind === 'fixture-setup').map((entry) => entry.requestId));
-assert.deepEqual(clean.server.serviceRequestIds().sort(), enumeratedLoggingRequests
-  .filter((entry) => entry.operationKind !== 'fixture-setup').map((entry) => entry.requestId).sort());
+assert.deepEqual(clean.server.fixtureSetupRequestIds(), [null, null, null, null, null, null, null, null, null, null, null, null]);
+assert.equal(clean.server.serviceRequestIds().length, enumeratedLoggingRequests
+  .filter((entry) => entry.operationKind !== 'fixture-setup').length);
+assert(clean.server.serviceRequestIds().every((requestId) => requestId.startsWith('service-request-')));
+assert(!clean.server.serviceRequestIds().some((requestId) =>
+  enumeratedLoggingRequests.some((entry) => entry.operationCorrelationId === requestId)),
+'the product-assigned request ID must remain distinct from the harness operation correlation ID');
 assert.equal(new Set(clean.receipts.map((receipt) => receipt.actionId)).size, 12);
 assert.ok(clean.receipts.every((receipt) => receipt.attempt === 1 &&
   receipt.retryAttempted === false && receipt.repairAttempted === false &&

@@ -2270,6 +2270,10 @@ fn test_browser_preference_binding_requires_all_identity_filters_for_launch() {
 }
 #[tokio::test]
 async fn test_service_access_plan_reports_browser_build_summary_without_launch() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("service-access-plan-browser-build-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
     let response = handle_service_access_plan(&json!(
         { "serviceName" : "CanvaCLI", "agentName" : "codex", "taskName" :
         "openCanvaWorkspace", "loginId" : "canary-site", "browserBuild" :
@@ -2295,7 +2299,7 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
     assert_eq!(response["decision"]["launchPosture"]["source"], "request");
     assert_eq!(
         response["decision"]["profileReuse"]["recommendedAction"],
-        "register_or_select_profile"
+        "launch_new_browser"
     );
     assert_eq!(
         response["browserBuildSelectionSummary"]["browserBuild"],
@@ -2305,6 +2309,7 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
         .as_str()
         .expect("compact summary should be present")
         .contains("build=stealthcdp_chromium"));
+    let _ = fs::remove_dir_all(home);
 }
 #[test]
 fn test_apply_service_browser_capability_selection_requires_compatibility() {

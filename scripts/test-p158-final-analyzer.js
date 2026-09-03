@@ -101,7 +101,13 @@ function cleanEvidence({
       firstFailureSignature,
       blocker: null,
       safetyStop: null,
-      causalIds: { requestId: 'request-good' },
+      causalIds: {},
+      causalEnvelopes: [{
+        expectationId: 'A01-E0-r001:open', actionId: 'A01-E0-r001:action', environmentId: 'E0',
+        operationCorrelationId: `${runId}:A01-E0-r001:open`,
+        observedCausalIds: { requestId: 'request-good', jobId: null, eventId: null,
+          traceId: null, incidentId: null },
+      }],
     },
   });
   const teardown = ledgerRecord({
@@ -162,7 +168,9 @@ function cleanEvidence({
   if (includeRawAudits) {
     input.loggingExpectations = [{
       attemptId: 'A01-E0-r001',
-      requestId: 'request-good',
+      expectationId: 'A01-E0-r001:open', actionId: 'A01-E0-r001:action',
+      operationCorrelationId: `${runId}:A01-E0-r001:open`,
+      productRequestId: null, productRequestIdState: 'assigned_at_runtime',
       incidentExpected: false,
       operatorVisible: false,
       expectedSurfaceRoles: [
@@ -277,16 +285,69 @@ runTest('requires live logging corpora to retain their campaign identity and sel
     capturedAt: '2026-09-03T01:01:00.000Z', inputIdentitySha256: 'c'.repeat(64),
     expectationSetSha256: 'd'.repeat(64), fixtureCount: 1,
     fixtures: clone(input.loggingEvidence[0].fixtures), observerRequestCount: 0,
-    observerReceipts: [], redactionPolicy: { mode: 'allowlist_projection', excludedFieldNames: ['result'],
+    observerReceipts: [], failureJournal: { captureState: 'complete', records: [], malformedLineCount: 0,
+      writeFailureCount: 0, captureGap: null },
+    redactionPolicy: { mode: 'allowlist_projection', excludedFieldNames: ['result'],
       rawSensitiveMaterialDisposition: 'reject' },
     effectsAttempted: false, repairAttempted: false, retryAttempted: false,
   };
   input.loggingEvidence = [{ ...liveBody, corpusSha256: stableP158AnalysisHash(liveBody) }];
   const cleanReport = analyze(input);
   assert(!cleanReport.findings.some((finding) => finding.code === 'logging_evidence_corpus_integrity_invalid'));
+  assert.equal(cleanReport.independentAudits.logging[0].failureJournalCaptureState, 'complete');
+  assert.equal(cleanReport.independentAudits.logging[0].failureJournalRecordCount, 0);
   input.loggingEvidence[0].environmentId = 'E1';
   const tamperedReport = analyze(input);
   assert(tamperedReport.findings.some((finding) => finding.code === 'logging_evidence_corpus_integrity_invalid'));
+});
+
+runTest('treats failure-journal capture corruption and write loss as postmortem findings', () => {
+  const input = cleanEvidence();
+  const liveBody = {
+    schemaVersion: 'agent-browser.p158-logging-evidence-corpus.v1', planId: 'P158', syntheticOnly: false,
+    runId: input.runId, candidateSha256: input.manifest.candidate.candidateSha256,
+    phaseId: 'W7', environmentId: 'E0', environmentSealSha256: 'a'.repeat(64),
+    sourceBinding: { sourcePath: 'scripts/lib/p158-logging-evidence-harvester.js', sourceSha256: 'b'.repeat(64) },
+    window: { startedAt: '2026-09-03T00:59:00.000Z', completedAt: '2026-09-03T01:01:00.000Z' },
+    capturedAt: '2026-09-03T01:01:00.000Z', inputIdentitySha256: 'c'.repeat(64),
+    expectationSetSha256: 'd'.repeat(64), fixtureCount: 1,
+    fixtures: clone(input.loggingEvidence[0].fixtures), observerRequestCount: 1,
+    observerReceipts: [], failureJournal: { captureState: 'complete', records: [], malformedLineCount: 2,
+      writeFailureCount: 1, captureGap: null },
+    redactionPolicy: { mode: 'allowlist_projection', excludedFieldNames: ['result'],
+      rawSensitiveMaterialDisposition: 'reject' },
+    effectsAttempted: false, repairAttempted: false, retryAttempted: false,
+  };
+  input.loggingEvidence = [{ ...liveBody, corpusSha256: stableP158AnalysisHash(liveBody) }];
+  const report = analyze(input);
+  assert(report.findings.some((finding) => finding.code === 'failure_journal_corruption_detected'));
+  assert(report.findings.some((finding) => finding.code === 'failure_journal_write_failure'));
+  assert.equal(report.independentAudits.logging[0].passed, false);
+});
+
+runTest('requires a product failure to join a durable journal occurrence', () => {
+  const input = cleanEvidence({
+    resultState: 'new_product_failure',
+    firstFailureSignature: 'browser_launch_failed',
+  });
+  const liveBody = {
+    schemaVersion: 'agent-browser.p158-logging-evidence-corpus.v1', planId: 'P158', syntheticOnly: false,
+    runId: input.runId, candidateSha256: input.manifest.candidate.candidateSha256,
+    phaseId: 'W7', environmentId: 'E0', environmentSealSha256: 'a'.repeat(64),
+    sourceBinding: { sourcePath: 'scripts/lib/p158-logging-evidence-harvester.js', sourceSha256: 'b'.repeat(64) },
+    window: { startedAt: '2026-09-03T00:59:00.000Z', completedAt: '2026-09-03T01:01:00.000Z' },
+    capturedAt: '2026-09-03T01:01:00.000Z', inputIdentitySha256: 'c'.repeat(64),
+    expectationSetSha256: 'd'.repeat(64), fixtureCount: 1,
+    fixtures: clone(input.loggingEvidence[0].fixtures), observerRequestCount: 1,
+    observerReceipts: [], failureJournal: { captureState: 'complete', records: [], malformedLineCount: 0,
+      writeFailureCount: 0, captureGap: null },
+    redactionPolicy: { mode: 'allowlist_projection', excludedFieldNames: ['result'],
+      rawSensitiveMaterialDisposition: 'reject' },
+    effectsAttempted: false, repairAttempted: false, retryAttempted: false,
+  };
+  input.loggingEvidence = [{ ...liveBody, corpusSha256: stableP158AnalysisHash(liveBody) }];
+  const report = analyze(input);
+  assert(report.findings.some((finding) => finding.code === 'failure_journal_occurrence_missing'));
 });
 
 runTest('retains historical reproduction in clusters timelines and criterion judgment', () => {
@@ -326,8 +387,7 @@ runTest('detects broken ledger ancestry and refuses to call it intact', () => {
 
 runTest('does not let an unrelated clean logging envelope satisfy a terminal attempt', () => {
   const input = cleanEvidence();
-  input.loggingExpectations[0].requestId = 'request-for-this-attempt';
-  input.ledgerRecords[0].payload.causalIds = { requestId: 'request-for-this-attempt' };
+  input.ledgerRecords[0].payload.causalEnvelopes[0].observedCausalIds.requestId = 'request-for-this-attempt';
   input.ledgerRecords[0].sha256 = stableP158AnalysisHash(input.ledgerRecords[0]);
   input.ledgerRecords[1].previousRecordSha256 = input.ledgerRecords[0].sha256;
   input.ledgerRecords[1].sha256 = stableP158AnalysisHash(input.ledgerRecords[1]);
@@ -377,11 +437,12 @@ runTest('accepts exact controller-only logging for a frozen skipped blocker', ()
     sourcePath: 'scripts/lib/p158-w7-development-adapters.js', sourceSha256: 'c'.repeat(64),
   };
   input.loggingExpectations[0] = {
-    attemptId: 'A01-E0-r001', requestId: 'request-good', incidentExpected: false,
+    ...input.loggingExpectations[0], productRequestIdState: 'not_applicable', incidentExpected: false,
     operatorVisible: false,
     expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
   };
   input.loggingEvidence[0].fixtures = [blockedLoggingFixture()];
+  input.ledgerRecords[0].payload.causalEnvelopes[0].observedCausalIds.requestId = null;
   const directLogging = auditCausalEnvelopes({ fixtureSet: input.loggingEvidence[0] });
   assert.equal(directLogging.findings.length, 0, JSON.stringify(directLogging));
   rehashLedger(input);
@@ -396,7 +457,7 @@ runTest('accepts exact controller-only logging for a frozen skipped blocker', ()
 runTest('does not let a concrete attempt claim the weaker blocked logging contract', () => {
   const input = cleanEvidence();
   input.loggingExpectations[0] = {
-    attemptId: 'A01-E0-r001', requestId: 'request-good', incidentExpected: false,
+    ...input.loggingExpectations[0], incidentExpected: false,
     operatorVisible: false,
     expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
   };
@@ -404,6 +465,33 @@ runTest('does not let a concrete attempt claim the weaker blocked logging contra
   const report = analyze(input);
   assert.equal(validateReport(report), true, ajv.errorsText(validateReport.errors));
   assert(report.findings.some((finding) => finding.code === 'logging_expectation_invalid'));
+});
+
+runTest('preserves unavailable product request identity as an explicit sealed gap', () => {
+  const input = cleanEvidence();
+  const operationCorrelationId = `${input.runId}:A13-001:handoff-prepare`;
+  input.loggingExpectations[0] = {
+    ...input.loggingExpectations[0], productRequestId: null,
+    productRequestIdState: 'assigned_at_runtime', operationCorrelationId,
+    incidentExpected: false, operatorVisible: false,
+    expectedSurfaceRoles: [
+      'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+    ],
+  };
+  input.loggingOperationGaps = [{ attemptId: 'A01-E0-r001', operationCorrelationId,
+    productRequestId: null, correlationState: 'product_request_id_unavailable',
+    loggingGap: { code: 'product_request_id_not_preserved' } }];
+  input.ledgerRecords[0].payload.causalEnvelopes[0].operationCorrelationId = operationCorrelationId;
+  input.ledgerRecords[0].payload.causalEnvelopes[0].observedCausalIds.requestId = null;
+  const report = analyze(input);
+  assert.equal(validateReport(report), true, ajv.errorsText(validateReport.errors));
+  assert(report.findings.some((finding) => finding.code === 'request_id_correlation_unavailable'));
+  assert(report.findings.some((finding) => finding.code === 'unobserved_due_to_uncorrelatable_id'));
+  assert(!report.findings.some((finding) => finding.code === 'logging_expectation_invalid'));
+
+  input.loggingExpectations[0].productRequestId = operationCorrelationId;
+  const forged = analyze(input);
+  assert(forged.findings.some((finding) => finding.code === 'logging_expectation_invalid'));
 });
 
 process.stdout.write('P158 W10 final analyzer provider-free self-test passed\n');

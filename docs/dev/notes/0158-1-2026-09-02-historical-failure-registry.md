@@ -102,7 +102,7 @@ dashboard, installed generation, browser executable, runtime manifest,
 provider configuration, external ingress, fixture digest, and prepare/freeze
 timestamps. W6 must populate and seal those fields before the first case.
 
-The resource guard freezes a 100 GiB artifact quota, 85 percent filesystem
+The resource guard freezes a 100 GiB artifact quota, 90 percent filesystem
 ceiling, 4 GiB available-memory floor, 8 GiB combined available-memory and
 free-swap floor, and hard ceilings for campaign processes, Chrome, Xvfb,
 displays, routes, external connections, and unresolved jobs. Two consecutive

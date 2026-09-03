@@ -75,13 +75,22 @@ function validateBundle({ phaseId, bundle, schedule, liveHookManifestSha256 }) {
 
 function correlationIds(runId, phaseId, attemptId, effectId = null, ordinal = null) {
   return {
-    requestId: `p158:${runId}:${attemptId}:request`,
     eventId: `p158:${runId}:${attemptId}:${effectId ?? 'terminal'}:${ordinal ?? 0}`,
     traceId: `p158:${runId}:${phaseId}`,
   };
 }
 
-function terminalResult({ attempt, result, phaseId, runId, checkpointPath }) {
+function terminalResult({ attempt, result, phaseId, runId, checkpointPath, loggingExpectations = [] }) {
+  const correlations = new Map((result.receipts ?? []).flatMap((receipt) =>
+    receipt.requestCorrelations ?? []).map((entry) => [entry.operationCorrelationId, entry]));
+  const causalEnvelopes = loggingExpectations.map((entry) => ({
+    expectationId: entry.expectationId, actionId: entry.actionId, environmentId: entry.environmentId,
+    operationCorrelationId: entry.operationCorrelationId,
+    observedCausalIds: {
+      requestId: correlations.get(entry.operationCorrelationId)?.productRequestId ?? null,
+      jobId: null, eventId: null, traceId: null, incidentId: null,
+    },
+  }));
   const body = {
     attemptId: attempt.attemptId,
     caseId: attempt.caseId,
@@ -92,18 +101,26 @@ function terminalResult({ attempt, result, phaseId, runId, checkpointPath }) {
       .includes(result.retryDisposition) ? result.retryDisposition : 'prohibited_opportunistic_retry',
     completedAt: result.completedAt,
     causalIds: correlationIds(runId, phaseId, attempt.attemptId),
+    causalIdsAuthoritative: false,
+    causalEnvelopes,
     evidence: {
       phaseCheckpointPath: checkpointPath,
       artifactIds: [`p158:${runId}:${phaseId}:${attempt.attemptId}:terminal`],
       resultSha256: sha256(result),
     },
     ...(result.blocker ? { blocker: clone(result.blocker) } : {}),
-    ...(result.resultState === 'skipped_blocked' ? { requestedEffects: [] } : {}),
+    ...(result.resultState === 'skipped_blocked' ? {
+      requestedEffects: [], blockerCode: result.blocker?.code ?? 'pre_execution_blocked',
+    } : {}),
   };
   return body;
 }
 
-export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle, liveHookManifestSha256, runId }) {
+export function buildP158CampaignPhasePreparation({
+  schedule, w7Bundle, w8Bundle, w9AdapterBindings = null, loggingRequestExpectations = null,
+  loggingOperationGaps = [],
+  liveHookManifestSha256, runId,
+}) {
   if (typeof runId !== 'string' || runId.length === 0) {
     fail('phase_run_id_missing', 'Preparation requires the exact frozen campaign run ID');
   }
@@ -111,6 +128,11 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
     W7: validateBundle({ phaseId: 'W7', bundle: w7Bundle, schedule, liveHookManifestSha256 }),
     W8: validateBundle({ phaseId: 'W8', bundle: w8Bundle, schedule, liveHookManifestSha256 }),
   };
+  const w9Bindings = w9AdapterBindings === null ? new Map() : new Map(w9AdapterBindings.map((entry) => [entry.caseId, entry]));
+  if (w9AdapterBindings !== null && (w9Bindings.size !== 5 ||
+      ['C01', 'C02', 'C03', 'C04', 'C05'].some((caseId) => !w9Bindings.has(caseId)))) {
+    fail('phase_adapter_matrix_incomplete', 'W9 adapter matrix is incomplete');
+  }
   const preExecutionBlockers = PRE_PHASES.flatMap((phaseId) => schedule.attempts
     .filter((attempt) => attempt.phaseId === phaseId)
     .flatMap((attempt) => {
@@ -123,24 +145,95 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
         blocker: clone(adapter.blocker),
         bindingSha256: sha256(binding),
       }] : [];
+    })).concat(schedule.attempts.filter((attempt) => w9Bindings.get(attempt.caseId)?.mode === 'explicit_blocked')
+    .map((attempt) => {
+      const binding = w9Bindings.get(attempt.caseId);
+      return { phaseId: 'W9', caseId: attempt.caseId, attemptId: attempt.attemptId,
+        blocker: { ...clone(binding.blocker), sourcePath: binding.sourcePath, sourceSha256: binding.sourceSha256 },
+        bindingSha256: sha256(binding) };
     }));
-  const loggingExpectations = schedule.attempts.map((attempt) => {
+  const suppliedByAttempt = new Map();
+  const knownAttemptIds = new Set(schedule.attempts.map((attempt) => attempt.attemptId));
+  const globalExpectationIds = new Set();
+  const globalOperationCorrelationIds = new Set();
+  for (const descriptor of loggingRequestExpectations ?? []) {
+    if (!knownAttemptIds.has(descriptor.attemptId) || globalExpectationIds.has(descriptor.expectationId) ||
+        globalOperationCorrelationIds.has(descriptor.operationCorrelationId)) {
+      fail('logging_request_expectations_incomplete', 'Logging request descriptors must be unique and name a frozen attempt');
+    }
+    globalExpectationIds.add(descriptor.expectationId);
+    globalOperationCorrelationIds.add(descriptor.operationCorrelationId);
+    if (!suppliedByAttempt.has(descriptor.attemptId)) suppliedByAttempt.set(descriptor.attemptId, []);
+    suppliedByAttempt.get(descriptor.attemptId).push(descriptor);
+  }
+  const operationGapIds = new Set();
+  const gapsByAttempt = new Map();
+  for (const gap of loggingOperationGaps) {
+    if (!knownAttemptIds.has(gap?.attemptId) || typeof gap.descriptorId !== 'string' ||
+        operationGapIds.has(gap.descriptorId) || gap.productRequestId !== null ||
+        gap.correlationState !== 'product_request_id_unavailable' ||
+        gap.loggingGap?.code !== 'product_request_id_not_preserved') {
+      fail('logging_operation_gaps_invalid', 'Operation logging gaps must be exact, unique, and explicitly uncorrelatable');
+    }
+    operationGapIds.add(gap.descriptorId);
+    if (!gapsByAttempt.has(gap.attemptId)) gapsByAttempt.set(gap.attemptId, []);
+    gapsByAttempt.get(gap.attemptId).push(gap);
+  }
+  const loggingExpectations = schedule.attempts.flatMap((attempt) => {
     const binding = PRE_PHASES.includes(attempt.phaseId)
       ? bundles[attempt.phaseId].bindings.get(attempt.caseId)
-      : null;
+      : w9Bindings.get(attempt.caseId) ?? null;
     const blocked = binding?.mode === 'explicit_blocked';
-    return {
-      attemptId: attempt.attemptId,
-      requestId: `p158:${runId}:${attempt.attemptId}:request`,
-      incidentExpected: false,
-      operatorVisible: blocked ? false : attempt.externalIngressRequired === true,
-      expectedSurfaceRoles: blocked
-        ? ['controller_transition', 'pre_execution_blocker', 'terminal_event']
-        : [
-            'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
-            ...(attempt.externalIngressRequired ? ['dashboard_projection'] : []),
-          ],
-    };
+    const declaredActionIds = attempt.cardinalityAllocations?.flatMap((entry) => entry.actionIds) ?? [];
+    const supplied = suppliedByAttempt.get(attempt.attemptId) ?? [];
+    const operationGaps = gapsByAttempt.get(attempt.attemptId) ?? [];
+    if (blocked && (supplied.length > 0 || operationGaps.length > 0)) {
+      fail('logging_request_expectations_incomplete', `${attempt.attemptId} is blocked but has executable request descriptors`);
+    }
+    if (!blocked && (supplied.length + operationGaps.length < Math.max(1, declaredActionIds.length) ||
+        new Set(supplied.map((entry) => entry.expectationId)).size !== supplied.length ||
+        new Set(supplied.map((entry) => entry.operationCorrelationId)).size !== supplied.length ||
+        declaredActionIds.some((actionId) => !supplied.some((entry) => entry.actionId === actionId) &&
+          !operationGaps.some((entry) => entry.actionId === actionId)) ||
+        supplied.some((entry) => entry.caseId !== attempt.caseId || entry.phaseId !== attempt.phaseId ||
+          !attempt.environmentIds.includes(entry.environmentId) ||
+          !['accepted_request', 'rejected_request', 'transition', 'dashboard_action'].includes(entry.requestKind) ||
+          typeof entry.operationCorrelationId !== 'string' || entry.operationCorrelationId.length === 0 ||
+          entry.productRequestId !== null || entry.productRequestIdState !== 'assigned_at_runtime' ||
+          (declaredActionIds.length > 0 && !declaredActionIds.includes(entry.actionId))))) {
+      fail('logging_request_expectations_incomplete', `${attempt.attemptId} lacks exact pre-freeze request/action envelopes`);
+    }
+    const descriptors = blocked
+      ? [...attempt.environmentIds].sort().map((environmentId) => ({
+          expectationId: `${attempt.attemptId}:${environmentId}:blocked`, environmentId, actionId: null,
+          operationCorrelationId: `p158:${runId}:${attempt.attemptId}:${environmentId}:blocked`,
+          productRequestId: null, productRequestIdState: 'not_applicable',
+        }))
+      : supplied;
+    return descriptors.sort((left, right) => left.expectationId.localeCompare(right.expectationId))
+      .map((descriptor) => {
+      const environmentId = descriptor.environmentId;
+      const operatorVisible = blocked ? false
+        : (descriptor.operatorVisible ?? (attempt.externalIngressRequired === true && environmentId === 'E2'));
+      return {
+        expectationId: descriptor.expectationId, actionId: descriptor.actionId ?? null,
+        requestKind: blocked ? 'rejected_request' : descriptor.requestKind,
+        attemptId: attempt.attemptId, caseId: attempt.caseId, phaseId: attempt.phaseId,
+        environmentId, executionMode: blocked ? 'explicit_blocked' : 'concrete_live',
+        operationCorrelationId: descriptor.operationCorrelationId,
+        productRequestId: null, productRequestIdState: descriptor.productRequestIdState,
+        causalIds: { requestId: null, jobId: null, eventId: null, traceId: null, incidentId: null },
+        correlationState: blocked ? 'controller_identity'
+          : (descriptor.correlationState ?? 'product_request_id_expected'),
+        incidentExpected: false, operatorVisible,
+        expectedSurfaceRoles: blocked
+          ? ['controller_transition', 'pre_execution_blocker', 'terminal_event']
+          : (descriptor.expectedSurfaceRoles ?? [
+              'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+              ...(operatorVisible ? ['dashboard_projection'] : []),
+            ]),
+      };
+    });
   });
   const body = {
     schemaVersion: 'agent-browser.p158-campaign-phase-preparation.v1',
@@ -149,6 +242,8 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
     liveHookManifestSha256,
     preExecutionBlockers,
     loggingExpectations,
+    loggingOperationGaps: clone(loggingOperationGaps)
+      .sort((left, right) => left.descriptorId.localeCompare(right.descriptorId)),
   };
   return Object.freeze({ ...body, preparationSha256: sha256(body) });
 }
@@ -188,12 +283,20 @@ export async function runP158CampaignPhases({
     W8: validateBundle({ phaseId: 'W8', bundle: w8Bundle, schedule, liveHookManifestSha256 }),
   };
   const expectedPreparation = buildP158CampaignPhasePreparation({
-    schedule, w7Bundle, w8Bundle, liveHookManifestSha256, runId: w9.target.runId,
+    schedule, w7Bundle, w8Bundle, w9AdapterBindings: w9.adapterBindings,
+    loggingRequestExpectations: w9.loggingRequestExpectations,
+    loggingOperationGaps: w9.loggingOperationGaps ?? [],
+    liveHookManifestSha256, runId: w9.target.runId,
   });
   if (sha256(phasePreparation) !== sha256(expectedPreparation)) {
     fail('phase_preparation_unproven', 'Execution requires the exact preparation-time blocker and logging declaration');
   }
   const blockers = phasePreparation.preExecutionBlockers.map((entry) => clone(entry));
+  const loggingByAttempt = new Map();
+  for (const expectation of phasePreparation.loggingExpectations) {
+    if (!loggingByAttempt.has(expectation.attemptId)) loggingByAttempt.set(expectation.attemptId, []);
+    loggingByAttempt.get(expectation.attemptId).push(expectation);
+  }
   const store = artifactStore ?? createFileArtifactStore(runRoot);
   const sourceDigest = sha256({ scheduleSha256: schedule.scheduleSha256, liveHookManifestSha256,
     bindings: PRE_PHASES.flatMap((phaseId) => [...bundles[phaseId].bindings.values()]) });
@@ -226,6 +329,7 @@ export async function runP158CampaignPhases({
           verifyCheckpoint(started);
           terminal = await writeCheckpoint(store, terminalPath, terminalResult({
             attempt, phaseId, runId: controller.snapshot().runId ?? w9.target.runId, checkpointPath: terminalPath,
+            loggingExpectations: loggingByAttempt.get(attempt.attemptId) ?? [],
             result: { resultState: 'harness_failure', effectState: 'effect_uncertain',
               retryDisposition: 'prohibited_opportunistic_retry', completedAt: clock.wallNow() },
           }));
@@ -279,6 +383,7 @@ export async function runP158CampaignPhases({
           terminal = await writeCheckpoint(store, terminalPath, terminalResult({
             attempt, result: normalizedResult, phaseId,
             runId: controller.snapshot().runId ?? w9.target.runId, checkpointPath: terminalPath,
+            loggingExpectations: loggingByAttempt.get(attempt.attemptId) ?? [],
           }));
         }
       } else verifyCheckpoint(terminal);
@@ -307,7 +412,8 @@ export async function runP158CampaignPhases({
   const recordedIds = new Set(controller.snapshot().results.map((entry) => entry.attemptId));
   const missing = expectedPreAttempts.filter((entry) => !recordedIds.has(entry.attemptId)).map((entry) => entry.attemptId);
   if (missing.length > 0) fail('pre_execution_not_terminal', 'W9 cannot start before W7/W8 terminal closure', { missing });
-  const w9Result = await runW9({ ...w9, schedule, controller });
+  const w9Result = await runW9({ ...w9, schedule, controller,
+    loggingExpectations: phasePreparation.loggingExpectations.filter((entry) => entry.phaseId === 'W9') });
   return {
     state: controller.snapshot().state,
     sourceDigest,

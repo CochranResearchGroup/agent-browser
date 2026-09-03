@@ -12,6 +12,10 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
+use crate::native::service_failure_journal::{
+    append_service_failure_best_effort, read_service_failures, record_client_failure_observation,
+    ServiceFailureCategory, ServiceFailureRecord,
+};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -208,6 +212,18 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     if method == "POST" && path == "/api/dashboard-auth/login" {
         let body_str = read_post_body(&mut stream, &buf, n).await;
         let response = dashboard_auth::login_response(&headers, &body_str, secure_cookie);
+        if !response.is_success() {
+            append_service_failure_best_effort(
+                &ServiceFailureRecord::new(
+                    ServiceFailureCategory::DashboardAction,
+                    "dashboard_auth",
+                    "login",
+                    "dashboard_login_failed",
+                    "Dashboard authentication did not succeed.",
+                )
+                .with_action("dashboard_login"),
+            );
+        }
         let _ = stream.write_all(&response.into_http_bytes()).await;
         return;
     }
@@ -515,6 +531,64 @@ async fn handle_service_api_request(
     body: &str,
     authenticated_dashboard_user: &str,
 ) {
+    if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
+        let limit = split_path_query(path)
+            .1
+            .and_then(|query| {
+                query.split('&').find_map(|part| {
+                    let (key, value) = part.split_once('=')?;
+                    (key == "limit")
+                        .then(|| value.parse::<usize>().ok())
+                        .flatten()
+                })
+            })
+            .unwrap_or(100);
+        match read_service_failures(limit) {
+            Ok(readback) => {
+                write_json_value(
+                    stream,
+                    "200 OK",
+                    json!({
+                        "success": true,
+                        "data": readback,
+                    }),
+                )
+                .await
+            }
+            Err(error) => {
+                write_json_error_with_code(
+                    stream,
+                    "500 Internal Server Error",
+                    &error,
+                    Some("failure_journal_read_failed"),
+                    None,
+                )
+                .await
+            }
+        }
+        return;
+    }
+    if method == "POST" && split_path_query(path).0 == "/api/service/failure-observation" {
+        match record_client_failure_observation(body, authenticated_dashboard_user) {
+            Ok(record) => {
+                write_json_value(
+                    stream,
+                    "202 Accepted",
+                    json!({
+                        "success": true,
+                        "data": {
+                            "schemaVersion": record.schema_version,
+                            "occurrenceId": record.occurrence_id,
+                            "recorded": true,
+                        }
+                    }),
+                )
+                .await;
+            }
+            Err(error) => write_json_error(stream, "400 Bad Request", &error).await,
+        }
+        return;
+    }
     if method == "POST" {
         if let Some((session_name, command_body)) = service_request_focus_command_body(path, body) {
             if let Some(port) = session_port_for_name(&session_name) {
@@ -645,10 +719,7 @@ async fn handle_service_api_request(
             }
         }
 
-        if path == "/api/service/request"
-            && crate::native::service_lease_mode::profile_lease_mode_from_env()
-                == Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
-        {
+        if path == "/api/service/request" {
             let state = load_service_state();
             let command = match service_request_command_with_dashboard_generation(
                 body,
@@ -667,15 +738,21 @@ async fn handle_service_api_request(
             };
             let session_name =
                 service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
-            if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await {
-                write_json_error(stream, "502 Bad Gateway", &err).await;
-                return;
-            }
-            let Some(port) = session_port_for_name(&session_name) else {
+            let port = if session_name == DASHBOARD_SERVICE_BACKEND_SESSION {
+                dashboard_service_backend_port()
+            } else {
+                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
+                {
+                    write_json_error(stream, "502 Bad Gateway", &err).await;
+                    return;
+                }
+                session_port_for_name(&session_name)
+            };
+            let Some(port) = port else {
                 write_json_error(
                     stream,
                     "503 Service Unavailable",
-                    &format!("Claimed service session '{session_name}' has no HTTP route"),
+                    &format!("Service session '{session_name}' has no HTTP route"),
                 )
                 .await;
                 return;
@@ -696,7 +773,7 @@ async fn handle_service_api_request(
                     write_json_error_with_code(
                         stream,
                         "502 Bad Gateway",
-                        &format!("Unsafe claimed-session proxy failed: {err}"),
+                        &format!("Service request proxy failed: {err}"),
                         Some(err.code),
                         err.details,
                     )
@@ -852,8 +929,26 @@ where
 }
 
 fn dashboard_service_backend_port() -> Option<u16> {
+    if let Some(port) = configured_dashboard_service_backend_port(
+        std::env::var("AGENT_BROWSER_DASHBOARD_BACKEND_PORT")
+            .ok()
+            .as_deref(),
+    ) {
+        return Some(port);
+    }
     let sessions: Value = serde_json::from_str(&discover_sessions()).ok()?;
     dashboard_service_backend_port_from_sessions(sessions.as_array()?)
+}
+
+/// Resolve the explicitly managed local dashboard backend before consulting
+/// browser-session discovery. A backend-only process is not a browser session
+/// and therefore cannot be expected to register in the daemon socket catalog.
+fn configured_dashboard_service_backend_port(value: Option<&str>) -> Option<u16> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port > 0)
 }
 
 fn session_port_for_name(session_name: &str) -> Option<u16> {
@@ -3341,6 +3436,24 @@ mod tests {
             dashboard_service_backend_port_from_sessions(&first_sessions),
             None
         );
+    }
+
+    #[test]
+    fn dashboard_service_backend_accepts_only_an_explicit_nonzero_port() {
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some("4949")),
+            Some(4949)
+        );
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some(" 4949 ")),
+            Some(4949)
+        );
+        assert_eq!(configured_dashboard_service_backend_port(Some("0")), None);
+        assert_eq!(
+            configured_dashboard_service_backend_port(Some("not-a-port")),
+            None
+        );
+        assert_eq!(configured_dashboard_service_backend_port(None), None);
     }
 
     #[test]

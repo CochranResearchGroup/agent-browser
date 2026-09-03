@@ -177,6 +177,11 @@ manifest and route inventory retain their deterministic binding digest. The
 loopback dashboard address remains a local diagnostic only and is never an
 operator handoff. Review the provider plan, stage its secret-free
 artifacts, and pass preflight before using the explicit apply command above.
+An installed v1 provider authority may cross this boundary only when its
+loopback URL equals the new local diagnostic URL and every other provider
+identity matches exactly. Staging and preflight recognize that state as an
+additive upgrade, while status remains drifted until explicit apply writes v2
+authority. Any other manifest drift remains blocking.
 Ingress publication remains deferred until the provider-ready checkpoint.
 Provider doctor success proves provider readiness; Service Status must also
 report non-null `presentationCapacity` before capacity acceptance begins.
@@ -755,6 +760,18 @@ agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
+
+Failed browser launches and non-success service jobs are also written to the
+append-only user-scoped forensic journal at
+`~/.agent-browser/service/failure-journal.jsonl`. The authenticated dashboard
+adds observations for failed Guacamole loads, unusable handoff links, CDP feeds
+that connect without delivering frames, and dashboard actions that fail before
+the service can create a job. Read recent privacy-bounded records with
+`GET /api/service/failures?limit=100`. Authenticated dashboard clients report
+external-only failures to `POST /api/service/failure-observation`; this route
+rejects raw URLs and handoff IDs. Failure records contain causal identifiers,
+runtime and boot epochs, typed codes, bounded redacted summaries, and no page
+content, credentials, headers, bearer material, or query strings.
 
 `close --all` is intentionally global and cannot be combined with an explicit
 `--session`. Use `agent-browser --session <name> close` for one session. If a
@@ -3915,6 +3932,18 @@ include `operatorVisible`; clients should require
 operator. `operatorVisible` also includes selected target evidence and route,
 display, browser, tab, stream, and Guacamole component states so clients can
 render the same proof vocabulary without inferring it from separate fields.
+Successful automation-capable opens return the same valid `serviceTabHandle`
+both at the top level and under `tab.serviceTabHandle`, so the next bounded
+evaluate, probe, or UI action does not need a second `tab_new` request. Read it
+with `getServiceTabHandle(response)` or
+`summarizeServiceRemoteViewOpenProof(response).serviceTabHandle`. Generic
+`tab_new` rejects route selection fields before queueing because its cold-launch
+path does not own presentation-route acquisition. Use
+`requestServiceRemoteViewOpen()` for route-bound work.
+When a route-pool entry omits an explicit `displayAllocationId`, Agent Browser
+derives the allocation identity from the stable route identity rather than the
+reusable X11 display number. A released historical allocation for `:10`
+therefore cannot govern a different route that later uses `:10`.
 When the browser window is visible but the selected tab URL does not match the
 requested URL, `operatorVisible.state` is `wrong_tab` while the display
 component can still report browser-window visibility. When the display and tab

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
-import { createMemoryArtifactStore, sha256 } from './lib/p158-campaign-controller.js';
+import { canonicalJson, createMemoryArtifactStore, sha256 } from './lib/p158-campaign-controller.js';
 import {
   buildP158W9ActionPlan,
   canonicalP158W9TargetBindingDigest,
@@ -67,16 +67,25 @@ function controllerHarness() {
   let scheduledTeardown = {};
   let startCount = 0;
   let sealCount = 0;
+  const artifacts = [];
   return {
     get startCount() { return startCount; },
     get sealCount() { return sealCount; },
-    snapshot: () => ({ state, results: structuredClone(results), scheduledTeardown: structuredClone(scheduledTeardown) }),
+    snapshot: () => ({ state, results: structuredClone(results), scheduledTeardown: structuredClone(scheduledTeardown),
+      evidence: { artifacts: structuredClone(artifacts) } }),
     startExecution: async () => { assert.equal(state, 'frozen'); state = 'executing'; startCount += 1; },
     recordAttempt: async (result) => {
       assert.equal(results.some((entry) => entry.attemptId === result.attemptId), false);
       results.push(structuredClone(result));
     },
     recordScheduledTeardown: async (result) => { scheduledTeardown = structuredClone(result); },
+    writeArtifact: async ({ artifactId, relativePath, content, metadata = {} }) => {
+      const bytes = Buffer.from(content);
+      const receipt = { artifactId, relativePath, sha256: sha256(bytes), byteCount: bytes.byteLength,
+        ...structuredClone(metadata) };
+      artifacts.push(receipt);
+      return receipt;
+    },
     finishExecution: async () => { state = 'execution_terminal'; },
     sealEvidence: async () => { state = 'evidence_sealed'; sealCount += 1; },
   };
@@ -90,6 +99,8 @@ function receipt(action) {
     scheduleSha256: schedule.scheduleSha256,
     workflowRunId: binding.workflowRunId, workflowRunAttempt: binding.workflowRunAttempt,
     caseId: action.caseId, attemptId: action.attemptId, actionId: action.actionId,
+    operationCorrelationId: action.requestId ?? `p158:${binding.runId}:${action.actionId}:request`,
+    productRequestId: null, correlationState: 'product_request_id_unavailable',
     environmentId: action.environmentId, kind: action.kind,
     attempt: 1, state: 'passed', observedAt: '2026-09-04T12:00:00.000Z',
     effectClass: action.transport === 'external_ingress'
@@ -173,6 +184,80 @@ function driverHarness({ failOnceAt = null } = {}) {
   };
 }
 
+function adapterBindings(blockedCaseIds = []) {
+  const blocked = new Set(blockedCaseIds);
+  const actionCounts = new Map(buildP158W9ActionPlan(schedule).map((entry) => [entry.attempt.caseId, 0]));
+  for (const entry of buildP158W9ActionPlan(schedule)) {
+    actionCounts.set(entry.attempt.caseId, actionCounts.get(entry.attempt.caseId) + entry.actions.length);
+  }
+  return ['C01', 'C02', 'C03', 'C04', 'C05'].map((caseId) => {
+    const sourcePath = 'scripts/lib/p158-w9-concrete-drivers.js';
+    const sourceSha256 = 'ab'.repeat(32);
+    const isBlocked = blocked.has(caseId);
+    return {
+      caseId, mode: isBlocked ? 'explicit_blocked' : 'concrete_live', providerFree: false,
+      sourcePath, sourceSha256, hookIds: [],
+      implementedActionCount: isBlocked ? 0 : actionCounts.get(caseId),
+      blockedActionCount: isBlocked ? actionCounts.get(caseId) : 0,
+      effectsAllowed: !isBlocked,
+      blocker: isBlocked ? { code: 'live_case_hook_missing', detail: `missing ${caseId}` } : null,
+    };
+  });
+}
+
+function loggingHarvest(state = 'complete') {
+  const sourcePath = 'scripts/lib/p158-logging-evidence-harvester.js';
+  const sourceSha256 = 'cd'.repeat(32);
+  return {
+    sourcePath, sourceSha256,
+    execute: async ({ target: binding, schedule: frozenSchedule, registerArtifact }) => {
+      assert.equal(typeof registerArtifact, 'function');
+      await registerArtifact({ artifactId: 'logging-corpus', relativePath: 'logging/w3-corpus.json',
+        content: canonicalJson({ schemaVersion: 'p158-test-logging-corpus.v1', state }),
+        metadata: { mediaType: 'application/json', analysisRole: 'logging_evidence',
+          capturePurpose: 'logging_evidence', captureState: 'complete' } });
+      const body = {
+        schemaVersion: 'agent-browser.p158-logging-harvest-receipt.v1', runId: binding.runId,
+        scheduleSha256: frozenSchedule.scheduleSha256, sourcePath, sourceSha256,
+        state, artifactIds: ['logging-corpus'], repairAttempted: false, retryAttempted: false,
+      };
+      return { ...body, receiptSha256: sha256(body) };
+    },
+  };
+}
+
+function loggingExpectations(blockedCaseIds = []) {
+  const blocked = new Set(blockedCaseIds);
+  return buildP158W9ActionPlan(schedule).flatMap((entry) => {
+    const descriptors = blocked.has(entry.attempt.caseId)
+      ? entry.attempt.environmentIds.map((environmentId) => ({ environmentId, actionId: null,
+          expectationId: `${entry.attempt.attemptId}:${environmentId}:blocked` }))
+      : entry.actions.map((action) => ({ environmentId: action.environmentId, actionId: action.actionId,
+          expectationId: `${entry.attempt.attemptId}:${action.actionId}` }));
+    return descriptors.map((descriptor) => {
+      const action = descriptor.actionId === null ? null : entry.actions.find((item) => item.actionId === descriptor.actionId);
+      const operationCorrelationId = descriptor.actionId === null
+        ? `p158:p158-w9-live:${entry.attempt.attemptId}:${descriptor.environmentId}:blocked`
+        : `p158:p158-w9-live:${descriptor.actionId}:request`;
+      return { ...descriptor, attemptId: entry.attempt.attemptId, caseId: entry.attempt.caseId,
+        phaseId: 'W9', operationCorrelationId, productRequestId: null,
+        productRequestIdState: descriptor.actionId === null ? 'not_applicable' : 'assigned_at_runtime',
+        requestKind: descriptor.actionId === null ? 'rejected_request'
+          : action.declaredFault ? 'transition'
+            : action.transport === 'external_ingress' ? 'dashboard_action' : 'accepted_request',
+        executionMode: descriptor.actionId === null ? 'explicit_blocked' : 'concrete_live',
+        expectedSurfaceRoles: descriptor.actionId === null
+          ? ['controller_transition', 'pre_execution_blocker', 'terminal_event']
+          : action.kind === 'service_command'
+            ? ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome']
+            : action.declaredFault
+              ? ['controller_transition', 'terminal_event', 'trace_outcome']
+              : ['ingress_request', 'immediate_response', 'terminal_event', 'dashboard_projection'],
+        causalIds: { requestId: null, jobId: null, eventId: null, traceId: null, incidentId: null } };
+    });
+  });
+}
+
 async function withRoot(body) {
   const root = await mkdtemp(join(tmpdir(), 'p158-w9-'));
   try { return await body(root); } finally { await rm(root, { recursive: true, force: true }); }
@@ -217,9 +302,11 @@ await runTest('executes once, crosses future 20m 8h and 24h barriers, tears down
   const drivers = driverHarness();
   const time = clockHarness();
   const artifactStore = createMemoryArtifactStore();
-  const frozenInputs = { schedule: structuredClone(schedule), target: target(), caseWindows: windows() };
+  const frozenInputs = { schedule: structuredClone(schedule), target: target(), caseWindows: windows(),
+    adapterBindings: adapterBindings() };
   const result = await runP158W9Phase({
     ...frozenInputs, drivers, controller, runRoot, artifactStore, clock: time.clock, scheduler: time.scheduler,
+    loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
   });
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(controller.startCount, 1);
@@ -234,7 +321,16 @@ await runTest('executes once, crosses future 20m 8h and 24h barriers, tears down
   assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-started/')).length, 15955);
   assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-terminal/')).length, 15955);
   assert.equal(artifactStore.paths().filter((path) => path.includes('/attempts/')).length, 835);
-  assert.deepEqual(frozenInputs, { schedule, target: target(), caseWindows: windows() });
+  const externalResult = controller.snapshot().results.find((entry) =>
+    entry.causalEnvelopes?.some((envelope) => envelope.environmentId === 'E2' && envelope.actionId));
+  const externalExpectation = loggingExpectations().find((entry) =>
+    externalResult.causalEnvelopes.some((envelope) => envelope.expectationId === entry.expectationId) &&
+    entry.requestKind === 'dashboard_action');
+  assert.ok(externalExpectation.expectedSurfaceRoles.includes('ingress_request'));
+  assert.equal(externalResult.causalRecords.some((record) =>
+    record.expectationId === externalExpectation.expectationId && record.surfaceRole === 'ingress_request'), false,
+  'external ingress must remain an explicit harvest gap unless the workflow receipt supplies it');
+  assert.deepEqual(frozenInputs, { schedule, target: target(), caseWindows: windows(), adapterBindings: adapterBindings() });
 }));
 
 await runTest('resumes append-only after interruption without replaying the uncertain action', () => withRoot(async (runRoot) => {
@@ -245,13 +341,13 @@ await runTest('resumes append-only after interruption without replaying the unce
   const time = clockHarness();
   const artifactStore = createMemoryArtifactStore();
   await assert.rejects(() => runP158W9Phase({
-    schedule, target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
-    clock: time.clock, scheduler: time.scheduler,
+    schedule, adapterBindings: adapterBindings(), target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
   }), /injected process interruption/u);
   const callsAtCrash = drivers.calls.length;
   const result = await runP158W9Phase({
-    schedule, target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
-    clock: time.clock, scheduler: time.scheduler,
+    schedule, adapterBindings: adapterBindings(), target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
   });
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(drivers.calls.filter((call) => call.actionId === interrupted).length, 1);
@@ -268,8 +364,8 @@ await runTest('safety stop terminalizes remaining work without effects', () => w
   const artifactStore = createMemoryArtifactStore();
   let observations = 0;
   const result = await runP158W9Phase({
-    schedule, target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
-    clock: time.clock, scheduler: time.scheduler,
+    schedule, adapterBindings: adapterBindings(), target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
     safetyStop: async () => (++observations === 1 ? { code: 'injected_safety_stop' } : null),
   });
   assert.equal(result.state, 'evidence_sealed');
@@ -285,8 +381,8 @@ await runTest('refuses production and source mutation before undeclared effects'
   const time = clockHarness();
   const artifactStore = createMemoryArtifactStore();
   await assert.rejects(
-    () => runP158W9Phase({ schedule, target: bad, caseWindows: windows(), drivers, controller, runRoot, artifactStore,
-      clock: time.clock, scheduler: time.scheduler }),
+    () => runP158W9Phase({ schedule, adapterBindings: adapterBindings(), target: bad, caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+      clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations() }),
     (error) => error instanceof P158W9OrchestrationError && error.code === 'development_target_unproven',
   );
   assert.equal(drivers.calls.length, 0);
@@ -296,9 +392,9 @@ await runTest('refuses production and source mutation before undeclared effects'
     sourceSha256: '88'.repeat(32), reason: 'operator authority withheld',
   };
   await assert.rejects(
-    () => runP158W9Phase({ schedule, target: target(), caseWindows: windows(), drivers: blocked,
+    () => runP158W9Phase({ schedule, adapterBindings: adapterBindings(), target: target(), caseWindows: windows(), drivers: blocked,
       controller: controllerHarness(), runRoot, artifactStore: createMemoryArtifactStore(),
-      clock: time.clock, scheduler: time.scheduler }),
+      clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations() }),
     (error) => error.code === 'live_hook_blocked',
   );
   assert.equal(blocked.calls.length, 0);
@@ -324,13 +420,102 @@ await runTest('fails closed on unbound and externally unproven live receipts', a
       const time = clockHarness();
       await assert.rejects(
         () => runP158W9Phase({
-          schedule, target: target(), caseWindows: windows(), drivers, controller, runRoot,
+          schedule, adapterBindings: adapterBindings(), target: target(), caseWindows: windows(), drivers, controller, runRoot,
           artifactStore: createMemoryArtifactStore(), clock: time.clock, scheduler: time.scheduler,
+          loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
         }),
         (error) => error.code === expectedCode,
       );
     });
   }
 });
+
+await runTest('terminalizes a mixed explicit blocker without invoking its action drivers', () => withRoot(async (runRoot) => {
+  const controller = controllerHarness();
+  const drivers = driverHarness();
+  const time = clockHarness();
+  const result = await runP158W9Phase({
+    schedule, adapterBindings: adapterBindings(['C02']), target: target(), caseWindows: windows(),
+    drivers, controller, runRoot, artifactStore: createMemoryArtifactStore(),
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(),
+    loggingExpectations: loggingExpectations(['C02']),
+  });
+  assert.equal(result.state, 'evidence_sealed');
+  assert.equal(drivers.calls.some((call) => call.caseId === 'C02'), false);
+  assert.ok(drivers.calls.some((call) => call.caseId === 'C03'));
+  const blocked = controller.snapshot().results.filter((entry) => entry.caseId === 'C02');
+  assert.equal(blocked.length, 100);
+  assert.ok(blocked.every((entry) => entry.resultState === 'skipped_blocked' &&
+    entry.effectState === 'not_started' && entry.requestedEffects.length === 0));
+  assert.deepEqual(blocked[0].causalRecords.map((entry) => entry.surfaceRole),
+    ['controller_transition', 'pre_execution_blocker', 'terminal_event',
+      'controller_transition', 'pre_execution_blocker', 'terminal_event']);
+  assert.ok(blocked[0].causalRecords.every((entry) => entry.transport === 'controller'));
+}));
+
+await runTest('resumes an all-blocked W9 phase without effects or duplicate terminals', () => withRoot(async (runRoot) => {
+  const controller = controllerHarness();
+  const drivers = driverHarness();
+  const time = clockHarness();
+  const artifactStore = createMemoryArtifactStore();
+  const input = {
+    schedule, adapterBindings: adapterBindings(['C01', 'C02', 'C03', 'C04', 'C05']),
+    target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: loggingHarvest(),
+    loggingExpectations: loggingExpectations(['C01', 'C02', 'C03', 'C04', 'C05']),
+  };
+  const first = await runP158W9Phase(input);
+  const second = await runP158W9Phase(input);
+  assert.equal(first.state, 'evidence_sealed');
+  assert.equal(second.state, 'evidence_sealed');
+  assert.equal(drivers.calls.length, 0);
+  assert.equal(controller.snapshot().results.length, 835);
+  assert.equal(controller.startCount, 1);
+  assert.equal(controller.sealCount, 1);
+}));
+
+await runTest('retains a failed pre-seal harvest without replaying campaign work on resume', () => withRoot(async (runRoot) => {
+  const controller = controllerHarness();
+  const drivers = driverHarness();
+  const time = clockHarness();
+  const artifactStore = createMemoryArtifactStore();
+  let harvestCalls = 0;
+  const failedHarvest = loggingHarvest();
+  failedHarvest.execute = async () => {
+    harvestCalls += 1;
+    throw Object.assign(new Error('synthetic logging capture failed'), { code: 'logging_capture_failed' });
+  };
+  const input = {
+    schedule, adapterBindings: adapterBindings(['C01', 'C02', 'C03', 'C04', 'C05']),
+    target: target(), caseWindows: windows(), drivers, controller, runRoot, artifactStore,
+    clock: time.clock, scheduler: time.scheduler, loggingHarvest: failedHarvest,
+    loggingExpectations: loggingExpectations(['C01', 'C02', 'C03', 'C04', 'C05']),
+  };
+  await assert.rejects(() => runP158W9Phase(input), (error) => error.code === 'logging_capture_failed');
+  assert.equal(controller.snapshot().state, 'executing');
+  assert.equal(controller.sealCount, 0);
+  assert.equal(drivers.calls.length, 0);
+  await assert.rejects(() => runP158W9Phase({ ...input, loggingHarvest: loggingHarvest() }),
+    (error) => error.code === 'logging_harvest_failed');
+  assert.equal(harvestCalls, 1);
+  assert.equal(drivers.calls.length, 0);
+  assert.equal(controller.snapshot().results.length, 835);
+}));
+
+await runTest('seals an explicit logging capture gap for independent W10 analysis', () => withRoot(async (runRoot) => {
+  const controller = controllerHarness();
+  const drivers = driverHarness();
+  const time = clockHarness();
+  const result = await runP158W9Phase({
+    schedule, adapterBindings: adapterBindings(['C01', 'C02', 'C03', 'C04', 'C05']),
+    target: target(), caseWindows: windows(), drivers, controller, runRoot,
+    artifactStore: createMemoryArtifactStore(), clock: time.clock, scheduler: time.scheduler,
+    loggingHarvest: loggingHarvest('capture_gap'),
+    loggingExpectations: loggingExpectations(['C01', 'C02', 'C03', 'C04', 'C05']),
+  });
+  assert.equal(result.state, 'evidence_sealed');
+  assert.equal(controller.sealCount, 1);
+  assert.equal(drivers.calls.length, 0);
+}));
 
 process.stdout.write('P158 W9 campaign orchestration test passed\n');

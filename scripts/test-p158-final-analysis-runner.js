@@ -94,6 +94,19 @@ async function fixture({ sealed = true, forbidden = false, binary = false } = {}
     dashboardCorpus.baseline, { artifactId: `${runId}:dashboard`, mediaType: 'application/json',
       analysisRole: 'dashboard_fixture', captureState: 'complete', captureGap: null, redactions: [],
       parentArtifactSha256s: [artifactBindings.at(-1).sha256] }));
+  const operationGaps = [{ descriptorId: `${runId}:A13-001:handoff-prepare`,
+    operationCorrelationId: `${runId}:A13-001:handoff-prepare`, productRequestId: null,
+    correlationState: 'product_request_id_unavailable', operationKind: 'handoff-prepare',
+    actionId: 'A13-001', attemptId: 'A13-E1-r001', caseId: 'A13', phaseId: 'W7',
+    environmentId: 'E1', loggingGap: { code: 'product_request_id_not_preserved',
+      detail: 'Product request identity is unavailable.' } }];
+  artifactBindings.push(await writeBound(runRoot, 'artifacts/logging/operation-gaps.json', {
+    schemaVersion: 'agent-browser.p158-logging-operation-gaps.v1', planId: 'P158', runId,
+    operationGapCount: operationGaps.length, loggingOperationGapsSha256: sha256(operationGaps),
+    operations: operationGaps, effectsAttempted: false, repairAttempted: false,
+  }, { artifactId: `${runId}:operation-gaps`, mediaType: 'application/json',
+    analysisRole: 'logging_operation_gaps', captureState: 'complete', captureGap: null,
+    redactions: [], parentArtifactSha256s: [artifactBindings.at(-1).sha256] }));
   if (forbidden) {
     artifactBindings.push(await writeBound(runRoot, 'artifacts/logging/forbidden.json', {
       schemaVersion: 'fixture.v1', credentialCharacters: 'must-not-survive',
@@ -176,6 +189,14 @@ async function fixture({ sealed = true, forbidden = false, binary = false } = {}
     `ledger/${String(value.sequence).padStart(8, '0')}-${value.recordType}.json`, value));
   const descriptor = {
     schemaVersion: 'agent-browser.p158-final-analysis-runner.v1', planId: 'P158', runRoot,
+    sourceBindings: [
+      { hookId: 'p158.final_analysis_descriptor',
+        sourcePath: 'scripts/lib/p158-final-analysis-descriptor.js',
+        sourceSha256: sha256(await readFile('scripts/lib/p158-final-analysis-descriptor.js')) },
+      { hookId: 'p158.final_analysis_runner',
+        sourcePath: 'scripts/lib/p158-final-analysis-runner.js',
+        sourceSha256: sha256(await readFile('scripts/lib/p158-final-analysis-runner.js')) },
+    ],
     files: { manifest: manifestBinding, freeze: freezeBinding, schedule: scheduleBinding,
       registry: registryBinding, evidenceManifest: evidenceBinding,
       ledger: ledgerBindings, artifacts: [...artifactBindings, evidenceBinding] },
@@ -263,5 +284,12 @@ assert.equal(binaryResult.controllerState, 'analyzed');
 const changedDescriptor = await fixture();
 await writeFile(changedDescriptor.descriptorPath, '{}\n');
 await assert.rejects(run(changedDescriptor), (error) => error.code === 'analysis_descriptor_changed');
+
+const forgedSource = await fixture();
+forgedSource.descriptor.sourceBindings[0].sourceSha256 = 'ff'.repeat(32);
+const forgedBytes = Buffer.from(canonicalJson(forgedSource.descriptor));
+await writeFile(forgedSource.descriptorPath, forgedBytes);
+await assert.rejects(run({ ...forgedSource, descriptorSha256: sha256(forgedBytes) }),
+  (error) => error.code === 'analysis_source_binding_invalid');
 
 process.stdout.write('P158 W10 final analysis runner passed sealed/tamper/incomplete/redaction/resume/no-effect checks\n');

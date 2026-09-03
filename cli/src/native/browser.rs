@@ -12,6 +12,9 @@ use super::cdp::chrome::{
 use super::cdp::discovery::discover_cdp_url;
 use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
 use super::element::{resolve_element_object_id, RefMap};
+use super::service_failure_journal::{
+    append_service_failure_best_effort, ServiceFailureCategory, ServiceFailureRecord,
+};
 use agent_browser_cdp::client::CdpClient;
 use agent_browser_cdp::types::*;
 use std::path::Path;
@@ -541,7 +544,32 @@ impl BrowserManager {
     pub(crate) fn owns_launched_browser_process(&self) -> bool {
         self.browser_process.is_some()
     }
+    /// Launch a browser and durably journal any failure before returning it.
     pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
+        let engine_name = engine.unwrap_or("chrome").to_string();
+        let profile_configured = options.profile.is_some();
+        let headed = !options.headless;
+        let result = Self::launch_inner(options, engine).await;
+        if let Err(error) = result.as_ref() {
+            let record = ServiceFailureRecord::new(
+                ServiceFailureCategory::BrowserLaunch,
+                "browser_manager",
+                "launch",
+                "browser_launch_failed",
+                error,
+            )
+            .with_action("open")
+            .with_details(json!({
+                "engine": engine_name,
+                "profileConfigured": profile_configured,
+                "headed": headed,
+            }));
+            append_service_failure_best_effort(&record);
+        }
+        result
+    }
+
+    async fn launch_inner(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
         let bootstrap_mode = if engine == "chrome" {
             CdpBootstrapMode::for_local_launch()?

@@ -123,6 +123,9 @@ function receiptBody(action, target, fields) {
     scheduleSha256: action.scheduleSha256,
     workflowRunId: target.workflowRunId, workflowRunAttempt: target.workflowRunAttempt,
     caseId: action.caseId, attemptId: action.attemptId, actionId: action.actionId,
+    operationCorrelationId: action.requestId,
+    productRequestId: null,
+    correlationState: 'product_request_id_unavailable',
     environmentId: action.environmentId, kind: action.kind, attempt: 1,
     retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false,
     ...clone(fields),
@@ -183,7 +186,11 @@ export function createP158W9ConcreteDriverBundle({
   const fetch = suppliedFetch ?? globalThis.fetch;
   const transitionPrimitives = suppliedTransitionPrimitives ?? concreteTransitionPrimitives();
   const plan = buildP158W9ActionPlan(schedule);
-  const actions = plan.flatMap((entry) => entry.actions).map((action) => ({ ...action, scheduleSha256: schedule.scheduleSha256 }));
+  const actions = plan.flatMap((entry) => entry.actions).map((action) => ({
+    ...action,
+    scheduleSha256: schedule.scheduleSha256,
+    requestId: `p158:${target.runId}:${action.actionId}:request`,
+  }));
   const byId = new Map(actions.map((action) => [action.actionId, action]));
   const external = verifyPlan(
     externalWorkflowPlan,
@@ -385,10 +392,41 @@ export function createP158W9ConcreteDriverBundle({
   };
   return {
     drivers, classification, actions, actionCountByCase,
+    loggingRequestExpectations: enumerateP158W9LoggingRequests({
+      actions: actions.filter((action) => classification.get(action.caseId).mode === 'concrete_live'),
+    }),
     freezeEligible: testing === false && suppliedFetch === undefined && suppliedTransitionPrimitives === undefined,
     c01FetchSource: suppliedFetch === undefined ? 'global' : 'supplied',
     sourcePath: SOURCE_PATH, sourceSha256: SOURCE_SHA256,
   };
+}
+
+export function enumerateP158W9LoggingRequests({ actions }) {
+  if (!Array.isArray(actions) || actions.some((action) =>
+    typeof action.requestId !== 'string' || typeof action.actionId !== 'string')) {
+    fail('logging_request_enumerator_invalid', 'W9 logging enumeration requires exact frozen actions');
+  }
+  return Object.freeze(actions.map((action) => Object.freeze({
+    expectationId: action.requestId,
+    operationCorrelationId: action.requestId,
+    productRequestId: null,
+    productRequestIdState: 'assigned_at_runtime',
+    correlationState: 'product_request_id_unavailable',
+    requestKind: action.kind === 'service_command' ? 'accepted_request'
+      : action.declaredFault ? 'transition' : 'dashboard_action',
+    operationKind: action.kind,
+    actionId: action.actionId,
+    attemptId: action.attemptId,
+    caseId: action.caseId,
+    phaseId: 'W9',
+    environmentId: action.environmentId,
+    operatorVisible: action.transport === 'external_ingress',
+    expectedSurfaceRoles: action.kind === 'service_command'
+      ? ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome']
+      : action.declaredFault
+        ? ['controller_transition', 'terminal_event', 'trace_outcome']
+        : ['ingress_request', 'immediate_response', 'terminal_event', 'dashboard_projection'],
+  })));
 }
 
 export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookManifestSha256 }) {
@@ -459,7 +497,7 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
       hookIds: classified.mode === 'concrete_live' ? hookIds(caseId) : [],
       implementedActionCount: classified.mode === 'concrete_live' ? count : 0,
       blockedActionCount: classified.mode === 'concrete_live' ? 0 : count,
-      effectsAllowed: classified.mode === 'concrete_live', blocker: clone(exactBlocker),
+      effectsAllowed: classified.mode === 'concrete_live', blocker: clone(classified.blocker),
     };
     const adapter = {
       ...base, executionMode: classified.mode, providerFree: false,

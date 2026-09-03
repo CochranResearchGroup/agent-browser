@@ -976,6 +976,8 @@ export interface ServiceRemoteViewRouteMutationData {
   newRoutePoolEntryId?: string | null;
   browserId?: string;
   sessionName?: string;
+  serviceTabHandle?: ServiceTabHandle | null;
+  tab?: Record<string, unknown> | null;
   frameUrl?: string | null;
   externalUrl?: string | null;
   providerMode?: string;
@@ -1026,6 +1028,7 @@ export interface ServiceRemoteViewOpenProofSummary {
   sessionName: string | null;
   tabId: string | null;
   profileId: string | null;
+  serviceTabHandle: ServiceTabHandle | null;
   visualProof: string | null;
   browserBuildState: string | null;
   requestedBrowserBuild: string | null;

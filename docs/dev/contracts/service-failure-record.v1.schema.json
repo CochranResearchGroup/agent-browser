@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-failure-record.v1.schema.json",
+  "title": "Service failure journal record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "occurrenceId", "occurredAt", "runtimeEnvironment", "category", "source", "stage", "code", "summary", "references"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.service-failure-record.v1" },
+    "occurrenceId": { "type": "string", "minLength": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "bootEpoch": { "type": "string" },
+    "runtimeEnvironment": { "enum": ["development", "production"] },
+    "category": { "enum": ["browser_launch", "guacamole_load", "handoff_link", "cdp_stream", "dashboard_action", "service_action"] },
+    "source": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "stage": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "summary": { "type": "string", "maxLength": 1024 },
+    "action": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtimeEnvironmentId": { "type": "string" },
+        "runtimeLaneId": { "type": "string" },
+        "requestId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "traceId": { "type": "string" },
+        "browserId": { "type": "string" },
+        "profileId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "routeId": { "type": "string" },
+        "displayId": { "type": "string" },
+        "handoffIdHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "details": { "type": "object" }
+  }
+}

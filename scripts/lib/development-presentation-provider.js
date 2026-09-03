@@ -288,6 +288,22 @@ export function developmentPresentationProviderManifestCompatible(manifest, expe
   return JSON.stringify(manifest) === JSON.stringify(expected);
 }
 
+/**
+ * Admit only the additive v1 to v2 authority upgrade. The legacy manifest
+ * called the loopback dashboard URL public; every other provider identity must
+ * still match before an explicit apply may rewrite current v2 authority.
+ */
+export function developmentPresentationProviderManifestUpgradeCompatible(manifest, expected) {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return false;
+  if (expected?.externalIngress?.configured !== true) return false;
+  const legacyExpected = { ...expected };
+  legacyExpected.schemaVersion = 'agent-browser.development-presentation-provider.v1';
+  delete legacyExpected.localDiagnosticUrl;
+  delete legacyExpected.externalIngress;
+  legacyExpected.publicOperatorUrl = expected.localDiagnosticUrl;
+  return JSON.stringify(manifest) === JSON.stringify(legacyExpected);
+}
+
 export function developmentPresentationProviderStatus({ env = process.env, probe = null } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   const required = env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED === '1';

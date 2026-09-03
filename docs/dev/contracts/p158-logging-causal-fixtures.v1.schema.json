@@ -89,7 +89,7 @@
       ],
       "properties": {
         "surfaceRole": { "$ref": "#/$defs/surfaceRole" },
-        "transport": { "enum": ["cli", "http", "mcp", "service", "dashboard"] },
+        "transport": { "enum": ["cli", "http", "mcp", "service", "dashboard", "controller"] },
         "recordId": { "$ref": "#/$defs/id" },
         "requestId": { "$ref": "#/$defs/nullableId" },
         "jobId": { "$ref": "#/$defs/nullableId" },

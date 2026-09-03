@@ -738,6 +738,11 @@ the current provider connection as `providerExternalUrl`. Generic service
 clients must never substitute `providerExternalUrl` or a route-binding URL for
 the durable handoff. Software clients that need an operator link use
 `requestServiceRemoteViewHandoff()`, which returns only the handoff identity.
+Automation-capable responses also expose the valid `serviceTabHandle` at the
+top level and under `tab.serviceTabHandle`. Generic `tab_new` rejects route and
+display selectors before job creation; callers use authenticated
+`remote_view_open` for route-bound acquisition. Derived allocation identifiers
+follow stable route identity rather than reusable display numbers.
 Service request action `service_remote_view_handoff_resolve` accepts `params.handoffId`
 and optional `params.allowReopenClosed`. It replays durable intent without stale
 route, display, or Guacamole connection selectors, prefers the recorded target,

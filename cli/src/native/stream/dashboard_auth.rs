@@ -62,6 +62,10 @@ pub(super) struct DashboardAuthResponse {
 }
 
 impl DashboardAuthResponse {
+    pub(super) fn is_success(&self) -> bool {
+        self.status.starts_with('2')
+    }
+
     pub(super) fn into_http_bytes(self) -> Vec<u8> {
         let mut response = format!(
             "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n",

@@ -1053,17 +1053,18 @@ pub fn plan_remote_view_acquisition(
     })
 }
 
+/// Return the durable display-allocation identity for a route-pool entry.
+///
+/// Explicit provider identities remain authoritative. Otherwise the identity
+/// follows the route rather than its reusable display number, so a terminal
+/// allocation for an older route on the same display cannot govern checkout.
 pub fn display_allocation_id_for_route_pool_entry(entry: &RoutePoolEntry) -> String {
     route_pool_target_string(entry, "displayAllocationId").unwrap_or_else(|| {
-        let seed = route_pool_target_string(entry, "displayName")
-            .or_else(|| {
-                if entry.route_id.trim().is_empty() {
-                    None
-                } else {
-                    Some(entry.route_id.clone())
-                }
-            })
-            .unwrap_or_else(|| entry.id.clone());
+        let seed = if entry.route_id.trim().is_empty() {
+            entry.id.clone()
+        } else {
+            entry.route_id.clone()
+        };
         format!("remote-view-display:{}", route_binding_id_component(&seed))
     })
 }
@@ -2268,7 +2269,7 @@ mod tests {
     }
 
     #[test]
-    fn display_allocation_id_for_route_pool_entry_prefers_configured_target() {
+    fn display_allocation_id_for_route_pool_entry_prefers_configured_target_and_route_identity() {
         let configured = RoutePoolEntry {
             id: "pool-a".to_string(),
             route_id: "route-a".to_string(),
@@ -2291,7 +2292,7 @@ mod tests {
         );
         assert_eq!(
             display_allocation_id_for_route_pool_entry(&derived),
-            "remote-view-display:21"
+            "remote-view-display:route-b"
         );
     }
 
@@ -2406,7 +2407,10 @@ mod tests {
             Some("pool-clean")
         );
         assert_eq!(plan.selected_route_id, "route-clean");
-        assert_eq!(plan.display_allocation_id, "remote-view-display:31");
+        assert_eq!(
+            plan.display_allocation_id,
+            "remote-view-display:route-clean"
+        );
         assert_eq!(plan.display_name.as_deref(), Some(":31"));
         assert!(plan.decisions.iter().any(|decision| {
             decision.step == "display_allocation" && decision.reason == "available_route_pool_entry"
@@ -2775,7 +2779,7 @@ mod tests {
     }
 
     #[test]
-    fn acquisition_plan_reclaims_released_display_allocation_from_previous_session() {
+    fn acquisition_plan_avoids_released_display_number_identity_collision() {
         let state = ServiceState {
             route_pool: BTreeMap::from([(
                 "pool-clean".to_string(),
@@ -2784,7 +2788,7 @@ mod tests {
                     route_id: "route-clean".to_string(),
                     frame_url: Some("https://guac.example/#/client/clean".to_string()),
                     target: json!({
-                        "displayName": ":31",
+                        "displayName": ":10",
                         "displayIsolation": "shared_display"
                     }),
                     state: "available".to_string(),
@@ -2793,10 +2797,10 @@ mod tests {
                 },
             )]),
             display_allocations: BTreeMap::from([(
-                "remote-view-display:31".to_string(),
+                "remote-view-display:10".to_string(),
                 DisplayAllocation {
-                    id: "remote-view-display:31".to_string(),
-                    display_name: Some(":31".to_string()),
+                    id: "remote-view-display:10".to_string(),
+                    display_name: Some(":11".to_string()),
                     display_isolation: "shared_display".to_string(),
                     owner_browser_id: Some("session:old".to_string()),
                     owner_session_id: Some("old".to_string()),
@@ -2822,8 +2826,14 @@ mod tests {
             Some("pool-clean")
         );
         assert_eq!(plan.selected_route_id, "route-clean");
-        assert_eq!(plan.display_allocation_id, "remote-view-display:31");
-        assert_eq!(plan.display_name.as_deref(), Some(":31"));
+        assert_eq!(
+            plan.display_allocation_id,
+            "remote-view-display:route-clean"
+        );
+        assert_eq!(plan.display_name.as_deref(), Some(":10"));
+        assert!(state
+            .display_allocations
+            .contains_key("remote-view-display:10"));
     }
 
     #[test]

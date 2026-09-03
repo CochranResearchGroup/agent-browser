@@ -123,13 +123,15 @@ function validateExpectations(expectations, runId, phaseId, environmentId) {
     fail('logging_expectations_missing', 'At least one frozen logging expectation is required');
   }
   const expectationIds = new Set();
-  const requestIds = new Set();
+  const operationCorrelationIds = new Set();
   return expectations.map((entry) => {
     if (typeof entry?.expectationId !== 'string' || expectationIds.has(entry.expectationId) ||
-        typeof entry?.attemptId !== 'string' || requestIds.has(entry.requestId) ||
+        typeof entry?.attemptId !== 'string' || operationCorrelationIds.has(entry.operationCorrelationId) ||
         entry.phaseId !== phaseId || entry.environmentId !== environmentId ||
-        typeof entry.requestId !== 'string' ||
-        !(entry.requestId.startsWith(`${runId}:`) || entry.requestId.includes(`:${runId}:`)) ||
+        typeof entry.operationCorrelationId !== 'string' ||
+        !(entry.operationCorrelationId.startsWith(`${runId}:`) ||
+          entry.operationCorrelationId.includes(`:${runId}:`)) ||
+        entry.productRequestId !== null ||
         !['accepted_request', 'rejected_request', 'transition', 'dashboard_action']
           .includes(entry.requestKind) ||
         !Array.isArray(entry.expectedSurfaceRoles) || entry.expectedSurfaceRoles.length === 0 ||
@@ -138,12 +140,15 @@ function validateExpectations(expectations, runId, phaseId, environmentId) {
       fail('logging_expectation_invalid', `Invalid expectation for ${entry?.attemptId ?? 'unknown'}`);
     }
     const blocked = entry.executionMode === 'explicit_blocked';
+    if (entry.productRequestIdState !== (blocked ? 'not_applicable' : 'assigned_at_runtime')) {
+      fail('logging_expectation_invalid', `${entry.attemptId} has invalid product request identity state`);
+    }
     if (blocked && JSON.stringify([...entry.expectedSurfaceRoles].sort()) !==
         JSON.stringify([...BLOCKED_ROLES].sort())) {
       fail('logging_expectation_invalid', `${entry.attemptId} has invalid blocked surfaces`);
     }
     expectationIds.add(entry.expectationId);
-    requestIds.add(entry.requestId);
+    operationCorrelationIds.add(entry.operationCorrelationId);
     return freeze(clone(entry));
   }).sort((left, right) => left.expectationId.localeCompare(right.expectationId));
 }
@@ -162,8 +167,9 @@ function validateCausalEnvelopes(causalEnvelopes, expectations, runId, phaseId, 
     if (envelope?.environmentId !== environmentId ||
         typeof envelope.expectationId !== 'string' ||
         byExpectation.has(envelope.expectationId) ||
-        typeof envelope.expectedRequestId !== 'string' || !envelope.observedCausalIds ||
-        envelope.observedCausalIds.requestId !== envelope.expectedRequestId) {
+        typeof envelope.operationCorrelationId !== 'string' || !envelope.observedCausalIds ||
+        (envelope.observedCausalIds.requestId !== null &&
+          typeof envelope.observedCausalIds.requestId !== 'string')) {
       fail('causal_envelope_invalid', `Invalid causal envelope for ${envelope?.attemptId ?? 'unknown'}`);
     }
     byExpectation.set(envelope.expectationId, freeze(clone(envelope)));
@@ -171,12 +177,15 @@ function validateCausalEnvelopes(causalEnvelopes, expectations, runId, phaseId, 
   return expectations.map((expectation) => {
     const envelope = byExpectation.get(expectation.expectationId);
     if (!envelope || envelope.actionId !== (expectation.actionId ?? null) ||
-        envelope.expectedRequestId !== expectation.requestId) {
+        envelope.operationCorrelationId !== expectation.operationCorrelationId) {
       fail('causal_envelope_invalid', `${expectation.attemptId} causal identity does not match preparation`);
     }
     const ids = envelope.observedCausalIds;
     return freeze({
-      ...clone(expectation), jobId: ids.jobId ?? null, eventId: ids.eventId ?? null,
+      ...clone(expectation), productRequestId: ids.requestId ?? null,
+      productRequestIdState: ids.requestId ? 'observed' :
+        (expectation.executionMode === 'explicit_blocked' ? 'not_applicable' : 'not_returned'),
+      jobId: ids.jobId ?? null, eventId: ids.eventId ?? null,
       traceId: ids.traceId ?? null, incidentId: ids.incidentId ?? null,
       causalEnvelopeSha256: sha256(envelope),
     });
@@ -186,7 +195,9 @@ function validateCausalEnvelopes(causalEnvelopes, expectations, runId, phaseId, 
 function causalIds(record, expectation) {
   const provenance = record.provenance ?? {};
   return {
-    requestId: record.requestId ?? provenance.requestId ?? expectation.requestId ?? null,
+    // An expectation ID is a harness correlation key, not an observed product
+    // request ID. Only independently captured product evidence may populate it.
+    requestId: record.requestId ?? provenance.requestId ?? null,
     jobId: record.jobId ?? provenance.jobId ?? expectation.jobId ?? null,
     eventId: record.eventId ?? expectation.eventId ?? null,
     traceId: record.traceId ?? provenance.traceId ?? expectation.traceId ?? null,
@@ -235,23 +246,26 @@ function normalizeRecord(record, expectation, index, window, runId) {
 }
 
 function missingRecord(expectation, role, ordinal, capturedAt) {
+  const correlationUnavailable = expectation.productRequestIdState === 'not_returned';
   return {
     surfaceRole: role,
     transport: role === 'dashboard_projection' ? 'dashboard' : 'service',
     recordId: `${expectation.expectationId}:${role}:capture-gap:${ordinal}`,
-    requestId: expectation.requestId,
+    requestId: null,
     ...(expectation.jobId ? { jobId: expectation.jobId } : {}),
     ...(expectation.eventId ? { eventId: expectation.eventId } : {}),
     ...(expectation.traceId ? { traceId: expectation.traceId } : {}),
     ...(expectation.incidentId ? { incidentId: expectation.incidentId } : {}),
     causalIds: {
-      requestId: expectation.requestId, jobId: expectation.jobId ?? null,
+      requestId: null, jobId: expectation.jobId ?? null,
       eventId: expectation.eventId ?? null, traceId: expectation.traceId ?? null,
       incidentId: expectation.incidentId ?? null,
     },
     timestamp: capturedAt, parentId: null, terminal: false, state: 'rejected', phase: 'finalize',
     effectState: 'no_effect', retryDisposition: 'inspect_before_retry', failure: null, provenance: null,
-    captureState: 'missing', captureGap: `expected ${role} was absent from exact bound evidence`,
+    captureState: 'missing', captureGap: correlationUnavailable
+      ? `request_id_correlation_unavailable; unobserved_due_to_uncorrelatable_id:${role}`
+      : `expected ${role} was absent from exact bound evidence`,
     capturedValues: [],
   };
 }
@@ -263,7 +277,7 @@ function serviceRecord(role, record, expectation) {
     surfaceRole: role,
     transport: 'service',
     recordId: record.id,
-    requestId: provenance?.requestId ?? expectation.requestId,
+    requestId: provenance?.requestId ?? null,
     jobId: record.jobId ?? provenance?.jobId ?? (role === 'durable_job' ? record.id : expectation.jobId),
     eventId: role === 'terminal_event' ? record.id : expectation.eventId,
     traceId: provenance?.traceId ?? expectation.traceId,
@@ -283,8 +297,17 @@ function serviceRecord(role, record, expectation) {
 
 export function createP158ServiceLoggingObserver({ fetch = globalThis.fetch } = {}) {
   if (typeof fetch !== 'function') fail('logging_observer_invalid', 'A fetch implementation is required');
-  return async ({ environment, expectation, window }) => {
-    const query = { requestId: expectation.requestId, since: window.startedAt, limit: 500 };
+  const observer = async ({ environment, expectation, window }) => {
+    if (!expectation.productRequestId) {
+      const operation = { operation: 'product_request_id_correlation_unavailable',
+        expectationId: expectation.expectationId, window };
+      return { records: [], observerReceipts: [{
+        receiptId: `${expectation.expectationId}:observer:01`, expectationId: expectation.expectationId,
+        environmentId: environment.environmentId, capturePlane: true, operation: operation.operation,
+        requestSha256: sha256(operation),
+      }] };
+    }
+    const query = { requestId: expectation.productRequestId, since: window.startedAt, limit: 500 };
     const [trace, events, job, incident] = await Promise.all([
       getServiceTrace({ baseUrl: environment.serviceOrigin, fetch, query }),
       getServiceEvents({ baseUrl: environment.serviceOrigin, fetch, query }),
@@ -294,7 +317,7 @@ export function createP158ServiceLoggingObserver({ fetch = globalThis.fetch } = 
     ]);
     assertNoSensitiveMaterial({ trace, events, job, incident });
     const matching = (records) => (records ?? []).filter((record) =>
-      (record.provenance?.requestId ?? record.requestId) === expectation.requestId);
+      (record.provenance?.requestId ?? record.requestId) === expectation.productRequestId);
     const records = [
       ...matching(job ? [job.job ?? job] : trace.jobs).map((record) => serviceRecord('durable_job', record, expectation)),
       ...matching(events.events ?? trace.events).map((record) => serviceRecord('terminal_event', record, expectation)),
@@ -318,6 +341,42 @@ export function createP158ServiceLoggingObserver({ fetch = globalThis.fetch } = 
       })),
     };
   };
+  observer.readFailureJournal = async ({ environment, window }) => {
+    const url = new URL('/api/service/failures', environment.serviceOrigin);
+    url.searchParams.set('limit', '1000');
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) fail('logging_failure_journal_unavailable', `Failure journal read failed: ${response.status}`);
+    const payload = await response.json();
+    if (!payload?.success || !Array.isArray(payload.data?.records)) {
+      fail('logging_failure_journal_invalid', 'Failure journal readback is not a valid Service response');
+    }
+    assertNoSensitiveMaterial(payload.data);
+    const started = parseTime(window.startedAt, 'window.startedAt');
+    const completed = parseTime(window.completedAt, 'window.completedAt');
+    return {
+      captureState: 'complete',
+      records: payload.data.records.filter((record) => {
+        const occurred = Date.parse(record.occurredAt);
+        return Number.isFinite(occurred) && occurred >= started && occurred <= completed;
+      }),
+      malformedLineCount: payload.data.malformedLineCount ?? 0,
+      writeFailureCount: payload.data.writeFailureCount ?? 0,
+      captureGap: null,
+      observerReceipt: {
+        receiptId: `${environment.environmentId}:failure-journal:observer:01`,
+        expectationId: normalizedFailureJournalReceiptExpectationId(environment.environmentId),
+        environmentId: environment.environmentId,
+        capturePlane: true,
+        operation: 'service_failure_journal',
+        requestSha256: sha256({ operation: 'service_failure_journal', window, limit: 1000 }),
+      },
+    };
+  };
+  return observer;
+}
+
+function normalizedFailureJournalReceiptExpectationId(environmentId) {
+  return `failure-journal:${environmentId}`;
 }
 
 function artifactPath(environmentId, phaseId) {
@@ -336,7 +395,7 @@ export async function harvestP158LoggingEvidence({
   runId, candidateSha256, phaseId, environment, environmentSealSha256, window,
   expectations, expectationSetSha256, causalEnvelopes,
   checkpointRecords = [], dashboardProjections = [], observer,
-  artifactStore, runRoot, capturedAt,
+  artifactStore, artifactWriter = null, runRoot, capturedAt,
 }) {
   const times = validateIdentity({ runId, candidateSha256, phaseId, environment, environmentSealSha256, window });
   if (!isAbsolute(runRoot ?? '')) fail('logging_run_root_invalid', 'Logging run root must be absolute');
@@ -346,7 +405,7 @@ export async function harvestP158LoggingEvidence({
     fail('logging_run_root_inside_repository', 'Logging evidence belongs outside the product repository');
   }
   if (typeof artifactStore?.read !== 'function' || typeof artifactStore?.writeOnce !== 'function' ||
-      typeof observer !== 'function') {
+      typeof observer !== 'function' || (artifactWriter !== null && typeof artifactWriter !== 'function')) {
     fail('logging_dependency_missing', 'Logging harvest requires observer and append-only artifact store');
   }
   parseTime(capturedAt, 'capturedAt');
@@ -376,14 +435,44 @@ export async function harvestP158LoggingEvidence({
     return { corpus: verifyCorpus(parsed, inputIdentitySha256), resumed: true, relativePath };
   }
 
-  const suppliedRecords = [...checkpointRecords, ...dashboardProjections];
-  assertNoSensitiveMaterial(suppliedRecords);
+  assertNoSensitiveMaterial(checkpointRecords);
+  assertNoSensitiveMaterial(dashboardProjections);
   const fixtures = [];
   const observerReceipts = [];
+  let failureJournal = {
+    captureState: 'unavailable', records: [], malformedLineCount: 0, writeFailureCount: 0,
+    captureGap: 'failure_journal_observer_not_configured',
+  };
+  if (typeof observer.readFailureJournal === 'function') {
+    const observedJournal = await observer.readFailureJournal({
+      environment: clone(environment), window: clone(window),
+    });
+    const { observerReceipt, ...journal } = observedJournal ?? {};
+    if (!observerReceipt || observerReceipt.capturePlane !== true ||
+        observerReceipt.operation !== 'service_failure_journal' ||
+        !/^[a-f0-9]{64}$/u.test(observerReceipt.requestSha256 ?? '')) {
+      fail('logging_observer_invalid', 'Failure journal observer must expose a capture-plane receipt');
+    }
+    assertNoSensitiveMaterial(journal);
+    failureJournal = clone(journal);
+    observerReceipts.push(clone(observerReceipt));
+  }
   for (const expectation of normalizedExpectations) {
-    const records = suppliedRecords.filter((record) =>
-      record.expectationId === expectation.expectationId ||
-      (record.requestId === expectation.requestId && record.attemptId === expectation.attemptId));
+    // Controller checkpoints are authoritative only for requests deliberately
+    // rejected before dispatch. Concrete product surfaces must be returned by
+    // the independent observer and cannot be self-attested by the harness.
+    const records = expectation.executionMode === 'explicit_blocked'
+      ? checkpointRecords.filter((record) => record.expectationId === expectation.expectationId)
+      : [];
+    if (expectation.executionMode !== 'explicit_blocked') {
+      records.push(...dashboardProjections.filter((record) =>
+        record.expectationId === expectation.expectationId && record.actionId === expectation.actionId &&
+        record.surfaceRole === 'dashboard_projection' && record.capturePlane === true &&
+        record.sourceBinding?.implementationKind === 'concrete_live' &&
+        typeof record.sourceBinding.sourcePath === 'string' &&
+        /^[a-f0-9]{64}$/u.test(record.sourceBinding.sourceSha256 ?? '') &&
+        record.provenance?.source !== 'p158_controller' && record.provenance?.source !== 'p158_harness'));
+    }
     if (expectation.executionMode !== 'explicit_blocked' &&
         expectation.expectedSurfaceRoles.some((role) => SERVICE_ROLES.has(role))) {
       const observed = await observer({ environment: clone(environment), expectation: clone(expectation), window: clone(window) });
@@ -422,6 +511,7 @@ export async function harvestP158LoggingEvidence({
     expectationSetSha256, fixtureCount: fixtures.length, fixtures,
     observerRequestCount: observerReceipts.length,
     observerReceipts: observerReceipts.sort((left, right) => left.receiptId.localeCompare(right.receiptId)),
+    failureJournal,
     redactionPolicy: {
       mode: 'allowlist_projection', excludedFieldNames: [...REDACTED_SOURCE_FIELDS],
       rawSensitiveMaterialDisposition: 'reject',
@@ -429,7 +519,11 @@ export async function harvestP158LoggingEvidence({
     effectsAttempted: false, repairAttempted: false, retryAttempted: false,
   };
   const corpus = freeze({ ...body, corpusSha256: sha256(body) });
-  await artifactStore.writeOnce(relativePath, canonicalJson(corpus));
+  if (artifactWriter) {
+    await artifactWriter({ artifactId: `p158-logging-evidence:${corpus.corpusSha256}`, relativePath,
+      content: canonicalJson(corpus), metadata: { mediaType: 'application/json', analysisRole: 'logging_evidence',
+        capturePurpose: 'logging_evidence', captureState: 'complete', redactions: [], parentArtifactSha256s: [] } });
+  } else await artifactStore.writeOnce(relativePath, canonicalJson(corpus));
   return { corpus, resumed: false, relativePath };
 }
 
@@ -441,9 +535,13 @@ export function createP158LoggingHarvestHook({
   const {
     runId, scheduleSha256, candidateSha256, environments, environmentSealSha256s,
     loggingExpectations, loggingExpectationsSha256, windowsByEnvironmentPhase,
-    dashboardProjections = [],
+    dashboardProjections = [], loggingOperationGaps = [], loggingOperationGapsSha256 = sha256([]),
   } = config;
   if (loggingExpectationsSha256 !== sha256(loggingExpectations) ||
+      loggingOperationGapsSha256 !== sha256(loggingOperationGaps) ||
+      loggingOperationGaps.some((entry) => entry?.productRequestId !== null ||
+        entry.correlationState !== 'product_request_id_unavailable' ||
+        entry.loggingGap?.code !== 'product_request_id_not_preserved') ||
       !/^[a-f0-9]{64}$/u.test(scheduleSha256 ?? '') || typeof clock?.wallNow !== 'function') {
     fail('logging_expectation_set_unfrozen', 'Pre-seal harvest requires the exact preparation expectation seal');
   }
@@ -454,10 +552,11 @@ export function createP158LoggingHarvestHook({
     sourcePath,
     sourceSha256: sourceDigest,
     async execute({ schedule, target, sourceDigest: executionSourceDigest,
-      causalEnvelopes, checkpointRecords }) {
+      causalEnvelopes, checkpointRecords, registerArtifact = null }) {
       if (schedule?.scheduleSha256 !== scheduleSha256 || target?.runId !== runId ||
           !/^[a-f0-9]{64}$/u.test(executionSourceDigest ?? '') ||
-          !Array.isArray(causalEnvelopes) || !Array.isArray(checkpointRecords)) {
+          !Array.isArray(causalEnvelopes) || !Array.isArray(checkpointRecords) ||
+          (registerArtifact !== null && typeof registerArtifact !== 'function')) {
         fail('logging_harvest_execution_binding_invalid', 'Pre-seal harvest invocation is not campaign-bound');
       }
       const groups = new Map();
@@ -469,6 +568,27 @@ export function createP158LoggingHarvestHook({
       const artifactIds = [];
       const corpusSha256s = [];
       const findingCodes = new Set();
+      if (loggingOperationGaps.length > 0) {
+        const operationGapBody = {
+          schemaVersion: 'agent-browser.p158-logging-operation-gaps.v1', planId: 'P158', runId, scheduleSha256,
+          sourcePath, sourceSha256: sourceDigest, loggingOperationGapsSha256,
+          operationGapCount: loggingOperationGaps.length,
+          operations: clone(loggingOperationGaps), capturedAt: clock.wallNow(),
+          repairAttempted: false, retryAttempted: false,
+        };
+        const operationGapArtifact = { ...operationGapBody, artifactSha256: sha256(operationGapBody) };
+        const operationGapArtifactId = `p158-logging-operation-gaps:${operationGapArtifact.artifactSha256}`;
+        const operationGapWrite = { artifactId: operationGapArtifactId,
+          relativePath: 'artifacts/logging/operation-gaps.json', content: canonicalJson(operationGapArtifact),
+          metadata: { mediaType: 'application/json', analysisRole: 'logging_operation_gaps',
+            capturePurpose: 'logging_operation_gaps', captureState: 'complete', redactions: [],
+            parentArtifactSha256s: [] } };
+        if (registerArtifact) await registerArtifact(operationGapWrite);
+        else await artifactStore.writeOnce(operationGapWrite.relativePath, operationGapWrite.content);
+        artifactIds.push(operationGapArtifactId);
+        findingCodes.add('request_id_correlation_unavailable');
+        findingCodes.add('unobserved_due_to_uncorrelatable_id');
+      }
       for (const key of [...groups.keys()].sort()) {
         const [phaseId, environmentId] = key.split(':');
         const expectations = groups.get(key);
@@ -489,7 +609,8 @@ export function createP158LoggingHarvestHook({
           window, expectations,
           expectationSetSha256: canonicalP158LoggingExpectationSetDigest(expectations),
           causalEnvelopes: groupEnvelopes, checkpointRecords,
-          dashboardProjections, observer, artifactStore, runRoot,
+          dashboardProjections, observer, artifactStore,
+          artifactWriter: registerArtifact, runRoot,
           capturedAt: window.capturedAt ?? clock.wallNow(),
         });
         const audit = auditCausalEnvelopes({ fixtureSet: result.corpus });
@@ -503,6 +624,7 @@ export function createP158LoggingHarvestHook({
         state: findingCodes.size === 0 ? 'complete' : 'capture_gap',
         artifactIds: artifactIds.sort(), corpusSha256s: corpusSha256s.sort(),
         findingCodes: [...findingCodes].sort(),
+        operationGapCount: loggingOperationGaps.length,
         completedAt: clock.wallNow(),
         repairAttempted: false, retryAttempted: false,
       };

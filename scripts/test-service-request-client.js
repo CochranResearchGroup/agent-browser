@@ -1083,6 +1083,14 @@ async function main() {
     },
     jobTimeoutMs: 45_000,
   });
+  assert.throws(
+    () =>
+      createServiceTabRequest({
+        url: 'https://example.com/route-bound',
+        params: { routePoolEntryId: 'guacamole-rdp-b' },
+      }),
+    /use requestServiceRemoteViewOpen\(\) to acquire the route and serviceTabHandle/,
+  );
   const accessPlan = {
     decision: {
       serviceRequest: {
@@ -3048,6 +3056,16 @@ async function main() {
       displayAllocationId: 'display-a',
       browserId: 'session:rdp-a',
       sessionName: 'rdp-a',
+      serviceTabHandle: {
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        tabId: 'target:target-facebook',
+        targetId: 'target-facebook',
+        profileOrigin: 'agent_browser_owned',
+        leaseHeartbeatExpected: true,
+        traceFilter: {},
+        valid: true,
+      },
       tab: {
         targetId: 'target-facebook',
         profileId: 'last30days-facebook',
@@ -3151,6 +3169,7 @@ async function main() {
   assert.equal(remoteViewOpenSummary.routeId, 'route-a');
   assert.equal(remoteViewOpenSummary.tabId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.profileId, 'last30days-facebook');
+  assert.equal(remoteViewOpenSummary.serviceTabHandle?.targetId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.visualProof, 'browser_window_visible');
   assert.equal(remoteViewOpenSummary.browserBuildState, 'matched');
   assert.equal(remoteViewOpenSummary.requestedBrowserBuild, 'stealthcdp_chromium');

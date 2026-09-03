@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 
 import { canonicalJson, sha256 } from './lib/p158-campaign-controller.js';
 import {
@@ -14,11 +16,38 @@ import {
   P158LiveCampaignEntrypointError,
   runP158LiveCampaignEntrypoint,
 } from './lib/p158-live-campaign-entrypoint.js';
+import {
+  createP158LiveCampaignDescriptor,
+  P158_RUNTIME_IDENTITY_PROJECTION_AXES,
+  P158_RUNTIME_IDENTITY_PROBE_KINDS,
+  p158LiveCampaignAssemblySourceBinding,
+  sealP158RuntimeIdentityProbe,
+} from './lib/p158-live-campaign-assembly.js';
 
 const SOURCE_PATH = 'scripts/lib/p158-live-campaign-entrypoint.js';
 const SOURCE_SHA256 = sha256(await readFile(new URL('./lib/p158-live-campaign-entrypoint.js', import.meta.url)));
+const ASSEMBLY_SOURCE = p158LiveCampaignAssemblySourceBinding();
 const COMMIT = '1'.repeat(40);
 const NOW = '2026-09-03T12:00:00.000Z';
+const resultAjv = new Ajv2020({ strict: true, allErrors: true });
+addFormats(resultAjv);
+const validateResultRecord = resultAjv.compile(JSON.parse(await readFile(
+  'docs/dev/contracts/p158-campaign-result.v1.schema.json', 'utf8')));
+
+function completeStatusProjection() {
+  return P158_RUNTIME_IDENTITY_PROJECTION_AXES.map((axis) => ({
+    axis, probeKind: P158_RUNTIME_IDENTITY_PROBE_KINDS[axis],
+    ...(() => {
+      const expectedValue = axis === 'runtime_generation' ? 1
+        : axis === 'runtime_host_pid' ? 4242
+          : ['config_path', 'state_path'].includes(axis) ? `/tmp/p158/${axis}.json`
+            : ['candidate_binary_identity', 'service_socket_identity', 'stream_identity', 'config_digest',
+                'state_digest', 'browser_profile_identity'].includes(axis) ? sha256(axis)
+              : `${axis}-value`;
+      return { expectedValue, valueSha256: sha256(expectedValue) };
+    })(),
+  }));
+}
 
 function sealed(value, field) {
   const body = structuredClone(value);
@@ -28,11 +57,11 @@ function sealed(value, field) {
 function scheduleFixture() {
   const attempts = [
     { scheduleSequence: 0, scheduleId: 'schedule:A01', caseId: 'A01', attemptId: 'A01-E1-r001',
-      repetition: 1, seed: 'seed-a', phaseId: 'W7', environmentId: 'E1', environmentIds: ['E1'],
+      repetition: 1, seed: 101, phaseId: 'W7', environmentId: 'E1', environmentIds: ['E1'],
       dependsOnAttemptIds: [], preconditionIds: [], stimuli: [], evidenceProfile: 'service',
       externalIngressRequired: false, declaredEffectIds: ['effect:a'], preExecutionBlocker: null },
     { scheduleSequence: 1, scheduleId: 'schedule:D01', caseId: 'D01', attemptId: 'D01-E2-r001',
-      repetition: 1, seed: 'seed-d', phaseId: 'W8', environmentId: 'E2', environmentIds: ['E2'],
+      repetition: 1, seed: 102, phaseId: 'W8', environmentId: 'E2', environmentIds: ['E2'],
       dependsOnAttemptIds: [], preconditionIds: [], stimuli: [], evidenceProfile: 'dashboard',
       externalIngressRequired: true, declaredEffectIds: ['effect:d'], preExecutionBlocker: null },
   ];
@@ -103,7 +132,10 @@ async function createFixture(label) {
     schemaVersion: 'agent-browser.p158-live-hook-manifest.v1', planId: 'P158', manifestId: `hooks-${label}`,
     capturedAt: NOW, mode: 'concrete_live', providerFree: false, aggregateSha256: '9'.repeat(64),
     scheduleSha256: schedule.scheduleSha256, candidateSha256: candidate.candidateSha256,
-    hookBindings: [{ hookId: 'entrypoint.fixture', implementationKind: 'concrete_live', sourcePath: SOURCE_PATH, sourceSha256: SOURCE_SHA256 }],
+    hookBindings: [
+      { hookId: 'entrypoint.fixture', implementationKind: 'concrete_live', sourcePath: SOURCE_PATH, sourceSha256: SOURCE_SHA256 },
+      ASSEMBLY_SOURCE,
+    ],
     adapterBindings: bindingsFor(schedule), repairAllowed: false, retryAllowed: false, garbageCollectionAllowed: false,
   };
   const liveHooks = sealed(hookBody, 'manifestSha256');
@@ -139,12 +171,31 @@ async function createFixture(label) {
     freezePolicy: {}, safetyPolicy: {}, evidencePolicy: {},
   };
   await writeFile(paths.manifest, canonicalJson(manifest));
+  await mkdir(join(runRoot, 'ledger'), { recursive: true });
+  const manifestSha256 = sha256(await readFile(paths.manifest));
+  const preparedRecord = {
+    schemaVersion: 'agent-browser.p158-campaign-result.v1', planId: 'P158', runId: candidate.runId,
+    manifestSha256, recordId: `${candidate.runId}:record:00000000`, sequence: 0,
+    previousRecordSha256: null, recordType: 'controller_transition', controllerState: 'prepared',
+    wallTime: NOW, monotonicTimeNanoseconds: 1, clockOffsetMilliseconds: 0,
+    payload: { kind: 'controller_transition', from: null, to: 'prepared',
+      reason: 'fixture campaign prepared', terminal: false }, artifacts: [],
+  };
+  const preparedBytes = Buffer.from(canonicalJson(preparedRecord));
+  await writeFile(join(runRoot, 'ledger', '00000000-controller_transition.json'), preparedBytes);
+  const frozenRecord = {
+    ...preparedRecord, recordId: `${candidate.runId}:record:00000001`, sequence: 1,
+    previousRecordSha256: sha256(preparedBytes), controllerState: 'frozen', monotonicTimeNanoseconds: 2,
+    payload: { kind: 'controller_transition', from: 'prepared', to: 'frozen',
+      reason: 'fixture campaign frozen', terminal: false },
+  };
+  await writeFile(join(runRoot, 'ledger', '00000001-controller_transition.json'), canonicalJson(frozenRecord));
   const freeze = {
     schemaVersion: 'agent-browser.p158-campaign-freeze.v1', planId: 'P158', runId: candidate.runId,
     freezeId: `freeze-${label}`, controllerState: 'frozen', manifestSha256: sha256(await readFile(paths.manifest)),
     candidateSha256: candidate.candidateSha256, artifactBindingsSha256: sha256(artifactBindings),
     environmentSealsSha256: sha256(environmentSeals), calibrationSha256: sha256(manifest.calibration),
-    fixtureSealSha256: sha256(manifest.fixtureSeal), preparedLedgerHeadSha256: 'a'.repeat(64), frozenAt: NOW,
+    fixtureSealSha256: sha256(manifest.fixtureSeal), preparedLedgerHeadSha256: sha256(preparedBytes), frozenAt: NOW,
     monotonicTimeNanoseconds: 1, startedCaseCount: 0, startedAttemptCount: 0,
   };
   await writeFile(paths.freeze, canonicalJson(freeze));
@@ -209,11 +260,79 @@ try {
   assert.equal(terminal.outcome, 'completed');
   assert.equal(w9Calls, 1);
   assert.deepEqual(exact.invocations, [], 'explicit blockers must not invoke their adapters');
+  const ledgerNames = (await readdir(join(exact.runRoot, 'ledger'))).sort();
+  const ledger = await Promise.all(ledgerNames.map(async (name) =>
+    JSON.parse(await readFile(join(exact.runRoot, 'ledger', name), 'utf8'))));
+  assert.deepEqual(ledger.map((record) => record.recordType), [
+    'controller_transition', 'controller_transition', 'controller_transition',
+    'artifact_recorded', 'attempt_terminal', 'artifact_recorded', 'attempt_terminal',
+    'scheduled_teardown_terminal', 'controller_transition', 'evidence_seal',
+  ]);
+  let previous = null;
+  for (const [sequence, record] of ledger.entries()) {
+    assert.equal(validateResultRecord(record), true, resultAjv.errorsText(validateResultRecord.errors));
+    assert.equal(record.sequence, sequence);
+    assert.equal(record.previousRecordSha256, previous);
+    assert.equal(record.manifestSha256, exact.descriptor.manifest.sha256);
+    previous = sha256(canonicalJson(record));
+  }
+  const sealedManifest = JSON.parse(await readFile(join(exact.runRoot,
+    'artifacts/manifest/sealed-evidence-manifest.json'), 'utf8'));
+  assert.equal(sealedManifest.events.at(-1).recordType, 'controller_transition');
+  assert.equal(ledger.at(-1).payload.ledgerHeadSha256, sha256(canonicalJson(ledger.at(-2))));
   const resumed = await runP158LiveCampaignEntrypoint(options(exact, {
     bundleAssemblyLoader: async () => assert.fail('a terminal campaign must not reconstruct bundles'),
   }));
   assert.equal(resumed.checkpointSha256, terminal.checkpointSha256);
 } finally { await exact.cleanup(); }
+
+const generatedDescriptor = await createFixture('generated-descriptor');
+try {
+  const authorities = Object.fromEntries(['manifest', 'freeze', 'schedule', 'phasePreparation', 'liveHookManifest', 'runtimeIdentity']
+    .map((field) => [field, generatedDescriptor.descriptor[field]]));
+  const generated = createP158LiveCampaignDescriptor({
+    runRoot: generatedDescriptor.runRoot, runId: generatedDescriptor.descriptor.runId,
+    candidateExecutablePath: generatedDescriptor.paths.candidate,
+    isolation: generatedDescriptor.descriptor.isolation, authorities,
+    runtimeIdentityProbes: [sealP158RuntimeIdentityProbe({
+      environmentId: 'E1', commandArgs: ['service', 'status', '--json'],
+      environment: { HOME: join(generatedDescriptor.runRoot, 'home'),
+        AGENT_BROWSER_RUNTIME_PROFILE: 'profile-E1',
+        P158_CAMPAIGN_RUN_ID: generatedDescriptor.descriptor.runId,
+        P158_CAMPAIGN_ENVIRONMENT_ID: 'E1' },
+      expectedEnvironmentIdentity: { environmentId: 'E1' },
+      probeSpecification: {
+        configPath: join(generatedDescriptor.runRoot, 'config', 'E1', 'config.json'),
+        profileName: 'profile-E1', profilePath: join(generatedDescriptor.runRoot, 'profiles', 'E1'),
+        socketDir: join(generatedDescriptor.runRoot, 'sockets', 'E1'),
+        statePath: join(generatedDescriptor.runRoot, 'state', 'E1', 'state.json'),
+      },
+      identityProjection: completeStatusProjection(),
+    })],
+    assemblyConfiguration: generatedDescriptor.descriptor.bundleAssembly.configuration,
+    scheduledTeardown: generatedDescriptor.descriptor.scheduledTeardown,
+  });
+  await writeFile(generatedDescriptor.paths.descriptor, canonicalJson(generated.descriptor));
+  generatedDescriptor.descriptor = generated.descriptor;
+  generatedDescriptor.descriptorSha256 = sha256(await readFile(generatedDescriptor.paths.descriptor));
+  let loadedSource = null;
+  const terminal = await runP158LiveCampaignEntrypoint(options(generatedDescriptor, {
+    bundleAssemblyLoader: async (sourcePath) => {
+      loadedSource = sourcePath;
+      return {
+        readP158LiveCampaignRuntimeIdentity: async () => JSON.parse(await readFile(generatedDescriptor.paths.runtimeIdentity, 'utf8')),
+        constructP158LiveCampaignBundles: async () => ({
+          w7Bundle: generatedDescriptor.w7Bundle, w8Bundle: generatedDescriptor.w8Bundle,
+          w9: { target: { runId: generatedDescriptor.descriptor.runId } },
+          repairAttempted: false, retryAttempted: false, garbageCollectionAttempted: false,
+        }),
+      };
+    },
+    runCampaignPhases: async () => ({ state: 'evidence_sealed' }),
+  }));
+  assert.equal(loadedSource, ASSEMBLY_SOURCE.sourcePath);
+  assert.equal(terminal.outcome, 'completed');
+} finally { await generatedDescriptor.cleanup(); }
 
 const changedPreparation = await createFixture('changed-preparation');
 try {
@@ -326,8 +445,17 @@ try {
       return { resultState: 'passed', effectState: 'verified_effect' };
     } };
   crashingW7.effects = { 'effect:a': async () => { effectCalls += 1; throw Object.assign(new Error('lost'), { code: 'simulated_loss' }); } };
+  const exactLoggingRequestExpectations = [`${interrupted.schedule.attempts[0].attemptId}:action`]
+    .map((actionId) => {
+      const operationCorrelationId = `p158:${interrupted.descriptor.runId}:${actionId}:action`;
+      return { expectationId: operationCorrelationId, operationCorrelationId,
+        productRequestId: null, productRequestIdState: 'assigned_at_runtime',
+        requestKind: 'accepted_request', actionId,
+        attemptId: interrupted.schedule.attempts[0].attemptId, caseId: 'A01', phaseId: 'W7', environmentId: 'E1' };
+    });
   const alteredPreparation = buildP158CampaignPhasePreparation({ schedule: interrupted.schedule,
     w7Bundle: crashingW7, w8Bundle: interrupted.w8Bundle,
+    loggingRequestExpectations: exactLoggingRequestExpectations,
     liveHookManifestSha256: interrupted.liveHooks.manifestSha256, runId: interrupted.descriptor.runId });
   await writeFile(interrupted.paths.phasePreparation, canonicalJson(alteredPreparation));
   interrupted.descriptor.phasePreparation.sha256 = sha256(await readFile(interrupted.paths.phasePreparation));
@@ -359,15 +487,16 @@ try {
   const attempt = interrupted.schedule.attempts[0];
   await writeFile(join(phaseStartRoot, `${attempt.attemptId}.json`), canonicalJson(sealed({
     state: 'started', sourceDigest: phaseSourceDigest,
-    correlationIds: { requestId: `p158:${interrupted.descriptor.runId}:${attempt.attemptId}:request`,
-      eventId: `p158:${interrupted.descriptor.runId}:W7:${attempt.attemptId}:terminal:0`,
+    correlationIds: { eventId: `p158:${interrupted.descriptor.runId}:W7:${attempt.attemptId}:terminal:0`,
       traceId: `p158:${interrupted.descriptor.runId}:W7` }, observedAt: NOW,
   }, 'checkpointSha256')));
   const resumedOptions = options(interrupted, {
     bundleAssemblyLoader: async () => ({
       readP158LiveCampaignRuntimeIdentity: async () => JSON.parse(await readFile(interrupted.paths.runtimeIdentity, 'utf8')),
       constructP158LiveCampaignBundles: async () => ({
-        w7Bundle: crashingW7, w8Bundle: interrupted.w8Bundle, w9: { target: { runId: interrupted.descriptor.runId } },
+        w7Bundle: crashingW7, w8Bundle: interrupted.w8Bundle,
+        w9: { target: { runId: interrupted.descriptor.runId },
+          loggingRequestExpectations: exactLoggingRequestExpectations },
       }),
     }),
     runCampaignPhases: (input) => runP158CampaignPhases({ ...input, runW9: async ({ controller }) => {

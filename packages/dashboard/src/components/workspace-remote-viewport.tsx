@@ -41,6 +41,7 @@ import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { reportDashboardFailure } from "@/lib/failure-observation";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
@@ -691,16 +692,22 @@ function WorkspaceCdpStreamCanvas({
   streamUrl,
   canControl,
   refreshNonce,
+  browserId,
+  sessionId,
 }: {
   streamUrl: string;
   canControl: boolean;
   refreshNonce: number;
+  browserId?: string | null;
+  sessionId?: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const frameSizeRef = useRef({ width: 1280, height: 720 });
+  const lastFrameAtRef = useRef(Date.now());
+  const stallReportedRef = useRef(false);
   const [state, setState] = useState<CdpStreamState>({
     connected: false,
     browserConnected: false,
@@ -731,6 +738,8 @@ function WorkspaceCdpStreamCanvas({
   }, [canControl, state.httpFallback, streamPort]);
 
   const drawFrame = useCallback((base64: string) => {
+    lastFrameAtRef.current = Date.now();
+    stallReportedRef.current = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -752,6 +761,29 @@ function WorkspaceCdpStreamCanvas({
       }));
     });
   }, []);
+
+  useEffect(() => {
+    lastFrameAtRef.current = Date.now();
+    stallReportedRef.current = false;
+    const timer = window.setInterval(() => {
+      if (!state.connected || !state.browserConnected || !state.screencasting) return;
+      const elapsedMs = Date.now() - lastFrameAtRef.current;
+      if (elapsedMs < 15_000 || stallReportedRef.current) return;
+      stallReportedRef.current = true;
+      void reportDashboardFailure({
+        category: "cdp_stream",
+        stage: "frame_watchdog",
+        code: state.frameReceived ? "cdp_frame_stream_stalled" : "cdp_frame_never_received",
+        summary: "The dashboard CDP feed was connected and screencasting but delivered no usable frame within the watchdog interval.",
+        action: "stream_frame",
+        browserId,
+        sessionId,
+        streamProvider: "cdp_screencast",
+        elapsedMs,
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [browserId, refreshNonce, sessionId, state.browserConnected, state.connected, state.frameReceived, state.screencasting]);
 
   useEffect(() => {
     if (state.httpFallback) {
@@ -1681,6 +1713,19 @@ export function WorkspaceRemoteViewport({
   }, [canEmbed, frameUrl, viewportTargetToken]);
 
   const handleFrameLoadIssue = useCallback((failure: WorkspaceFrameFailure) => {
+    void reportDashboardFailure({
+      category: "guacamole_load",
+      stage: "workspace_iframe",
+      code: `guacamole_${failure}`,
+      summary: "The dashboard observed an unusable Guacamole or remote-view iframe.",
+      action: "remote_view_load",
+      browserId: browser?.id,
+      profileId: browser?.profileId,
+      sessionId: viewportSelection?.selection.sessionId,
+      routeId: stream?.routeId,
+      displayId: stream?.displayAllocationId,
+      streamProvider: stream?.provider,
+    });
     if (failure === "login-required") {
       setFrameIssue(null);
       if (viewportTargetToken) dispatchViewportController({
@@ -1719,7 +1764,7 @@ export function WorkspaceRemoteViewport({
         ? "Guacamole reported that the remote desktop connection closed."
         : "The embedded remote stream failed to load. Refresh the workspace viewport or open the stream externally.",
     });
-  }, [viewportTargetToken]);
+  }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   const onFrameLoad = useCallback(() => {
     const failure = detectWorkspaceFrameFailure(viewportFrameRef.current);
@@ -2302,6 +2347,34 @@ export function WorkspaceRemoteViewport({
                         className="workspace-remote-viewport-frame"
                         allow="clipboard-read; clipboard-write; fullscreen; pointer-lock"
                         allowFullScreen
+                        onError={() => void reportDashboardFailure({
+                          category: "guacamole_load",
+                          stage: "tile_iframe",
+                          code: "guacamole_browser_error",
+                          summary: "A tiled dashboard remote-view iframe failed to load.",
+                          action: "remote_view_load",
+                          browserId: tile.browser.id,
+                          profileId: tile.browser.profileId,
+                          routeId: tile.stream?.routeId,
+                          displayId: tile.stream?.displayAllocationId,
+                          streamProvider: tile.stream?.provider,
+                        })}
+                        onLoad={(event) => {
+                          const failure = detectWorkspaceFrameFailure(event.currentTarget);
+                          if (!failure) return;
+                          void reportDashboardFailure({
+                            category: "guacamole_load",
+                            stage: "tile_iframe",
+                            code: `guacamole_${failure}`,
+                            summary: "A tiled dashboard remote-view iframe loaded an unusable state.",
+                            action: "remote_view_load",
+                            browserId: tile.browser.id,
+                            profileId: tile.browser.profileId,
+                            routeId: tile.stream?.routeId,
+                            displayId: tile.stream?.displayAllocationId,
+                            streamProvider: tile.stream?.provider,
+                          });
+                        }}
                       />
                     ) : (
                       <div className="workspace-remote-viewport-empty workspace-remote-viewport-tile-empty">
@@ -2599,6 +2672,8 @@ export function WorkspaceRemoteViewport({
             streamUrl={streamUrl}
             canControl={canControl}
             refreshNonce={streamRefreshNonce}
+            browserId={browser?.id}
+            sessionId={viewportSelection.selection.sessionId}
           />
         ) : stream && canRenderSnapshotStream && snapshotUrl ? (
           <WorkspaceCdpSnapshotViewer

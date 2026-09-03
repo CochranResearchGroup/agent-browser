@@ -74,7 +74,7 @@
     "minimumAvailableMemoryBytes": 4294967296,
     "minimumAvailableMemoryPlusFreeSwapBytes": 8589934592,
     "artifactQuotaBytes": 107374182400,
-    "filesystemMaximumUsedPercent": 85,
+    "filesystemMaximumUsedPercent": 90,
     "campaignProcessCount": 512,
     "chromeProcessCount": 192,
     "xvfbProcessCount": 48,

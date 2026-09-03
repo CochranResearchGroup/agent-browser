@@ -303,6 +303,19 @@ export function createServiceTabRequest(input) {
   if (url !== undefined) {
     tabParams.url = url;
   }
+  const routeFields = [
+    'routePoolEntryId',
+    'remoteViewRouteId',
+    'routeId',
+    'viewStreamRouteId',
+    'displayAllocationId',
+    'displayName',
+  ];
+  if (routeFields.some((field) => tabParams[field] !== undefined || request[field] !== undefined)) {
+    throw new TypeError(
+      'service tab request cannot execute remote-view route intent; use requestServiceRemoteViewOpen() to acquire the route and serviceTabHandle',
+    );
+  }
 
   return createServiceRequest({
     ...plannedRequestFields,
@@ -2344,6 +2357,9 @@ export function summarizeServiceRemoteViewOpenProof(response) {
     sessionName,
     tabId,
     profileId,
+    serviceTabHandle: isServiceTabHandle(serviceTabHandle)
+      ? /** @type {ServiceTabHandle} */ (/** @type {unknown} */ (serviceTabHandle))
+      : null,
     visualProof,
     browserBuildState,
     requestedBrowserBuild,

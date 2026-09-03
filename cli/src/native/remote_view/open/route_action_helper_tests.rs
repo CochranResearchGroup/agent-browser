@@ -205,7 +205,7 @@ fn test_remote_view_open_acquisition_lease_rollback_quarantines_until_cleanup_co
     let pending = repository.load_snapshot().unwrap();
     assert_eq!(pending.route_pool["pool-a"].state, "pending");
     assert_eq!(
-        pending.display_allocations["remote-view-display:41"].state,
+        pending.display_allocations["remote-view-display:route-a"].state,
         "pending"
     );
     assert_eq!(pending.remote_view_routes["route-a"].state, "pending");
@@ -228,7 +228,7 @@ fn test_remote_view_open_acquisition_lease_rollback_quarantines_until_cleanup_co
     );
     assert!(!restored
         .display_allocations
-        .contains_key("remote-view-display:41"));
+        .contains_key("remote-view-display:route-a"));
     assert!(!restored.remote_view_routes.contains_key("route-a"));
     assert_eq!(
         restored.remote_view_acquisition_leases[&lease.id].state,

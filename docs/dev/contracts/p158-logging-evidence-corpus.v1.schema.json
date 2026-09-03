@@ -8,7 +8,7 @@
     "schemaVersion", "planId", "syntheticOnly", "runId", "candidateSha256", "phaseId",
     "environmentId", "environmentSealSha256", "sourceBinding", "window", "capturedAt",
     "inputIdentitySha256", "expectationSetSha256", "fixtureCount", "fixtures",
-    "observerRequestCount", "observerReceipts", "redactionPolicy",
+    "observerRequestCount", "observerReceipts", "failureJournal", "redactionPolicy",
     "effectsAttempted", "repairAttempted",
     "retryAttempted", "corpusSha256"
   ],
@@ -59,11 +59,26 @@
           "expectationId": { "$ref": "#/$defs/id" },
           "environmentId": { "$ref": "#/$defs/id" },
           "capturePlane": { "const": true },
-          "operation": { "enum": ["service_trace", "service_events", "service_job", "service_incident", "injected_observer"] },
+          "operation": { "enum": ["service_trace", "service_events", "service_job", "service_incident", "service_failure_journal", "injected_observer"] },
           "requestSha256": { "$ref": "#/$defs/sha256" }
         },
         "additionalProperties": false
       }
+    },
+    "failureJournal": {
+      "type": "object",
+      "required": ["captureState", "records", "malformedLineCount", "writeFailureCount", "captureGap"],
+      "properties": {
+        "captureState": { "enum": ["complete", "unavailable"] },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "service-failure-record.v1.schema.json" }
+        },
+        "malformedLineCount": { "type": "integer", "minimum": 0 },
+        "writeFailureCount": { "type": "integer", "minimum": 0 },
+        "captureGap": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
     },
     "redactionPolicy": {
       "type": "object",

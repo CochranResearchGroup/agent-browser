@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -231,7 +231,55 @@ async function loadTerminalFiles(store, schedule) {
   return results;
 }
 
-async function createResumableController({ store, runRoot, manifest, schedule, scheduledTeardown, clock }) {
+function ledgerArtifact(receipt) {
+  return {
+    artifactId: receipt.artifactId,
+    relativePath: receipt.relativePath,
+    mediaType: receipt.mediaType ?? receipt.metadata?.mediaType ?? 'application/octet-stream',
+    sha256: receipt.sha256,
+    byteCount: receipt.byteCount,
+    captureState: receipt.captureState ?? receipt.metadata?.captureState ?? 'complete',
+    captureGap: receipt.captureGap ?? receipt.metadata?.captureGap ?? null,
+    redactions: clone(receipt.redactions ?? receipt.metadata?.redactions ?? []),
+    parentArtifactSha256s: clone(receipt.parentArtifactSha256s ?? receipt.metadata?.parentArtifactSha256s ?? []),
+  };
+}
+
+async function loadCanonicalLedger({ store, runRoot, manifestSha256, freeze }) {
+  let names;
+  try { names = (await readdir(join(runRoot, 'ledger'))).filter((name) => /^\d{8}-.+\.json$/u.test(name)).sort(); }
+  catch (error) { if (error?.code === 'ENOENT') names = []; else throw error; }
+  if (names.length === 0) fail('canonical_ledger_missing', 'The frozen campaign canonical ledger is missing');
+  const records = [];
+  let previous = null;
+  for (const [sequence, name] of names.entries()) {
+    const bytes = await store.read(`ledger/${name}`);
+    const record = JSON.parse(bytes.toString('utf8'));
+    if (record.schemaVersion !== 'agent-browser.p158-campaign-result.v1' || record.planId !== 'P158' ||
+        record.runId !== freeze.runId || record.manifestSha256 !== manifestSha256 || record.sequence !== sequence ||
+        record.recordId !== `${freeze.runId}:record:${String(sequence).padStart(8, '0')}` ||
+        record.previousRecordSha256 !== previous ||
+        name !== `${String(sequence).padStart(8, '0')}-${record.recordType}.json`) {
+      fail('canonical_ledger_invalid', `Canonical ledger record ${name} is not in the frozen chain`);
+    }
+    previous = sha256(bytes);
+    records.push({ ...record, sha256: previous, byteCount: bytes.byteLength });
+  }
+  const sealIndex = records.findIndex((record) => record.recordType === 'evidence_seal');
+  if (records.some((record) => record.recordType === 'analysis_terminal') ||
+      (sealIndex !== -1 && sealIndex !== records.length - 1) ||
+      records.filter((record) => record.recordType === 'evidence_seal').length > 1) {
+    fail('canonical_ledger_post_seal_invalid', 'Live execution cannot accept analysis records or records after evidence seal');
+  }
+  if (records[0]?.recordType !== 'controller_transition' || records[0]?.payload?.to !== 'prepared' ||
+      records[0].sha256 !== freeze.preparedLedgerHeadSha256 ||
+      records[1]?.recordType !== 'controller_transition' || records[1]?.payload?.to !== 'frozen') {
+    fail('canonical_ledger_freeze_boundary_invalid', 'The ledger does not preserve the exact prepared and frozen boundary');
+  }
+  return records;
+}
+
+async function createResumableController({ store, runRoot, manifest, manifestSha256, freeze, schedule, scheduledTeardown, clock }) {
   const startedPath = `${STATE_ROOT}/controller-started.json`;
   const executionTerminalPath = `${STATE_ROOT}/controller-execution-terminal.json`;
   const evidenceSealPath = `${STATE_ROOT}/controller-evidence-sealed.json`;
@@ -241,8 +289,26 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
   if (existingExecutionTerminal) verifyCheckpoint(existingExecutionTerminal);
   const existingSeal = await readOptionalJson(store, evidenceSealPath);
   if (existingSeal) verifyCheckpoint(existingSeal);
-  let state = existingSeal ? 'evidence_sealed' : existingStart ? 'executing' : 'frozen';
-  const results = await loadTerminalFiles(store, schedule);
+  const ledger = await loadCanonicalLedger({ store, runRoot, manifestSha256, freeze });
+  const sealedRecord = ledger.find((record) => record.recordType === 'evidence_seal');
+  const executionTerminalRecord = [...ledger].reverse().find((record) =>
+    record.recordType === 'controller_transition' && record.payload?.to === 'execution_terminal');
+  let state = sealedRecord ? 'evidence_sealed' : executionTerminalRecord ? 'execution_terminal' :
+    ledger.some((record) => record.recordType === 'controller_transition' && record.payload?.to === 'executing')
+      ? 'executing' : 'frozen';
+  if ((existingSeal && !sealedRecord) || (existingExecutionTerminal && !executionTerminalRecord) ||
+      (existingStart && state === 'frozen')) {
+    fail('checkpoint_without_canonical_ledger', 'A live checkpoint exists without its contemporaneous canonical ledger record');
+  }
+  const terminalByAttempt = new Map(ledger.filter((record) => record.recordType === 'attempt_terminal')
+    .map((record) => [record.payload.attempt.attemptId, record]));
+  const checkpointResults = await loadTerminalFiles(store, schedule);
+  const results = checkpointResults.filter((result) => terminalByAttempt.has(result.attemptId));
+  for (const record of terminalByAttempt.values()) {
+    if (!results.some((result) => result.attemptId === record.payload.attempt.attemptId)) {
+      results.push({ ...clone(record.payload), ...clone(record.payload.attempt), recordId: record.recordId });
+    }
+  }
   const artifacts = [];
   for (const attempt of schedule.attempts) {
     const metadata = await readOptionalJson(store, `${STATE_ROOT}/artifacts/${attempt.attemptId}.json`);
@@ -250,20 +316,48 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
   }
   let teardown = await readOptionalJson(store, `${STATE_ROOT}/scheduled-teardown.json`);
   if (teardown) teardown = without(verifyCheckpoint(teardown), ['checkpointSha256']);
-  else teardown = clone(scheduledTeardown);
+  else {
+    const teardownRecord = [...ledger].reverse().find((record) => record.recordType === 'scheduled_teardown_terminal');
+    teardown = teardownRecord ? { ...clone(scheduledTeardown), ...clone(teardownRecord.payload) } : clone(scheduledTeardown);
+  }
+  let previousLedgerSha256 = ledger.at(-1).sha256;
+  const monotonic = () => {
+    const candidate = typeof clock.monotonicNow === 'function' ? Number(clock.monotonicNow()) : NaN;
+    return Number.isInteger(candidate) && candidate > ledger.at(-1).monotonicTimeNanoseconds
+      ? candidate : ledger.at(-1).monotonicTimeNanoseconds + 1;
+  };
+  const appendLedger = async (recordType, controllerState, payload, recordArtifacts = []) => {
+    const sequence = ledger.length;
+    const record = {
+      schemaVersion: 'agent-browser.p158-campaign-result.v1', planId: 'P158', runId: manifest.runId,
+      manifestSha256, recordId: `${manifest.runId}:record:${String(sequence).padStart(8, '0')}`,
+      sequence, previousRecordSha256: previousLedgerSha256, recordType, controllerState,
+      wallTime: clock.wallNow(), monotonicTimeNanoseconds: monotonic(), clockOffsetMilliseconds: 0,
+      payload: clone(payload), artifacts: recordArtifacts.map(ledgerArtifact),
+    };
+    const bytes = canonicalJson(record);
+    await store.writeOnce(`ledger/${String(sequence).padStart(8, '0')}-${recordType}.json`, bytes);
+    previousLedgerSha256 = sha256(bytes);
+    ledger.push({ ...record, sha256: previousLedgerSha256, byteCount: Buffer.byteLength(bytes) });
+    return ledger.at(-1);
+  };
   const snapshot = () => ({
     schemaVersion: 'agent-browser.p158-live-resumed-controller.v1',
     state,
     runId: manifest.runId,
     candidate: clone(manifest.candidate),
     results: clone(results),
-    evidence: { artifacts: clone(artifacts) },
+    evidence: { artifacts: clone(artifacts), events: clone(ledger), eventHeadSha256: previousLedgerSha256 },
     scheduledTeardown: clone(teardown),
   });
   return {
     snapshot,
     async startExecution() {
       if (state !== 'frozen') fail('controller_state_invalid', `Cannot start from ${state}`);
+      await appendLedger('controller_transition', 'executing', {
+        kind: 'controller_transition', from: 'frozen', to: 'executing',
+        reason: 'frozen live campaign execution started', terminal: false,
+      });
       await writeCheckpoint(store, startedPath, {
         state: 'executing', runId: manifest.runId, manifestSha256: sha256(canonicalJson(manifest)), observedAt: clock.wallNow(),
       });
@@ -276,7 +370,12 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
       try { existing = await store.read(relativePath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
       if (existing && sha256(existing) !== sha256(bytes)) fail('artifact_changed_across_resume', `${relativePath} changed across resume`);
       if (!existing) await store.writeOnce(relativePath, bytes);
-      const receipt = { artifactId, relativePath, sha256: sha256(bytes), byteCount: Buffer.byteLength(bytes), metadata: clone(metadata) };
+      const previousArtifact = artifacts.at(-1);
+      const receipt = { artifactId, relativePath, sha256: sha256(bytes), byteCount: Buffer.byteLength(bytes),
+        mediaType: metadata.mediaType ?? 'application/octet-stream', captureState: metadata.captureState ?? 'complete',
+        captureGap: metadata.captureGap ?? null, redactions: clone(metadata.redactions ?? []),
+        parentArtifactSha256s: clone(metadata.parentArtifactSha256s ?? (previousArtifact ? [previousArtifact.sha256] : [])),
+        metadata: clone(metadata) };
       const attemptId = artifactId.split(':').at(-2) ?? sha256(artifactId);
       const receiptPath = `${STATE_ROOT}/artifacts/${attemptId}.json`;
       const prior = await readOptionalJson(store, receiptPath);
@@ -285,6 +384,10 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
         if (sha256(without(prior, ['checkpointSha256'])) !== sha256(receipt)) fail('artifact_changed_across_resume', `${artifactId} changed across resume`);
       } else await writeCheckpoint(store, receiptPath, receipt);
       if (!artifacts.some((entry) => entry.artifactId === artifactId)) artifacts.push(receipt);
+      if (!ledger.some((entry) => entry.recordType === 'artifact_recorded' && entry.payload?.artifactId === artifactId)) {
+        await appendLedger('artifact_recorded', state, { kind: 'artifact_recorded', artifactId,
+          capturePurpose: metadata.capturePurpose ?? 'campaign_evidence', terminal: false }, [receipt]);
+      }
       return clone(receipt);
     },
     async recordAttempt(result) {
@@ -296,6 +399,26 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
         verifyCheckpoint(prior);
         if (sha256(without(prior, ['checkpointSha256'])) !== sha256(result)) fail('terminal_result_changed', `${result.attemptId} changed across resume`);
       } else await writeCheckpoint(store, path, result);
+      if (!terminalByAttempt.has(result.attemptId)) {
+        const attempt = schedule.attempts.find((entry) => entry.attemptId === result.attemptId);
+        const payload = { kind: 'attempt_terminal', attempt: {
+          scheduleId: attempt.scheduleId, caseId: attempt.caseId, attemptId: attempt.attemptId,
+          repetition: attempt.repetition, seed: attempt.seed, environmentIds: clone(attempt.environmentIds),
+        }, resultState: result.resultState,
+        effectState: result.effectState ?? (result.resultState === 'passed' ? 'verified_effect' : 'no_effect'),
+        retryDisposition: result.retryDisposition ?? 'prohibited_opportunistic_retry',
+        completedAt: result.completedAt ?? clock.wallNow(), terminal: true,
+        firstFailureSignature: result.firstFailureSignature ?? result.evidence?.signature ?? null,
+        blocker: result.resultState === 'skipped_blocked' ? clone(result.blocker ?? attempt.preExecutionBlocker) : null,
+        safetyStop: result.resultState === 'safety_stopped' ? clone(result.safetyStop) : null,
+        causalIds: clone(result.causalIds ?? result.evidence?.causalIds ?? {}),
+        };
+        const evidenceIds = new Set(result.evidence?.artifactIds ?? []);
+        const record = await appendLedger('attempt_terminal', 'executing', payload,
+          artifacts.filter((artifact) => evidenceIds.has(artifact.artifactId)));
+        terminalByAttempt.set(result.attemptId, record);
+        result = { ...clone(result), recordId: record.recordId };
+      }
       if (!results.some((entry) => entry.attemptId === result.attemptId)) results.push(clone(result));
     },
     async recordScheduledTeardown(result) {
@@ -304,12 +427,29 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
       const prior = await readOptionalJson(store, path);
       if (prior) fail('terminal_result_changed', 'Scheduled teardown is already terminal');
       teardown = { ...clone(scheduledTeardown), ...clone(result) };
+      await appendLedger('scheduled_teardown_terminal', 'executing', {
+        kind: 'scheduled_teardown_terminal', scheduleId: scheduledTeardown.attemptId,
+        resultState: result.resultState,
+        effectState: result.effectState ?? (result.resultState === 'passed' ? 'verified_effect' : 'no_effect'),
+        retryDisposition: result.retryDisposition ?? 'prohibited_opportunistic_retry',
+        completedAt: result.completedAt ?? clock.wallNow(), terminal: true,
+      });
       await writeCheckpoint(store, path, teardown);
     },
     async finishExecution() {
       if (state !== 'executing') fail('controller_state_invalid', `Cannot finish from ${state}`);
       const missing = schedule.attempts.filter((attempt) => !results.some((result) => result.attemptId === attempt.attemptId));
       if (missing.length > 0 || !teardown?.resultState) fail('execution_not_terminal', 'All attempts and scheduled teardown must be terminal');
+      if (!executionTerminalRecord) {
+        const states = ['passed', 'reproduced_historical_failure', 'new_product_failure', 'harness_failure',
+          'inconclusive', 'skipped_blocked', 'safety_stopped'];
+        const resultCounts = Object.fromEntries(states.map((value) => [value,
+          [...results, teardown].filter((entry) => entry.resultState === value).length]));
+        await appendLedger('controller_transition', 'execution_terminal', {
+          kind: 'controller_transition', from: 'executing', to: 'execution_terminal',
+          reason: 'all live attempts and scheduled teardown are terminal', terminal: false, resultCounts,
+        });
+      }
       if (!existingExecutionTerminal) await writeCheckpoint(store, executionTerminalPath, {
         state: 'execution_terminal', resultSetSha256: sha256(results), teardownSha256: sha256(teardown), observedAt: clock.wallNow(),
       });
@@ -321,10 +461,22 @@ async function createResumableController({ store, runRoot, manifest, schedule, s
         schemaVersion: 'agent-browser.p158-evidence-manifest.v1', runId: manifest.runId,
         candidateSha256: sha256(manifest.candidate), registrySha256: manifest.registrySha256,
         scheduleSha256: sha256(schedule), resultsSha256: sha256(results),
-        events: [], artifacts: clone(artifacts), eventHeadSha256: null,
+        events: clone(ledger), artifacts: clone(artifacts), eventHeadSha256: previousLedgerSha256,
       };
-      await store.writeOnce('artifacts/manifest/sealed-evidence-manifest.json', canonicalJson(body));
-      await writeCheckpoint(store, evidenceSealPath, { state: 'evidence_sealed', manifestSha256: sha256(body), sealedAt: clock.wallNow() });
+      const evidenceBytes = canonicalJson(body);
+      await store.writeOnce('artifacts/manifest/sealed-evidence-manifest.json', evidenceBytes);
+      const evidenceReceipt = { artifactId: `${manifest.runId}:sealed-manifest`,
+        relativePath: 'artifacts/manifest/sealed-evidence-manifest.json', mediaType: 'application/json',
+        sha256: sha256(evidenceBytes), byteCount: Buffer.byteLength(evidenceBytes), captureState: 'complete',
+        captureGap: null, redactions: [], parentArtifactSha256s: artifacts.at(-1) ? [artifacts.at(-1).sha256] : [] };
+      const sealedAt = clock.wallNow();
+      await appendLedger('evidence_seal', 'evidence_sealed', { kind: 'evidence_seal',
+        manifestSha256: evidenceReceipt.sha256, ledgerHeadSha256: previousLedgerSha256,
+        artifactCount: artifacts.length + 1,
+        artifactBytes: artifacts.reduce((sum, artifact) => sum + artifact.byteCount, 0) + evidenceReceipt.byteCount,
+        allScheduledAttemptsTerminal: true, teardownTerminal: true, sealedAt, terminal: true,
+      }, [evidenceReceipt]);
+      await writeCheckpoint(store, evidenceSealPath, { state: 'evidence_sealed', manifestSha256: evidenceReceipt.sha256, sealedAt });
       state = 'evidence_sealed';
     },
   };
@@ -459,7 +611,7 @@ export async function runP158LiveCampaignEntrypoint({
       fail('prohibited_lifecycle_effect', 'Bundle construction reported a repair, retry, or garbage-collection effect');
     }
     const controller = await createResumableController({
-      store, runRoot: descriptor.runRoot, manifest, schedule,
+      store, runRoot: descriptor.runRoot, manifest, manifestSha256: descriptor.manifest.sha256, freeze, schedule,
       scheduledTeardown: descriptor.scheduledTeardown, clock,
     });
     const result = await runCampaignPhases({

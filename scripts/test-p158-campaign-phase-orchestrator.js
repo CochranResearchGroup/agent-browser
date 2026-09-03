@@ -20,10 +20,10 @@ const registry = JSON.parse(await readFile(
 const schedule = compileP158ExecutionSchedule({ registry, seed: 'p158-integrated-phases' });
 const LIVE_MANIFEST = '91'.repeat(32);
 
-function bundle(phaseId, { blockedCaseId, interruptAttemptId = null, calls = [] } = {}) {
+function bundle(phaseId, { blockedCaseId, concreteCaseIds = null, interruptAttemptId = null, calls = [] } = {}) {
   const contracts = schedule.caseContracts.filter((entry) => entry.phaseId === phaseId);
   const bindings = contracts.map((contract) => {
-    const blocked = contract.caseId === blockedCaseId;
+    const blocked = concreteCaseIds ? !concreteCaseIds.includes(contract.caseId) : contract.caseId === blockedCaseId;
     return {
       caseId: contract.caseId,
       adapterId: contract.adapterId,
@@ -77,6 +77,36 @@ function bundle(phaseId, { blockedCaseId, interruptAttemptId = null, calls = [] 
   };
 }
 
+function preparationInputs(w7, w8) {
+  const w9AdapterBindings = schedule.caseContracts.filter((entry) => entry.phaseId === 'W9').map((contract) => ({
+    caseId: contract.caseId, adapterId: contract.adapterId,
+    executionContractSha256: contract.executionContractSha256, mode: 'explicit_blocked', providerFree: false,
+    sourcePath: 'scripts/live-hooks/w9.js', sourceSha256: '92'.repeat(32), hookIds: [],
+    implementedActionCount: 0, blockedActionCount: 1, effectsAllowed: false,
+    blocker: { code: 'live_case_hook_missing', detail: 'fixture W9 blocked' },
+  }));
+  const loggingRequestExpectations = schedule.attempts.flatMap((attempt) => {
+    const blocked = [...w7.adapterBindings, ...w8.adapterBindings, ...w9AdapterBindings]
+      .find((entry) => entry.caseId === attempt.caseId).mode === 'explicit_blocked';
+    if (blocked) return [];
+    const actionIds = attempt.cardinalityAllocations.flatMap((entry) => entry.actionIds);
+    return (actionIds.length > 0 ? actionIds : [null]).map((actionId, index) => {
+      const expectationId = `${attempt.attemptId}:${actionId ?? `request-${index + 1}`}`;
+      const environmentId = attempt.environmentId ?? attempt.environmentIds[0];
+      const operationCorrelationId = `p158:p158-integrated-run:${attempt.attemptId}:${environmentId}:${expectationId}:request`;
+      return { expectationId, operationCorrelationId,
+        productRequestId: null, productRequestIdState: 'assigned_at_runtime',
+        requestKind: 'accepted_request',
+        actionId, attemptId: attempt.attemptId, caseId: attempt.caseId, phaseId: attempt.phaseId,
+        environmentId };
+    });
+  });
+  return {
+    w9AdapterBindings,
+    loggingRequestExpectations,
+  };
+}
+
 function controllerHarness(preparedSchedule = schedule.attempts.map((attempt) => ({
   attemptId: attempt.attemptId, preExecutionBlocker: null,
 }))) {
@@ -96,7 +126,7 @@ function controllerHarness(preparedSchedule = schedule.attempts.map((attempt) =>
         assert.ok(['not_started', 'no_effect', 'effect_uncertain', 'verified_effect'].includes(result.effectState));
         assert.ok(['not_applicable', 'prohibited_opportunistic_retry', 'predetermined_distinct_attempt']
           .includes(result.retryDisposition));
-        assert.deepEqual(Object.keys(result.causalIds).sort(), ['eventId', 'requestId', 'traceId']);
+        assert.deepEqual(Object.keys(result.causalIds).sort(), ['eventId', 'traceId']);
         assert.ok(result.evidence.artifactIds.every((artifactId) => artifacts.some((entry) => entry.artifactId === artifactId)));
         const frozen = preparedSchedule.find((entry) => entry.attemptId === result.attemptId)?.preExecutionBlocker;
         if (result.resultState === 'skipped_blocked') {
@@ -150,13 +180,14 @@ async function withRoot(body) {
 
 await withRoot(async (runRoot) => {
   const calls = [];
-  const w7 = bundle('W7', { blockedCaseId: 'A01', calls });
-  const w8 = bundle('W8', { blockedCaseId: 'D01', calls });
+  const w7 = bundle('W7', { concreteCaseIds: ['A02'], calls });
+  const w8 = bundle('W8', { concreteCaseIds: ['D02'], calls });
+  const prepared = preparationInputs(w7, w8);
   const store = createMemoryArtifactStore();
   const w9Starts = [];
   const phasePreparation = buildP158CampaignPhasePreparation({
     schedule, w7Bundle: w7, w8Bundle: w8, liveHookManifestSha256: LIVE_MANIFEST,
-    runId: 'p158-integrated-run',
+    runId: 'p158-integrated-run', ...prepared,
   });
   const controllerSchedule = applyP158PhasePreparationToControllerSchedule({
     controllerSchedule: schedule.attempts.map((attempt) => ({
@@ -167,7 +198,8 @@ await withRoot(async (runRoot) => {
   const controller = controllerHarness(controllerSchedule);
   const result = await runP158CampaignPhases({
     schedule, controller, w7Bundle: w7, w8Bundle: w8,
-    w9: { target: { runId: 'p158-integrated-run' } }, runRoot, artifactStore: store,
+    w9: { target: { runId: 'p158-integrated-run' }, adapterBindings: prepared.w9AdapterBindings,
+      loggingRequestExpectations: prepared.loggingRequestExpectations }, runRoot, artifactStore: store,
     liveHookManifestSha256: LIVE_MANIFEST, clock: { wallNow: () => '2026-09-03T12:00:00.000Z' },
     phasePreparation,
     runW9: w9Harness(controller, w9Starts),
@@ -175,14 +207,21 @@ await withRoot(async (runRoot) => {
   const preAttempts = schedule.attempts.filter((entry) => ['W7', 'W8'].includes(entry.phaseId));
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(result.terminalPreAttemptCount, preAttempts.length);
-  assert.deepEqual(result.preExecutionBlockers.map(({ phaseId, caseId, attemptId }) => [phaseId, caseId, attemptId]),
-    schedule.attempts.filter((attempt) => ['A01', 'D01'].includes(attempt.caseId))
-      .map((attempt) => [attempt.phaseId, attempt.caseId, attempt.attemptId]));
+  assert.deepEqual(result.preExecutionBlockers.map(({ phaseId, caseId, attemptId }) => `${phaseId}:${caseId}:${attemptId}`).sort(),
+    schedule.attempts.filter((attempt) => !['A02', 'D02'].includes(attempt.caseId))
+      .map((attempt) => `${attempt.phaseId}:${attempt.caseId}:${attempt.attemptId}`).sort());
   assert.deepEqual(w9Starts, [preAttempts.length]);
-  assert.equal(calls.length, preAttempts.filter((attempt) => !['A01', 'D01'].includes(attempt.caseId)).length);
-  assert.equal(result.loggingExpectations.length, schedule.attempts.length);
-  assert.ok(result.loggingExpectations.every((entry) => entry.requestId.includes(entry.attemptId)));
-  assert.ok(result.loggingExpectations.every((entry) => entry.requestId.startsWith('p158:p158-integrated-run:')));
+  assert.equal(calls.length, preAttempts.filter((attempt) => ['A02', 'D02'].includes(attempt.caseId)).length);
+  assert.equal(result.loggingExpectations.length, prepared.loggingRequestExpectations.length +
+    schedule.attempts.filter((attempt) => !['A02', 'D02'].includes(attempt.caseId))
+      .reduce((count, attempt) => count + attempt.environmentIds.length, 0));
+  assert.ok(result.loggingExpectations.every((entry) => entry.operationCorrelationId.includes(entry.attemptId)));
+  assert.ok(result.loggingExpectations.every((entry) => entry.operationCorrelationId.includes(`:${entry.environmentId}:`) &&
+    entry.caseId && entry.phaseId && entry.executionMode));
+  assert.ok(result.loggingExpectations.every((entry) => entry.causalIds.requestId === null &&
+    entry.causalIds.jobId === null && entry.causalIds.eventId === null && entry.causalIds.traceId === null));
+  assert.ok(result.loggingExpectations.every((entry) =>
+    entry.operationCorrelationId.startsWith('p158:p158-integrated-run:')));
   const blockedIds = new Set(result.preExecutionBlockers.map((entry) => entry.attemptId));
   assert.ok(result.loggingExpectations.filter((entry) => blockedIds.has(entry.attemptId)).every((entry) =>
     entry.operatorVisible === false && entry.incidentExpected === false &&
@@ -200,12 +239,14 @@ await withRoot(async (runRoot) => {
 await withRoot(async (runRoot) => {
   const calls = [];
   const interrupted = schedule.attempts.find((entry) => entry.phaseId === 'W7' && entry.caseId !== 'A01').attemptId;
-  const w7 = bundle('W7', { blockedCaseId: 'A01', interruptAttemptId: interrupted, calls });
-  const w8 = bundle('W8', { blockedCaseId: 'D01', calls });
+  const interruptedCase = schedule.attempts.find((entry) => entry.attemptId === interrupted).caseId;
+  const w7 = bundle('W7', { concreteCaseIds: [interruptedCase], interruptAttemptId: interrupted, calls });
+  const w8 = bundle('W8', { concreteCaseIds: [], calls });
+  const prepared = preparationInputs(w7, w8);
   const store = createMemoryArtifactStore();
   const phasePreparation = buildP158CampaignPhasePreparation({
     schedule, w7Bundle: w7, w8Bundle: w8, liveHookManifestSha256: LIVE_MANIFEST,
-    runId: 'p158-integrated-run',
+    runId: 'p158-integrated-run', ...prepared,
   });
   const controller = controllerHarness(applyP158PhasePreparationToControllerSchedule({
     controllerSchedule: schedule.attempts.map((attempt) => ({
@@ -214,14 +255,15 @@ await withRoot(async (runRoot) => {
   }));
   const args = {
     schedule, controller, w7Bundle: w7, w8Bundle: w8,
-    w9: { target: { runId: 'p158-integrated-run' } }, runRoot, artifactStore: store,
+    w9: { target: { runId: 'p158-integrated-run' }, adapterBindings: prepared.w9AdapterBindings,
+      loggingRequestExpectations: prepared.loggingRequestExpectations }, runRoot, artifactStore: store,
     liveHookManifestSha256: LIVE_MANIFEST, clock: { wallNow: () => '2026-09-03T12:00:00.000Z' },
     phasePreparation,
     runW9: w9Harness(controller, []),
   };
   await assert.rejects(() => runP158CampaignPhases(args), /simulated process loss/u);
   assert.equal(calls.filter((entry) => entry.attemptId === interrupted).length, 1);
-  const resumed = bundle('W7', { blockedCaseId: 'A01', calls });
+  const resumed = bundle('W7', { concreteCaseIds: [interruptedCase], calls });
   const result = await runP158CampaignPhases({ ...args, w7Bundle: resumed });
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(calls.filter((entry) => entry.attemptId === interrupted).length, 1, 'resume must not replay an uncertain effect');
@@ -241,5 +283,38 @@ await withRoot(async (runRoot) => {
   }), (error) => error.code === 'phase_adapter_binding_unproven');
   assert.equal(controller.snapshot().state, 'frozen');
 });
+
+{
+  const w7 = bundle('W7', { concreteCaseIds: [] });
+  const w8 = bundle('W8', { concreteCaseIds: [] });
+  const prepared = preparationInputs(w7, w8);
+  const blockedAttempt = schedule.attempts.find((attempt) => attempt.phaseId === 'W7');
+  const extra = {
+    expectationId: `p158:p158-integrated-run:${blockedAttempt.attemptId}:forged`,
+    operationCorrelationId: `p158:p158-integrated-run:${blockedAttempt.attemptId}:forged`,
+    productRequestId: null, productRequestIdState: 'assigned_at_runtime',
+    requestKind: 'accepted_request', actionId: null, attemptId: blockedAttempt.attemptId,
+    caseId: blockedAttempt.caseId, phaseId: blockedAttempt.phaseId,
+    environmentId: blockedAttempt.environmentIds[0],
+  };
+  assert.throws(() => buildP158CampaignPhasePreparation({
+    schedule, w7Bundle: w7, w8Bundle: w8, w9AdapterBindings: prepared.w9AdapterBindings,
+    loggingRequestExpectations: [...prepared.loggingRequestExpectations, extra],
+    liveHookManifestSha256: LIVE_MANIFEST, runId: 'p158-integrated-run',
+  }), (error) => error.code === 'logging_request_expectations_incomplete');
+  assert.throws(() => buildP158CampaignPhasePreparation({
+    schedule, w7Bundle: w7, w8Bundle: w8, w9AdapterBindings: prepared.w9AdapterBindings,
+    loggingRequestExpectations: prepared.loggingRequestExpectations,
+    loggingOperationGaps: [{
+      descriptorId: `${blockedAttempt.attemptId}:gap`, operationCorrelationId: `${blockedAttempt.attemptId}:gap`,
+      productRequestId: null, correlationState: 'product_request_id_unavailable',
+      operationKind: 'blocked-operation', actionId: null, attemptId: blockedAttempt.attemptId,
+      caseId: blockedAttempt.caseId, phaseId: blockedAttempt.phaseId,
+      environmentId: blockedAttempt.environmentIds[0],
+      loggingGap: { code: 'product_request_id_not_preserved', detail: 'must not bind a blocked case' },
+    }],
+    liveHookManifestSha256: LIVE_MANIFEST, runId: 'p158-integrated-run',
+  }), (error) => error.code === 'logging_request_expectations_incomplete');
+}
 
 process.stdout.write('P158 integrated W7/W8/W9 phase orchestration test passed\n');

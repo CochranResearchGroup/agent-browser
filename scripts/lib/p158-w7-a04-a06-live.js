@@ -87,10 +87,12 @@ function a05RequestSuffixes(action) {
 
 function a05LoggingRequestDescriptors(action, campaignRunId, environmentId) {
   return a05RequestSuffixes(action).map((suffix) => {
-    const requestId = `${campaignRunId}:${action.actionId}:${suffix}`;
+    const operationCorrelationId = `${campaignRunId}:${action.actionId}:${suffix}`;
     return {
-      expectationId: requestId,
-      requestId,
+      expectationId: operationCorrelationId,
+      operationCorrelationId,
+      productRequestId: null,
+      productRequestIdState: 'assigned_at_runtime',
       // Both CAS contenders are admitted as durable Service jobs; exactly one
       // later terminates with policy_revision_conflict, without pre-assigning
       // the nondeterministic winner to a request identity.
@@ -257,7 +259,7 @@ function requestBase(context, subjectId, requestId) {
     serviceName: 'p158-a05', agentName: 'p158-w7-live-runner',
     taskName: context.action.actionId, clientSubjectId: subjectId,
     identityAssurance: 'self-declared', runtimeEnvironmentId: context.environmentId,
-    requestId, traceId: `${requestId}:trace`, runtimeProfile: context.fixture.profileId,
+    runtimeProfile: context.fixture.profileId,
     profileId: context.fixture.profileId, sessionName: context.fixture.sessionName,
   };
 }
@@ -269,7 +271,10 @@ function responseData(response) {
 async function assertTrace(service, context, requestId, subjectId, fetch) {
   const trace = await service.trace({ context, requestId, fetch });
   const jobs = Array.isArray(trace) ? trace : (trace?.jobs ?? trace?.data?.jobs ?? []);
-  const job = jobs.find((candidate) => candidate.provenance?.requestId === requestId);
+  const candidates = jobs.filter((candidate) =>
+    (requestId ? candidate.provenance?.requestId === requestId :
+      candidate.provenance?.clientSubjectId === subjectId));
+  const job = candidates.length === 1 ? candidates[0] : null;
   if (!job || job.provenance?.clientSubjectId !== subjectId ||
       typeof job.provenance?.connectionInstanceId !== 'string' ||
       job.provenance.connectionInstanceId.length === 0) {
@@ -301,9 +306,8 @@ export function createP158W7A05DevelopmentService(options = {}) {
       exactSubset(status, context.environment.ownershipStatus);
       return status;
     },
-    upsertProfile: ({ context, profile, fetch, requestId }) => upsertServiceProfile({
+    upsertProfile: ({ context, profile, fetch }) => upsertServiceProfile({
       baseUrl: context.environment.serviceOrigin, fetch, id: context.fixture.profileId, profile,
-      headers: { 'x-agent-browser-request-id': requestId },
     }),
     async mutate({ context, subjectId, capability, expectedRevision, targetPolicy, fetch, suffix }) {
       const requestId = `${context.manifest.campaignRunId}:${context.action.actionId}:${suffix}`;
@@ -313,7 +317,8 @@ export function createP158W7A05DevelopmentService(options = {}) {
           ...requestBase(context, subjectId, requestId), expectedRevision, targetPolicy,
         }),
       });
-      return { response, requestId };
+      return { response, operationCorrelationId: requestId,
+        requestId: typeof response?.id === 'string' && response.id.length > 0 ? response.id : null };
     },
     async open({ context, subjectId, capability, fetch, suffix }) {
       const requestId = `${context.manifest.campaignRunId}:${context.action.actionId}:${suffix}`;
@@ -321,7 +326,8 @@ export function createP158W7A05DevelopmentService(options = {}) {
         baseUrl: context.environment.serviceOrigin, fetch, profileCapability: capability,
         ...requestBase(context, subjectId, requestId), url: context.fixture.url,
       });
-      return { response, requestId };
+      return { response, operationCorrelationId: requestId,
+        requestId: typeof response?.id === 'string' && response.id.length > 0 ? response.id : null };
     },
     async release({ context, subjectId, capability, handle, fetch, suffix }) {
       const requestId = `${context.manifest.campaignRunId}:${context.action.actionId}:${suffix}`;
@@ -329,7 +335,8 @@ export function createP158W7A05DevelopmentService(options = {}) {
         baseUrl: context.environment.serviceOrigin, fetch, profileCapability: capability,
         ...requestBase(context, subjectId, requestId), serviceTabHandle: handle,
       });
-      return { response, requestId };
+      return { response, operationCorrelationId: requestId,
+        requestId: typeof response?.id === 'string' && response.id.length > 0 ? response.id : null };
     },
     accessPlan: ({ context, subjectId, capability, fetch }) => getServiceAccessPlan({
       baseUrl: context.environment.serviceOrigin, fetch, profileCapability: capability,
@@ -339,7 +346,8 @@ export function createP158W7A05DevelopmentService(options = {}) {
     }),
     tabs: ({ context, fetch }) => getServiceTabs({ baseUrl: context.environment.serviceOrigin, fetch }),
     trace: ({ context, requestId, fetch }) => getServiceTrace({
-      baseUrl: context.environment.serviceOrigin, fetch, query: { requestId, limit: 100 },
+      baseUrl: context.environment.serviceOrigin, fetch,
+      query: requestId ? { requestId, limit: 100 } : { taskName: context.action.actionId, limit: 100 },
     }),
   };
   if (transportFor && transportFor.close) service.close = () => transportFor.close();
@@ -360,6 +368,8 @@ async function setupProfile(context, service, accessPolicy, fetch, requestId) {
     context, fetch, requestId, profile: profileFixture(context.fixture, accessPolicy),
   });
   if (response?.success === false) fail('fixture_setup_failed', context.action.actionId, response);
+  return { operationCorrelationId: requestId,
+    requestId: typeof response?.id === 'string' && response.id.length > 0 ? response.id : null };
 }
 
 async function openOccupant(context, service, participantFetch, participantCapability) {
@@ -401,16 +411,26 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
   const loggingRequestExpectations = a05LoggingRequestDescriptors(
     frozenAction, manifest.campaignRunId, environmentId,
   );
-  const requestIds = loggingRequestExpectations.map((entry) => entry.requestId);
+  const operationCorrelationIds = loggingRequestExpectations.map((entry) => entry.operationCorrelationId);
+  const requestCorrelations = loggingRequestExpectations.map((entry) => ({
+    operationCorrelationId: entry.operationCorrelationId, productRequestId: null,
+  }));
+  const recordCorrelation = (entry) => {
+    const target = requestCorrelations.find((item) =>
+      item.operationCorrelationId === entry?.operationCorrelationId);
+    if (target) target.productRequestId = entry.requestId ?? null;
+  };
+  const productRequestIds = [];
   const requestIdFor = (suffix) => `${manifest.campaignRunId}:${frozenAction.actionId}:${suffix}`;
   const connectionInstanceIds = [];
   let effectObserved = false;
   try {
-    await setupProfile(context, service, transition === 'widen' ? restricted : shared, adminFetch,
-      requestIdFor('fixture-setup'));
+    recordCorrelation(await setupProfile(context, service,
+      transition === 'widen' ? restricted : shared, adminFetch, requestIdFor('fixture-setup')));
     let occupant = null;
     if (['admission', 'own_tab_release', 'drain_completion'].includes(transition)) {
       occupant = await openOccupant(context, service, participantFetch, participantCapability);
+      recordCorrelation(occupant);
       connectionInstanceIds.push(occupant.connectionInstanceId);
       effectObserved = true;
     }
@@ -421,6 +441,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
       const second = service.mutate({ context, fetch: participantFetch, subjectId: context.fixture.adminSubjectId,
         capability: adminCapability, expectedRevision: 1, targetPolicy: targetRestricted, suffix: 'conflict-b' });
       const results = await Promise.all([first, second]);
+      results.forEach(recordCorrelation);
+      productRequestIds.push(...results.map((entry) => entry.requestId).filter(Boolean));
       const passed = results.filter((entry) => entry.response?.success === true);
       const conflicted = results.filter((entry) => entry.response?.success === false &&
         JSON.stringify(entry.response).includes('policy_revision_conflict'));
@@ -436,6 +458,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         context, fetch: adminFetch, subjectId: context.fixture.adminSubjectId,
         capability: adminCapability, expectedRevision: 1, targetPolicy, suffix: 'policy-mutate',
       });
+      recordCorrelation(mutated);
+      if (mutated.requestId) productRequestIds.push(mutated.requestId);
       connectionInstanceIds.push(await assertTrace(
         service, context, mutated.requestId, context.fixture.adminSubjectId, adminFetch,
       ));
@@ -462,6 +486,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const denied = await service.open({ context, fetch: participantFetch,
           subjectId: context.fixture.participantSubjectId, capability: participantCapability,
           suffix: 'admission-probe' });
+        recordCorrelation(denied);
+        if (denied.requestId) productRequestIds.push(denied.requestId);
         if (denied.response?.success !== false || !JSON.stringify(denied.response).includes('profile_access_denied')) {
           fail('draining_admission_oracle_failed', frozenAction.actionId, denied.response);
         }
@@ -470,6 +496,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const released = await service.release({ context, fetch: participantFetch,
           subjectId: context.fixture.participantSubjectId, capability: participantCapability,
           handle: occupant.handle, suffix: 'own-release' });
+        recordCorrelation(released);
+        if (released.requestId) productRequestIds.push(released.requestId);
         requireSuccess(released.response, 'own_tab_release_oracle_failed');
         const tabs = await service.tabs({ context, fetch: participantFetch });
         const rows = tabs?.tabs ?? tabs?.data?.tabs ?? [];
@@ -482,6 +510,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const completed = await service.mutate({ context, fetch: adminFetch,
           subjectId: context.fixture.adminSubjectId, capability: adminCapability,
           expectedRevision: 1, targetPolicy: targetRestricted, suffix: 'drain-complete' });
+        recordCorrelation(completed);
+        if (completed.requestId) productRequestIds.push(completed.requestId);
         const completion = requireSuccess(completed.response, 'drain_completion_failed');
         if (completion?.outcome !== 'restricted' || completion.policy?.revision !== 2 ||
             completion.policy?.state !== 'active') {
@@ -497,7 +527,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
       campaignRunId: manifest.campaignRunId, caseId: 'A05', attemptId: attempt.attemptId,
       actionId: frozenAction.actionId, environmentId, transition,
       clientSubjectIds: [context.fixture.adminSubjectId, context.fixture.participantSubjectId],
-      connectionInstanceIds, requestIds, state: 'passed', attempt: 1,
+      connectionInstanceIds, operationCorrelationIds, productRequestIds, requestCorrelations,
+      state: 'passed', attempt: 1,
       resultState: 'passed', effectState: 'verified_effect', observedAt: clock(),
       retryDisposition: 'prohibited_opportunistic_retry', repairAttempted: false,
       retryAttempted: false, garbageCollectionAttempted: false,
@@ -522,7 +553,8 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
       schemaVersion: 'agent-browser.p158-w7-action-receipt.v1', campaignRunId: manifest.campaignRunId,
       caseId: 'A05', attemptId: attempt.attemptId, actionId: frozenAction.actionId,
       environmentId, transition, clientSubjectIds: [context.fixture.adminSubjectId, context.fixture.participantSubjectId],
-      connectionInstanceIds, requestIds, state: 'failed', attempt: 1, resultState,
+      connectionInstanceIds, operationCorrelationIds, productRequestIds, requestCorrelations,
+      state: 'failed', attempt: 1, resultState,
       effectState: effectObserved ? 'effect_uncertain' : 'no_effect', observedAt: clock(),
       failure: { code: error?.code ?? 'service_transport_failed', message: error?.message ?? String(error) },
       retryDisposition: 'prohibited_opportunistic_retry', repairAttempted: false,

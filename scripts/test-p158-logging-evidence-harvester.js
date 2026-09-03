@@ -23,22 +23,27 @@ addFormats(ajv);
 const fixtureSchema = JSON.parse(await readFile(
   'docs/dev/contracts/p158-logging-causal-fixtures.v1.schema.json', 'utf8'));
 ajv.addSchema(fixtureSchema);
+ajv.addSchema(JSON.parse(await readFile(
+  'docs/dev/contracts/service-failure-record.v1.schema.json', 'utf8')));
 const validateCorpus = ajv.compile(JSON.parse(await readFile(
   'docs/dev/contracts/p158-logging-evidence-corpus.v1.schema.json', 'utf8')));
 const requestId = `p158:${runId}:A01-E0-r001:request`;
 const expectation = {
   campaignRunId: runId, expectationId: 'A01-E0-r001:open:001', requestKind: 'accepted_request',
   phaseId: 'W7', environmentId: 'E0', caseId: 'A01',
-  attemptId: 'A01-E0-r001', requestId, jobId: 'job-1', eventId: 'event-1', traceId: 'trace-1',
+  attemptId: 'A01-E0-r001', operationCorrelationId: `${runId}:A01-E0-r001:open`,
+  productRequestId: null, productRequestIdState: 'assigned_at_runtime',
+  jobId: 'job-1', eventId: 'event-1', traceId: 'trace-1',
   incidentExpected: false, operatorVisible: false, executionMode: 'concrete_live',
   expectedSurfaceRoles: ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome'],
 };
 function causalEnvelope(entry = expectation, overrides = {}) {
   return {
     expectationId: entry.expectationId, actionId: entry.actionId ?? null,
-    environmentId: entry.environmentId, expectedRequestId: entry.requestId,
+    environmentId: entry.environmentId, operationCorrelationId: entry.operationCorrelationId,
     observedCausalIds: {
-      requestId: entry.requestId, jobId: entry.jobId ?? null, eventId: entry.eventId ?? null,
+      requestId: entry.observedProductRequestId === undefined ? requestId : entry.observedProductRequestId,
+      jobId: entry.jobId ?? null, eventId: entry.eventId ?? null,
       traceId: entry.traceId ?? null, incidentId: entry.incidentId ?? null,
     },
     ...overrides,
@@ -112,7 +117,7 @@ function observerResult(records, target = expectation) {
 
 function baseInput({ observer, artifactStore = memoryStore(), expectations = [expectation],
   causalEnvelopes = expectations.map((entry) => causalEnvelope(entry)),
-  checkpointRecords = [record('ingress_request'), record('immediate_response')],
+  checkpointRecords = [],
   dashboardProjections = [] } = {}) {
   return {
     runId, candidateSha256: '11'.repeat(32), phaseId: 'W7',
@@ -150,7 +155,8 @@ function findingCodes(corpus) {
   return [...new Set(auditCausalEnvelopes({ fixtureSet: corpus }).findings.map((entry) => entry.code))];
 }
 
-const serviceRecords = [record('durable_job'), record('terminal_event'), record('trace_outcome')];
+const serviceRecords = ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome']
+  .map((surfaceRole) => record(surfaceRole));
 const liveObserverCalls = [];
 const liveFetch = async (url) => {
     liveObserverCalls.push(String(url));
@@ -162,7 +168,16 @@ const liveFetch = async (url) => {
       provenance, terminalOutcome };
     const outcome = { id: 'trace-1', state: 'succeeded', timestamp: times.trace_outcome,
       provenance, terminalOutcome };
-    const data = pathname.endsWith('/trace') ? { jobs: [job], events: [event], incidents: [], outcomes: [outcome] }
+    const failureRecord = {
+      schemaVersion: 'agent-browser.service-failure-record.v1', occurrenceId: 'failure-1',
+      occurredAt: times.terminal_event, bootEpoch: 'boot-1', runtimeEnvironment: 'development',
+      category: 'browser_launch', source: 'control_plane', stage: 'terminal_job', code: 'launch_failed',
+      summary: 'Browser launch failed', action: 'launch', references: { requestId, jobId: 'job-1' },
+    };
+    const data = pathname.endsWith('/failures')
+      ? { schemaVersion: 'agent-browser.service-failure-journal-readback.v1', records: [failureRecord],
+        malformedLineCount: 0, writeFailureCount: 0 }
+      : pathname.endsWith('/trace') ? { jobs: [job], events: [event], incidents: [], outcomes: [outcome] }
       : pathname.endsWith('/events') ? { events: [event] }
         : { job };
     return { ok: true, async json() { return { success: true, data }; } };
@@ -170,14 +185,21 @@ const liveFetch = async (url) => {
 const liveObserver = createP158ServiceLoggingObserver({ fetch: liveFetch });
 const observedFromService = await liveObserver({
   environment: baseInput({ observer: async () => observerResult([]) }).environment,
-  expectation,
+  expectation: { ...expectation, productRequestId: requestId, productRequestIdState: 'observed' },
   window: baseInput({ observer: async () => observerResult([]) }).window,
 });
 assert.deepEqual(observedFromService.records.map((entry) => entry.surfaceRole),
   ['durable_job', 'terminal_event', 'trace_outcome']);
 assert.equal(observedFromService.observerReceipts.length, 3);
-assert.equal(liveObserverCalls.length, 3);
-assert(liveObserverCalls.filter((url) => !url.endsWith('/api/service/jobs/job-1'))
+const observedFailureJournal = await liveObserver.readFailureJournal({
+  environment: baseInput({ observer: async () => observerResult([]) }).environment,
+  window: baseInput({ observer: async () => observerResult([]) }).window,
+});
+assert.equal(observedFailureJournal.records.length, 1);
+assert.equal(observedFailureJournal.observerReceipt.operation, 'service_failure_journal');
+assert.equal(liveObserverCalls.length, 4);
+assert(liveObserverCalls.filter((url) => !url.endsWith('/api/service/jobs/job-1') &&
+  !new URL(url).pathname.endsWith('/failures'))
   .every((url) => new URL(url).searchParams.get('requestId') === requestId));
 assert(liveObserverCalls.some((url) => url.endsWith('/api/service/jobs/job-1')));
 
@@ -189,11 +211,21 @@ assert.equal(clean.corpus.observerReceipts[0].capturePlane, true);
 assert.equal(clean.corpus.effectsAttempted, false);
 assert.equal(clean.corpus.redactionPolicy.mode, 'allowlist_projection');
 assert.equal(clean.corpus.redactionPolicy.rawSensitiveMaterialDisposition, 'reject');
+assert.equal(clean.corpus.failureJournal.captureState, 'unavailable');
 const { corpusSha256, ...corpusBody } = clean.corpus;
 assert.equal(corpusSha256, sha256(corpusBody));
 assert.equal(clean.store.writes, 1);
 assert.equal(validateCorpus(clean.corpus), true, JSON.stringify(validateCorpus.errors));
 assert.deepEqual(auditCausalEnvelopes({ fixtureSet: clean.corpus }).findings, []);
+const journalAwareObserver = async ({ expectation: target }) => observerResult(serviceRecords, target);
+journalAwareObserver.readFailureJournal = liveObserver.readFailureJournal;
+const journalAware = await harvestP158LoggingEvidence(baseInput({
+  observer: journalAwareObserver,
+  artifactStore: memoryStore(),
+}));
+assert.equal(journalAware.corpus.failureJournal.captureState, 'complete');
+assert.equal(journalAware.corpus.failureJournal.records[0].category, 'browser_launch');
+assert(journalAware.corpus.observerReceipts.some((entry) => entry.operation === 'service_failure_journal'));
 const source = p158LoggingEvidenceSourceBinding();
 assert.equal(source.sourceSha256, sha256(await readFile(source.sourcePath)));
 
@@ -221,6 +253,23 @@ const missing = await harvestWith(serviceRecords.filter((entry) => entry.surface
 assert.equal(validateCorpus(missing.corpus), true, JSON.stringify(validateCorpus.errors));
 assert.equal(missing.corpus.fixtures[0].records.find((entry) => entry.surfaceRole === 'trace_outcome').captureState, 'missing');
 assert.deepEqual(findingCodes(missing.corpus), ['capture_gap']);
+
+const uncorrelatableExpectation = {
+  ...expectation,
+  expectationId: `${expectation.expectationId}:uncorrelatable`,
+  operationCorrelationId: `${runId}:A01-E0-r001:uncorrelatable`,
+  observedProductRequestId: null,
+  jobId: null, eventId: null, traceId: null,
+};
+const uncorrelatable = await harvestWith([], {
+  expectations: [uncorrelatableExpectation],
+  causalEnvelopes: [causalEnvelope(uncorrelatableExpectation, { observedCausalIds: {
+    requestId: null, jobId: null, eventId: null, traceId: null, incidentId: null,
+  } })],
+});
+assert.ok(uncorrelatable.corpus.fixtures[0].records.every((entry) =>
+  entry.requestId === null && entry.captureGap.includes('request_id_correlation_unavailable')),
+'an unavailable product request ID must remain an explicit correlation gap');
 
 const duplicate = await harvestWith([...serviceRecords, record('terminal_event', {
   recordId: 'record-terminal-event-duplicate', eventId: 'event-duplicate',
@@ -253,7 +302,8 @@ function combinedEnvelopeInput(environmentId, complete, artifactStore) {
   const combinedExpectation = {
     ...expectation, attemptId: 'X10-E1_E2-r001', caseId: 'X10', environmentId,
     expectationId: `X10-E1_E2-r001:${environmentId}:epoch:001`,
-    requestId: `p158:${runId}:X10-E1_E2-r001:${environmentId}:request`,
+    operationCorrelationId: `${runId}:X10-E1_E2-r001:${environmentId}:request`,
+    observedProductRequestId: `service-request-${environmentId}`,
     jobId: `job-${environmentId}`, eventId: `event-${environmentId}`, traceId: `trace-${environmentId}`,
   };
   const roles = ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome'];
@@ -262,21 +312,19 @@ function combinedEnvelopeInput(environmentId, complete, artifactStore) {
     return {
       ...record(surfaceRole), attemptId: combinedExpectation.attemptId,
       expectationId: combinedExpectation.expectationId,
-      requestId: combinedExpectation.requestId, jobId: combinedExpectation.jobId,
+      requestId: combinedExpectation.observedProductRequestId, jobId: combinedExpectation.jobId,
       eventId: ['terminal_event', 'trace_outcome'].includes(surfaceRole) ? combinedExpectation.eventId : undefined,
       traceId: combinedExpectation.traceId, recordId,
       parentId: index === 0 ? null : `${environmentId}-${roles[index - 1]}`,
-      provenance: { ...provenance, requestId: combinedExpectation.requestId,
+      provenance: { ...provenance, requestId: combinedExpectation.observedProductRequestId,
         jobId: combinedExpectation.jobId, traceId: combinedExpectation.traceId,
         runtimeEnvironmentId: environmentId },
     };
   });
-  const serviceRows = rows.filter((entry) =>
-    ['durable_job', 'terminal_event', 'trace_outcome'].includes(entry.surfaceRole) &&
-    (complete || entry.surfaceRole !== 'trace_outcome'));
+  const serviceRows = rows.filter((entry) => complete || entry.surfaceRole !== 'trace_outcome');
   return baseInput({
     artifactStore, expectations: [combinedExpectation], causalEnvelopes: [causalEnvelope(combinedExpectation)],
-    checkpointRecords: rows.filter((entry) => ['ingress_request', 'immediate_response'].includes(entry.surfaceRole)),
+    checkpointRecords: [],
     observer: async ({ expectation: target }) => observerResult(serviceRows, target),
   });
 }
@@ -297,16 +345,18 @@ assert.notEqual(e1.relativePath, e2.relativePath);
 
 const secondExpectation = {
   ...expectation, expectationId: 'A01-E0-r001:release:001', requestKind: 'accepted_request',
-  requestId: `p158:${runId}:A01-E0-r001:release:001`, jobId: 'job-2', eventId: 'event-2', traceId: 'trace-2',
+  operationCorrelationId: `${runId}:A01-E0-r001:release`, observedProductRequestId: 'service-request-2',
+  jobId: 'job-2', eventId: 'event-2', traceId: 'trace-2',
 };
 function rewriteRequest(entry, target) {
   const suffix = target.expectationId.includes('release') ? '-2' : '-1';
+  const targetRequestId = target.observedProductRequestId ?? requestId;
   return {
-    ...entry, expectationId: target.expectationId, requestId: target.requestId,
+    ...entry, expectationId: target.expectationId, requestId: targetRequestId,
     jobId: target.jobId, eventId: entry.eventId ? target.eventId : undefined,
     traceId: target.traceId, recordId: `${entry.recordId}${suffix}`,
     parentId: entry.parentId ? `${entry.parentId}${suffix}` : null,
-    provenance: { ...entry.provenance, requestId: target.requestId, jobId: target.jobId, traceId: target.traceId },
+    provenance: { ...entry.provenance, requestId: targetRequestId, jobId: target.jobId, traceId: target.traceId },
   };
 }
 const multiRequestRows = [expectation, secondExpectation].flatMap((target) =>
@@ -327,7 +377,7 @@ assert.deepEqual(multiRequest.corpus.fixtures.map((fixture) => fixture.fixtureId
 const a05Expectation = {
   ...expectation,
   expectationId: `${runId}:A05-E0-r001:policy-mutate`,
-  requestId: `${runId}:A05-E0-r001:policy-mutate`,
+  operationCorrelationId: `${runId}:A05-E0-r001:policy-mutate`,
   attemptId: 'A05-E0-r001',
   caseId: 'A05',
 };
@@ -347,16 +397,17 @@ assert.deepEqual(auditCausalEnvelopes({ fixtureSet: multiRequest.corpus }).findi
 const blockedExpectation = {
   campaignRunId: runId, expectationId: 'A11-E0-r001:blocker', requestKind: 'rejected_request',
   phaseId: 'W7', environmentId: 'E0', caseId: 'A11', attemptId: 'A11-E0-r001',
-  requestId: `p158:${runId}:A11-E0-r001:request`, executionMode: 'explicit_blocked',
+  operationCorrelationId: `${runId}:A11-E0-r001:blocked`,
+  productRequestId: null, productRequestIdState: 'not_applicable', executionMode: 'explicit_blocked',
   incidentExpected: false, operatorVisible: false,
   expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
 };
-const blockedProvenance = { ...provenance, requestId: blockedExpectation.requestId,
+const blockedProvenance = { ...provenance, requestId: 'controller-blocked-record',
   jobId: 'blocked-controller-job', traceId: null, action: 'explicit_blocked' };
 const blockedRows = ['controller_transition', 'pre_execution_blocker', 'terminal_event'].map((surfaceRole, index) => ({
-  campaignRunId: runId, attemptId: blockedExpectation.attemptId, surfaceRole, transport: 'service',
+  campaignRunId: runId, attemptId: blockedExpectation.attemptId, surfaceRole, transport: 'controller',
   expectationId: blockedExpectation.expectationId,
-  recordId: `blocked-${surfaceRole}`, requestId: blockedExpectation.requestId,
+  recordId: `blocked-${surfaceRole}`, requestId: null,
   jobId: 'blocked-controller-job', timestamp: `2026-09-03T10:00:0${index + 1}.000Z`,
   parentId: index === 0 ? null : `blocked-${blockedExpectation.expectedSurfaceRoles[index - 1]}`,
   terminal: surfaceRole === 'terminal_event', state: surfaceRole === 'terminal_event' ? 'rejected' : 'accepted',
@@ -374,6 +425,13 @@ assert.deepEqual(auditCausalEnvelopes({ fixtureSet: blocked.corpus }).findings, 
 
 const hookStore = memoryStore();
 const loggingExpectations = [expectation];
+const loggingOperationGaps = [{
+  descriptorId: `${runId}:A13:operation-1`, operationCorrelationId: `${runId}:A13:operation-1`,
+  productRequestId: null, correlationState: 'product_request_id_unavailable',
+  operationKind: 'handoff-prepare', actionId: 'A13:action-1', attemptId: 'A13-E1-r001',
+  caseId: 'A13', phaseId: 'W7', environmentId: 'E1',
+  loggingGap: { code: 'product_request_id_not_preserved', detail: 'Synthetic test gap.' },
+}];
 const hook = createP158LoggingHarvestHook({
   configuration: {
     runId, scheduleSha256: '51'.repeat(32), candidateSha256: '11'.repeat(32),
@@ -381,21 +439,35 @@ const hook = createP158LoggingHarvestHook({
     environmentSealSha256s: { E0: '22'.repeat(32) },
     loggingExpectations,
     loggingExpectationsSha256: sha256(loggingExpectations),
+    loggingOperationGaps, loggingOperationGapsSha256: sha256(loggingOperationGaps),
     windowsByEnvironmentPhase: { 'W7:E0': baseInput({ observer: async () => observerResult([]) }).window },
   },
   artifactStore: hookStore, runRoot: '/tmp/p158-harvester-hook-provider-free',
   clock: { wallNow: () => '2026-09-03T10:01:00.000Z' },
   fetchByEnvironment: { E0: liveFetch },
 });
+const registeredArtifacts = [];
 const hookReceipt = await hook.execute({
   schedule: { scheduleSha256: '51'.repeat(32) }, target: { runId },
   sourceDigest: '52'.repeat(32), causalEnvelopes: [causalEnvelope(expectation)],
   checkpointRecords: [record('ingress_request'), record('immediate_response')],
+  registerArtifact: async (artifact) => {
+    registeredArtifacts.push(structuredClone(artifact));
+    await hookStore.writeOnce(artifact.relativePath, artifact.content);
+  },
 });
 const { receiptSha256, ...hookReceiptBody } = hookReceipt;
 assert.equal(receiptSha256, sha256(hookReceiptBody));
-assert.equal(hookReceipt.state, 'complete');
-assert.equal(hookReceipt.artifactIds.length, 1);
+assert.equal(hookReceipt.state, 'capture_gap');
+assert.equal(hookReceipt.artifactIds.length, 2);
+assert.deepEqual(registeredArtifacts.map((artifact) => artifact.artifactId).sort(), hookReceipt.artifactIds);
+assert.equal(registeredArtifacts.find((artifact) => artifact.relativePath.endsWith('operation-gaps.json'))
+  .metadata.analysisRole, 'logging_operation_gaps');
+assert(registeredArtifacts.filter((artifact) => !artifact.relativePath.endsWith('operation-gaps.json'))
+  .every((artifact) => artifact.metadata.analysisRole === 'logging_evidence'));
+assert.equal(hookReceipt.operationGapCount, 1);
+assert.ok(hookReceipt.findingCodes.includes('request_id_correlation_unavailable'));
+assert.ok(hookReceipt.findingCodes.includes('unobserved_due_to_uncorrelatable_id'));
 assert.equal(hookReceipt.repairAttempted, false);
 assert.equal(hookReceipt.retryAttempted, false);
 await assert.rejects(() => hook.execute({
@@ -426,6 +498,6 @@ const gapReceipt = await gapHook.execute({
   checkpointRecords: [record('ingress_request'), record('immediate_response')],
 });
 assert.equal(gapReceipt.state, 'capture_gap');
-assert.deepEqual(gapReceipt.findingCodes, ['capture_gap']);
+assert.deepEqual(gapReceipt.findingCodes, ['capture_gap', 'one_transport_only', 'timestamp_inversion']);
 
 process.stdout.write('P158 logging evidence harvester passed exact live, adversarial, blocked, and resume contracts\n');

@@ -31,6 +31,7 @@ const environment = {
   xdgRuntimeDir: path.join(temporary, 'campaign', 'control-xdg'),
   socketDir: path.join(temporary, 'campaign', 'control-socket'),
 };
+const validatorHelp = 'agent-browser service state validate --path <absolute-path> --json\n';
 
 function expectCode(code, action) {
   assert.throws(action, (error) => error instanceof P158W7A08Error && error.code === code);
@@ -59,6 +60,9 @@ const manifest = await prepareP158W7A08ReplayManifest({
   scheduleSha256: schedule.scheduleSha256, liveHookManifestSha256: 'a'.repeat(64),
   environmentSealSha256s: { E1: 'b'.repeat(64) },
   run: async (_binary, args) => {
+    if (args[0] === 'service' && args[1] === '--help') {
+      return { stdout: validatorHelp, stderr: '' };
+    }
     const statePath = args.at(-1);
     const stateBytes = fs.readFileSync(statePath);
     return { stdout: JSON.stringify({ success: true, data: {
@@ -70,8 +74,12 @@ const manifest = await prepareP158W7A08ReplayManifest({
 
 assert.equal(manifest.cells.length, 8);
 assert.equal(new Set(manifest.cells.map((cell) => cell.rootSha256)).size, 8);
-assert.equal(enumerateP158W7A08LoggingOperations({
-  campaignRunId: manifest.campaignRunId }).length, 24);
+const loggingOperations = enumerateP158W7A08LoggingOperations({
+  campaignRunId: manifest.campaignRunId });
+assert.equal(loggingOperations.length, 8);
+assert(loggingOperations.every((entry) => entry.productRequestId === null &&
+  entry.correlationState === 'product_request_id_unavailable' &&
+  entry.loggingGap.code === 'product_request_id_not_preserved'));
 assert.equal(p158W7A08SourceBinding().sourceSha256.length, 64);
 assert.equal(p158W7A08SourceBinding().fixtureSha256.length, 64);
 
@@ -101,10 +109,12 @@ assert.equal(successfulCalls.length, 8);
 assert(result.receipts.every((receipt) =>
   receipt.resultState === 'reproduced_historical_failure' &&
   receipt.effectState === 'verified_no_browser_effect' &&
-  receipt.productRequestIdSha256?.length === 64));
+  receipt.productRequestIdSha256?.length === 64 &&
+  receipt.productRequestId === `private-product-id-${receipt.cellId}`));
 assert(!JSON.stringify(result).includes('private.invalid'));
 assert(!JSON.stringify(result).includes('/private/profile'));
-assert(!JSON.stringify(result).includes('private-product-id'));
+assert(!JSON.stringify(result.receipts.map((receipt) => receipt.responseEvidence))
+  .includes('private-product-id'));
 
 const replayed = await successfulBundle.adapters[0].execute({ attempt });
 assert.equal(replayed.resultState, 'reproduced_historical_failure');
@@ -127,11 +137,47 @@ assert.equal(uncertainInvocations, 7, 'claimed cell must not be replayed');
 
 const mismatchStore = store();
 const mismatchBundle = createP158W7A08LiveBundle({ schedule, replayManifest: manifest,
-  receiptStore: mismatchStore, driver: { async execute() {
-    return { success: false, error: 'different_product_failure' };
+  receiptStore: mismatchStore, driver: { async execute(cell) {
+    return { success: false, error: 'different_product_failure',
+      provenance: { requestedAction: cell.action },
+      effectEvidence: { beforeStateSha256: cell.stateSha256,
+        afterStateSha256: 'd'.repeat(64), browserEffectObserved: false,
+        actionOracleSatisfied: false } };
   } }, clock: () => '2026-09-03T12:00:02Z' });
 const mismatch = await mismatchBundle.adapters[0].execute({ attempt });
 assert.equal(mismatch.resultState, 'new_product_failure');
+
+const fixedStore = store();
+const fixedBundle = createP158W7A08LiveBundle({ schedule, replayManifest: manifest,
+  receiptStore: fixedStore, driver: { async execute(cell) {
+    const data = {
+      launch: { url: 'data:text/html,p158-fixed' },
+      remote_view_open: { browserId: 'session:p158-a08-retained-session' },
+      tab_switch: { index: 0 },
+      view_focus: { broughtToFront: true },
+    }[cell.action];
+    return { success: true, data, provenance: { requestedAction: cell.action },
+      effectEvidence: { beforeStateSha256: cell.stateSha256,
+        afterStateSha256: 'e'.repeat(64), browserEffectObserved: true,
+        actionOracleSatisfied: true } };
+  } }, clock: () => '2026-09-03T12:00:02Z' });
+const fixed = await fixedBundle.adapters[0].execute({ attempt });
+assert.equal(fixed.resultState, 'passed');
+assert.equal(fixed.effectState, 'verified_action_effect');
+assert(fixed.receipts.every((receipt) => receipt.resultState === 'passed' &&
+  receipt.effectState === 'verified_action_effect'));
+
+const falseSuccessStore = store();
+const falseSuccessBundle = createP158W7A08LiveBundle({ schedule, replayManifest: manifest,
+  receiptStore: falseSuccessStore, driver: { async execute(cell) {
+    return { success: true, data: {}, provenance: { requestedAction: cell.action },
+      effectEvidence: { beforeStateSha256: cell.stateSha256,
+        afterStateSha256: 'e'.repeat(64), browserEffectObserved: true,
+        actionOracleSatisfied: false } };
+  } }, clock: () => '2026-09-03T12:00:02Z' });
+const falseSuccess = await falseSuccessBundle.adapters[0].execute({ attempt });
+assert.equal(falseSuccess.resultState, 'harness_failure',
+  'successful response without an action-specific oracle is not a pass');
 
 const missingEffectStore = store();
 const missingEffectBundle = createP158W7A08LiveBundle({ schedule, replayManifest: manifest,
@@ -181,9 +227,11 @@ await assert.rejects(prepareP158W7A08ReplayManifest({
     socketDir: path.join(rejectedRoot, 'control-socket') },
   scheduleSha256: schedule.scheduleSha256, liveHookManifestSha256: 'a'.repeat(64),
   environmentSealSha256s: { E1: 'b'.repeat(64) },
-  run: async (_binary, args) => ({ stdout: JSON.stringify({ data: { accepted: false,
-    classification: 'error', stateSha256: sha256(fs.readFileSync(args.at(-1))),
-    parserIdentitySha256: candidate.binarySha256 } }) }),
+  run: async (_binary, args) => args[0] === 'service' && args[1] === '--help'
+    ? { stdout: validatorHelp, stderr: '' }
+    : { stdout: JSON.stringify({ data: { accepted: false,
+      classification: 'error', stateSha256: sha256(fs.readFileSync(args.at(-1))),
+      parserIdentitySha256: candidate.binarySha256 } }) },
 }), (error) => error instanceof P158W7A08Error && error.code === 'a08_fixture_parser_rejected');
 
 const defaultEnvironment = { ...environment, root: process.env.HOME,

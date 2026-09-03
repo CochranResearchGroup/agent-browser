@@ -11,6 +11,8 @@ import { join } from 'node:path';
 import {
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
+  developmentPresentationProviderManifestCompatible,
+  developmentPresentationProviderManifestUpgradeCompatible,
   validateDevelopmentPresentationProviderIsolation,
 } from './development-presentation-provider.js';
 import {
@@ -78,8 +80,15 @@ export function developmentPresentationProviderSystemPreflight({
     }
     checks.push(check(
       'configured-manifest',
-      manifest !== null && JSON.stringify(manifest) ===
-        JSON.stringify(developmentPresentationProviderManifest(descriptor)),
+      manifest !== null && (
+        developmentPresentationProviderManifestCompatible(
+          manifest,
+          developmentPresentationProviderManifest(descriptor),
+        ) || developmentPresentationProviderManifestUpgradeCompatible(
+          manifest,
+          developmentPresentationProviderManifest(descriptor),
+        )
+      ),
       manifest === null ? 'unreadable' : 'configured',
     ));
   } else {

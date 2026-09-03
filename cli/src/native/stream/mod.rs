@@ -261,6 +261,7 @@ impl StreamServer {
         let last_tabs_bg = last_tabs.clone();
         let last_engine_bg = last_engine.clone();
         let recording_bg = recording.clone();
+        let cdp_session_name = session_id.clone();
         let cdp_task = tokio::spawn(async move {
             cdp_loop::cdp_event_loop(
                 frame_tx_bg,
@@ -275,6 +276,8 @@ impl StreamServer {
                 last_tabs_bg,
                 last_engine_bg,
                 recording_bg,
+                cdp_session_name,
+                port,
                 shutdown_rx,
             )
             .await;

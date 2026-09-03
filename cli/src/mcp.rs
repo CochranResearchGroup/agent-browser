@@ -6419,7 +6419,19 @@ fn service_request_command_with_state_and_authority(
         request_id: &request_id,
         effective_session: Some(effective_session),
     })
-    .map_err(|issue| JsonRpcError::invalid_params(issue.message()))?;
+    .map_err(|issue| {
+        #[cfg(not(test))]
+        crate::native::service_failure_journal::append_service_failure_best_effort(
+            &crate::native::service_request::service_request_rejection_failure_record(
+                "mcp_service_request",
+                request.get("action").and_then(Value::as_str),
+                &request_id,
+                effective_session,
+                &issue,
+            ),
+        );
+        JsonRpcError::invalid_params(issue.message())
+    })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);

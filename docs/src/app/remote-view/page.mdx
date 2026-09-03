@@ -5,6 +5,13 @@ Guacamole and preserve one durable link across route changes. The operator
 opens an authenticated `/remote-view/<handoff-id>` URL. Provider URLs remain
 diagnostic evidence and must not become handoff links.
 
+Guacamole viewer failures and unusable durable handoff links are appended to
+the privacy-bounded Service failure journal. Records contain route and display
+correlation identifiers plus a hash of the handoff identifier. They never
+contain the operator URL, provider URL, credentials, page content, or request
+headers. Reopening the same durable handoff remains the correct reconnect
+operation and does not create a replacement handoff solely for diagnostics.
+
 > **Important:** Share only `handoffUrl` from a successful remote-view open.
 > Never share or bookmark `providerExternalUrl`, a raw Guacamole URL, or a URL
 > under `routeBinding`.
@@ -101,6 +108,14 @@ console.log(handoff.handoffUrl);
 The lower-level `requestServiceRemoteViewOpen()` helper also requires a durable
 handoff URL for real opens. Do not set `allowRawProviderUrl: true` outside an
 explicit infrastructure diagnostic.
+
+For software automation, read the valid `serviceTabHandle` directly from the
+successful open response with `getServiceTabHandle(response)`. It is returned
+at the top level and under `tab.serviceTabHandle`; no additional `tab_new` is
+needed. Generic `tab_new` rejects route and display selectors before creating a
+job. Route-bound callers must use authenticated `remote_view_open`. Derived
+display-allocation identity follows the stable route identity, not an X11
+display number that may later be reused by another route.
 
 ## Resume software automation from a handoff
 

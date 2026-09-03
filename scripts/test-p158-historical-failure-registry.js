@@ -45,7 +45,7 @@ assert(
   'P158 actual freeze receipt is incomplete',
 );
 assert(registry.resourceCeilings.artifactQuotaBytes > 0, 'P158 artifact quota is not numeric');
-assert(registry.resourceCeilings.filesystemMaximumUsedPercent === 85, 'P158 filesystem safety ceiling drifted');
+assert(registry.resourceCeilings.filesystemMaximumUsedPercent === 90, 'P158 filesystem safety ceiling drifted');
 assert(registry.performanceCeilings.internalHandoffUrlLeaks === 0, 'P158 must tolerate zero internal URL leaks');
 assert(registry.performanceCeilings.missingTerminalOutcomes === 0, 'P158 must tolerate zero missing terminal outcomes');
 

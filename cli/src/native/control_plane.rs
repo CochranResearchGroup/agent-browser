@@ -17,6 +17,10 @@ use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
 use super::service_failure::attach_service_failure_recourse;
+use super::service_failure_journal::{
+    append_service_failure_best_effort, opaque_identifier_hash, ServiceFailureCategory,
+    ServiceFailureRecord, ServiceFailureReferences,
+};
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     reconcile_persisted_service_state, record_browser_health_changed_event,
@@ -1293,6 +1297,68 @@ fn persist_service_job_terminal(
             }
         }
     });
+    if outcome.state != ServiceTerminalState::Succeeded {
+        let category =
+            failure_category_for_action(&request.action, request.service_name.as_deref());
+        let code = outcome
+            .failure
+            .as_ref()
+            .map(|failure| failure.code.as_str())
+            .filter(|code| !code.trim().is_empty())
+            .unwrap_or("service_request_failed");
+        let handoff_id_hash = service_job_optional_command_string(request, "handoffId")
+            .or_else(|| service_job_optional_command_string(request, "remoteViewHandoffId"))
+            .map(|id| opaque_identifier_hash(&id));
+        let record = ServiceFailureRecord::new(
+            category,
+            "service_control_plane",
+            format!("{:?}", outcome.phase).to_ascii_lowercase(),
+            code,
+            response
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("service request reached a non-success terminal state"),
+        )
+        .with_action(request.action.clone())
+        .with_references(ServiceFailureReferences {
+            runtime_environment_id: request.provenance.runtime_environment_id.clone(),
+            runtime_lane_id: request.provenance.runtime_lane_id.clone(),
+            request_id: Some(request.provenance.request_id.clone()),
+            job_id: Some(job_id),
+            trace_id: request.provenance.trace_id.clone(),
+            browser_id: request.provenance.browser_id.clone(),
+            profile_id: request.provenance.profile_id.clone(),
+            session_id: request.provenance.session_id.clone(),
+            route_id: allocation_refs.remote_view_route_id,
+            display_id: allocation_refs.display_allocation_id,
+            handoff_id_hash,
+        })
+        .with_details(json!({
+            "terminalState": outcome.state,
+            "effectState": outcome.effect_state,
+            "retryDisposition": outcome.retry_disposition,
+        }));
+        append_service_failure_best_effort(&record);
+    }
+}
+
+fn failure_category_for_action(action: &str, service_name: Option<&str>) -> ServiceFailureCategory {
+    if service_name.is_some_and(|name| name.contains("dashboard")) {
+        return ServiceFailureCategory::DashboardAction;
+    }
+    match action {
+        "open" | "cdp_free_launch" => ServiceFailureCategory::BrowserLaunch,
+        "service_remote_view_handoff_resolve" => ServiceFailureCategory::HandoffLink,
+        "remote_view_open"
+        | "service_remote_view_route_preflight"
+        | "service_remote_view_browser_reattach"
+        | "service_remote_view_route_switch"
+        | "service_remote_view_route_checkout"
+        | "service_remote_view_route_release"
+        | "service_route_pool_repair" => ServiceFailureCategory::GuacamoleLoad,
+        "cdp_attach" | "cdp_detach" | "view_focus" => ServiceFailureCategory::CdpStream,
+        _ => ServiceFailureCategory::ServiceAction,
+    }
 }
 
 fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> Value {
@@ -4774,5 +4840,29 @@ mod tests {
             }
             _ => panic!("cancellation must retain the coordinator future through compensation"),
         }
+    }
+
+    #[test]
+    fn terminal_failures_map_to_forensic_categories() {
+        assert_eq!(
+            failure_category_for_action("open", None),
+            ServiceFailureCategory::BrowserLaunch
+        );
+        assert_eq!(
+            failure_category_for_action("service_remote_view_handoff_resolve", None),
+            ServiceFailureCategory::HandoffLink
+        );
+        assert_eq!(
+            failure_category_for_action("remote_view_open", None),
+            ServiceFailureCategory::GuacamoleLoad
+        );
+        assert_eq!(
+            failure_category_for_action("view_focus", None),
+            ServiceFailureCategory::CdpStream
+        );
+        assert_eq!(
+            failure_category_for_action("tab_new", Some("agent-browser-dashboard")),
+            ServiceFailureCategory::DashboardAction
+        );
     }
 }

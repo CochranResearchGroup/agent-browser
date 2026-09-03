@@ -32,7 +32,7 @@ const input = {
 const original = structuredClone(input);
 const report = auditP158W7LiveHookReadiness(input);
 assert.deepEqual(input, original);
-assert.equal(report.reviewedCaseCount, 22);
+assert.equal(report.reviewedCaseCount, 24);
 assert.deepEqual(report.concreteCaseIds, []);
 assert.deepEqual(report.explicitBlockedCaseIds,
   [...new Set([...P158_W7_LIVE_HOOK_AUDIT_CASE_IDS, ...P158_W7_PRODUCT_BLOCKED_CASE_IDS])]);
@@ -131,7 +131,7 @@ const promoted = auditP158W7LiveHookReadiness({
 assert.deepEqual(promoted.concreteCaseIds, ['A01', 'A02', 'A03', 'A05']);
 assert.deepEqual(Object.fromEntries(promoted.cases.filter((entry) => entry.implementationKind === 'concrete_live')
   .map((entry) => [entry.caseId, entry.implementedActionCount])), { A01: 250, A02: 400, A03: 20, A05: 12 });
-assert.ok(['A04', 'A06', 'A08', 'A09', 'A10', 'A15', 'X01', 'X02', 'X03', 'X04', 'X05',
+assert.ok(['A04', 'A06', 'A07', 'A08', 'A09', 'A10', 'A13', 'A15', 'X01', 'X02', 'X03', 'X04', 'X05',
   'X07', 'X08', 'X09', 'X10', 'A11', 'A12', 'A14'].every((caseId) =>
   promoted.explicitBlockedCaseIds.includes(caseId)));
 

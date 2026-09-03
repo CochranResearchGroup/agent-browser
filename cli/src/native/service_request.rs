@@ -13,6 +13,9 @@ use std::fmt;
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
 use crate::native::service_access::apply_shared_profile_route_hints_for_service_request_with_principal;
 use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
+use crate::native::service_failure_journal::{
+    ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
+};
 use crate::native::service_model::ServiceState;
 use crate::native::service_principal::AuthenticatedServicePrincipal;
 
@@ -403,6 +406,50 @@ impl ServiceRequestIssue {
     pub(crate) fn message(&self) -> &str {
         &self.message
     }
+
+    pub(crate) fn code(&self) -> &'static str {
+        match self.kind {
+            ServiceRequestIssueKind::InvalidRequest => "invalid_request",
+            ServiceRequestIssueKind::MissingAction => "missing_action",
+            ServiceRequestIssueKind::UnsupportedAction => "unsupported_action",
+            ServiceRequestIssueKind::UnknownField => "unknown_field",
+            ServiceRequestIssueKind::InvalidFieldType => "invalid_field_type",
+            ServiceRequestIssueKind::InvalidFieldValue => "invalid_field_value",
+            ServiceRequestIssueKind::BlockedManualAction => "blocked_manual_action",
+            ServiceRequestIssueKind::StaleMonitorEvidence => "stale_monitor_evidence",
+            ServiceRequestIssueKind::ForbiddenCdpExecution => "forbidden_cdp_execution",
+            ServiceRequestIssueKind::InvalidServiceTabHandle => "invalid_service_tab_handle",
+            ServiceRequestIssueKind::InvalidBoundedRecipe => "invalid_bounded_recipe",
+            ServiceRequestIssueKind::RouteHintFailure => "route_hint_failure",
+            ServiceRequestIssueKind::MissingAccountablePrincipal => "missing_accountable_principal",
+        }
+    }
+}
+
+/// Build privacy-bounded evidence for a request rejected before job creation.
+pub(crate) fn service_request_rejection_failure_record(
+    source: &str,
+    action: Option<&str>,
+    request_id: &str,
+    session_id: &str,
+    issue: &ServiceRequestIssue,
+) -> ServiceFailureRecord {
+    let mut record = ServiceFailureRecord::new(
+        ServiceFailureCategory::ServiceAction,
+        source,
+        "ingress_validation",
+        issue.code(),
+        issue.message(),
+    )
+    .with_references(ServiceFailureReferences {
+        request_id: Some(request_id.to_string()),
+        session_id: Some(session_id.to_string()),
+        ..ServiceFailureReferences::default()
+    });
+    if let Some(action) = action {
+        record = record.with_action(action);
+    }
+    record
 }
 
 impl fmt::Display for ServiceRequestIssue {
@@ -723,6 +770,7 @@ fn validate_safety_gates(
     reject_cdp_free_service_request(action, request)?;
     reject_cdp_attach_service_request(action, request)?;
     reject_external_byop_adopt_request(action, request)?;
+    reject_unexecutable_tab_new_route_intent(action, request)?;
     reject_bounded_evaluate_service_request(action, request)?;
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
@@ -736,6 +784,38 @@ fn validate_safety_gates(
     reject_service_network_capture_request(action, request)?;
     reject_service_file_transfer_request(action, request)?;
     reject_stale_monitor_service_request(request)
+}
+
+/// Reject route-bound intent before a generic tab job can be enqueued.
+///
+/// `tab_new` uses the generic browser auto-launch path, which has no authority
+/// to reserve a presentation route. Callers must use the route-aware
+/// `remote_view_open` action, whose successful result includes a tab handle.
+fn reject_unexecutable_tab_new_route_intent(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "tab_new" {
+        return Ok(());
+    }
+    const ROUTE_FIELDS: &[&str] = &[
+        "routePoolEntryId",
+        "remoteViewRouteId",
+        "routeId",
+        "viewStreamRouteId",
+        "displayAllocationId",
+        "displayName",
+    ];
+    let params = request.get("params").and_then(Value::as_object);
+    if ROUTE_FIELDS.iter().any(|field| {
+        request.contains_key(*field) || params.is_some_and(|value| value.contains_key(*field))
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "tab_new cannot execute remote-view route intent; use authenticated remote_view_open to acquire the route and serviceTabHandle",
+        ));
+    }
+    Ok(())
 }
 
 fn issue(kind: ServiceRequestIssueKind, message: impl Into<String>) -> ServiceRequestIssue {
@@ -2410,6 +2490,39 @@ mod tests {
             "cdpPort": 9222
         }))
         .is_err());
+    }
+
+    #[test]
+    fn route_bearing_tab_new_is_rejected_before_job_creation() {
+        let error = normalize(json!({
+            "action": "tab_new",
+            "params": {
+                "url": "https://example.test/",
+                "routePoolEntryId": "guacamole-rdp-b"
+            }
+        }))
+        .unwrap_err();
+
+        assert_eq!(error.kind, ServiceRequestIssueKind::InvalidBoundedRecipe);
+        assert_eq!(
+            error.message(),
+            "tab_new cannot execute remote-view route intent; use authenticated remote_view_open to acquire the route and serviceTabHandle"
+        );
+        let record = service_request_rejection_failure_record(
+            "mcp_service_request",
+            Some("tab_new"),
+            "mcp-service-request-tab-new-fixture",
+            "default",
+            &error,
+        );
+        assert_eq!(record.category, ServiceFailureCategory::ServiceAction);
+        assert_eq!(record.stage, "ingress_validation");
+        assert_eq!(record.code, "invalid_bounded_recipe");
+        assert_eq!(record.action.as_deref(), Some("tab_new"));
+        assert_eq!(
+            record.references.request_id.as_deref(),
+            Some("mcp-service-request-tab-new-fixture")
+        );
     }
 
     #[test]
