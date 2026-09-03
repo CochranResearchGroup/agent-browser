@@ -1228,6 +1228,94 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         Some(profile_id)
     );
 
+    let display_allocation_id = "development-display-1";
+    let route_id = "development-route-1";
+    state
+        .browsers
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .display_allocation_id = Some(display_allocation_id.to_string());
+    state.display_allocations.insert(
+        display_allocation_id.to_string(),
+        DisplayAllocation {
+            id: display_allocation_id.to_string(),
+            owner_browser_id: Some(format!("session:{session_id}")),
+            owner_session_id: Some(session_id.to_string()),
+            profile_id: Some(profile_id.to_string()),
+            state: "ready".to_string(),
+            route_ids: vec![route_id.to_string()],
+            ..DisplayAllocation::default()
+        },
+    );
+    state.remote_view_acquisition_leases.insert(
+        format!("remote-view-open:{session_id}:{route_id}:fixture"),
+        RemoteViewAcquisitionLease {
+            id: format!("remote-view-open:{session_id}:{route_id}:fixture"),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            browser_id: format!("session:{session_id}"),
+            session_id: session_id.to_string(),
+            route_id: route_id.to_string(),
+            display_allocation_id: display_allocation_id.to_string(),
+            state: "pending".to_string(),
+            phase: "display_ready".to_string(),
+            ..RemoteViewAcquisitionLease::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let remote_view_command = json!({
+        "action": "remote_view_open",
+        "profile": profile_id,
+        "serviceName": "development-presentation-provider",
+    });
+    let mut route_prepared_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let route_prepared_selection = apply_service_profile_selection(
+        &mut route_prepared_options,
+        &remote_view_command,
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(route_prepared_selection, None);
+    assert_eq!(
+        route_prepared_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+
+    state
+        .remote_view_acquisition_leases
+        .values_mut()
+        .next()
+        .unwrap()
+        .state = "completed".to_string();
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut stale_route_preparation_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    assert_eq!(
+        apply_service_profile_selection(
+            &mut stale_route_preparation_options,
+            &remote_view_command,
+            Some(session_id),
+        )
+        .unwrap_err(),
+        "existing_session_profile_identity_inconsistent"
+    );
+
+    state
+        .browsers
+        .get_mut(&format!("session:{session_id}"))
+        .unwrap()
+        .display_allocation_id = None;
+    state.display_allocations.clear();
+    state.remote_view_acquisition_leases.clear();
+
     state.sessions.get_mut(session_id).unwrap().lease = LeaseState::Exclusive;
     JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
         .save(&state)

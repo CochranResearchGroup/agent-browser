@@ -1184,13 +1184,43 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
                 && session.tab_ids.is_empty()
         }
     };
+    let prepared_remote_display_matches = |display_allocation_id: &str| {
+        command.get("action").and_then(Value::as_str) == Some("remote_view_open")
+            && state
+                .display_allocations
+                .get(display_allocation_id)
+                .is_some_and(|allocation| {
+                    allocation.state == "ready"
+                        && allocation.owner_browser_id.as_deref() == Some(logical_browser_id)
+                        && allocation.owner_session_id.as_deref() == Some(session_id)
+                        && allocation.profile_id.as_deref() == Some(profile_id)
+                        && allocation.route_ids.iter().any(|route_id| {
+                            state.remote_view_acquisition_leases.values().any(|lease| {
+                                crate::native::remote_view::pending_remote_view_acquisition_lease_matches_owner(
+                                    lease,
+                                    logical_browser_id,
+                                    session_id,
+                                    route_id,
+                                    display_allocation_id,
+                                    None,
+                                )
+                            })
+                        })
+                })
+    };
     let browser_projection_inert = state.browsers.iter().all(|(browser_id, browser)| {
         if browser_id == logical_browser_id {
             browser.profile_id.as_deref() == Some(profile_id)
                 && browser.pid.is_none()
                 && browser.cdp_endpoint.is_none()
                 && browser.active_session_ids.is_empty()
-                && browser.display_allocation_id.is_none()
+                // Remote-view acquisition reserves the replacement display before
+                // profile selection. That exact pending lease is preparation for
+                // this relaunch, not evidence that the terminal browser is live.
+                && browser
+                    .display_allocation_id
+                    .as_deref()
+                    .is_none_or(&prepared_remote_display_matches)
                 && browser.tab_handles.iter().all(&inert_handle)
         } else {
             browser.profile_id.as_deref() != Some(profile_id)

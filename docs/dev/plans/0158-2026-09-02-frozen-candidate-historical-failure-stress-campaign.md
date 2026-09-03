@@ -1517,3 +1517,43 @@ identity, resolve the same durable handoff without an HTTP lane, and inspect
 the structured resolver outcome. Reopen only through the durable handoff's
 explicit `allowReopenClosed` path if its no-effect readback requests it. Then
 require `operatorVisible.state=ready` before external workflow dispatch.
+
+Development generation `0.28.0-f7389af3c928` passed isolated installation,
+the production-unchanged comparison, three disposable launches, and the
+provider-required doctor. The same durable handoff then resolved through the
+current runtime host without a legacy HTTP lane. Its read-only result correctly
+reported that the retained tab was deliberately closed and required one
+explicit reopen action.
+
+That single authorized reopen failed before browser launch with
+`existing_session_profile_identity_inconsistent`. Compensation restored the
+display, provider route, and route-pool entry, and the terminal job reported
+`effectState=no_effect`, `retryDisposition=inspect_before_retry`, and a hard
+stop against blind retry. The append-only journal retained the exact request,
+job, browser, session, runtime lane, hashed handoff identity, outer
+`browser_launch_failed` code, and inner identity error in its summary. No
+second live attempt was made.
+
+The retained browser, session, Profile, runtime owner, and terminal lifecycle
+records all agree. The actual defect is ordering inside remote-view reopen:
+route acquisition reserves a matching replacement display before Profile
+selection, while the terminal-owner relaunch guard previously required
+`displayAllocationId` to be absent. It therefore misclassified the newly
+reserved display as evidence that the old browser remained live, fell into the
+live-owner consistency path, and rejected the intentionally empty active
+session set.
+
+The provider-free regression reproduces that exact state transition. The
+bounded repair accepts a prepared display only for `remote_view_open` and only
+when a current-boot pending acquisition lease matches the terminal browser,
+session, route, display allocation, and Profile. A completed or otherwise
+stale lease continues to produce the identity-inconsistent rejection. The
+focused red test failed with the historical signature before the repair and
+passes afterward. This regression is now the fifteenth exact Rust case in the
+named P158 Last30Days battery.
+
+Revised next action: run the related route-host and named Last30Days batteries,
+formatting, and workspace clippy. If green, install one new isolated candidate
+and perform exactly one fresh explicit reopen attempt through the same durable
+handoff. Require a ready operator-visible result and inspect the new journal
+window before dispatching the external-vantage workflow.
