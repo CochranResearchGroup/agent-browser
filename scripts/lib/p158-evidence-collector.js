@@ -22,6 +22,7 @@ import { compileP158ControllerScheduleInput } from './p158-execution-schedule.js
 
 export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   '.github/workflows/p158-external-vantage.yml',
+  '.github/workflows/p158-w8-h03-external.yml',
   '.github/workflows/p158-w9-endurance.yml',
   '.github/workflows/p158-w9-endurance-segment.yml',
   '.github/workflows/p158-w9-endurance-preparation.yml',
@@ -65,6 +66,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-w7-a01-a03-live.js',
   'scripts/lib/p158-w7-live-hook-readiness.js',
   'scripts/lib/p158-w8-hd-adapters.js',
+  'scripts/lib/p158-w8-h03-external.js',
   'scripts/lib/p158-w8-dashboard-live.js',
   'scripts/lib/p158-w9-campaign-orchestrator.js',
   'scripts/lib/p158-w9-concrete-drivers.js',
@@ -76,6 +78,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/run-p158-distributed-calibration-live.js',
   'scripts/run-p158-external-vantage.js',
   'scripts/run-p158-w7-a01-a03-live.js',
+  'scripts/run-p158-w8-h03-external.js',
   'scripts/run-p158-w9-endurance.js',
   'scripts/run-p158-w9-endurance-preparation.js',
   'scripts/test-p158-calibration-runner.js',
@@ -98,6 +101,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-w7-a01-a03-live.js',
   'scripts/test-p158-w7-live-hook-readiness.js',
   'scripts/test-p158-w8-hd-adapters.js',
+  'scripts/test-p158-w8-h03-external.js',
   'scripts/test-p158-w8-dashboard-live.js',
   'scripts/test-p158-w9-campaign-orchestrator.js',
   'scripts/test-p158-w9-concrete-drivers.js',

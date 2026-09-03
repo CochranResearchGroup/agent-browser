@@ -90,7 +90,7 @@ await assert.rejects(
   }), artifactStore: artifactStore() }),
   (error) => error instanceof P158W9EndurancePreparationError && error.code === 'lease_baseline_unproven',
 );
-process.stdout.write('PASS rejects wrong or non-distinct lease generation\n');
+process.stdout.write('PASS rejects non-positive lease generation\n');
 
 await assert.rejects(
   prepareP158W9EndurancePostconditions({ ...input, config: { ...config,

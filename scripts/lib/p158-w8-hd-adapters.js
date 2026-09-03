@@ -9,6 +9,11 @@ import { RETAINED_IDENTITY_FIELDS, classifyOperatorUrl } from './p158-external-h
 import { sha256 } from './p158-campaign-controller.js';
 import { createP158CaseAdapter } from './p158-execution-schedule.js';
 import { aggregateExternalVantageReceipts } from '../run-p158-external-vantage.js';
+import {
+  P158_W8_H03_PRODUCER_PATHS,
+  validateP158W8H03ExternalManifest,
+  validateP158W8H03ExternalResult,
+} from './p158-w8-h03-external.js';
 
 export const P158_W8_CASE_IDS = Object.freeze([
   ...Array.from({ length: 12 }, (_, index) => `H${String(index + 1).padStart(2, '0')}`),
@@ -24,15 +29,18 @@ const REVIEWED_SOURCE_URLS = Object.freeze({
   dashboardLiveSmoke: new URL('../smoke-dashboard-operator-plan0022-live.js', import.meta.url),
   dashboardLiveFoundation: new URL('./p158-w8-dashboard-live.js', import.meta.url),
   dashboardCampaignRunner: new URL('../run-p158-w8-dashboard-campaign.js', import.meta.url),
+  h03ExternalWorkflow: new URL('../../.github/workflows/p158-w8-h03-external.yml', import.meta.url),
+  h03ExternalRunner: new URL('../run-p158-w8-h03-external.js', import.meta.url),
+  h03ExternalLibrary: new URL('./p158-w8-h03-external.js', import.meta.url),
 });
 
 export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   H01: 'external_workflow_action_manifest_missing',
   H02: 'url_role_host_scheme_injection_driver_missing',
-  H03: 'presentation_rebind_transition_driver_missing',
-  H04: 'multi_viewer_controller_contention_driver_missing',
-  H05: 'agent_human_controller_barrier_driver_missing',
-  H06: 'remote_desktop_visible_state_driver_missing',
+  H03: 'source_hashed_external_h03_result_missing',
+  H04: 'off_host_guacamole_input_transport_to_viewer_lease_fencing_binding_missing',
+  H05: 'operator_assisted_human_controller_barrier_not_supplied',
+  H06: 'native_prompt_minimize_obscure_external_pixel_driver_missing',
   H07: 'route_capacity_saturation_driver_missing',
   H08: 'presentation_failure_injection_driver_missing',
   H09: 'external_network_profile_driver_missing',
@@ -95,6 +103,21 @@ export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
     cases: Object.freeze(['D01', 'D09']),
     coverage: 'Installed-parser-bound immutable preseeds, isolated per-action Service and dashboard roots, exact reviewed HTTPS route selection, off-host Playwright capture, D09 churn planning, exact teardown, and append-only terminal receipts.',
     missing: 'D01 remains blocked until one frozen reviewed campaign aggregate is supplied. D09 remains blocked because Service has no declared lock-respecting development state-churn API.',
+  }),
+  h03ExternalWorkflow: Object.freeze({
+    path: '.github/workflows/p158-w8-h03-external.yml', cases: Object.freeze(['H03']),
+    coverage: 'Manual off-host public-ingress execution for all four frozen H03 rebind transitions.',
+    missing: 'No live result exists until the reviewed workflow is explicitly dispatched.',
+  }),
+  h03ExternalRunner: Object.freeze({
+    path: 'scripts/run-p158-w8-h03-external.js', cases: Object.freeze(['H03']),
+    coverage: 'Playwright durable-handoff pixels plus authoritative route, display, connection, and viewer-lease observations.',
+    missing: 'It intentionally does not emulate H04 stale-input fencing, H05 human takeover, or H06 native window state.',
+  }),
+  h03ExternalLibrary: Object.freeze({
+    path: 'scripts/lib/p158-w8-h03-external.js', cases: Object.freeze(['H03']),
+    coverage: 'Frozen H03 manifest, transition oracle, append-only artifact receipts, and exact result validation.',
+    missing: 'Provider-free validation cannot substitute for the off-host workflow receipt.',
   }),
 });
 
@@ -749,6 +772,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   seals,
   operatorAssisted = { enabled: false },
   externalActionExecution = null,
+  h03ExternalExecution = null,
   dashboardCampaignExecution = null,
   liveHookManifestSha256 = null,
   additionalAdapters = [],
@@ -766,6 +790,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   const effects = {};
   const consumedActionIds = new Set();
   let loadExternalReceipts = null;
+  let loadH03Receipts = null;
   let loadDashboardReceipts = null;
   if (externalActionExecution) {
     const expectedManifest = buildP158W8ExternalActionManifest({
@@ -818,6 +843,30 @@ export function createP158W8ReviewedLiveAdapterBundle({
           expectedManifest.actions.some((action) => !cached.has(action.actionId))) {
         fail('external_action_result_invalid', 'W8 external workflow result does not cover the exact action set');
       }
+      return cached;
+    };
+  }
+  if (h03ExternalExecution) {
+    if (!isAbsolute(h03ExternalExecution.resultPath ?? '')) {
+      fail('external_action_manifest_invalid', 'Reviewed H03 execution requires an absolute result path');
+    }
+    validateP158W8H03ExternalManifest({ manifest: h03ExternalExecution.manifest, registry, schedule, seals });
+    for (const [field, path] of Object.entries(P158_W8_H03_PRODUCER_PATHS)) {
+      const actual = createHash('sha256').update(readFileSync(fileURLToPath(REVIEWED_SOURCE_URLS[
+        field === 'workflowPath' ? 'h03ExternalWorkflow' : field === 'runnerPath' ? 'h03ExternalRunner' : 'h03ExternalLibrary'
+      ]))).digest('hex');
+      if (h03ExternalExecution.manifest.producer[field] !== path ||
+          h03ExternalExecution.manifest.producer[field.replace('Path', 'Sha256')] !== actual) {
+        fail('external_action_manifest_invalid', `Reviewed H03 ${field} source changed`);
+      }
+    }
+    concreteCaseIds.add('H03');
+    let cached = null;
+    loadH03Receipts = async () => {
+      if (cached) return cached;
+      const result = JSON.parse(await readFile(h03ExternalExecution.resultPath, 'utf8'));
+      validateP158W8H03ExternalResult({ result, manifest: h03ExternalExecution.manifest });
+      cached = new Map(result.receipts.map((receipt) => [receipt.actionId, receipt]));
       return cached;
     };
   }
@@ -909,7 +958,9 @@ export function createP158W8ReviewedLiveAdapterBundle({
             dashboardCampaignReceiptSha256: dashboardCampaignReceipt.receiptSha256,
             dashboardOracleBindingSha256: sha256(dashboardCampaignReceipt.oracleBinding),
           })
-          : (await loadExternalReceipts()).get(action.actionId);
+          : caseId === 'H03'
+            ? (await loadH03Receipts()).get(action.actionId)
+            : (await loadExternalReceipts()).get(action.actionId);
         const { receiptSha256, ...body } = receipt ?? {};
         if (dashboardCampaignReceipt) {
           validateDashboardReceipt({ receipt, action, seals });
