@@ -200,7 +200,7 @@ function commonRequest(context, action, subjectId, requestId) {
   return {
     serviceName: `p158-${context.caseId.toLowerCase()}`,
     agentName: 'p158-w7-live-runner',
-    taskName: action.actionId,
+    taskName: context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId,
     clientSubjectId: subjectId,
     identityAssurance: 'self-declared',
     runtimeEnvironmentId: context.environmentId,
@@ -250,7 +250,8 @@ async function openClient(context, action, subjectId, fetch) {
   }
   let connectionInstanceId;
   try {
-    const evidence = await observe(context.environment.serviceOrigin, action.actionId, fetch);
+    const evidence = await observe(context.environment.serviceOrigin,
+      context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId, fetch);
     connectionInstanceId = assertOpenOracle({
       ...evidence, handle, requestId, subjectId, environmentId: context.environmentId,
     });
@@ -285,7 +286,8 @@ async function releaseClient(context, action, subjectId, fetch, opened) {
   }
   const requestId = typeof response.id === 'string' ? response.id : plannedRequestId;
   try {
-    const evidence = await observe(context.environment.serviceOrigin, action.actionId, fetch);
+    const evidence = await observe(context.environment.serviceOrigin,
+      context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId, fetch);
     assertReleasedOracle({ ...evidence, requestId, handle: opened.handle, subjectId });
   } catch (error) {
     error.effectState ??= 'effect_uncertain';
@@ -295,9 +297,7 @@ async function releaseClient(context, action, subjectId, fetch, opened) {
 }
 
 async function runClient(context, action, index) {
-  const subjectId = context.caseId === 'A03'
-    ? context.fixture.sharedLabel
-    : `${context.manifest.campaignRunId}:${context.caseId}:${context.attempt.attemptId}:client-${String(index + 1).padStart(3, '0')}`;
+  const subjectId = `${context.manifest.campaignRunId}:${context.caseId}:${context.attempt.attemptId}:client-${String(index + 1).padStart(3, '0')}`;
   const fetch = context.transportFor({ action, subjectId, index });
   if (typeof fetch !== 'function') fail('client_transport_missing', action.actionId);
   try {
@@ -404,7 +404,7 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
     const opened = concurrentClients.filter((row) => row.opened);
     if (opened.length === 10) {
       const connectionIds = new Set(opened.map((row) => row.opened.connectionInstanceId));
-      if (connectionIds.size !== 10 || new Set(opened.map((row) => row.subjectId)).size !== 1) {
+      if (connectionIds.size !== 10 || new Set(opened.map((row) => row.subjectId)).size !== 10) {
         const error = new P158W7A01A03Error(
           'same_label_connection_oracle_failed',
           `${attempt.attemptId} did not preserve ten connections`,
@@ -501,9 +501,9 @@ function fetchResponse(status, headers, bytes) {
 }
 
 /**
- * Create one keep-alive HTTP transport per frozen client action. The
- * development Service assigns connectionInstanceId at its ingress socket, so
- * sharing a global fetch pool would not prove same-label connection isolation.
+ * Create one keep-alive HTTP transport per frozen client action. Durable
+ * ownership remains bound to clientSubjectId; connectionInstanceId is retained
+ * as per-request transport provenance and is never promoted to durable identity.
  */
 export function createP158W7PinnedDevelopmentTransports() {
   const transports = new Map();

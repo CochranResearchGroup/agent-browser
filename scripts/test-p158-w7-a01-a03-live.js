@@ -176,8 +176,8 @@ async function startFakeService({
       return json(response, 200, { id: requestId, success: true, data: { serviceTabHandle: handle } });
     }
     if (command.action === 'diagnostics') {
-      const ownerConnection = command.serviceTabHandle?.profileAccess?.connectionInstanceId;
-      if (ownerConnection !== connectionInstanceId) {
+      const ownerSubject = command.serviceTabHandle?.profileAccess?.subjectId;
+      if (ownerSubject !== command.clientSubjectId) {
         return json(response, 200, { id: requestId, success: false, error: { code: 'profile_access_denied' } });
       }
       return json(response, 200, { id: requestId, success: true, data: {} });
@@ -185,7 +185,7 @@ async function startFakeService({
     if (command.action === 'tab_handle_release') {
       const handle = command.serviceTabHandle;
       const tab = tabs.get(handle?.tabId);
-      if (!tab || handle.profileAccess?.connectionInstanceId !== connectionInstanceId) {
+      if (!tab || handle.profileAccess?.subjectId !== command.clientSubjectId) {
         return json(response, 200, { id: requestId, success: false, error: { code: 'profile_access_denied' } });
       }
       tab.lifecycle = 'closed';
@@ -199,6 +199,7 @@ async function startFakeService({
     origin: `http://127.0.0.1:${server.address().port}`,
     requestCount: () => requestCount,
     seenByAction,
+    jobs: () => structuredClone(jobs),
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }
@@ -363,8 +364,12 @@ try {
     }
     const a03 = store.receipts.filter((row) => row.caseId === 'A03' && row.environmentId === environmentId);
     assert.equal(a03.length, 10);
-    assert.equal(new Set(a03.map((row) => row.clientSubjectId)).size, 1);
+    assert.equal(new Set(a03.map((row) => row.clientSubjectId)).size, 10);
     assert.equal(new Set(a03.map((row) => row.connectionInstanceId)).size, 10);
+    const a03Jobs = service.jobs().filter((job) =>
+      job.provenance.runtimeEnvironmentId === environmentId && job.provenance.serviceName === 'p158-a03');
+    assert.equal(new Set(a03Jobs.map((job) => job.provenance.taskName)).size, 1,
+      'same-label clients did not retain one shared task label');
   }
   assert.equal(service.seenByAction.get('tab_new'), 670);
   assert.equal(service.seenByAction.get('tab_handle_release'), 670);
