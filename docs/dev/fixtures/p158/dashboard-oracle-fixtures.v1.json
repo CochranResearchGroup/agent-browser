@@ -87,6 +87,8 @@
       "displayedReady": true,
       "authoritativeReady": true
     },
+    "consoleEntries": [],
+    "networkEntries": [],
     "uiChecks": [
       {
         "checkId": "ui-accessibility",
@@ -155,6 +157,20 @@
         "p95BudgetMs": 3000
       }
     ],
+    "resourceSlopeBudgets": {
+      "heapBytesPerMinute": 1000000,
+      "domNodesPerMinute": 100,
+      "listenersPerMinute": 10,
+      "cpuMillisecondsPerMinute": 1000,
+      "networkBytesPerMinute": 100000,
+      "longTasksPerMinute": 2,
+      "browserProcessesPerMinute": 0,
+      "xvfbProcessesPerMinute": 0,
+      "routeAllocationsPerMinute": 0,
+      "profileLeasesPerMinute": 0,
+      "retainedSessionsPerMinute": 0,
+      "unresolvedJobsPerMinute": 0
+    },
     "resourceSamples": [
       {
         "elapsedMs": 0,
