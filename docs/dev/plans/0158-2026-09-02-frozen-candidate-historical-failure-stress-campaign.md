@@ -1792,3 +1792,25 @@ installation, secret use, or browser execution, and therefore produced no
 campaign artifact. This is a dispatch-operator error, not evidence about the
 candidate. The replacement must source the full value directly from
 `git rev-parse HEAD`; no hand-copied commit string is admissible.
+
+The E15b replacement also stopped before browser execution. Both independent
+clients emitted `external_vantage_probe_failed` with `Invalid expected identity
+JSON`; the aggregate correctly rejected their failure receipts as zero
+observations. The protected expected-identity value produced during the marker
+rotation was malformed. This is a configuration-preparation defect, not remote
+presentation evidence, and no retry or automated repair occurred inside the
+campaign.
+
+The blocking input has been reconstructed directly from the authoritative
+retained handoff and its exact retained tab. Before replacement, the eight-field
+object was parsed locally, every required field was proven to be a non-empty
+string, and the pixel digest was proven to be lowercase SHA-256. Only the
+protected expected-identity secret was replaced; the handoff, browser, Profile,
+fixture, and other protected inputs were not changed.
+
+Revised next action: verify that the retained handoff remains ready without a
+browser effect, commit this E15b diagnostic checkpoint, and dispatch exactly
+one E15c readiness observation using `git rev-parse HEAD` as the commit input.
+If the clients reach capture but the marker still differs, preserve the direct
+iframe-relative crops and diagnose decoded pixel content before changing any
+digest again.
