@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { sha256 } from './lib/p158-campaign-controller.js';
 
 import {
   buildP158W9EnduranceDispatch,
@@ -20,6 +21,9 @@ const producer = {
   segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml', segmentWorkflowSha256: 'aa'.repeat(32),
   runnerPath: 'scripts/run-p158-w9-endurance.js', runnerSha256: '22'.repeat(32),
   libraryPath: 'scripts/lib/p158-w9-endurance.js', librarySha256: '33'.repeat(32),
+  preparationWorkflowPath: '.github/workflows/p158-w9-endurance-preparation.yml', preparationWorkflowSha256: '34'.repeat(32),
+  preparationRunnerPath: 'scripts/run-p158-w9-endurance-preparation.js', preparationRunnerSha256: '35'.repeat(32),
+  preparationLibraryPath: 'scripts/lib/p158-w9-endurance-preparation.js', preparationLibrarySha256: '36'.repeat(32),
 };
 
 const producerFiles = {
@@ -27,6 +31,9 @@ const producerFiles = {
   segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml',
   runnerPath: 'scripts/run-p158-w9-endurance.js',
   libraryPath: 'scripts/lib/p158-w9-endurance.js',
+  preparationWorkflowPath: '.github/workflows/p158-w9-endurance-preparation.yml',
+  preparationRunnerPath: 'scripts/run-p158-w9-endurance-preparation.js',
+  preparationLibraryPath: 'scripts/lib/p158-w9-endurance-preparation.js',
 };
 
 async function actualProducer() {
@@ -55,12 +62,37 @@ function actions(caseId) {
 
 const eventPostconditions = {
   viewer_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '10'.repeat(32), viewerRole: 'viewer',
-    fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
+    fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
   controller_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '20'.repeat(32), viewerRole: 'controller',
-    fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
+    fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
   client_restart: { kind: 'retained_identity_reopen', retainedIdentitySha256: '77'.repeat(32) },
   scheduled_network_profile: { kind: 'offline_failure_then_unchanged_handoff_recovery' },
 };
+
+function preparation(caseId, preparedActions, events, bindings = {}) {
+  const artifactCount = preparedActions.filter((action) => action.kind === 'dashboard_action').length * 2 +
+    (caseId === 'C05' ? 2 : 0);
+  const body = {
+    schemaVersion: 'agent-browser.p158-w9-endurance-postcondition-preparation.v1', planId: 'P158', caseId,
+    runId: bindings.runId ?? 'p158-endurance-test', sourceCommit: bindings.sourceCommit ?? 'a'.repeat(40),
+    candidateSha256: '44'.repeat(32), scheduleSha256: '55'.repeat(32),
+    handoffUrlSha256: '66'.repeat(32), retainedIdentitySha256: '77'.repeat(32),
+    syntheticFixtureAttestationSha256: '41'.repeat(32), externalRunnerIdentitySha256: '43'.repeat(32),
+    workflowRunId: '111111', workflowRunAttempt: 1, workflowJob: 'prepare-postconditions',
+    preparedAt: '2026-09-03T00:00:00.000Z', externalIngress: true, providerFree: false, syntheticOnly: true,
+    dashboardActionCount: preparedActions.filter((action) => action.kind === 'dashboard_action').length,
+    actionPostconditionsSha256: sha256(
+      preparedActions.filter((action) => action.kind === 'dashboard_action')
+        .map((action) => ({ actionId: action.actionId, postcondition: action.postcondition }))),
+    leaseBaselines: [], eventPostconditionsSha256: sha256(events),
+    artifactReceipts: Array.from({ length: artifactCount }, (_, index) => ({
+      artifactId: `preparation-${caseId}-${index}`, relativePath: `preparation-${index}.png`,
+      sha256: 'ef'.repeat(32), byteCount: 1,
+    })),
+    retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false,
+  };
+  return { ...body, postconditionPreparationSha256: sha256(body) };
+}
 
 function dispatch(caseId) {
   const input = {
@@ -69,11 +101,11 @@ function dispatch(caseId) {
     candidateSha256: '44'.repeat(32), scheduleSha256: '55'.repeat(32),
     handoffUrlSha256: '66'.repeat(32), retainedIdentitySha256: '77'.repeat(32),
     externalVantageAggregateSha256: '88'.repeat(32), externalHandoffOracleSha256: '99'.repeat(32),
-    postconditionPreparationSha256: '42'.repeat(32),
     startAt: caseId === 'C04' ? '2026-09-04T00:00:00.000Z' : '2026-09-05T00:00:00.000Z',
     actions: actions(caseId), eventPostconditions: caseId === 'C05' ? eventPostconditions : {},
     producer, receiptRoot: `/tmp/p158-endurance-test/${caseId}`,
   };
+  input.postconditionPreparation = preparation(caseId, input.actions, input.eventPostconditions);
   const template = buildP158W9EnduranceDispatchTemplate(input);
   return bindP158W9EnduranceDispatchTemplate({
     template, sourceCommit: 'a'.repeat(40), workflowRunId: '123456789', workflowRunAttempt: 1,
@@ -100,7 +132,7 @@ function harness(startAt) {
         actionId: action.actionId, caseId: action.caseId, attemptId: action.attemptId, kind: action.kind,
       }), ...(action.kind === 'dashboard_action' ? {
         postconditionSatisfied: true,
-        postconditionSha256: (await import('./lib/p158-campaign-controller.js')).sha256(action.postcondition),
+        postconditionSha256: sha256(action.postcondition),
         artifacts: [evidenceArtifact(`${action.actionId}-before`), evidenceArtifact(`${action.actionId}-after`)],
       } : {}) }),
       executeScheduledEvent: async (event) => ({ ...terminal({ eventId: event.eventId, kind: event.kind }),
@@ -132,7 +164,7 @@ async function runCase(caseId) {
     candidateSha256: frozen.candidateSha256, scheduleSha256: frozen.scheduleSha256,
     enduranceDispatches: { [caseId]: frozen },
   };
-  const workflowPlan = { ...workflowPlanBody, planSha256: (await import('./lib/p158-campaign-controller.js')).sha256(workflowPlanBody) };
+  const workflowPlan = { ...workflowPlanBody, planSha256: sha256(workflowPlanBody) };
   const projected = projectP158W9EnduranceActionReceipts({
     dispatch: frozen, finalReceipt: final, workflowPlan,
   });
@@ -220,13 +252,15 @@ const runnerSource = await readFile('scripts/run-p158-w9-endurance.js', 'utf8');
 assert(!/^import .*playwright/m.test(runnerSource));
 assert.match(runnerSource, /import\('playwright'\)/);
 const sourceBoundTemplate = buildP158W9EnduranceDispatchTemplate({
-  caseId: 'C05', runId: 'p158-endurance-source-bound', candidateSha256: '44'.repeat(32),
+  caseId: 'C05', runId: 'p158-endurance-source-bound', sourceCommit: 'b'.repeat(40), candidateSha256: '44'.repeat(32),
   scheduleSha256: '55'.repeat(32), handoffUrlSha256: '66'.repeat(32),
   retainedIdentitySha256: '77'.repeat(32), externalVantageAggregateSha256: '88'.repeat(32),
   externalHandoffOracleSha256: '99'.repeat(32), startAt: '2026-09-05T00:00:00.000Z',
-  postconditionPreparationSha256: '42'.repeat(32),
   actions: actions('C05'), producer: await actualProducer(), receiptRoot: '/tmp/p158-endurance-source-bound/C05',
   eventPostconditions,
+  postconditionPreparation: preparation('C05', actions('C05'), eventPostconditions, {
+    runId: 'p158-endurance-source-bound', sourceCommit: 'b'.repeat(40),
+  }),
 });
 const sourceBound = bindP158W9EnduranceDispatchTemplate({
   template: sourceBoundTemplate, sourceCommit: 'b'.repeat(40), workflowRunId: '987654321', workflowRunAttempt: 2,

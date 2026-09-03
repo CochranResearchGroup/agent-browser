@@ -259,7 +259,9 @@ async function createLiveDriver({ dispatch, outputDir, env }) {
           throw new Error(`${event.eventId} lease-expiry postcondition is not frozen`);
         }
         const before = await leaseProjection(contract);
-        if (before?.state !== contract.fromState) throw new Error(`${event.eventId} lease was not active before expiry`);
+        if (before?.state !== contract.fromState || before.generation !== contract.baselineGeneration) {
+          throw new Error(`${event.eventId} lease did not match the frozen active generation before expiry`);
+        }
         await closePage();
         const deadline = Date.now() + contract.timeoutMs;
         let after = null;
@@ -339,7 +341,8 @@ function bind(args, env) {
   const output = resolve(take(args, '--output'));
   if (args.length) throw new Error(`Unexpected arguments: ${args.join(' ')}`);
   if (template.runId !== env.P158_RUN_ID) throw new Error('Endurance template campaign run differs from workflow input');
-  for (const field of ['workflow', 'segmentWorkflow', 'runner', 'library']) {
+  for (const field of ['workflow', 'segmentWorkflow', 'runner', 'library',
+    'preparationWorkflow', 'preparationRunner', 'preparationLibrary']) {
     const path = template.producer?.[`${field}Path`];
     const expected = template.producer?.[`${field}Sha256`];
     if (typeof path !== 'string' || path.startsWith('/') || path.split('/').includes('..') ||

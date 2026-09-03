@@ -24,6 +24,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   '.github/workflows/p158-external-vantage.yml',
   '.github/workflows/p158-w9-endurance.yml',
   '.github/workflows/p158-w9-endurance-segment.yml',
+  '.github/workflows/p158-w9-endurance-preparation.yml',
   'package.json',
   'pnpm-lock.yaml',
   'docs/dev/contracts/p158-campaign-freeze.v1.schema.json',
@@ -68,6 +69,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-w9-campaign-orchestrator.js',
   'scripts/lib/p158-w9-concrete-drivers.js',
   'scripts/lib/p158-w9-endurance.js',
+  'scripts/lib/p158-w9-endurance-preparation.js',
   'scripts/generate-p158-campaign-preparation-fixtures.js',
   'scripts/p158-evidence-collector.js',
   'scripts/p158-synthetic-visual-fixture.js',
@@ -75,6 +77,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/run-p158-external-vantage.js',
   'scripts/run-p158-w7-a01-a03-live.js',
   'scripts/run-p158-w9-endurance.js',
+  'scripts/run-p158-w9-endurance-preparation.js',
   'scripts/test-p158-calibration-runner.js',
   'scripts/test-p158-campaign-controller.js',
   'scripts/test-p158-campaign-phase-orchestrator.js',
@@ -99,6 +102,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-w9-campaign-orchestrator.js',
   'scripts/test-p158-w9-concrete-drivers.js',
   'scripts/test-p158-w9-endurance.js',
+  'scripts/test-p158-w9-endurance-preparation.js',
 ]);
 
 export const P158_REQUIRED_LIVE_HOOK_IDS = Object.freeze([

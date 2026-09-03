@@ -31,6 +31,9 @@ const PRODUCER_PATHS = Object.freeze({
   segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml',
   runnerPath: 'scripts/run-p158-w9-endurance.js',
   libraryPath: 'scripts/lib/p158-w9-endurance.js',
+  preparationWorkflowPath: '.github/workflows/p158-w9-endurance-preparation.yml',
+  preparationRunnerPath: 'scripts/run-p158-w9-endurance-preparation.js',
+  preparationLibraryPath: 'scripts/lib/p158-w9-endurance-preparation.js',
 });
 
 export class P158W9EnduranceError extends Error {
@@ -137,7 +140,8 @@ function scheduledEvents(caseId, contract, startMs, segmentDurationMs, eventPost
           ? postcondition?.kind === 'retained_identity_reopen' && SHA256.test(postcondition.retainedIdentitySha256 ?? '')
           : postcondition?.kind === 'authoritative_lease_expiry' && SHA256.test(postcondition.leaseIdSha256 ?? '') &&
             ['viewer', 'controller'].includes(postcondition.viewerRole) && postcondition.fromState === 'active' &&
-            postcondition.toState === 'expired' && Number.isInteger(postcondition.timeoutMs) && postcondition.timeoutMs > 0;
+            postcondition.toState === 'expired' && Number.isInteger(postcondition.baselineGeneration) &&
+            postcondition.baselineGeneration > 0 && Number.isInteger(postcondition.timeoutMs) && postcondition.timeoutMs > 0;
       if (!valid) fail('endurance_event_postcondition_unbound', `${kind} lacks a frozen observable postcondition`);
       rows.push({
         eventId: `${caseId}:endurance:${kind}:${String(segmentIndex).padStart(2, '0')}`,
@@ -161,10 +165,35 @@ function verifyProducer(producer) {
   }
 }
 
+function verifyPostconditionPreparation(receipt, input) {
+  const digest = receipt?.postconditionPreparationSha256;
+  if (receipt?.schemaVersion !== 'agent-browser.p158-w9-endurance-postcondition-preparation.v1' ||
+      digest !== sha256(bodyWithoutDigest(receipt, 'postconditionPreparationSha256')) ||
+      receipt.planId !== 'P158' || receipt.caseId !== input.caseId || receipt.runId !== input.runId ||
+      receipt.sourceCommit !== input.sourceCommit || receipt.candidateSha256 !== input.candidateSha256 ||
+      receipt.scheduleSha256 !== input.scheduleSha256 || receipt.handoffUrlSha256 !== input.handoffUrlSha256 ||
+      receipt.retainedIdentitySha256 !== input.retainedIdentitySha256 || receipt.externalIngress !== true ||
+      receipt.providerFree !== false || receipt.syntheticOnly !== true ||
+      !SHA256.test(receipt.externalRunnerIdentitySha256 ?? '') || !/^\d+$/u.test(receipt.workflowRunId ?? '') ||
+      !Number.isInteger(receipt.workflowRunAttempt) || receipt.workflowRunAttempt < 1 ||
+      typeof receipt.workflowJob !== 'string' || !receipt.workflowJob ||
+      receipt.dashboardActionCount !== input.actions.filter((action) => action.kind === 'dashboard_action').length ||
+      receipt.actionPostconditionsSha256 !== sha256(input.actions.filter((action) => action.kind === 'dashboard_action')
+        .map((action) => ({ actionId: action.actionId, postcondition: action.postcondition }))) ||
+      receipt.eventPostconditionsSha256 !== sha256(input.eventPostconditions) ||
+      !Array.isArray(receipt.artifactReceipts) ||
+      receipt.artifactReceipts.length < receipt.dashboardActionCount * 2 + (input.caseId === 'C05' ? 2 : 0)) {
+    fail('endurance_postcondition_preparation_invalid', `${input.caseId} postcondition preparation is absent, changed, or unbound`);
+  }
+  verifyArtifactReceipts(receipt.artifactReceipts);
+  assertNoRawUrls(receipt);
+  return digest;
+}
+
 export function buildP158W9EnduranceDispatch({
   caseId, runId, sourceCommit, workflowRunId, workflowRunAttempt, candidateSha256,
   scheduleSha256, handoffUrlSha256, retainedIdentitySha256,
-  externalVantageAggregateSha256, externalHandoffOracleSha256, postconditionPreparationSha256,
+  externalVantageAggregateSha256, externalHandoffOracleSha256, postconditionPreparation,
   startAt, actions, eventPostconditions = {}, producer, receiptRoot,
 }) {
   const contract = P158_W9_ENDURANCE_CASES[caseId];
@@ -175,8 +204,7 @@ export function buildP158W9EnduranceDispatch({
     fail('endurance_binding_invalid', `${caseId} run, workflow, commit, or receipt-root binding is invalid`);
   }
   for (const [field, value] of Object.entries({ candidateSha256, scheduleSha256, handoffUrlSha256,
-    retainedIdentitySha256, externalVantageAggregateSha256, externalHandoffOracleSha256,
-    postconditionPreparationSha256 })) requireDigest(value, field);
+    retainedIdentitySha256, externalVantageAggregateSha256, externalHandoffOracleSha256 })) requireDigest(value, field);
   verifyProducer(producer);
   const startMs = parsedTime(startAt, 'startAt');
   const normalized = normalizedActions(caseId, actions);
@@ -195,6 +223,10 @@ export function buildP158W9EnduranceDispatch({
   ].sort((left, right) => Date.parse(left.plannedAt) - Date.parse(right.plannedAt) ||
     left.actionId.localeCompare(right.actionId));
   const events = scheduledEvents(caseId, contract, startMs, segmentDurationMs, eventPostconditions);
+  const postconditionPreparationSha256 = verifyPostconditionPreparation(postconditionPreparation, {
+    caseId, runId, sourceCommit, candidateSha256, scheduleSha256, handoffUrlSha256,
+    retainedIdentitySha256, actions: scheduledActions, eventPostconditions,
+  });
   const segments = Array.from({ length: contract.segmentCount }, (_, index) => {
     const segmentIndex = index + 1;
     return {
@@ -210,6 +242,7 @@ export function buildP158W9EnduranceDispatch({
     planId: 'P158', caseId, runId, sourceCommit, workflowRunId, workflowRunAttempt,
     candidateSha256, scheduleSha256, handoffUrlSha256, retainedIdentitySha256,
     externalVantageAggregateSha256, externalHandoffOracleSha256, postconditionPreparationSha256,
+    postconditionPreparation: clone(postconditionPreparation),
     startAt: new Date(startMs).toISOString(),
     endAt: new Date(startMs + contract.durationMs).toISOString(),
     durationMs: contract.durationMs, segmentCount: contract.segmentCount, segmentDurationMs,
@@ -228,11 +261,11 @@ export function buildP158W9EnduranceDispatchTemplate(input) {
     planId: 'P158',
     ...clone(input),
   };
-  for (const field of ['sourceCommit', 'workflowRunId', 'workflowRunAttempt', 'dispatchSha256', 'templateSha256']) {
+  for (const field of ['workflowRunId', 'workflowRunAttempt', 'dispatchSha256', 'templateSha256']) {
     delete body[field];
   }
   buildP158W9EnduranceDispatch({
-    ...clone(body), sourceCommit: '0'.repeat(40), workflowRunId: '0', workflowRunAttempt: 1,
+    ...clone(body), workflowRunId: '0', workflowRunAttempt: 1,
   });
   assertNoRawUrls(body);
   return Object.freeze({ ...body, templateSha256: sha256(body) });
@@ -248,6 +281,9 @@ export function bindP158W9EnduranceDispatchTemplate({
   const input = bodyWithoutDigest(template, 'templateSha256');
   delete input.schemaVersion;
   delete input.planId;
+  if (input.sourceCommit !== sourceCommit) {
+    fail('endurance_template_integrity_mismatch', 'Endurance template was prepared from another source commit');
+  }
   return buildP158W9EnduranceDispatch({
     ...input, sourceCommit, workflowRunId, workflowRunAttempt,
   });
@@ -499,7 +535,11 @@ export function validateP158W9EndurancePlanBinding({ externalWorkflowPlan, caseI
         externalWorkflowPlan.enduranceProducer?.segmentWorkflowSourceSha256 !== dispatch.producer.segmentWorkflowSha256 ||
         externalWorkflowPlan.enduranceProducer?.runnerSourceSha256 !== dispatch.producer.runnerSha256 ||
         externalWorkflowPlan.enduranceProducer?.librarySourceSha256 !== dispatch.producer.librarySha256 ||
-        externalWorkflowPlan.enduranceProducer?.postconditionPreparationSha256 !== dispatch.postconditionPreparationSha256) {
+        externalWorkflowPlan.enduranceProducer?.preparationWorkflowSourceSha256 !== dispatch.producer.preparationWorkflowSha256 ||
+        externalWorkflowPlan.enduranceProducer?.preparationRunnerSourceSha256 !== dispatch.producer.preparationRunnerSha256 ||
+        externalWorkflowPlan.enduranceProducer?.preparationLibrarySourceSha256 !== dispatch.producer.preparationLibrarySha256 ||
+        externalWorkflowPlan.enduranceProducer?.postconditionPreparationSha256ByCase?.[caseId] !==
+          dispatch.postconditionPreparationSha256) {
       fail('endurance_plan_binding_invalid', `${caseId} endurance producer or dispatch is not frozen into the workflow plan`);
     }
     return { valid: true, dispatchSha256: dispatch.dispatchSha256 };

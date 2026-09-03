@@ -79,16 +79,56 @@ function plans({ omitActionId = null } = {}) {
     segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml', segmentWorkflowSha256: '65'.repeat(32),
     runnerPath: 'scripts/run-p158-w9-endurance.js', runnerSha256: '77'.repeat(32),
     libraryPath: 'scripts/lib/p158-w9-endurance.js', librarySha256: '88'.repeat(32),
+    preparationWorkflowPath: '.github/workflows/p158-w9-endurance-preparation.yml', preparationWorkflowSha256: '89'.repeat(32),
+    preparationRunnerPath: 'scripts/run-p158-w9-endurance-preparation.js', preparationRunnerSha256: '90'.repeat(32),
+    preparationLibraryPath: 'scripts/lib/p158-w9-endurance-preparation.js', preparationLibrarySha256: '91'.repeat(32),
   };
   external.enduranceProducer = {
     workflowSourceSha256: producer.workflowSha256,
     segmentWorkflowSourceSha256: producer.segmentWorkflowSha256,
     runnerSourceSha256: producer.runnerSha256,
     librarySourceSha256: producer.librarySha256,
-    postconditionPreparationSha256: '42'.repeat(32),
+    postconditionPreparationSha256ByCase: {},
+    preparationWorkflowSourceSha256: producer.preparationWorkflowSha256,
+    preparationRunnerSourceSha256: producer.preparationRunnerSha256,
+    preparationLibrarySourceSha256: producer.preparationLibrarySha256,
   };
-  external.enduranceDispatches = Object.fromEntries(['C04', 'C05'].map((caseId) => [caseId,
-    buildP158W9EnduranceDispatch({
+  external.enduranceDispatches = Object.fromEntries(['C04', 'C05'].map((caseId) => {
+    const preparedActions = allExternalActions.filter((action) => action.caseId === caseId).map((action) => ({
+      ...action,
+      ...(action.kind === 'dashboard_action' ? { postcondition: {
+        kind: 'pixel_region_transition', region: { x: 10, y: 10, width: 20, height: 20 },
+        beforeSha256: 'ab'.repeat(32), afterSha256: 'cd'.repeat(32),
+      } } : {}),
+    }));
+    const events = caseId === 'C05' ? {
+      viewer_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '10'.repeat(32),
+        viewerRole: 'viewer', fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
+      controller_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '20'.repeat(32),
+        viewerRole: 'controller', fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
+      client_restart: { kind: 'retained_identity_reopen', retainedIdentitySha256: target().retainedIdentitySha256 },
+      scheduled_network_profile: { kind: 'offline_failure_then_unchanged_handoff_recovery' },
+    } : {};
+    const artifactCount = preparedActions.filter((action) => action.kind === 'dashboard_action').length * 2 +
+      (caseId === 'C05' ? 2 : 0);
+    const preparationBody = {
+      schemaVersion: 'agent-browser.p158-w9-endurance-postcondition-preparation.v1', planId: 'P158', caseId,
+      runId: target().runId, sourceCommit: 'a'.repeat(40), candidateSha256: target().candidateSha256,
+      scheduleSha256: schedule.scheduleSha256, handoffUrlSha256: target().handoffUrlSha256,
+      retainedIdentitySha256: target().retainedIdentitySha256, syntheticFixtureAttestationSha256: '41'.repeat(32),
+      externalRunnerIdentitySha256: '43'.repeat(32), preparedAt: '2026-09-03T00:00:00.000Z',
+      workflowRunId: '111111', workflowRunAttempt: 1, workflowJob: 'prepare-postconditions',
+      externalIngress: true, providerFree: false, syntheticOnly: true,
+      dashboardActionCount: preparedActions.filter((action) => action.kind === 'dashboard_action').length,
+      actionPostconditionsSha256: sha256(preparedActions.filter((action) => action.kind === 'dashboard_action')
+        .map((action) => ({ actionId: action.actionId, postcondition: action.postcondition }))),
+      leaseBaselines: [], eventPostconditionsSha256: sha256(events),
+      artifactReceipts: Array.from({ length: artifactCount }, (_, index) => ({
+        artifactId: `preparation-${caseId}-${index}`, relativePath: `preparation-${index}.png`,
+        sha256: 'ef'.repeat(32), byteCount: 1,
+      })), retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false,
+    };
+    return [caseId, buildP158W9EnduranceDispatch({
       caseId, runId: target().runId, sourceCommit: 'a'.repeat(40),
       workflowRunId: target().workflowRunId, workflowRunAttempt: target().workflowRunAttempt,
       candidateSha256: target().candidateSha256, scheduleSha256: schedule.scheduleSha256,
@@ -98,25 +138,16 @@ function plans({ omitActionId = null } = {}) {
       externalHandoffOracleSha256: target().externalHandoffOracleSha256,
       postconditionPreparationSha256: '42'.repeat(32),
       startAt: caseId === 'C04' ? '2026-09-04T00:00:00.000Z' : '2026-09-05T00:00:00.000Z',
-      actions: allExternalActions.filter((action) => action.caseId === caseId).map((action) => ({
-        ...action,
-        ...(action.kind === 'dashboard_action' ? { postcondition: {
-          kind: 'pixel_region_transition', region: { x: 10, y: 10, width: 20, height: 20 },
-          beforeSha256: 'ab'.repeat(32), afterSha256: 'cd'.repeat(32),
-        } } : {}),
-      })),
-      eventPostconditions: caseId === 'C05' ? {
-        viewer_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '10'.repeat(32),
-          viewerRole: 'viewer', fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
-        controller_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '20'.repeat(32),
-          viewerRole: 'controller', fromState: 'active', toState: 'expired', timeoutMs: 60_000 },
-        client_restart: { kind: 'retained_identity_reopen', retainedIdentitySha256: target().retainedIdentitySha256 },
-        scheduled_network_profile: { kind: 'offline_failure_then_unchanged_handoff_recovery' },
-      } : {},
+      actions: preparedActions, eventPostconditions: events,
+      postconditionPreparation: { ...preparationBody, postconditionPreparationSha256: sha256(preparationBody) },
       producer,
       receiptRoot: `/evidence/${caseId}`,
-    }),
-  ]));
+    })];
+  }));
+  external.enduranceProducer.postconditionPreparationSha256ByCase = Object.fromEntries(
+    Object.entries(external.enduranceDispatches).map(([caseId, dispatch]) =>
+      [caseId, dispatch.postconditionPreparationSha256]),
+  );
   external.planSha256 = canonicalW9PlanDigest(external);
   for (let index = 0; index < external.actions.length; index += 1) {
     external.actions[index].receipt = externalReceipt(externalActions[index], external.planSha256);
