@@ -5,9 +5,13 @@ import { readFileSync } from 'node:fs';
 import {
   P158_W8_CASE_IDS,
   P158_W8_ERROR_CODES,
+  P158_W8_LIVE_HOOK_GAPS,
+  P158_W8_REVIEWED_SOURCE_COVERAGE,
   P158W8AdapterError,
+  assessP158W8ReviewedLiveSources,
   buildP158W8ActionPlan,
   createP158W8AdapterBundle,
+  createP158W8ReviewedLiveAdapterBundle,
   sealP158W8Receipt,
 } from './lib/p158-w8-hd-adapters.js';
 import { RETAINED_IDENTITY_FIELDS } from './lib/p158-external-handoff-oracle.js';
@@ -342,4 +346,90 @@ await expectCode('dashboard_oracle_failed', () => badDashboardBundle.effects['p1
   d01E0,
 ));
 
-process.stdout.write(`Plan 0158 W8 H/D adapters provider-free checks passed (${calls.external.length} external actions)\n`);
+const readinessInputs = { registry, schedule, seals };
+const originalReadinessInputs = structuredClone(readinessInputs);
+const reviewed = assessP158W8ReviewedLiveSources(readinessInputs);
+assert.equal(reviewed.ready, false);
+assert.deepEqual(reviewed.concreteCaseIds, []);
+assert.deepEqual(reviewed.explicitlyBlockedCaseIds, P158_W8_CASE_IDS);
+assert.equal(reviewed.blockerCount, 24);
+assert.equal(reviewed.reviewedSourceCount, 5);
+assert.equal(reviewed.effectsExecuted, false);
+assert.equal(reviewed.scheduledActionCount, 1017);
+assert.deepEqual(readinessInputs, originalReadinessInputs);
+assert.deepEqual(Object.keys(P158_W8_LIVE_HOOK_GAPS).sort(), [...P158_W8_CASE_IDS].sort());
+assert.deepEqual(
+  reviewed.reviewedSources.map((entry) => entry.sourcePath).sort(),
+  Object.values(P158_W8_REVIEWED_SOURCE_COVERAGE).map((entry) => entry.path).sort(),
+);
+for (const source of reviewed.reviewedSources) {
+  assert.equal(source.sourceSha256, sha256(readFileSync(new URL(`../${source.sourcePath}`, import.meta.url))));
+  assert(source.cases.length > 0);
+  assert(source.coverage.length > 20);
+  assert(source.missing.length > 20);
+}
+assert.match(
+  reviewed.blockers.find((entry) => entry.caseId === 'H01').detail,
+  /action_manifest_missing/,
+);
+assert.match(
+  reviewed.blockers.find((entry) => entry.caseId === 'H11').detail,
+  /operator_gate_missing/,
+);
+assert.match(
+  reviewed.blockers.find((entry) => entry.caseId === 'D11').detail,
+  /8_hour/,
+);
+
+const reviewedBundle = createP158W8ReviewedLiveAdapterBundle(readinessInputs);
+assert.equal(reviewedBundle.ready, true, 'explicitly blocked adapters are freeze-ready');
+assert.equal(reviewedBundle.executionReady, false);
+assert.equal(reviewedBundle.w8Adapters.length, 24);
+assert.equal(Object.keys(reviewedBundle.effects).length, 0);
+assert.equal(reviewedBundle.adapterBindings.length, 24);
+assert(reviewedBundle.adapterBindings.every((binding) => binding.mode === 'explicit_blocked'));
+assert(reviewedBundle.adapterBindings.every((binding) => binding.providerFree === false));
+assert(reviewedBundle.adapterBindings.every((binding) => binding.effectsAllowed === false));
+assert(reviewedBundle.adapterBindings.every((binding) => binding.implementedActionCount === 0));
+assert(reviewedBundle.adapterBindings.every((binding) => binding.blockedActionCount > 0));
+assert(reviewedBundle.adapterBindings.every((binding) => binding.blocker.code === 'live_case_hook_missing'));
+assert.equal(
+  reviewedBundle.adapterBindings.reduce((sum, binding) => sum + binding.blockedActionCount, 0),
+  reviewed.scheduledActionCount,
+);
+assert.deepEqual(
+  reviewedBundle.adapterBindings.find((binding) => binding.caseId === 'H01').hookIds,
+  ['w8.external_workflow', 'w8.playwright'],
+);
+assert.deepEqual(
+  reviewedBundle.adapterBindings.find((binding) => binding.caseId === 'D07').hookIds,
+  ['w8.dashboard_capture', 'w8.dashboard_execute', 'w8.stimulus'],
+);
+let blockedEffectRequests = 0;
+for (const adapter of reviewedBundle.w8Adapters) {
+  const attempt = schedule.attempts.find((entry) => entry.caseId === adapter.caseId);
+  const result = await adapter.execute({
+    attempt,
+    requestEffect: async () => {
+      blockedEffectRequests += 1;
+      throw new Error('blocked W8 adapter attempted an effect');
+    },
+  });
+  assert.equal(result.resultState, 'skipped_blocked');
+  assert.equal(result.effectState, 'not_started');
+  assert.equal(result.retryDisposition, 'prohibited');
+  assert.equal(result.repairAttempted, false);
+  assert.equal(result.retryAttempted, false);
+  assert.equal(result.garbageCollectionAttempted, false);
+  assert.equal(result.blocker.detail, P158_W8_LIVE_HOOK_GAPS[adapter.caseId]);
+  assert.match(result.blocker.sourceSha256, /^[a-f0-9]{64}$/);
+}
+assert.equal(blockedEffectRequests, 0);
+assert.throws(
+  () => assessP158W8ReviewedLiveSources({
+    registry, schedule, seals, operatorAssisted: { enabled: true },
+  }),
+  (error) => error instanceof P158W8AdapterError && error.code === 'operator_gate_missing',
+);
+
+process.stdout.write(`Plan 0158 W8 H/D adapters provider-free checks passed (${calls.external.length} external actions, ${reviewed.scheduledActionCount} reviewed live actions blocked)\n`);

@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { auditDashboardFixture } from './p158-dashboard-oracle.js';
 import { RETAINED_IDENTITY_FIELDS, classifyOperatorUrl } from './p158-external-handoff-oracle.js';
 import { sha256 } from './p158-campaign-controller.js';
@@ -7,6 +11,75 @@ export const P158_W8_CASE_IDS = Object.freeze([
   ...Array.from({ length: 12 }, (_, index) => `H${String(index + 1).padStart(2, '0')}`),
   ...Array.from({ length: 12 }, (_, index) => `D${String(index + 1).padStart(2, '0')}`),
 ]);
+
+const W8_SOURCE_PATH = 'scripts/lib/p158-w8-hd-adapters.js';
+const REVIEWED_SOURCE_URLS = Object.freeze({
+  externalVantageRunner: new URL('../run-p158-external-vantage.js', import.meta.url),
+  externalVantageWorkflow: new URL('../../.github/workflows/p158-external-vantage.yml', import.meta.url),
+  syntheticVisualFixture: new URL('../p158-synthetic-visual-fixture.js', import.meta.url),
+  dashboardOracle: new URL('./p158-dashboard-oracle.js', import.meta.url),
+  dashboardLiveSmoke: new URL('../smoke-dashboard-operator-plan0022-live.js', import.meta.url),
+});
+
+export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
+  H01: 'external_workflow_action_manifest_missing',
+  H02: 'url_role_host_scheme_injection_driver_missing',
+  H03: 'presentation_rebind_transition_driver_missing',
+  H04: 'multi_viewer_controller_contention_driver_missing',
+  H05: 'agent_human_controller_barrier_driver_missing',
+  H06: 'remote_desktop_visible_state_driver_missing',
+  H07: 'route_capacity_saturation_driver_missing',
+  H08: 'presentation_failure_injection_driver_missing',
+  H09: 'external_network_profile_driver_missing',
+  H10: 'durable_handoff_disruption_driver_missing',
+  H11: 'secure_surface_action_driver_and_operator_gate_missing',
+  H12: 'scheduled_24_hour_reconnect_driver_missing',
+  D01: 'live_inventory_density_capture_driver_missing',
+  D02: 'live_resource_transition_barrier_driver_missing',
+  D03: 'live_ambiguous_rail_fixture_driver_missing',
+  D04: 'external_multi_client_dashboard_driver_missing',
+  D05: 'live_missing_resource_deep_link_driver_missing',
+  D06: 'live_health_axis_matrix_driver_missing',
+  D07: 'live_snapshot_stream_fault_driver_missing',
+  D08: 'external_dashboard_handoff_action_scan_missing',
+  D09: 'live_dense_inventory_stream_driver_missing',
+  D10: 'live_interaction_timing_capture_driver_missing',
+  D11: 'scheduled_8_hour_resource_capture_driver_missing',
+  D12: 'live_responsive_accessibility_matrix_driver_missing',
+});
+
+export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
+  externalVantageRunner: Object.freeze({
+    path: 'scripts/run-p158-external-vantage.js',
+    cases: Object.freeze(['H01', 'H02', 'H12']),
+    coverage: 'Public HTTPS DNS, TLS, cookie, redirect, WebSocket, iframe, form-action, reconnect, pixels, and retained-identity evidence for one readiness visit or the fixed C01 calibration workload.',
+    missing: 'It does not consume the W8 frozen action IDs or implement the H02 injected host matrix and H12 500-action 24-hour schedule.',
+  }),
+  externalVantageWorkflow: Object.freeze({
+    path: '.github/workflows/p158-external-vantage.yml',
+    cases: Object.freeze(['H01']),
+    coverage: 'Two distinct off-host runners and one aggregate receipt over the same durable handoff.',
+    missing: 'It has no W8 case action manifest or exact per-action terminal receipts.',
+  }),
+  syntheticVisualFixture: Object.freeze({
+    path: 'scripts/p158-synthetic-visual-fixture.js',
+    cases: Object.freeze(['H02', 'H06', 'H11', 'D12']),
+    coverage: 'Synthetic popup, prompt-like dialog, iframe, form, WebSocket, redirect, focus, overflow, reduced-motion, and pixel-marker surfaces.',
+    missing: 'It does not emulate native chooser, LastPass, passkey, desktop minimize or obscuration, nor execute frozen W8 actions.',
+  }),
+  dashboardOracle: Object.freeze({
+    path: 'scripts/lib/p158-dashboard-oracle.js',
+    cases: Object.freeze(Array.from({ length: 12 }, (_, index) => `D${String(index + 1).padStart(2, '0')}`)),
+    coverage: 'Deterministic audit of materialized dashboard truth, rail, action, warning, URL, UI, timing, and resource evidence.',
+    missing: 'It audits supplied fixtures; it does not capture a live dashboard or apply declared stimuli.',
+  }),
+  dashboardLiveSmoke: Object.freeze({
+    path: 'scripts/smoke-dashboard-operator-plan0022-live.js',
+    cases: Object.freeze(['D01', 'D03', 'D04', 'D05', 'D08', 'D12']),
+    coverage: 'Development dashboard navigation, selection, action, and UI observation primitives.',
+    missing: 'It is a Plan 0022 smoke and does not bind the P158 schedule, matrices, external-client set, or oracle receipt contract.',
+  }),
+});
 
 export const P158_W8_ERROR_CODES = Object.freeze([
   'action_set_mismatch',
@@ -525,6 +598,155 @@ export function createP158W8AdapterBundle({
     adapters,
     effects,
     operatorAssistedReady: !operatorAssisted.enabled || operatorGate.enabled,
+    reactionaryRepairAllowed: false,
+    opportunisticRetryAllowed: false,
+    undeclaredGcAllowed: false,
+  };
+}
+
+function hashSource(url) {
+  return createHash('sha256').update(readFileSync(fileURLToPath(url))).digest('hex');
+}
+
+function reviewedSourceInventory() {
+  return Object.entries(P158_W8_REVIEWED_SOURCE_COVERAGE).map(([sourceId, description]) => ({
+    sourceId,
+    sourcePath: description.path,
+    sourceSha256: hashSource(REVIEWED_SOURCE_URLS[sourceId]),
+    cases: Object.freeze([...description.cases]),
+    coverage: description.coverage,
+    missing: description.missing,
+  }));
+}
+
+function w8SourceSha256() {
+  return createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex');
+}
+
+function w8ActionCounts({ registry, schedule, operatorGate }) {
+  const registryCases = new Map(registry.cases.map((entry) => [entry.id, entry]));
+  return new Map(P158_W8_CASE_IDS.map((caseId) => {
+    const testCase = registryCases.get(caseId);
+    const attempts = schedule.attempts.filter((attempt) => attempt.caseId === caseId);
+    if (!testCase || attempts.length === 0) fail('schedule_invalid', `${caseId} has no frozen W8 schedule`);
+    const count = attempts.reduce((sum, attempt) => sum + buildP158W8ActionPlan({
+      testCase,
+      attempt,
+      operatorAssisted: operatorGate,
+    }).actionCount, 0);
+    return [caseId, count];
+  }));
+}
+
+function reviewedHookIds(caseId) {
+  const hookIds = [];
+  if (caseId.startsWith('H')) hookIds.push('w8.external_workflow', 'w8.playwright');
+  if (caseId.startsWith('D')) hookIds.push('w8.dashboard_capture', 'w8.dashboard_execute');
+  if (STIMULUS_CASES[caseId]) hookIds.push('w8.stimulus');
+  return hookIds.sort();
+}
+
+export function assessP158W8ReviewedLiveSources({
+  registry,
+  schedule,
+  seals,
+  operatorAssisted = { enabled: false },
+}) {
+  validateSeals({ registry, schedule, seals });
+  const operatorGate = validateOperatorGate(operatorAssisted, seals);
+  const actionCounts = w8ActionCounts({ registry, schedule, operatorGate });
+  const sources = reviewedSourceInventory();
+  const blockers = P158_W8_CASE_IDS.map((caseId) => ({
+    caseId,
+    code: 'live_case_hook_missing',
+    detail: P158_W8_LIVE_HOOK_GAPS[caseId],
+    affectedActionCount: actionCounts.get(caseId),
+    reviewedHookIds: Object.freeze(reviewedHookIds(caseId)),
+  }));
+  return Object.freeze({
+    schemaVersion: 'agent-browser.p158-w8-reviewed-live-source-readiness.v1',
+    planId: 'P158',
+    scheduleSha256: schedule.scheduleSha256,
+    registrySha256: schedule.registrySha256,
+    ready: false,
+    concreteCaseIds: Object.freeze([]),
+    explicitlyBlockedCaseIds: Object.freeze([...P158_W8_CASE_IDS]),
+    reviewedSourceCount: sources.length,
+    reviewedSources: Object.freeze(sources.map((entry) => Object.freeze(entry))),
+    blockerCount: blockers.length,
+    blockers: Object.freeze(blockers.map((entry) => Object.freeze(entry))),
+    scheduledActionCount: [...actionCounts.values()].reduce((sum, count) => sum + count, 0),
+    effectsExecuted: false,
+  });
+}
+
+export function createP158W8ReviewedLiveAdapterBundle({
+  registry,
+  schedule,
+  seals,
+  operatorAssisted = { enabled: false },
+  additionalAdapters = [],
+}) {
+  const readiness = assessP158W8ReviewedLiveSources({
+    registry,
+    schedule,
+    seals,
+    operatorAssisted,
+  });
+  const sourceSha256 = w8SourceSha256();
+  const actionCounts = new Map(readiness.blockers.map((entry) => [entry.caseId, entry.affectedActionCount]));
+  const contracts = new Map(schedule.caseContracts.map((entry) => [entry.caseId, entry]));
+  const adapters = P158_W8_CASE_IDS.map((caseId) => {
+    const contract = contracts.get(caseId);
+    if (!contract || contract.phaseId !== 'W8') fail('schedule_invalid', `${caseId} lacks a W8 contract`);
+    const blocker = Object.freeze({
+      code: 'live_case_hook_missing',
+      detail: P158_W8_LIVE_HOOK_GAPS[caseId],
+      sourcePath: W8_SOURCE_PATH,
+      sourceSha256,
+    });
+    return createP158CaseAdapter({
+      caseId,
+      evidenceProfile: contract.evidenceProfile,
+      executionContract: contract.executionContract,
+      execute: async () => ({
+        resultState: 'skipped_blocked',
+        blocker,
+        effectState: 'not_started',
+        retryDisposition: 'prohibited',
+        repairAttempted: false,
+        retryAttempted: false,
+        garbageCollectionAttempted: false,
+      }),
+    });
+  });
+  const adapterBindings = P158_W8_CASE_IDS.map((caseId) => Object.freeze({
+    caseId,
+    mode: 'explicit_blocked',
+    providerFree: false,
+    sourcePath: W8_SOURCE_PATH,
+    sourceSha256,
+    hookIds: Object.freeze(reviewedHookIds(caseId)),
+    implementedActionCount: 0,
+    blockedActionCount: actionCounts.get(caseId),
+    effectsAllowed: false,
+    blocker: Object.freeze({
+      code: 'live_case_hook_missing',
+      detail: P158_W8_LIVE_HOOK_GAPS[caseId],
+    }),
+  }));
+  return {
+    schemaVersion: 'agent-browser.p158-w8-reviewed-live-adapter-bundle.v1',
+    planId: 'P158',
+    scheduleSha256: schedule.scheduleSha256,
+    registrySha256: schedule.registrySha256,
+    ready: true,
+    executionReady: false,
+    adapters: [...adapters, ...additionalAdapters],
+    w8Adapters: adapters,
+    effects: {},
+    adapterBindings: Object.freeze(adapterBindings),
+    reviewedLiveSources: readiness,
     reactionaryRepairAllowed: false,
     opportunisticRetryAllowed: false,
     undeclaredGcAllowed: false,
