@@ -119,6 +119,12 @@ artifacts, and redaction receipts. Thirteen synthetic envelopes prove exact
 detection of 11 missing, duplicate, conflicting, reordered, null, isolated,
 broken-parent, unsafe-retry, capture-gap, and sensitive-leak classes while
 complete and reordered input stays clean.
+Plan 0158 W4 is complete. A provider-free external-handoff oracle rejects
+loopback, private, link-local, `.local`, raw provider, diagnostic-role, and
+non-secure URLs across 13 client-visible roles; requires all eight external
+ingress checks; gates pixels on operator readiness; reconciles eight retained
+identity fields; and detects changed handoffs and duplicate cold launches.
+Thirty-six synthetic sessions exercise all 23 finding classes.
 
 ### Plan
 
@@ -127,9 +133,9 @@ complete and reordered input stays clean.
 
 ### Next Recommendation
 
-Execute Plan 0158 W4. Build and provider-free test the external-ingress runner
-and durable-handoff oracle, including unconditional rejection of loopback
-fallback. Do not touch an installed runtime yet.
+Execute Plan 0158 W5. Build and provider-free test dashboard truth,
+performance, accessibility, selection, warning-axis, and external-URL probes
+over dense immutable fixtures. Do not touch an installed runtime yet.
 
 ## P156 | Full Runtime Shutdown Replacement
 

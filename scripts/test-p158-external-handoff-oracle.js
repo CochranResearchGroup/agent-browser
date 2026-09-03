@@ -47,12 +47,13 @@ function assertValid(validate, value, label) {
   );
 }
 
-function audit(session) {
+function audit(session, options = { requiredIngressChecks: [] }) {
   return auditExternalHandoffSession({
     session,
     options: {
       auditId: `p158-handoff-audit:${session.fixtureId}`,
       auditedAt: '2026-09-02T23:00:00.000Z',
+      ...options,
     },
   });
 }
@@ -216,6 +217,16 @@ runTest('requires public HTTPS ingress, ready gating, and exact retained identit
     assert.deepEqual(reconnect.identity, clean.expectedIdentity);
   }
   assert.equal(audit(clean).passed, true);
+});
+
+runTest('fails closed when a required external ingress observation is absent', () => {
+  const clean = fixtureSet.sessions.find((session) => session.fixtureId === 'handoff-clean-public-https');
+  const missingTls = clone(clean);
+  missingTls.fixtureId = 'handoff-required-check-missing';
+  missingTls.ingressChecks = missingTls.ingressChecks.filter((check) => check.kind !== 'tls');
+  const missingTlsReport = audit(missingTls, {});
+  assert.equal(missingTlsReport.passed, false);
+  assert.ok(missingTlsReport.findings.some((finding) => finding.code === 'tls_failure'));
 });
 
 runTest('detects wrong visible browser identity and duplicate reconnect launch', () => {

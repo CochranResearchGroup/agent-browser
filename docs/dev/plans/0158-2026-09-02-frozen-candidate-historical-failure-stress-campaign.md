@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w3_logging_auditor_complete_w4_external_oracle_ready`
+Execution state: `w4_external_oracle_complete_w5_dashboard_probes_ready`
 
 Lane: P157
 
@@ -675,3 +675,36 @@ exists yet.
 
 Next action: execute W4 only. Build the provider-free external-ingress and
 durable-handoff oracle, including hard rejection of loopback fallback.
+
+## W4 Checkpoint: External Handoff Oracle Complete
+
+State transition: `logging_auditor_complete -> external_oracle_complete`.
+
+Acceptance state: W4 complete. Installed acceptance remains open and no
+candidate or runtime has been touched.
+
+Progress classification: `outcome_progress`.
+
+Evidence:
+
+- `scripts/lib/p158-external-handoff-oracle.js` classifies external vantage,
+  public HTTPS and WSS, forbidden hosts and URL roles, ingress checks,
+  ready-before-pixels, retained identity, durable continuity, and cold launch;
+- the two P158 external-handoff schemas define synthetic inputs and exact
+  reports;
+- the 36-session corpus covers all 23 finding codes, 13 URL roles, nine host
+  classes, six identity axes, and one clean full-ingress path; and
+- `pnpm test:p158-external-handoff-oracle` performs strict schema,
+  classification, no-fallback, ingress, visibility, identity, continuity,
+  deterministic, no-mutation, and no-repair checks.
+
+Integration review changed the ingress checks from optional-by-absence to the
+full eight-check fail-closed default. Isolated unit fixtures can suppress
+unrelated gates; later E2 execution cannot.
+
+Material blocker: correlated rendered-dashboard truth and performance probes
+do not exist yet.
+
+Next action: execute W5 only. Build provider-free dashboard rail, selection,
+warning-axis, external URL hygiene, accessibility, and performance probes over
+dense immutable fixtures.

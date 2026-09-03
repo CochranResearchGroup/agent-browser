@@ -75,6 +75,17 @@ const CHECK_FINDINGS = Object.freeze({
   reconnect: 'reconnect_failure',
 });
 
+export const REQUIRED_INGRESS_CHECKS = Object.freeze([
+  'dns',
+  'tls',
+  'redirect',
+  'cookie',
+  'websocket',
+  'iframe',
+  'form_action',
+  'reconnect',
+]);
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -385,7 +396,7 @@ export function auditExternalHandoffSession({ session, options = {} }) {
       });
     }
   }
-  for (const requiredCheck of options.requiredIngressChecks ?? []) {
+  for (const requiredCheck of options.requiredIngressChecks ?? REQUIRED_INGRESS_CHECKS) {
     if (!checks.some((check) => String(check.kind ?? check.check ?? check.type).toLowerCase() === requiredCheck)) {
       const code = CHECK_FINDINGS[requiredCheck] ?? 'capture_gap';
       addFinding(findings, {
