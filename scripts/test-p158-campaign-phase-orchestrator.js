@@ -183,6 +183,15 @@ await withRoot(async (runRoot) => {
   assert.equal(result.loggingExpectations.length, schedule.attempts.length);
   assert.ok(result.loggingExpectations.every((entry) => entry.requestId.includes(entry.attemptId)));
   assert.ok(result.loggingExpectations.every((entry) => entry.requestId.startsWith('p158:p158-integrated-run:')));
+  const blockedIds = new Set(result.preExecutionBlockers.map((entry) => entry.attemptId));
+  assert.ok(result.loggingExpectations.filter((entry) => blockedIds.has(entry.attemptId)).every((entry) =>
+    entry.operatorVisible === false && entry.incidentExpected === false &&
+    JSON.stringify(entry.expectedSurfaceRoles) === JSON.stringify([
+      'controller_transition', 'pre_execution_blocker', 'terminal_event',
+    ])));
+  assert.ok(result.loggingExpectations.filter((entry) => !blockedIds.has(entry.attemptId)).every((entry) =>
+    ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome']
+      .every((role) => entry.expectedSurfaceRoles.includes(role))));
   assert.ok(controller.snapshot().results.find((entry) => entry.caseId === 'A01').evidence.artifactIds[0]
     .includes('p158-integrated-run'));
   assert.ok(store.paths().includes('campaign-phases/pre-execution-blockers.json'));

@@ -124,16 +124,24 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
         bindingSha256: sha256(binding),
       }] : [];
     }));
-  const loggingExpectations = schedule.attempts.map((attempt) => ({
-    attemptId: attempt.attemptId,
-    requestId: `p158:${runId}:${attempt.attemptId}:request`,
-    incidentExpected: false,
-    operatorVisible: attempt.externalIngressRequired === true,
-    expectedSurfaceRoles: [
-      'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
-      ...(attempt.externalIngressRequired ? ['dashboard_projection'] : []),
-    ],
-  }));
+  const loggingExpectations = schedule.attempts.map((attempt) => {
+    const binding = PRE_PHASES.includes(attempt.phaseId)
+      ? bundles[attempt.phaseId].bindings.get(attempt.caseId)
+      : null;
+    const blocked = binding?.mode === 'explicit_blocked';
+    return {
+      attemptId: attempt.attemptId,
+      requestId: `p158:${runId}:${attempt.attemptId}:request`,
+      incidentExpected: false,
+      operatorVisible: blocked ? false : attempt.externalIngressRequired === true,
+      expectedSurfaceRoles: blocked
+        ? ['controller_transition', 'pre_execution_blocker', 'terminal_event']
+        : [
+            'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
+            ...(attempt.externalIngressRequired ? ['dashboard_projection'] : []),
+          ],
+    };
+  });
   const body = {
     schemaVersion: 'agent-browser.p158-campaign-phase-preparation.v1',
     scheduleSha256: schedule.scheduleSha256,
