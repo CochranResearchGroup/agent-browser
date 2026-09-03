@@ -1306,3 +1306,36 @@ candidate containing `34c7d85a`; run the development browser smoke,
 provider-required doctor, and exact shared-Profile serial regression under a
 new epoch. If those pass, resume the external-handoff readiness sequence and
 the remaining W6 calibration gates. Production remains read-only.
+
+### W6 Shared-Local Cold-Route Blocking Repair
+
+Development generation `0.28.0-4025f74d88fc` passed installation, three
+disposable browser launches, skill synchronization, and the complete
+provider-required doctor. A disposable `shared-local` Profile was then created
+only in E1. Its access plan allowed the self-declared subject and recommended
+`launch_new_browser`, but both a manually shaped request and the exact copied
+access-plan request failed before launch with
+`existing_session_profile_identity_unproven`.
+
+The failure is distinct from the retained-route defect. A cold shared-local
+plan emitted no logical `sessionName`, so action execution inherited the
+runtime host's ambient daemon lane. Historical identity retained on that lane
+was then mistaken for the requested Profile's session identity. Strict
+registered principals already avoided this collision by receiving a stable
+principal-and-Profile-derived cold route; ordinary self-declared clients did
+not.
+
+Blocking repair commit `8f4cd76f` gives every allowed cold shared-local
+subject a stable `shared-profile-*` daemon route derived from the admitted
+subject and Profile ID. The access plan emits that route, request normalization
+accepts only its exact deterministic value, and no cryptographic identity or
+owner proof is introduced. The provider-free regression failed first because
+the plan contained no session route, then passed after the repair and proved
+deterministic replay plus absence of internal capability authorization. The
+retained-route regression, clippy, generated-client checks, docs build,
+formatting, and diff validation also pass.
+
+The failed E1 attempts remain evidence; no retry was made against their old
+candidate identity. Next action: build and install a new isolated candidate
+containing `8f4cd76f`, then restart the serial shared-Profile scenario from a
+fresh disposable Profile and attempt identity. Production remains read-only.
