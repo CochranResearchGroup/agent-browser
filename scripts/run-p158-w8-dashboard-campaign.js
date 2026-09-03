@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { sha256 } from './lib/p158-campaign-controller.js';
 import {
   aggregateP158DashboardCampaignReceipts,
+  buildP158DashboardIngressSelectorRequest,
   buildP158DashboardCampaignPlan,
   buildP158DashboardFixtureFromProjection,
   executeP158DashboardCampaignAction,
@@ -166,12 +167,20 @@ async function validateInstalledState(request) {
 }
 
 async function selectorReceipt(selector, request) {
-  if (!isAbsolute(selector?.executablePath ?? '') || !/^[a-f0-9]{64}$/.test(selector?.executableSha256 ?? '')) {
-    throw new Error('Execution input requires an absolute reviewed development ingress selector and SHA-256');
+  if (!isAbsolute(selector?.executablePath ?? '') || !isAbsolute(selector?.sourcePath ?? '') ||
+      !/^[a-f0-9]{64}$/.test(selector?.executableSha256 ?? '') ||
+      !/^[a-f0-9]{64}$/.test(selector?.sourceSha256 ?? '')) {
+    throw new Error('Execution input requires an absolute reviewed development ingress selector source and executable identity');
   }
-  const bytes = await readFile(selector.executablePath);
-  if (sha256Bytes(bytes) !== selector.executableSha256) throw new Error('Development ingress selector digest changed');
-  const result = await runProcess(selector.executablePath, [], {
+  const [executableBytes, sourceBytes] = await Promise.all([
+    readFile(selector.executablePath), readFile(selector.sourcePath),
+  ]);
+  if (sha256Bytes(executableBytes) !== selector.executableSha256 ||
+      sha256Bytes(sourceBytes) !== selector.sourceSha256) {
+    throw new Error('Development ingress selector source or executable digest changed');
+  }
+  const args = request.operation === 'select' ? ['--apply'] : [];
+  const result = await runProcess(selector.executablePath, args, {
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
     input: `${JSON.stringify({
       schemaVersion: 'agent-browser.p158-development-ingress-selection-request.v1',
@@ -545,7 +554,7 @@ function createLiveEffects(executionInput) {
         statePath: root.target.statePath,
       };
     },
-    selectExternalIngress: (request) => selectorReceipt(executionInput.ingressSelector, request),
+    selectExternalIngress: (request) => selectorReceipt(executionInput.campaignPlan.ingressSelector, request),
     observeExactRuntime: async ({ checkpoint, root }) => {
       try {
         const processIdentities = Object.fromEntries(await Promise.all(
@@ -566,26 +575,10 @@ function createLiveEffects(executionInput) {
     },
     observeExactIngress: async ({ checkpoint, root }) => {
       try {
-        const observed = await selectorReceipt(executionInput.ingressSelector, {
-          operation: 'observe',
-          actionId: root.actionId,
-          reviewedRevision: checkpoint.ingress.reviewedRevision,
-          bindingSha256: checkpoint.ingress.bindingSha256,
-          runtimeRootSha256: checkpoint.runtimeRootSha256,
-          expectedPid: checkpoint.processIdentities.ingress.pid,
-          expectedBackendPid: checkpoint.processIdentities.backend.pid,
-          expectedRuntimeHostPid: checkpoint.processIdentities.runtimeHost.pid,
-          processIdentitySha256: checkpoint.ingress.processIdentitySha256,
-        });
-        return {
-          unchanged: observed?.unchanged === true,
-          publicUrlSha256: sha256(observed?.publicUrl ?? ''),
-          publicPath: observed?.publicPath,
-          reviewedRevision: observed?.reviewedRevision,
-          bindingSha256: observed?.bindingSha256,
-          selectionReceiptSha256: observed?.selectionReceiptSha256,
-          processIdentitySha256: observed?.processIdentitySha256,
-        };
+        return await selectorReceipt(executionInput.campaignPlan.ingressSelector,
+          buildP158DashboardIngressSelectorRequest({
+            root, processIdentities: checkpoint.processIdentities, operation: 'observe',
+          }));
       } catch (error) {
         return { unchanged: false, code: error.code ?? 'host_ingress_identity_lost' };
       }

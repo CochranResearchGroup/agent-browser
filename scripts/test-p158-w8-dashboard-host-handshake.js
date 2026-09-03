@@ -14,6 +14,7 @@ import {
   pauseP158DashboardHostAction,
   resumeP158DashboardHostAction,
 } from './lib/p158-w8-dashboard-host-handshake.js';
+import { buildP158DashboardIngressSelectorRequest } from './lib/p158-w8-dashboard-campaign.js';
 import { buildP158DashboardGithubRunnerAttestation, sealP158DashboardExternalResult } from './lib/p158-w8-dashboard-external.js';
 import { buildP158DashboardPreseedPlan } from './lib/p158-w8-dashboard-live.js';
 import { sealP158DashboardScenarioReceipt } from './lib/p158-w8-dashboard-scenarios.js';
@@ -25,6 +26,13 @@ const candidate = {
 const externalIngress = {
   publicOperatorUrl: 'https://p158-dashboard.example.test',
   reviewedRevision: 'p158-w8-reviewed-001',
+};
+const ingressSelector = {
+  executablePath: '/tmp/p158-ingress-selector',
+  executableSha256: sha256('p158-ingress-selector'),
+  sourcePath: '/tmp/p158-ingress-selector.py',
+  sourceSha256: sha256('p158-ingress-selector-source'),
+  sourceCommit: 'e70368d',
 };
 const expectedCommit = 'a'.repeat(40);
 const workflowRunId = '1588003';
@@ -38,25 +46,51 @@ function processIdentities(root) {
   };
 }
 
-function selection(root, started, request) {
-  const publicPath = `/p158/${sha256(root.actionId).slice(0, 16)}`;
-  const body = {
-    selected: true,
-    actionId: root.actionId,
-    publicUrl: `${externalIngress.publicOperatorUrl}${publicPath}`,
-    publicPath,
-    bindingSha256: root.externalIngress.bindingSha256,
-    reviewedRevision: root.externalIngress.reviewedRevision,
+function selectorResponse(operation, request, deployed = null) {
+  const identity = {
+    schemaVersion: 'cooper.p158-action-route-selector.v1',
+    runIdSha256: sha256(request.runId),
+    actionIdSha256: sha256(request.actionId),
+    publicPath: `/p158/${encodeURIComponent(request.runId)}/${encodeURIComponent(request.actionId)}`,
+    reviewedRevision: request.reviewedRevision,
+    bindingSha256: request.bindingSha256,
     runtimeRootSha256: request.runtimeRootSha256,
-    dashboardPort: request.dashboardPort,
-    dashboardBackendPort: request.dashboardBackendPort,
-    runtimeStreamPort: request.runtimeStreamPort,
-    expectedPid: started.pid,
-    expectedBackendPid: started.backendPid,
-    expectedRuntimeHostPid: started.runtimeHostPid,
+    candidateSha256: request.candidateSha256,
     processIdentitySha256: request.processIdentitySha256,
+    rootPortsSha256: request.rootPortsSha256,
+    ingressPidSha256: request.ingressPidSha256,
+    backendPidSha256: request.backendPidSha256,
+    runtimeHostPidSha256: request.runtimeHostPidSha256,
+    ingressStartTokenSha256: request.ingressStartTokenSha256,
+    backendStartTokenSha256: request.backendStartTokenSha256,
+    runtimeHostStartTokenSha256: request.runtimeHostStartTokenSha256,
+    sourceHostUpstreamSha256: sha256(request.sourceHostUpstream),
+    sourceHostPort: request.sourceHostPort,
+    sourceHostRouteIdentitySha256: sha256({
+      upstreamSha256: sha256(request.sourceHostUpstream), port: request.sourceHostPort,
+      runtimeRootSha256: request.runtimeRootSha256, candidateSha256: request.candidateSha256,
+      processIdentitySha256: request.processIdentitySha256, rootPortsSha256: request.rootPortsSha256,
+    }),
   };
-  return { ...body, selectionReceiptSha256: sha256(body) };
+  const deployment = deployed ?? {
+    inventorySha256: sha256('inventory'),
+    localDeployedConfigSha256: sha256('local-config'),
+    bastionDeployedConfigSha256: sha256('bastion-config'),
+    deployedConfigSha256: sha256('deployed-config'),
+    deployedRevisionSha256: sha256('deployed-revision'),
+  };
+  const body = {
+    schemaVersion: identity.schemaVersion,
+    operation,
+    selected: operation === 'select',
+    unchanged: true,
+    ...identity,
+    selectionReceiptSha256: sha256(identity),
+    ...deployment,
+    productionRouteTouched: false,
+    retryAttempted: false,
+  };
+  return { ...body, observationReceiptSha256: sha256(body) };
 }
 
 function successExternalResult(manifest) {
@@ -100,6 +134,7 @@ try {
   const preseedPlan = buildP158DashboardPreseedPlan({ actions, campaignRoot });
   const campaignPlan = buildP158DashboardCampaignPlan({
     preseedPlan, candidate, externalIngress, basePort: 54100,
+    ingressSelector,
   });
   const preparation = await prepareP158DashboardCampaign({
     campaignPlan, preseedPlan, freezeState: 'pre_freeze', apply: true,
@@ -121,7 +156,7 @@ try {
     startExact: async () => { lifecycle.push('start'); return started; },
     selectExternalIngress: async (request) => {
       lifecycle.push('select');
-      selected = selection(root, started, request);
+      selected = selectorResponse('select', request);
       return selected;
     },
     persistDispatchReady: async (artifacts) => { lifecycle.push('persist'); persisted = artifacts; },
@@ -138,7 +173,7 @@ try {
   assert.equal(paused.retryAttempted, false);
   const checkpointText = JSON.stringify(paused.checkpoint);
   assert(!checkpointText.includes(root.target.disposableRoot));
-  assert(!checkpointText.includes(selected.publicUrl));
+  assert(!checkpointText.includes(externalIngress.publicOperatorUrl));
   assert(!checkpointText.includes('expectedState'));
 
   const persistFailure = await pauseP158DashboardHostAction({
@@ -161,15 +196,16 @@ try {
       statePathSha256: paused.checkpoint.statePathSha256,
       ports: root.ports, candidateSha256: candidate.executableSha256,
     }),
-    observeExactIngress: async () => ({
-      unchanged: true,
-      publicUrlSha256: paused.checkpoint.ingress.publicUrlSha256,
-      publicPath: paused.checkpoint.ingress.publicPath,
-      reviewedRevision: paused.checkpoint.ingress.reviewedRevision,
-      bindingSha256: paused.checkpoint.ingress.bindingSha256,
-      selectionReceiptSha256: paused.checkpoint.ingress.selectionReceiptSha256,
-      processIdentitySha256: paused.checkpoint.ingress.processIdentitySha256,
-    }),
+    observeExactIngress: async () => selectorResponse('observe',
+      buildP158DashboardIngressSelectorRequest({
+        root, processIdentities: started.processIdentities, operation: 'observe',
+      }), {
+        inventorySha256: paused.checkpoint.ingress.inventorySha256,
+        localDeployedConfigSha256: selected.localDeployedConfigSha256,
+        bastionDeployedConfigSha256: selected.bastionDeployedConfigSha256,
+        deployedConfigSha256: paused.checkpoint.ingress.deployedConfigSha256,
+        deployedRevisionSha256: paused.checkpoint.ingress.deployedRevisionSha256,
+      }),
     stopExact: async () => {
       stops += 1;
       return { state: 'stopped', pid: 7101, backendPid: 7102, runtimeHostPid: 7103 };

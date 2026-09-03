@@ -73,6 +73,79 @@ function validateExternalIngress(externalIngress) {
   return binding;
 }
 
+function validateIngressSelector(selector) {
+  if (!isAbsolute(selector?.executablePath ?? '') || !isAbsolute(selector?.sourcePath ?? '') ||
+      !SHA256.test(selector?.executableSha256 ?? '') || !SHA256.test(selector?.sourceSha256 ?? '') ||
+      !/^[a-f0-9]{7,40}$/u.test(selector?.sourceCommit ?? '')) {
+    fail('ingress_selector_invalid', 'W8 requires an absolute reviewed ingress selector source and executable identity');
+  }
+  return structuredClone(selector);
+}
+
+export function buildP158DashboardIngressSelectorRequest({ root, processIdentities, operation }) {
+  const pidDigest = (role) => sha256(String(processIdentities[role].pid));
+  const startDigest = (role) => sha256(processIdentities[role].startToken);
+  return {
+    schemaVersion: 'agent-browser.p158-development-ingress-selection-request.v1',
+    operation,
+    runId: root.target.runId,
+    actionId: root.actionId,
+    reviewedRevision: root.externalIngress.reviewedRevision,
+    bindingSha256: root.externalIngress.bindingSha256,
+    runtimeRootSha256: sha256(root.target.disposableRoot),
+    candidateSha256: root.candidate.executableSha256,
+    processIdentitySha256: sha256(processIdentities),
+    rootPortsSha256: sha256(root.ports),
+    ingressPidSha256: pidDigest('ingress'),
+    backendPidSha256: pidDigest('backend'),
+    runtimeHostPidSha256: pidDigest('runtimeHost'),
+    ingressStartTokenSha256: startDigest('ingress'),
+    backendStartTokenSha256: startDigest('backend'),
+    runtimeHostStartTokenSha256: startDigest('runtimeHost'),
+    sourceHostUpstream: 'host.docker.internal',
+    sourceHostPort: root.ports.dashboardIngress,
+  };
+}
+
+export function p158DashboardIngressSelectorIdentity(root, processIdentities) {
+  const request = buildP158DashboardIngressSelectorRequest({ root, processIdentities, operation: 'select' });
+  const identity = {
+    schemaVersion: 'cooper.p158-action-route-selector.v1',
+    runIdSha256: sha256(request.runId), actionIdSha256: sha256(request.actionId),
+    publicPath: `/p158/${encodeURIComponent(request.runId)}/${encodeURIComponent(request.actionId)}`,
+    reviewedRevision: request.reviewedRevision, bindingSha256: request.bindingSha256,
+    runtimeRootSha256: request.runtimeRootSha256, candidateSha256: request.candidateSha256,
+    processIdentitySha256: request.processIdentitySha256, rootPortsSha256: request.rootPortsSha256,
+    ingressPidSha256: request.ingressPidSha256, backendPidSha256: request.backendPidSha256,
+    runtimeHostPidSha256: request.runtimeHostPidSha256,
+    ingressStartTokenSha256: request.ingressStartTokenSha256,
+    backendStartTokenSha256: request.backendStartTokenSha256,
+    runtimeHostStartTokenSha256: request.runtimeHostStartTokenSha256,
+    sourceHostUpstreamSha256: sha256(request.sourceHostUpstream), sourceHostPort: request.sourceHostPort,
+    sourceHostRouteIdentitySha256: sha256({
+      upstreamSha256: sha256(request.sourceHostUpstream), port: request.sourceHostPort,
+      runtimeRootSha256: request.runtimeRootSha256, candidateSha256: request.candidateSha256,
+      processIdentitySha256: request.processIdentitySha256, rootPortsSha256: request.rootPortsSha256,
+    }),
+  };
+  return { identity, selectionReceiptSha256: sha256(identity) };
+}
+
+function validateIngressSelectorReceipt({ root, processIdentities, selected, operation }) {
+  const expected = p158DashboardIngressSelectorIdentity(root, processIdentities);
+  const { observationReceiptSha256, ...body } = selected ?? {};
+  if (selected?.operation !== operation || selected.selected !== (operation === 'select') || selected.unchanged !== true ||
+      Object.entries(expected.identity).some(([key, value]) => selected[key] !== value) ||
+      selected.selectionReceiptSha256 !== expected.selectionReceiptSha256 ||
+      !SHA256.test(selected.inventorySha256 ?? '') || !SHA256.test(selected.localDeployedConfigSha256 ?? '') ||
+      !SHA256.test(selected.bastionDeployedConfigSha256 ?? '') || !SHA256.test(selected.deployedConfigSha256 ?? '') ||
+      !SHA256.test(selected.deployedRevisionSha256 ?? '') || observationReceiptSha256 !== sha256(body) ||
+      /(?:https?|wss?|file|data|javascript):/iu.test(JSON.stringify(selected))) {
+    fail('external_ingress_selection_invalid', 'Reviewed ingress did not select the exact dashboard root');
+  }
+  return new URL(selected.publicPath, root.externalIngress.publicOperatorUrl).href;
+}
+
 /** Bind capture to a frozen public WSS Playwright runner outside the Service host. */
 export function validateP158ExternalPlaywrightRunner({ endpoint, attestation }) {
   let parsed;
@@ -107,10 +180,12 @@ export function buildP158DashboardCampaignPlan({
   preseedPlan,
   candidate,
   externalIngress,
+  ingressSelector,
   basePort = 52000,
 }) {
   const frozenCandidate = validateCandidate(candidate);
   const ingress = validateExternalIngress(externalIngress);
+  const selector = validateIngressSelector(ingressSelector);
   if (preseedPlan?.schemaVersion !== 'agent-browser.p158-dashboard-preseed-plan.v1' ||
       preseedPlan.planSha256 !== sha256(Object.fromEntries(
         Object.entries(preseedPlan).filter(([key]) => key !== 'planSha256'),
@@ -174,6 +249,7 @@ export function buildP158DashboardCampaignPlan({
     preseedPlanSha256: preseedPlan.planSha256,
     candidate: frozenCandidate,
     externalIngress: ingress,
+    ingressSelector: selector,
     actionCount: roots.length,
     roots,
     preFreezeMaterializationOnly: true,
@@ -241,6 +317,8 @@ export async function prepareP158DashboardCampaign({
     campaignPlanSha256: campaignPlan.campaignPlanSha256,
     preseedReceipt,
     candidateSha256: campaignPlan.candidate.executableSha256,
+    ingressSelector: structuredClone(campaignPlan.ingressSelector),
+    ingressSelectorSha256: sha256(campaignPlan.ingressSelector),
     materializedBeforeFreeze: apply,
     productionStateTouched: false,
     repairAttempted: false,
@@ -457,43 +535,24 @@ export async function executeP158DashboardCampaignAction({
           typeof started.processIdentities?.[role]?.startToken !== 'string')) {
       fail('wrong_runtime_state', 'Service host and dashboard process identities are incomplete or foreign');
     }
-    selected = await effects.selectExternalIngress({
-      actionId: root.actionId,
-      reviewedRevision: root.externalIngress.reviewedRevision,
-      bindingSha256: root.externalIngress.bindingSha256,
-      dashboardPort: root.ports.dashboardIngress,
-      dashboardBackendPort: root.ports.dashboardBackend,
-      runtimeStreamPort: root.ports.runtimeStream,
-      runtimeRootSha256: sha256(root.target.disposableRoot),
-      expectedPid: started.pid,
-      expectedBackendPid: started.backendPid,
-      expectedRuntimeHostPid: started.runtimeHostPid,
-      processIdentitySha256: sha256(started.processIdentities),
+    selected = await effects.selectExternalIngress(buildP158DashboardIngressSelectorRequest({
+      root, processIdentities: started.processIdentities, operation: 'select',
+    }));
+    const publicUrl = validateIngressSelectorReceipt({
+      root, processIdentities: started.processIdentities, selected, operation: 'select',
     });
-    const publicUrl = new URL(selected?.publicUrl ?? 'invalid:');
-    if (publicUrl.protocol !== 'https:' || publicUrl.origin !== root.externalIngress.publicOperatorUrl ||
-        publicUrl.search || publicUrl.hash || selected?.publicPath !== publicUrl.pathname ||
-        !selected.publicPath.startsWith('/p158/') || selected?.bindingSha256 !== root.externalIngress.bindingSha256 ||
-        selected?.selected !== true || selected?.actionId !== root.actionId ||
-        selected?.runtimeRootSha256 !== sha256(root.target.disposableRoot) ||
-        selected?.dashboardPort !== root.ports.dashboardIngress ||
-        selected?.dashboardBackendPort !== root.ports.dashboardBackend ||
-        selected?.runtimeStreamPort !== root.ports.runtimeStream ||
-        selected?.expectedPid !== started.pid || selected?.expectedBackendPid !== started.backendPid ||
-        selected?.expectedRuntimeHostPid !== started.runtimeHostPid ||
-        selected?.processIdentitySha256 !== sha256(started.processIdentities) ||
-        selected?.reviewedRevision !== root.externalIngress.reviewedRevision ||
-        selected?.selectionReceiptSha256 !== receiptDigest(selected, 'selectionReceiptSha256')) {
-      fail('external_ingress_selection_invalid', 'Reviewed ingress did not select the exact dashboard root');
-    }
-    pageHandle = await effects.openExternalPage({ publicUrl: publicUrl.href, root: structuredClone(root) });
+    const externalProof = {
+      offHost: true, outsideServiceNetworkNamespace: true, publicHttps: true,
+      operatorVisibleState: 'ready', handoffUrlSha256: sha256(selected.selectionReceiptSha256),
+    };
+    pageHandle = await effects.openExternalPage({ publicUrl, root: structuredClone(root) });
     if (scenarioPlan) {
       scenarioReceipt = await effects.exerciseScenario({
         pageHandle,
-        publicUrl: publicUrl.href,
+        publicUrl,
         publicPath: selected.publicPath,
         selectionReceiptSha256: selected.selectionReceiptSha256,
-        externalProof: structuredClone(selected.externalProof),
+        externalProof: structuredClone(externalProof),
         root: structuredClone(root),
         scenarioPlan: structuredClone(scenarioPlan),
       });
@@ -515,7 +574,7 @@ export async function executeP158DashboardCampaignAction({
     projection = await captureP158DashboardLiveProjection({
       page: pageHandle.page,
       materializationReceipt: preseed.materializationReceipt,
-      externalProof: selected.externalProof,
+      externalProof,
       screenshotPath: root.screenshotPath,
     });
     dashboardFixture = buildP158DashboardFixtureFromProjection({

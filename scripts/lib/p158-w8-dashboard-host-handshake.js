@@ -1,5 +1,9 @@
 import { sha256 } from './p158-campaign-controller.js';
-import { aggregateP158DashboardCampaignReceipts } from './p158-w8-dashboard-campaign.js';
+import {
+  aggregateP158DashboardCampaignReceipts,
+  buildP158DashboardIngressSelectorRequest,
+  p158DashboardIngressSelectorIdentity,
+} from './p158-w8-dashboard-campaign.js';
 import {
   buildP158DashboardExternalManifest,
   validateP158DashboardExternalManifest,
@@ -9,6 +13,7 @@ import { buildP158DashboardServiceState } from './p158-w8-dashboard-live.js';
 import { buildP158DashboardScenarioPlan } from './p158-w8-dashboard-scenarios.js';
 
 const COMMIT = /^[a-f0-9]{40}$/u;
+const SHA256 = /^[a-f0-9]{64}$/u;
 
 export class P158W8DashboardHostHandshakeError extends Error {
   constructor(code, message) {
@@ -46,6 +51,8 @@ function validateInputs({ campaignPlan, preparation, freezeState, actionId, expe
       preparation?.campaignPlanSha256 !== campaignPlanSha256 ||
       preparation?.receiptSha256 !== sha256(without(preparation, 'receiptSha256')) ||
       preparation.materializedBeforeFreeze !== true || !preseed?.written ||
+      preparation.ingressSelectorSha256 !== sha256(campaignPlan.ingressSelector) ||
+      sha256(preparation.ingressSelector) !== sha256(campaignPlan.ingressSelector) ||
       preseed.parserReceipt?.accepted !== true ||
       preseed.parserReceipt?.parserIdentitySha256 !== root.candidate.executableSha256) {
     fail('host_handshake_input_invalid', 'Host handshake action lacks exact parser-bound pre-freeze materialization');
@@ -65,6 +72,10 @@ function validateInputs({ campaignPlan, preparation, freezeState, actionId, expe
   return { root, preseed, sealed, scenarioPlan };
 }
 
+function selectorIdentity(root, started) {
+  return p158DashboardIngressSelectorIdentity(root, started.processIdentities);
+}
+
 function validateStarted(root, started) {
   if (started?.state !== 'ready' || started.candidateSha256 !== root.candidate.executableSha256 ||
       started.statePath !== root.target.statePath ||
@@ -82,25 +93,18 @@ function validateStarted(root, started) {
 }
 
 function validateSelection(root, started, selected) {
-  let publicUrl;
-  try { publicUrl = new URL(selected?.publicUrl); } catch {
-    fail('host_ingress_identity_invalid', 'Selected host ingress URL is invalid');
-  }
-  if (publicUrl.protocol !== 'https:' || selected.selected !== true || selected.actionId !== root.actionId ||
-      selected.publicPath !== publicUrl.pathname || !selected.publicPath.startsWith('/p158/') ||
-      selected.bindingSha256 !== root.externalIngress.bindingSha256 ||
-      selected.reviewedRevision !== root.externalIngress.reviewedRevision ||
-      selected.runtimeRootSha256 !== sha256(root.target.disposableRoot) ||
-      selected.dashboardPort !== root.ports.dashboardIngress ||
-      selected.dashboardBackendPort !== root.ports.dashboardBackend ||
-      selected.runtimeStreamPort !== root.ports.runtimeStream ||
-      selected.expectedPid !== started.pid || selected.expectedBackendPid !== started.backendPid ||
-      selected.expectedRuntimeHostPid !== started.runtimeHostPid ||
-      selected.processIdentitySha256 !== sha256(started.processIdentities) ||
-      selected.selectionReceiptSha256 !== sha256(without(selected, 'selectionReceiptSha256'))) {
+  const expected = selectorIdentity(root, started);
+  const { observationReceiptSha256, ...body } = selected ?? {};
+  if (selected?.operation !== 'select' || selected.selected !== true || selected.unchanged !== true ||
+      Object.entries(expected.identity).some(([key, value]) => selected[key] !== value) ||
+      selected.selectionReceiptSha256 !== expected.selectionReceiptSha256 ||
+      !SHA256.test(selected.inventorySha256 ?? '') || !SHA256.test(selected.localDeployedConfigSha256 ?? '') ||
+      !SHA256.test(selected.bastionDeployedConfigSha256 ?? '') || !SHA256.test(selected.deployedConfigSha256 ?? '') ||
+      !SHA256.test(selected.deployedRevisionSha256 ?? '') || observationReceiptSha256 !== sha256(body) ||
+      /(?:https?|wss?|file|data|javascript):/iu.test(JSON.stringify(selected))) {
     fail('host_ingress_identity_invalid', 'Selected ingress does not bind the exact action root, ports, and processes');
   }
-  return publicUrl.href;
+  return new URL(selected.publicPath, root.externalIngress.publicOperatorUrl).href;
 }
 
 function validateStopped(stopped, processIdentities) {
@@ -111,7 +115,7 @@ function validateStopped(stopped, processIdentities) {
   }
 }
 
-function checkpointBody({ campaignPlan, root, preseed, expectedCommit, started, selected, externalManifest }) {
+function checkpointBody({ campaignPlan, root, preseed, expectedCommit, started, selected, publicUrl, externalManifest }) {
   return {
     schemaVersion: 'agent-browser.p158-dashboard-host-dispatch-ready.v1',
     planId: 'P158',
@@ -130,12 +134,17 @@ function checkpointBody({ campaignPlan, root, preseed, expectedCommit, started, 
     ports: structuredClone(root.ports),
     processIdentities: structuredClone(started.processIdentities),
     ingress: {
-      publicUrlSha256: sha256(selected.publicUrl),
+      publicUrlSha256: sha256(publicUrl),
       publicPath: selected.publicPath,
       reviewedRevision: selected.reviewedRevision,
       bindingSha256: selected.bindingSha256,
       selectionReceiptSha256: selected.selectionReceiptSha256,
       processIdentitySha256: selected.processIdentitySha256,
+      sourceHostRouteIdentitySha256: selected.sourceHostRouteIdentitySha256,
+      inventorySha256: selected.inventorySha256,
+      deployedConfigSha256: selected.deployedConfigSha256,
+      deployedRevisionSha256: selected.deployedRevisionSha256,
+      ingressSelectorSha256: sha256(campaignPlan.ingressSelector),
     },
     externalManifestSha256: externalManifest.manifestSha256,
     automaticDispatchAllowed: false,
@@ -158,6 +167,7 @@ function validateCheckpoint(checkpoint, inputs) {
       checkpoint.runtimeRootSha256 !== sha256(root.target.disposableRoot) ||
       checkpoint.statePathSha256 !== sha256(root.target.statePath) ||
       checkpoint.environmentSha256 !== sha256(root.environment) ||
+      checkpoint.ingress?.ingressSelectorSha256 !== sha256(inputs.campaignPlan.ingressSelector) ||
       sha256(checkpoint.ports) !== sha256(root.ports) ||
       checkpoint.parserReceiptSha256 !== sha256(preseed.parserReceipt) ||
       checkpoint.materializationReceiptSha256 !== preseed.materializationReceipt.receiptSha256 ||
@@ -184,13 +194,23 @@ function runtimeObservationMatches(checkpoint, observation) {
     observation.candidateSha256 === checkpoint.candidateSha256;
 }
 
-function ingressObservationMatches(checkpoint, observation) {
-  return observation?.unchanged === true && observation.publicUrlSha256 === checkpoint.ingress.publicUrlSha256 &&
+function ingressObservationMatches(checkpoint, observation, root) {
+  const expected = selectorIdentity(root, { processIdentities: checkpoint.processIdentities });
+  const { observationReceiptSha256, ...body } = observation ?? {};
+  return observation?.operation === 'observe' && observation.selected === false && observation.unchanged === true &&
+    Object.entries(expected.identity).every(([key, value]) => observation[key] === value) &&
+    observationReceiptSha256 === sha256(body) &&
+    !/(?:https?|wss?|file|data|javascript):/iu.test(JSON.stringify(observation)) &&
+    sha256(new URL(observation.publicPath, root.externalIngress.publicOperatorUrl).href) === checkpoint.ingress.publicUrlSha256 &&
     observation.publicPath === checkpoint.ingress.publicPath &&
     observation.reviewedRevision === checkpoint.ingress.reviewedRevision &&
     observation.bindingSha256 === checkpoint.ingress.bindingSha256 &&
     observation.selectionReceiptSha256 === checkpoint.ingress.selectionReceiptSha256 &&
-    observation.processIdentitySha256 === checkpoint.ingress.processIdentitySha256;
+    observation.processIdentitySha256 === checkpoint.ingress.processIdentitySha256 &&
+    observation.sourceHostRouteIdentitySha256 === checkpoint.ingress.sourceHostRouteIdentitySha256 &&
+    observation.inventorySha256 === checkpoint.ingress.inventorySha256 &&
+    observation.deployedConfigSha256 === checkpoint.ingress.deployedConfigSha256 &&
+    observation.deployedRevisionSha256 === checkpoint.ingress.deployedRevisionSha256;
 }
 
 function uncertainTerminal(checkpoint, detail) {
@@ -219,18 +239,9 @@ export async function pauseP158DashboardHostAction(inputs) {
   try {
     started = await effects.startExact(structuredClone(root));
     validateStarted(root, started);
-    const selected = await effects.selectExternalIngress({
-      operation: 'select', actionId: root.actionId,
-      reviewedRevision: root.externalIngress.reviewedRevision,
-      bindingSha256: root.externalIngress.bindingSha256,
-      dashboardPort: root.ports.dashboardIngress,
-      dashboardBackendPort: root.ports.dashboardBackend,
-      runtimeStreamPort: root.ports.runtimeStream,
-      runtimeRootSha256: sha256(root.target.disposableRoot),
-      expectedPid: started.pid, expectedBackendPid: started.backendPid,
-      expectedRuntimeHostPid: started.runtimeHostPid,
-      processIdentitySha256: sha256(started.processIdentities),
-    });
+    const selected = await effects.selectExternalIngress(buildP158DashboardIngressSelectorRequest({
+      root, processIdentities: started.processIdentities, operation: 'select',
+    }));
     const publicUrl = validateSelection(root, started, selected);
     const externalManifest = buildP158DashboardExternalManifest({
       expectedCommit,
@@ -244,7 +255,7 @@ export async function pauseP158DashboardHostAction(inputs) {
       selectionReceiptSha256: selected.selectionReceiptSha256,
     });
     const body = checkpointBody({
-      campaignPlan, root, preseed, expectedCommit, started, selected, externalManifest,
+      campaignPlan, root, preseed, expectedCommit, started, selected, publicUrl, externalManifest,
     });
     const checkpoint = { ...body, checkpointSha256: sha256(body) };
     await effects.persistDispatchReady({
@@ -316,7 +327,7 @@ export async function resumeP158DashboardHostAction({
   } catch {
     return uncertainTerminal(checkpoint, 'Claimed action ingress identity could not be observed');
   }
-  if (!ingressObservationMatches(checkpoint, ingressObservation)) {
+  if (!ingressObservationMatches(checkpoint, ingressObservation, root)) {
     return uncertainTerminal(checkpoint, 'Claimed action lost its exact reviewed public ingress identity');
   }
   if (externalResult === null) {

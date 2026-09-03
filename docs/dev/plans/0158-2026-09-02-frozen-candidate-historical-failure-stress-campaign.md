@@ -405,6 +405,18 @@ becomes `effect_uncertain` and is never restarted. The workflow itself still
 does not start or stop the service-host runtime, and this implementation has
 not performed a live dispatch.
 
+The action-route selector is frozen to cooper-webservices commit
+`e70368ddbb2e61ae26a25072975c2953754b7479` and selector source SHA-256
+`53a7ab94b7d40dc620b39bdae90b4429b2043e08776ca195dab8e5306bdd6f3e`.
+W6 preparation seals both the reviewed selector source and executable digests.
+The host then submits only the exact `/p158/<run>/<action>` identity and
+digest-only process, root, and port bindings. Selection is an explicit
+apply-gated pre-dispatch operation. Resume uses the read-only observation
+operation, which independently rerenders and reads back the deployed route.
+Neither operation returns a raw public origin, provider URL, internal URL, or
+loopback URL. No selector apply, deployment, or restart was performed while
+adding this contract.
+
 ### C: Combined Deterministic Pressure
 
 Run the combined phases only after their declared prerequisites have terminal

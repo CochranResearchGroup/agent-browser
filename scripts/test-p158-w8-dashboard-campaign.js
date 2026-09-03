@@ -12,6 +12,7 @@ import {
   buildP158DashboardCampaignPlan,
   executeP158DashboardCampaignAction,
   prepareP158DashboardCampaign,
+  p158DashboardIngressSelectorIdentity,
   resolveP158DashboardActionResume,
   validateP158ExternalPlaywrightRunner,
 } from './lib/p158-w8-dashboard-campaign.js';
@@ -24,6 +25,13 @@ const candidate = {
 const externalIngress = {
   publicOperatorUrl: 'https://p158-dashboard.example.test',
   reviewedRevision: 'cooper-p158-w8-test-001',
+};
+const ingressSelector = {
+  executablePath: '/tmp/p158-ingress-selector',
+  executableSha256: sha256('p158-ingress-selector'),
+  sourcePath: '/tmp/p158-ingress-selector.py',
+  sourceSha256: sha256('p158-ingress-selector-source'),
+  sourceCommit: 'e70368d',
 };
 
 function action(caseId, ordinal, assignment) {
@@ -49,10 +57,15 @@ try {
     preseedPlan,
     candidate,
     externalIngress,
+    ingressSelector,
     basePort: 53100,
   });
 
   assert.equal(campaignPlan.actionCount, 2);
+  assert.deepEqual(campaignPlan.ingressSelector, ingressSelector);
+  assert.throws(() => buildP158DashboardCampaignPlan({
+    preseedPlan, candidate, externalIngress, basePort: 53000,
+  }), (error) => error instanceof P158W8DashboardCampaignError && error.code === 'ingress_selector_invalid');
   assert.equal(new Set(campaignPlan.roots.flatMap((root) => Object.values(root.ports))).size, 8);
   assert.equal(new Set(campaignPlan.roots.map((root) => root.environment.HOME)).size, 2);
   for (const root of campaignPlan.roots) {
@@ -68,6 +81,7 @@ try {
       preseedPlan,
       candidate,
       externalIngress: { ...externalIngress, publicOperatorUrl: 'http://127.0.0.1:53101' },
+      ingressSelector,
       basePort: 53200,
     }),
     (error) => error instanceof P158W8DashboardCampaignError && error.code === 'external_ingress_invalid',
@@ -113,6 +127,7 @@ try {
   });
   assert.equal(validatorCalls.length, 2);
   assert.equal(preparation.preseedReceipt.receipts.every((receipt) => receipt.written), true);
+  assert.equal(preparation.ingressSelectorSha256, sha256(ingressSelector));
   assert.equal(preparation.preseedReceipt.receipts.every((receipt) =>
     receipt.parserReceipt.stateSha256 === receipt.materializationReceipt.stateSha256), true);
 
@@ -138,6 +153,7 @@ try {
       preseedPlan: alternatePreseed,
       candidate,
       externalIngress,
+      ingressSelector,
       basePort: 53300,
     });
     await assert.rejects(
@@ -170,9 +186,9 @@ try {
         backendPid: root.caseId === 'D09' ? 9109 : 9101,
         runtimeHostPid: root.caseId === 'D09' ? 9209 : 9201,
         processIdentities: {
-          ingress: { startToken: '101', executableSha256: root.candidate.executableSha256 },
-          backend: { startToken: '102', executableSha256: root.candidate.executableSha256 },
-          runtimeHost: { startToken: '103', executableSha256: root.candidate.executableSha256 },
+          ingress: { pid: root.caseId === 'D09' ? 9009 : 9001, startToken: '101', executableSha256: root.candidate.executableSha256 },
+          backend: { pid: root.caseId === 'D09' ? 9109 : 9101, startToken: '102', executableSha256: root.candidate.executableSha256 },
+          runtimeHost: { pid: root.caseId === 'D09' ? 9209 : 9201, startToken: '103', executableSha256: root.candidate.executableSha256 },
         },
         candidateSha256: root.candidate.executableSha256,
         statePath: root.target.statePath,
@@ -180,30 +196,23 @@ try {
     },
     selectExternalIngress: async (request) => {
       lifecycle.push(`select:${request.actionId}`);
+      const root = campaignPlan.roots.find((entry) => entry.actionId === request.actionId);
+      const { identity, selectionReceiptSha256 } = p158DashboardIngressSelectorIdentity(root,
+        (root.caseId === 'D09'
+          ? { ingress: { pid: 9009, startToken: '101', executableSha256: candidate.executableSha256 }, backend: { pid: 9109, startToken: '102', executableSha256: candidate.executableSha256 }, runtimeHost: { pid: 9209, startToken: '103', executableSha256: candidate.executableSha256 } }
+          : { ingress: { pid: 9001, startToken: '101', executableSha256: candidate.executableSha256 }, backend: { pid: 9101, startToken: '102', executableSha256: candidate.executableSha256 }, runtimeHost: { pid: 9201, startToken: '103', executableSha256: candidate.executableSha256 } }));
       const body = {
+        schemaVersion: identity.schemaVersion,
+        operation: 'select',
         selected: true,
-        publicUrl: `${externalIngress.publicOperatorUrl}/p158/${sha256(request.actionId).slice(0, 16)}`,
-        publicPath: `/p158/${sha256(request.actionId).slice(0, 16)}`,
-        bindingSha256: campaignPlan.externalIngress.bindingSha256,
-        actionId: request.actionId,
-        runtimeRootSha256: request.runtimeRootSha256,
-        dashboardPort: request.dashboardPort,
-        dashboardBackendPort: request.dashboardBackendPort,
-        runtimeStreamPort: request.runtimeStreamPort,
-        expectedPid: request.expectedPid,
-        expectedBackendPid: request.expectedBackendPid,
-        expectedRuntimeHostPid: request.expectedRuntimeHostPid,
-        processIdentitySha256: request.processIdentitySha256,
-        reviewedRevision: request.reviewedRevision,
-        externalProof: {
-          offHost: true,
-          outsideServiceNetworkNamespace: true,
-          publicHttps: true,
-          operatorVisibleState: 'ready',
-          handoffUrlSha256: sha256(`${externalIngress.publicOperatorUrl}/service`),
-        },
+        unchanged: true,
+        ...identity,
+        selectionReceiptSha256,
+        inventorySha256: sha256('inventory'), localDeployedConfigSha256: sha256('local'),
+        bastionDeployedConfigSha256: sha256('bastion'), deployedConfigSha256: sha256('deployed'),
+        deployedRevisionSha256: sha256('revision'), productionRouteTouched: false, retryAttempted: false,
       };
-      return { ...body, selectionReceiptSha256: sha256(body) };
+      return { ...body, observationReceiptSha256: sha256(body) };
     },
     openExternalPage: async ({ root }) => {
       lifecycle.push(`open:${root.actionId}`);

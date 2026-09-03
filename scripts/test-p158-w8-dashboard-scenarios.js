@@ -12,6 +12,7 @@ import {
   buildP158DashboardCampaignPlan,
   executeP158DashboardCampaignAction,
   prepareP158DashboardCampaign,
+  p158DashboardIngressSelectorIdentity,
 } from './lib/p158-w8-dashboard-campaign.js';
 import {
   P158_D05_BLOCKED_TARGETS,
@@ -225,6 +226,13 @@ try {
       publicOperatorUrl: 'https://p158-dashboard-scenarios.example.test',
       reviewedRevision: 'p158-scenario-test-001',
     },
+    ingressSelector: {
+      executablePath: '/tmp/p158-ingress-selector',
+      executableSha256: sha256('p158-ingress-selector'),
+      sourcePath: '/tmp/p158-ingress-selector.py',
+      sourceSha256: sha256('p158-ingress-selector-source'),
+      sourceCommit: 'e70368d',
+    },
     basePort: 53800,
   });
   const preparation = await prepareP158DashboardCampaign({
@@ -240,11 +248,12 @@ try {
     }),
   });
   const lifecycle = [];
+  const startedIdentities = new Map();
   const effects = {
     startExact: async (campaignActionRoot) => {
       lifecycle.push(`start:${campaignActionRoot.actionId}`);
       const ordinal = lifecycle.length;
-      return {
+      const started = {
         state: 'ready', pid: 6000 + ordinal, backendPid: 6100 + ordinal,
         runtimeHostPid: 6200 + ordinal,
         processIdentities: {
@@ -255,20 +264,26 @@ try {
         candidateSha256: candidate.executableSha256,
         statePath: campaignActionRoot.target.statePath,
       };
+      startedIdentities.set(campaignActionRoot.actionId, started.processIdentities);
+      return started;
     },
     selectExternalIngress: async (request) => {
+      const root = campaignPlan.roots.find((entry) => entry.actionId === request.actionId);
+      const { identity, selectionReceiptSha256 } = p158DashboardIngressSelectorIdentity(
+        root, startedIdentities.get(request.actionId),
+      );
       const body = {
+        schemaVersion: identity.schemaVersion,
+        operation: 'select',
         selected: true,
-        publicUrl: `https://p158-dashboard-scenarios.example.test/p158/${sha256(request.actionId).slice(0, 16)}`,
-        publicPath: `/p158/${sha256(request.actionId).slice(0, 16)}`,
-        bindingSha256: campaignPlan.externalIngress.bindingSha256,
-        ...request,
-        externalProof: {
-          offHost: true, outsideServiceNetworkNamespace: true, publicHttps: true,
-          operatorVisibleState: 'ready', handoffUrlSha256: sha256('scenario-handoff'),
-        },
+        unchanged: true,
+        ...identity,
+        selectionReceiptSha256,
+        inventorySha256: sha256('inventory'), localDeployedConfigSha256: sha256('local'),
+        bastionDeployedConfigSha256: sha256('bastion'), deployedConfigSha256: sha256('deployed'),
+        deployedRevisionSha256: sha256('revision'), productionRouteTouched: false, retryAttempted: false,
       };
-      return { ...body, selectionReceiptSha256: sha256(body) };
+      return { ...body, observationReceiptSha256: sha256(body) };
     },
     openExternalPage: async ({ root: campaignActionRoot }) => {
       const state = JSON.parse(await readFile(campaignActionRoot.target.statePath, 'utf8'));
