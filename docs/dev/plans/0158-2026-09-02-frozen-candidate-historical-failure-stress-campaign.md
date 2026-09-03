@@ -79,11 +79,19 @@ network namespace. Durable handoff URLs, dashboard performance, left-rail
 truth, supervisor and install coherence, profile sharing, Xvfb allocation, and
 end-to-end logging are first-class test subjects.
 
-The campaign is diagnostic. Once the candidate is frozen, it accumulates
-failures without repairing them. Its final and last work unit seals the
-evidence, reconstructs causal timelines, evaluates architecture and logging
-completeness, and produces a prioritized remediation ledger. No product or
-runtime repair occurs inside that review.
+The campaign is diagnostic. Defer repairs to a future plan whenever the
+remaining test sequence can continue safely and still produce representative
+evidence. This preserves a holistic view of the defect surface so related
+failures can be diagnosed and repaired together efficiently. Some defects may
+prevent completion of a test sequence. When that happens, pause the affected
+campaign environment, seal the evidence already collected, diagnose the
+blocking defect, repair and validate it, install and identify a new frozen
+candidate epoch, and resume the blocked sequence with distinct attempt IDs.
+Never rewrite the earlier failure or represent results from different candidate
+epochs as one unchanged run. The final work unit seals all epochs,
+reconstructs causal timelines, evaluates architecture and logging completeness,
+and produces a prioritized remediation ledger. No new product or runtime repair
+occurs inside that final review.
 
 ## Frozen-Candidate Contract
 
@@ -93,13 +101,17 @@ runtime repair occurs inside that review.
 2. Complete fixture creation, synthetic-site deployment, external runner
    provisioning, observability checks, and a single clean baseline before the
    freeze point.
-3. After the isolated-campaign freeze point, prohibit source edits, rebuilds, reinstalls,
+3. During an active frozen-candidate epoch, prohibit source edits, rebuilds, reinstalls,
    configuration rewrites, service remedies, incident resolution, garbage
    collection, retained-state pruning, route repair, profile repair, and
-   unscheduled process termination until execution is complete and evidence is
-   sealed. This prohibition applies to E1 and E2 only. It never blocks a
-   production install, repair, or safety intervention; each production change
-   closes one observation epoch and starts another.
+   unscheduled process termination until that epoch is complete or formally
+   paused and its evidence is sealed. Defer nonblocking repairs for a future
+   plan. If a defect makes the remaining declared sequence impossible, pause
+   the affected environment, diagnose and repair the blocker, validate and
+   install a new candidate, and begin a new immutable epoch before resuming.
+   This prohibition applies to E1 and E2 only. It never blocks a production
+   install, repair, or safety intervention; each production change closes one
+   observation epoch and starts another.
 4. Permit only effects named in the case manifest. Controlled browser crashes,
    supervisor transitions, route exhaustion, network degradation, policy
    mutations, eviction, and full shutdown use disposable isolated targets and
@@ -109,7 +121,9 @@ runtime repair occurs inside that review.
    state. A pass after an earlier failure never erases the first failure.
 6. Continue independent cases after a failure. Mark only cases whose declared
    prerequisite is lost as `skipped_blocked`, retaining the exact blocking
-   case and state observation.
+   case and state observation. When a blocker prevents completion of the test
+   sequence rather than only one dependent case, invoke the bounded campaign
+   pause, diagnosis, repair, revalidation, and new-epoch resume path.
 7. Do not clean between cases unless that cleanup is itself a scheduled,
    observed case. State contamination and recovery failure are outcomes to
    measure.
@@ -493,9 +507,11 @@ census, and marks remaining dependent work when any predefined guard fires:
 - continued execution risks corrupting evidence already collected.
 
 The stop action itself may terminate the campaign load generator. It may not
-repair the tested runtime. Emergency host protection outside the controller is
-reported as an external intervention and invalidates subsequent frozen-state
-comparisons.
+silently repair the tested runtime inside the same frozen epoch. A blocking
+repair begins only after the controller seals the partial epoch and records the
+pause reason. Emergency host protection outside the controller is reported as
+an external intervention and invalidates subsequent frozen-state comparisons
+until a new epoch is established.
 
 ## Work Units And Dependencies
 
@@ -517,7 +533,15 @@ Critical path:
 W7 and W8 may execute concurrently only when their disposable Profile,
 display, route, and external-client ownership is disjoint. The campaign
 controller, evidence writer, safety monitor, and final analysis each have one
-owner. No repair edge exists in the graph.
+owner. Nonblocking defects have no repair edge in this campaign and enter the
+W10 remediation ledger. A sequence-blocking defect adds one bounded edge from
+the affected work unit to `pause -> seal partial epoch -> diagnose -> repair ->
+validate -> install new candidate -> resume blocked sequence`. The campaign
+controller owns that edge. Each traversal preserves the failed epoch and uses
+new candidate, environment, case-attempt, and evidence identities. After two
+blocking repair traversals, another sequence blocker ends execution as
+terminally blocked and proceeds to W10 with the missing cases explicit rather
+than opening an unbounded repair loop.
 
 ## Final Deep Review Protocol
 
@@ -559,15 +583,19 @@ The review must:
 
 One fresh-context evidence review checks the primary analysis against the
 sealed artifacts. Disagreements are recorded, not optimized away. Remediation
-begins only in separately authorized successor work after W10 closes.
+for nonblocking findings begins in successor work after W10 closes. A repair
+performed earlier under the explicit sequence-blocking pause path remains part
+of the campaign history and must be analyzed as a separate candidate epoch.
 
 ## Acceptance Criteria
 
 1. The registry demonstrates closed-world coverage of every historical failure
    family named in this plan and links each family to executed or explicitly
    blocked cases.
-2. One frozen installed candidate is tested without reactionary source,
-   binary, configuration, harness, or runtime repair.
+2. Every active candidate epoch is immutable while it runs. Nonblocking defects
+   are deferred. A sequence-blocking defect may pause and seal the current
+   epoch, receive a diagnosed and validated repair, and resume only under a new
+   frozen candidate identity without erasing or combining the prior evidence.
 3. Agent-only, human-simulated external remote-view, display/supervisor,
    dashboard, and combined deterministic tiers reach terminal evidence states.
    Eight-hour and 24-hour production observations are epoch-aware and may
@@ -1116,13 +1144,16 @@ evidence. The repair must derive no-effect or compensated-effect state from a
 structured coordinator result, not by reparsing arbitrary diagnostic text.
 
 Revised next action: keep the campaign unfrozen and preserve all current
-records. Diagnose the route acquisition and checkout transition against jobs
-`r729795` and `r156356`, including why completed rollback is normalized as
-effect-uncertain. Do not dispatch the external workflow until one durable
-`/remote-view/<handoff-id>` URL has `operatorVisible.state=ready` and the
-protected environment contains the exact synthetic identity, marker region,
-attestation, and dashboard credentials. The 20-minute calibration and E1/E2
-seal remain downstream of that readiness gate.
+records. Treat the route acquisition and checkout transition as a
+sequence-blocking pre-freeze defect. Repair the planner and checkout readiness
+disagreement plus the incorrect effect-uncertain normalization, add exact
+regression coverage for jobs `r729795` and `r156356`, validate and install a
+new candidate, and retry readiness under new evidence identities. Do not
+dispatch the external workflow until one durable `/remote-view/<handoff-id>`
+URL has `operatorVisible.state=ready` and the protected environment contains
+the exact synthetic identity, marker region, attestation, and dashboard
+credentials. The 20-minute calibration and E1/E2 seal remain downstream of
+that readiness gate.
 
 Direct journal readback confirms one `guacamole_load` occurrence for each of
 jobs `r925418`, `r729795`, and `r156356`. Each record retains the exact job,
