@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P157 | Profile Permissions And Request Provenance
 
-State: IN PROGRESS
+State: COMPLETE
 Current state: Research.gov fieldwork exposed that profile access, coordination
 leases, and runtime ownership proof are conflated, while scheduler rejection
 can bypass structured failure decoration and lose runtime-lane correlation.
@@ -88,6 +88,13 @@ ambiguous identity becomes nonblocking shared-local access and appears only on
 the access-health axis. HTTP, MCP, generated clients, dashboard, doctor, help,
 README, agent skill, contracts, and docs now expose human presets,
 revision-fenced policy edits, and exact authorized tab eviction.
+W11 is accepted at source checkpoint `cc8510ba` and installed generation
+`0.28.0-ef3cd3921169`. The isolated development runtime has one coherent
+selected executable across its host, backend, dashboard, and supervisor
+manifest. Doctor, three-cycle browser launch, self-declared disposable-profile
+continuity, HTTP and MCP crash recovery, causal recovery logging, supervisor
+takeover, revisioned policy mutation, exact eviction, and digest-bound full
+shutdown gates pass without production effects.
 
 ### Plan
 
@@ -95,9 +102,10 @@ revision-fenced policy edits, and exact authorized tab eviction.
 
 ### Next Recommendation
 
-Execute W11: install the candidate only in the isolated development runtime,
-then validate doctor, multi-client sharing, live policy edits, exact eviction,
-crash recovery, causal logging, warning taxonomy, and disposable full shutdown.
+Resume Research.gov fieldwork through the installed development runtime. Use a
+human-visible remote-view handoff for first login, stored-credential selection,
+or passkey interaction, then turn observed page behavior into deterministic
+automation and bounded evidence collection.
 
 ## P156 | Full Runtime Shutdown Replacement
 

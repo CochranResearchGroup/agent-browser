@@ -697,6 +697,54 @@ Validation evidence:
   access-policy contracts pass; and
 - the P157 oracle passes with six schemas, five green cases, and no red case.
 
+## Execution Checkpoint W11
+
+Source checkpoint: `cc8510ba`.
+
+Installed candidate: `0.28.0-ef3cd3921169`.
+
+State transition: `w10_complete -> complete`.
+
+Completed in W11 attempt 1:
+
+- derived one stable self-declared subject for labeled trusted-local requests
+  at ingress, preserving it through the executable request and immutable
+  provenance instead of demanding client-side enrollment;
+- created a deterministic managed disposable Profile when no durable Profile
+  is selected, and permitted policy-authorized shared-local session continuity
+  without treating runtime-owner proof as an access credential;
+- rebuilt and installed one development generation, then reconciled the runtime
+  host, backend, dashboard, supervisor manifest, browser executable, provider
+  routes, and warm display inventory to that exact candidate;
+- killed disposable browsers through installed HTTP and MCP recovery probes,
+  recovered on the next command, and proved ordered crash, recovery, ready,
+  request, job, event, and trace evidence; and
+- exercised supervisor startup and stale-owner takeover plus revision-fenced
+  policy mutation, exact tab eviction, and digest-bound full shutdown against
+  disposable or provider-free state.
+
+W11 and P157 are complete without production Profile, credential, browser,
+runtime, ACL, eviction, or shutdown effects. Research.gov fieldwork may resume
+through the coherent development runtime. Human remote-view interaction remains
+the intentional boundary for first login, credential chooser, password-manager
+extension, passkey, biometric, PIN, consent, and secure-desktop surfaces.
+
+Validation evidence:
+
+- the full provider-free Rust gate passes with 1,922 parallel-safe tests and
+  every serial environment-mutating partition;
+- formatting and workspace clippy with warnings denied pass;
+- the P157 oracle passes with six schemas and six green cases, and the complete
+  service-client, generated-client, dashboard, and docs gates pass;
+- development doctor reports success for installed generation
+  `0.28.0-ef3cd3921169`, and the three-cycle launch and residue smoke passes;
+- installed tab-handle refresh, HTTP crash recovery, and MCP crash recovery
+  probes pass against real disposable Chrome processes with causal trace
+  assertions; and
+- supervisor no-launch and stale-owner takeover fixtures, seven full-shutdown
+  tests, five exact lifecycle eviction tests, and revisioned policy persistence
+  pass.
+
 ## Execution Checkpoint W2
 
 Source checkpoint: `cd0bdb1d`.

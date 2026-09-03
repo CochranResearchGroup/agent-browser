@@ -4,6 +4,51 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 213 | 2026-09-02
+
+Scope: complete P157 W11 in the isolated development runtime and repair the
+installed supervisor without production browser, Profile, ACL, or shutdown
+effects.
+
+Actions:
+
+- made labeled trusted-local requests derive one stable self-declared subject
+  at ingress and carry it through immutable provenance;
+- gave requests without a durable Profile a deterministic managed disposable
+  Profile and preserved shared-local session continuity without strict
+  runtime-owner proof;
+- corrected the MCP crash-recovery smoke to establish its daemon through the
+  public HTTP ingress instead of the retired raw-token setup path;
+- built and installed development generation `0.28.0-ef3cd3921169`; and
+- reconciled the runtime host, dashboard backend, dashboard, lane manifest,
+  browser executable, provider routes, and warm displays to that generation.
+
+Validation:
+
+- the full provider-free Rust gate passes with 1,922 parallel-safe tests and
+  every serial environment-mutating partition; formatting and workspace clippy
+  with warnings denied pass;
+- the P157 oracle passes with six schemas and six green cases, while the
+  service-client, dashboard, docs, and generated-contract gates pass;
+- development doctor is fully green and the three-cycle browser launch and
+  residue smoke passes;
+- installed HTTP and MCP probes kill disposable Chrome processes, recover on
+  the next command, and preserve ordered crash, recovery, ready, and causal
+  trace evidence; and
+- supervisor no-launch and stale-owner takeover fixtures, seven exact
+  full-shutdown tests, five exact eviction tests, and revisioned policy
+  persistence pass.
+
+Result:
+
+- P157 is complete at `cc8510ba` with candidate generation
+  `0.28.0-ef3cd3921169`;
+- the development supervisor is coherent and production remains unchanged;
+  and
+- Research.gov fieldwork can resume through the development runtime, with
+  human remote-view interaction retained for first login, credential chooser,
+  and passkey surfaces.
+
 ## Turn 212 | 2026-09-02
 
 Scope: complete P157 W10 migration and public-surface alignment without
