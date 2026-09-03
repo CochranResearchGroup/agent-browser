@@ -109,6 +109,7 @@
       "type": "object",
       "required": [
         "envelopeId",
+        "fixtureId",
         "requestId",
         "operatorVisible",
         "incidentExpected",
@@ -120,6 +121,13 @@
       ],
       "properties": {
         "envelopeId": { "$ref": "#/$defs/id" },
+        "fixtureId": {
+          "oneOf": [
+            { "$ref": "#/$defs/id" },
+            { "type": "null" }
+          ],
+          "description": "Synthetic fixture identity when auditing a fixture corpus; null for ordinary campaign evidence."
+        },
         "requestId": { "$ref": "#/$defs/id" },
         "operatorVisible": { "type": "boolean" },
         "incidentExpected": { "type": "boolean" },
