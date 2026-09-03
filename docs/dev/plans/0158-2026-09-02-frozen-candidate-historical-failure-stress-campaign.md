@@ -394,9 +394,16 @@ result even when capture fails. It has no automatic trigger or retry. D05 tab
 and target recovery are executable because the dashboard itself replaces the
 stale tab selection and renders the recovery explanation. Browser, session,
 view, and handoff target classes remain `skipped_blocked` until an equivalent
-semantic product recovery route exists. A separate service-host handshake is
-still required to keep the exact isolated runtime alive while this manual
-external action runs; the workflow does not start or stop that runtime.
+semantic product recovery route exists. The service-host handshake starts and
+selects only the frozen action root, writes an append-only digest-only
+dispatch-ready checkpoint plus a separate workflow manifest, and resumes only
+when every process, port, root, candidate, and ingress identity is unchanged.
+It consumes exactly one downloaded workflow terminal receipt bound to the
+action, commit, workflow run, and attempt before exact teardown. A missing
+terminal receipt pauses without dispatching or retrying. Lost claimed identity
+becomes `effect_uncertain` and is never restarted. The workflow itself still
+does not start or stop the service-host runtime, and this implementation has
+not performed a live dispatch.
 
 ### C: Combined Deterministic Pressure
 

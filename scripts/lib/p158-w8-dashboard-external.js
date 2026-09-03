@@ -29,6 +29,8 @@ export function buildP158DashboardExternalManifest({
   campaignPlanSha256,
   candidateSha256,
   scenarioPlan,
+  expectedState,
+  materializationReceipt,
   publicUrlSha256,
   publicPath,
   selectionReceiptSha256,
@@ -38,7 +40,10 @@ export function buildP158DashboardExternalManifest({
       !SHA256.test(candidateSha256 ?? '') || !SHA256.test(publicUrlSha256 ?? '') ||
       !SHA256.test(selectionReceiptSha256 ?? '') || typeof publicPath !== 'string' ||
       !publicPath.startsWith('/p158/') || !['D03', 'D04', 'D05'].includes(scenarioPlan.caseId) ||
-      (scenarioPlan.caseId === 'D05' && scenarioPlan.scenarioTruth.executable !== true)) {
+      (scenarioPlan.caseId === 'D05' && scenarioPlan.scenarioTruth.executable !== true) ||
+      materializationReceipt?.stateSha256 !== sha256(expectedState) ||
+      materializationReceipt?.receiptSha256 !== sha256(without(materializationReceipt, 'receiptSha256')) ||
+      scenarioPlan.stateSha256 !== materializationReceipt.stateSha256) {
     fail('external_manifest_invalid', 'External dashboard manifest is incomplete, changed, blocked, or unsafe');
   }
   const body = {
@@ -50,6 +55,8 @@ export function buildP158DashboardExternalManifest({
     actionId: scenarioPlan.actionId,
     caseId: scenarioPlan.caseId,
     scenarioPlan: structuredClone(scenarioPlan),
+    expectedState: structuredClone(expectedState),
+    materializationReceipt: structuredClone(materializationReceipt),
     publicUrlSha256,
     publicPath,
     selectionReceiptSha256,
@@ -120,6 +127,9 @@ export function buildP158DashboardGithubRunnerAttestation(environment) {
 export function sealP158DashboardExternalResult({
   manifest,
   scenarioReceipt = null,
+  projection = null,
+  dashboardFixture = null,
+  oracleBinding = null,
   runnerAttestation = null,
   failure = null,
 }) {
@@ -150,6 +160,9 @@ export function sealP158DashboardExternalResult({
     caseId: manifest.caseId,
     scenarioReceipt,
     scenarioOracle,
+    projection,
+    dashboardFixture,
+    oracleBinding,
     runnerAttestation,
     failure,
     terminalState: 'completed',

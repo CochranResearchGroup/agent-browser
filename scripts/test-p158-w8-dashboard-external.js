@@ -37,22 +37,26 @@ function scenario(caseId, value) {
   const built = buildP158DashboardServiceState({
     target: root.target, density: root.density, scenario: root.scenario,
   });
-  return buildP158DashboardScenarioPlan({
+  const plan = buildP158DashboardScenarioPlan({
     root, expectedState: built.state, materializationReceipt: built.receipt,
   });
+  return { plan, built };
 }
 
 function expectCode(code, action) {
   assert.throws(action, (error) => error instanceof P158W8DashboardExternalError && error.code === code);
 }
 
-const scenarioPlan = scenario('D03', 'duplicate_labels');
+const scenarioFixture = scenario('D03', 'duplicate_labels');
+const { plan: scenarioPlan } = scenarioFixture;
 const publicUrl = 'https://dashboard-actions.example.test/p158/action-001/service';
 const manifest = buildP158DashboardExternalManifest({
   expectedCommit: 'a'.repeat(40),
   campaignPlanSha256: sha256('campaign-plan'),
   candidateSha256: sha256('candidate'),
   scenarioPlan,
+  expectedState: scenarioFixture.built.state,
+  materializationReceipt: scenarioFixture.built.receipt,
   publicUrlSha256: sha256(publicUrl),
   publicPath: '/p158/action-001',
   selectionReceiptSha256: sha256('selection'),
@@ -119,7 +123,9 @@ expectCode('external_manifest_invalid', () => buildP158DashboardExternalManifest
   expectedCommit: 'a'.repeat(40),
   campaignPlanSha256: sha256('campaign-plan'),
   candidateSha256: sha256('candidate'),
-  scenarioPlan: blockedD05,
+  scenarioPlan: blockedD05.plan,
+  expectedState: blockedD05.built.state,
+  materializationReceipt: blockedD05.built.receipt,
   publicUrlSha256: sha256(publicUrl),
   publicPath: '/p158/action-001',
   selectionReceiptSha256: sha256('selection'),

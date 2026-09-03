@@ -8,19 +8,31 @@ import { sha256 } from './lib/p158-campaign-controller.js';
 import {
   aggregateP158DashboardCampaignReceipts,
   buildP158DashboardCampaignPlan,
+  buildP158DashboardFixtureFromProjection,
   executeP158DashboardCampaignAction,
   prepareP158DashboardCampaign,
   resolveP158DashboardActionResume,
   sha256Bytes,
   validateP158ExternalPlaywrightRunner,
 } from './lib/p158-w8-dashboard-campaign.js';
-import { sealP158DashboardScenarioReceipt } from './lib/p158-w8-dashboard-scenarios.js';
+import {
+  applyP158DashboardScenarioToFixture,
+  sealP158DashboardScenarioReceipt,
+} from './lib/p158-w8-dashboard-scenarios.js';
+import {
+  auditP158DashboardLiveProjection,
+  captureP158DashboardLiveProjection,
+} from './lib/p158-w8-dashboard-live.js';
 import {
   buildP158DashboardGithubRunnerAttestation,
   sealP158DashboardExternalResult,
   validateP158DashboardExternalActionUrl,
   validateP158DashboardExternalManifest,
 } from './lib/p158-w8-dashboard-external.js';
+import {
+  pauseP158DashboardHostAction,
+  resumeP158DashboardHostAction,
+} from './lib/p158-w8-dashboard-host-handshake.js';
 
 const argv = process.argv.slice(2).filter((argument) => argument !== '--');
 const command = argv.shift();
@@ -130,6 +142,7 @@ async function assertSameProcessIdentity(expected) {
   if (current.startToken !== expected.startToken || current.executablePath !== expected.executablePath) {
     throw new Error(`PID ${expected.pid} was reused or changed executable identity`);
   }
+  return current;
 }
 
 async function validateInstalledState(request) {
@@ -533,6 +546,50 @@ function createLiveEffects(executionInput) {
       };
     },
     selectExternalIngress: (request) => selectorReceipt(executionInput.ingressSelector, request),
+    observeExactRuntime: async ({ checkpoint, root }) => {
+      try {
+        const processIdentities = Object.fromEntries(await Promise.all(
+          Object.entries(checkpoint.processIdentities).map(async ([role, identity]) =>
+            [role, await assertSameProcessIdentity(identity)]),
+        ));
+        return {
+          unchanged: true,
+          processIdentities,
+          runtimeRootSha256: sha256(root.target.disposableRoot),
+          statePathSha256: sha256(root.target.statePath),
+          ports: structuredClone(root.ports),
+          candidateSha256: root.candidate.executableSha256,
+        };
+      } catch (error) {
+        return { unchanged: false, code: error.code ?? 'host_runtime_identity_lost' };
+      }
+    },
+    observeExactIngress: async ({ checkpoint, root }) => {
+      try {
+        const observed = await selectorReceipt(executionInput.ingressSelector, {
+          operation: 'observe',
+          actionId: root.actionId,
+          reviewedRevision: checkpoint.ingress.reviewedRevision,
+          bindingSha256: checkpoint.ingress.bindingSha256,
+          runtimeRootSha256: checkpoint.runtimeRootSha256,
+          expectedPid: checkpoint.processIdentities.ingress.pid,
+          expectedBackendPid: checkpoint.processIdentities.backend.pid,
+          expectedRuntimeHostPid: checkpoint.processIdentities.runtimeHost.pid,
+          processIdentitySha256: checkpoint.ingress.processIdentitySha256,
+        });
+        return {
+          unchanged: observed?.unchanged === true,
+          publicUrlSha256: sha256(observed?.publicUrl ?? ''),
+          publicPath: observed?.publicPath,
+          reviewedRevision: observed?.reviewedRevision,
+          bindingSha256: observed?.bindingSha256,
+          selectionReceiptSha256: observed?.selectionReceiptSha256,
+          processIdentitySha256: observed?.processIdentitySha256,
+        };
+      } catch (error) {
+        return { unchanged: false, code: error.code ?? 'host_ingress_identity_lost' };
+      }
+    },
     openExternalPage: async ({ publicUrl }) => {
       const endpoint = process.env.AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS;
       if (!endpoint) throw new Error('AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS is required for off-host capture');
@@ -668,13 +725,34 @@ async function main() {
           outsideServiceNetworkNamespace: runnerAttestation.outsideServiceNetworkNamespace,
           publicHttps: true,
           operatorVisibleState: 'ready',
+          handoffUrlSha256: sha256(manifest.selectionReceiptSha256),
         },
         scenarioPlan: manifest.scenarioPlan,
       };
       const scenarioReceipt = manifest.caseId === 'D03'
         ? await exerciseD03(request)
         : manifest.caseId === 'D04' ? await exerciseD04(request) : await exerciseD05(request);
-      output = sealP158DashboardExternalResult({ manifest, scenarioReceipt, runnerAttestation });
+      const projection = await captureP158DashboardLiveProjection({
+        page: pageHandle.page,
+        materializationReceipt: manifest.materializationReceipt,
+        externalProof: request.externalProof,
+        screenshotPath: join(dirname(resolve(outputPath)), 'dashboard.png'),
+      });
+      let dashboardFixture = buildP158DashboardFixtureFromProjection({
+        projection,
+        actionId: manifest.actionId,
+        expectedState: manifest.expectedState,
+        materializationReceipt: manifest.materializationReceipt,
+      });
+      dashboardFixture = applyP158DashboardScenarioToFixture({
+        fixture: dashboardFixture,
+        plan: manifest.scenarioPlan,
+        receipt: scenarioReceipt,
+      });
+      const oracleBinding = auditP158DashboardLiveProjection({ projection, dashboardFixture });
+      output = sealP158DashboardExternalResult({
+        manifest, scenarioReceipt, runnerAttestation, projection, dashboardFixture, oracleBinding,
+      });
     } catch (error) {
       terminalError = error;
       output = sealP158DashboardExternalResult({
@@ -706,6 +784,31 @@ async function main() {
     if (terminalError) throw terminalError;
     process.stdout.write(`${JSON.stringify({ success: true, outputPath: resolve(outputPath) })}\n`);
     return;
+  } else if (command === 'host-pause') {
+    if (!apply) throw new Error('host-pause requires --apply');
+    if (!isAbsolute(input.externalManifestOutputPath ?? '')) {
+      throw new Error('host-pause requires an absolute externalManifestOutputPath');
+    }
+    const effects = createLiveEffects(input);
+    effects.persistDispatchReady = async ({ checkpoint, externalManifest }) => {
+      await writeNewJson(input.externalManifestOutputPath, externalManifest);
+      await writeNewJson(resolve(outputPath), checkpoint);
+    };
+    const paused = await pauseP158DashboardHostAction({
+      ...input,
+      effects,
+    });
+    if (paused.state === 'dispatch_ready') {
+      process.stdout.write(`${JSON.stringify({ success: true, outputPath: resolve(outputPath) })}\n`);
+      return;
+    }
+    output = paused;
+  } else if (command === 'host-resume') {
+    if (!apply) throw new Error('host-resume requires --apply');
+    output = await resumeP158DashboardHostAction({
+      ...input,
+      effects: createLiveEffects(input),
+    });
   } else if (command === 'plan') {
     if (apply) throw new Error('plan does not accept --apply');
     output = buildP158DashboardCampaignPlan(input);
@@ -761,7 +864,7 @@ async function main() {
       aggregate: aggregateP158DashboardCampaignReceipts({ campaignPlan: input.campaignPlan, receipts }),
     };
   } else {
-    throw new Error('Command must be plan, prepare, or execute');
+    throw new Error('Command must be plan, prepare, host-pause, host-resume, execute, or external-capture');
   }
   await writeNewJson(resolve(outputPath), output);
   process.stdout.write(`${JSON.stringify({ success: true, outputPath: resolve(outputPath) })}\n`);
