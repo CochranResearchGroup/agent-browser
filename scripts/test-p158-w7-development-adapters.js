@@ -48,6 +48,12 @@ const target = Object.freeze({
   daemonUnit: 'agent-browser-development.service',
   supervisorUnit: 'agent-browser-development-supervisor.service',
   evidenceSince: '2026-09-02T00:00:00Z',
+  developmentBinary: '/opt/agent-browser-dev',
+  agentBrowserId: 'p158-agent-browser-01',
+  agentProfilePath: '/tmp/p158-development-run-01/profiles/agent-main',
+  runtimeProfile: 'p158-development-run-01',
+  sessionName: 'p158-development-run-01',
+  localFixtureOrigin: 'http://127.0.0.1:43158',
   allowedExecutables: [
     '/usr/bin/printf',
     '/usr/bin/journalctl',
@@ -66,9 +72,10 @@ const target = Object.freeze({
     ...Object.values(a07BrowserBindingsByActionId).map((binding) => binding.pid),
   ],
   allowedBrowserIds: Object.values(a07BrowserBindingsByActionId)
-    .map((binding) => binding.browserId),
+    .map((binding) => binding.browserId).concat('p158-agent-browser-01'),
   allowedProfilePaths: Object.values(a07BrowserBindingsByActionId)
-    .map((binding) => binding.profilePath),
+    .map((binding) => binding.profilePath)
+    .concat('/tmp/p158-development-run-01/profiles/agent-main'),
 });
 
 function recordingPrimitives(overrides = {}) {
@@ -161,10 +168,18 @@ assert.equal(liveActionPlans.filter((action) =>
 const reviewedLive = assessP158W7ReviewedLiveDispatcher({ schedule, target });
 assert.equal(reviewedLive.ready, false);
 assert.deepEqual(reviewedLive.implementedCaseIds, ['A07', 'A13', 'X07']);
+assert.deepEqual(reviewedLive.partiallyImplementedCaseIds, ['A09', 'A15']);
 assert.equal(reviewedLive.blockerCount, 22);
 assert.equal(reviewedLive.effectsExecuted, false);
 assert.equal(reviewedLive.implementedActionCount,
-  liveActionPlans.filter((action) => ['A07', 'A13', 'X07'].includes(action.caseId)).length);
+  liveActionPlans.filter((action) =>
+    ['A07', 'A13', 'X07'].includes(action.caseId) ||
+    (action.caseId === 'A09' &&
+      action.dimensionAssignments.some((entry) =>
+        entry.dimensionId === 'target_pathology' && entry.value === 'blank')) ||
+    (action.caseId === 'A15' &&
+      action.dimensionAssignments.some((entry) =>
+        entry.dimensionId === 'control_transport' && entry.value === 'cli'))).length);
 assert(reviewedLive.bindings.every((binding) =>
   binding.targetId === target.targetId && binding.campaignRunId === target.campaignRunId));
 assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A07')
@@ -180,6 +195,14 @@ assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
   .some((binding) => binding.systemd.unit === target.daemonUnit));
 assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A13')
   .some((binding) => binding.systemd.unit === target.supervisorUnit));
+assert.equal(reviewedLive.bindings.filter((binding) => binding.caseId === 'A09').length, 2);
+assert(reviewedLive.bindings.filter((binding) => binding.caseId === 'A09')
+  .every((binding) => binding.command.args.at(-1) === 'about:blank'));
+assert.equal(reviewedLive.bindings.filter((binding) => binding.caseId === 'A15').length, 1);
+assert(reviewedLive.bindings.find((binding) => binding.caseId === 'A15')
+  .command.args.at(-1).includes(encodeURIComponent(
+    reviewedLive.bindings.find((binding) => binding.caseId === 'A15').actionId,
+  )));
 const liveBindingManifest = {
   schemaVersion: 'agent-browser.p158-w7-live-bindings.v1',
   actions: liveActionPlans.map((action) => ({
@@ -222,18 +245,39 @@ assert.equal(liveValidation.manifest.targetSha256.length, 64);
 assert.equal(liveValidation.manifest.manifestSha256.length, 64);
 assert.equal(liveValidation.liveReady, false);
 assert.equal(liveValidation.blockerCode, 'live_w7_dispatcher_implementation_unproven');
-assert.throws(
-  () => createP158W7LiveDevelopmentAdapterBundle({
-    schedule,
-    target,
-    primitives: recordingPrimitives(),
-    bindingManifest: liveBindingManifest,
-    additionalAdapters: otherAdapters,
-  }),
-  (error) => error instanceof P158W7AdapterError &&
-    error.code === 'live_w7_case_hooks_missing' &&
-    error.details.blockers.length === 22,
-);
+const reviewedPrimitives = recordingPrimitives();
+const reviewedBundle = createP158W7LiveDevelopmentAdapterBundle({
+  schedule,
+  target,
+  primitives: reviewedPrimitives,
+  additionalAdapters: otherAdapters,
+});
+assert.equal(reviewedBundle.ready, true);
+assert.equal(reviewedPrimitives.calls.length, 0);
+assert.equal(reviewedBundle.adapterBindings.length, 25);
+assert.equal(reviewedBundle.adapterBindings.filter((binding) =>
+  binding.mode === 'concrete_live').length, 3);
+assert.equal(reviewedBundle.adapterBindings.filter((binding) =>
+  binding.mode === 'explicit_blocked').length, 22);
+assert(reviewedBundle.adapterBindings.every((binding) =>
+  binding.providerFree === false && /^[a-f0-9]{64}$/.test(binding.sourceSha256)));
+assert.equal(assessP158AdapterReadiness({
+  schedule,
+  adapters: reviewedBundle.adapters,
+}).ready, true);
+const blockedA01 = reviewedBundle.w7Adapters.find((adapter) => adapter.caseId === 'A01');
+let blockedEffectCalls = 0;
+const blockedOutcome = await blockedA01.execute({
+  attempt: schedule.attempts.find((attempt) => attempt.caseId === 'A01'),
+  requestEffect: async () => {
+    blockedEffectCalls += 1;
+    throw new Error('blocked adapter must not request an effect');
+  },
+});
+assert.equal(blockedOutcome.resultState, 'skipped_blocked');
+assert.equal(blockedOutcome.effectState, 'not_started');
+assert.equal(blockedOutcome.blocker.code, 'live_case_hook_missing');
+assert.equal(blockedEffectCalls, 0);
 assert.throws(
   () => validateP158W7LiveBindingManifest({
     schedule,

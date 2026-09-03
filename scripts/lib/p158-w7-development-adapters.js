@@ -1,5 +1,7 @@
 import { execFile as nodeExecFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { createP158CaseAdapter } from './p158-execution-schedule.js';
@@ -84,6 +86,12 @@ const RESULT_PRIORITY = Object.freeze([
   'skipped_blocked',
   'passed',
 ]);
+
+const W7_SOURCE_PATH = 'scripts/lib/p158-w7-development-adapters.js';
+
+function w7SourceSha256() {
+  return createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex');
+}
 
 export class P158W7AdapterError extends Error {
   constructor(code, message, details = undefined) {
@@ -290,6 +298,7 @@ export function enumerateP158W7ActionPlans({ schedule }) {
         attemptId: attempt.attemptId,
         environmentIds: [...attempt.environmentIds],
         hook: CASE_SPECS[attempt.caseId].hook,
+        dimensionAssignments: structuredClone(action.dimensionAssignments ?? []),
         allowedStimuli: [...CASE_SPECS[attempt.caseId].stimuli],
         requiredStimulus: requiredStimulus(attempt.caseId, action, attempt, contract),
       });
@@ -314,6 +323,49 @@ function reviewedEvidenceCommands(target, unit = target.daemonUnit) {
   };
 }
 
+function reviewedBrowserBinding(action, target) {
+  const dimension = (id) =>
+    action.dimensionAssignments.find((entry) => entry.dimensionId === id)?.value;
+  let url = null;
+  if (action.caseId === 'A09' && dimension('target_pathology') === 'blank') {
+    url = 'about:blank';
+  } else if (action.caseId === 'A15' && dimension('control_transport') === 'cli') {
+    url = `${target.localFixtureOrigin}/${target.campaignRunId}/markers/${encodeURIComponent(action.actionId)}`;
+  } else {
+    return null;
+  }
+  return {
+    ...action,
+    targetId: target.targetId,
+    campaignRunId: target.campaignRunId,
+    stimulusKind: action.requiredStimulus,
+    browserId: target.agentBrowserId,
+    profilePath: target.agentProfilePath,
+    command: {
+      executable: target.developmentBinary,
+      args: [
+        '--json',
+        '--session', target.sessionName,
+        '--runtime-profile', target.runtimeProfile,
+        'open', url,
+      ],
+    },
+    evidenceCommand: {
+      executable: target.developmentBinary,
+      args: [
+        '--json',
+        '--session', target.sessionName,
+        '--runtime-profile', target.runtimeProfile,
+        'get', 'url',
+      ],
+    },
+    logCommand: {
+      executable: '/usr/bin/journalctl',
+      args: ['--user-unit', target.daemonUnit, '--since', target.evidenceSince, '--output=json'],
+    },
+  };
+}
+
 export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
   assertDevelopmentTarget(target);
   const requiredTargetFields = [
@@ -322,6 +374,12 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
     'daemonUnit',
     'supervisorUnit',
     'evidenceSince',
+    'developmentBinary',
+    'agentBrowserId',
+    'agentProfilePath',
+    'runtimeProfile',
+    'sessionName',
+    'localFixtureOrigin',
   ];
   for (const field of requiredTargetFields) {
     if (target[field] === undefined || target[field] === null || target[field] === '') {
@@ -335,8 +393,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
   }
   const expected = enumerateP158W7ActionPlans({ schedule });
   const bindings = [];
-  for (const action of expected.filter((entry) =>
-    P158_W7_REVIEWED_LIVE_CASE_IDS.includes(entry.caseId))) {
+  for (const action of expected) {
     let binding;
     if (action.caseId === 'A07') {
       const browser = target.browserBindingsByActionId[action.actionId];
@@ -364,7 +421,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
           args: ['--user-unit', target.daemonUnit, '--since', target.evidenceSince, '--output=json'],
         },
       };
-    } else {
+    } else if (['A13', 'X07'].includes(action.caseId)) {
       const unit = action.caseId === 'A13' &&
         action.requiredStimulus === 'daemon_transition'
         ? target.daemonUnit
@@ -377,6 +434,9 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
         systemd: { unit, verb: 'restart', executable: '/usr/bin/systemctl' },
         ...reviewedEvidenceCommands(target, unit),
       };
+    } else {
+      binding = reviewedBrowserBinding(action, target);
+      if (!binding) continue;
     }
     const {
       allowedStimuli: _allowedStimuli,
@@ -392,7 +452,8 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
     caseId,
     code: 'live_case_hook_missing',
     missingHook,
-    affectedActionCount: expected.filter((action) => action.caseId === caseId).length,
+    affectedActionCount: expected.filter((action) => action.caseId === caseId).length -
+      bindings.filter((binding) => binding.caseId === caseId).length,
   }));
   return deepFreeze({
     schemaVersion: 'agent-browser.p158-w7-reviewed-live-dispatcher-readiness.v1',
@@ -400,6 +461,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
     targetSha256: sha256(target),
     ready: blockers.length === 0,
     implementedCaseIds: [...P158_W7_REVIEWED_LIVE_CASE_IDS],
+    partiallyImplementedCaseIds: ['A09', 'A15'],
     implementedActionCount: bindings.length,
     blockerCount: blockers.length,
     blockers,
@@ -591,6 +653,7 @@ export function createP158W7DevelopmentAdapterBundle({
   primitives,
   planAction,
   additionalAdapters = [],
+  caseIds = P158_W7_CASE_IDS,
 }) {
   assertDevelopmentTarget(target);
   const targetBinding = structuredClone(target);
@@ -601,12 +664,12 @@ export function createP158W7DevelopmentAdapterBundle({
     }
   }
   const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
-  for (const caseId of P158_W7_CASE_IDS) {
+  for (const caseId of caseIds) {
     if (!contracts.has(caseId)) fail('case_contract_missing', `Schedule omitted W7 case ${caseId}`);
   }
   const executedActionIds = new Set();
   const effects = {};
-  const adapters = P158_W7_CASE_IDS.map((caseId) => {
+  const adapters = caseIds.map((caseId) => {
     const contract = contracts.get(caseId);
     const effectId = contract.declaredEffectIds[0];
     effects[effectId] = async (payload, attempt) => {
@@ -701,25 +764,99 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   schedule,
   target,
   primitives,
-  bindingManifest,
   additionalAdapters = [],
 }) {
   const reviewed = assessP158W7ReviewedLiveDispatcher({ schedule, target });
-  const validation = validateP158W7LiveBindingManifest({
+  const liveBindings = new Map(reviewed.bindings
+    .filter((binding) => P158_W7_REVIEWED_LIVE_CASE_IDS.includes(binding.caseId))
+    .map((binding) => [binding.actionId, binding]));
+  const concrete = createP158W7DevelopmentAdapterBundle({
     schedule,
     target,
-    manifest: bindingManifest,
-  });
-  void primitives;
-  void additionalAdapters;
-  fail(
-    reviewed.ready ? validation.blockerCode : 'live_w7_case_hooks_missing',
-    'W7 live freeze remains blocked until every A/X case has a reviewed development-only dispatcher hook',
-    {
-      bindingManifestSha256: validation.manifest.manifestSha256,
-      actionCount: validation.manifest.actionCount,
-      implementedCaseIds: reviewed.implementedCaseIds,
-      blockers: reviewed.blockers,
+    primitives,
+    caseIds: P158_W7_REVIEWED_LIVE_CASE_IDS,
+    planAction: ({ caseId, attempt, action }) => {
+      const binding = liveBindings.get(action.actionId);
+      if (!binding || binding.caseId !== caseId || binding.attemptId !== attempt.attemptId) {
+        fail('reviewed_live_binding_missing', action.actionId);
+      }
+      const {
+        caseId: _caseId,
+        attemptId: _attemptId,
+        environmentIds: _environmentIds,
+        dimensionAssignments: _dimensionAssignments,
+        ...plan
+      } = binding;
+      return structuredClone(plan);
     },
-  );
+  });
+  const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
+  const sourceSha256 = w7SourceSha256();
+  const explicitBlockedAdapters = Object.entries(P158_W7_LIVE_HOOK_GAPS)
+    .map(([caseId, missingHook]) => {
+      const contract = contracts.get(caseId);
+      const blocker = deepFreeze({
+        code: 'live_case_hook_missing',
+        detail: missingHook,
+        sourcePath: W7_SOURCE_PATH,
+        sourceSha256,
+      });
+      return createP158CaseAdapter({
+        caseId,
+        evidenceProfile: contract.evidenceProfile,
+        executionContract: contract.executionContract,
+        execute: async () => ({
+          resultState: 'skipped_blocked',
+          blocker,
+          effectState: 'not_started',
+          retryDisposition: 'prohibited',
+          repairAttempted: false,
+          retryAttempted: false,
+          garbageCollectionAttempted: false,
+        }),
+      });
+    });
+  const actionCounts = new Map(P158_W7_CASE_IDS.map((caseId) => [
+    caseId,
+    enumerateP158W7ActionPlans({ schedule }).filter((action) => action.caseId === caseId).length,
+  ]));
+  const adapterBindings = P158_W7_CASE_IDS.map((caseId) => {
+    const concreteLive = P158_W7_REVIEWED_LIVE_CASE_IDS.includes(caseId);
+    const partial = ['A09', 'A15'].includes(caseId);
+    return deepFreeze({
+      caseId,
+      mode: concreteLive ? 'concrete_live' : 'explicit_blocked',
+      providerFree: false,
+      sourcePath: W7_SOURCE_PATH,
+      sourceSha256,
+      hookIds: concreteLive
+        ? (caseId === 'A07'
+            ? ['w7.evidence', 'w7.logs', 'w7.process']
+            : ['w7.evidence', 'w7.logs', 'w7.systemd'])
+        : (partial ? ['w7.browser', 'w7.evidence', 'w7.logs'] : []),
+      implementedActionCount: concreteLive
+        ? actionCounts.get(caseId)
+        : reviewed.bindings.filter((binding) => binding.caseId === caseId).length,
+      blockedActionCount: concreteLive ? 0 : actionCounts.get(caseId),
+      effectsAllowed: concreteLive,
+      blocker: concreteLive ? null : {
+        code: 'live_case_hook_missing',
+        detail: P158_W7_LIVE_HOOK_GAPS[caseId],
+      },
+    });
+  });
+  const adapters = [
+    ...concrete.adapters,
+    ...explicitBlockedAdapters,
+    ...additionalAdapters,
+  ];
+  return {
+    adapters,
+    w7Adapters: [...concrete.w7Adapters, ...explicitBlockedAdapters],
+    effects: concrete.effects,
+    executedActionIds: concrete.executedActionIds,
+    adapterBindings: deepFreeze(adapterBindings),
+    reviewedLiveDispatcher: reviewed,
+    ready: true,
+  };
 }
