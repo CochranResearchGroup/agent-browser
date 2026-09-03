@@ -266,6 +266,29 @@ runTest('independently verifies a sealed clean campaign without effects', () => 
   assert.deepEqual(analyze(clone(input)), report);
 });
 
+runTest('requires live logging corpora to retain their campaign identity and self hash', () => {
+  const input = cleanEvidence();
+  const liveBody = {
+    schemaVersion: 'agent-browser.p158-logging-evidence-corpus.v1', planId: 'P158', syntheticOnly: false,
+    runId: input.runId, candidateSha256: input.manifest.candidate.candidateSha256,
+    phaseId: 'W7', environmentId: 'E0', environmentSealSha256: 'a'.repeat(64),
+    sourceBinding: { sourcePath: 'scripts/lib/p158-logging-evidence-harvester.js', sourceSha256: 'b'.repeat(64) },
+    window: { startedAt: '2026-09-03T00:59:00.000Z', completedAt: '2026-09-03T01:01:00.000Z' },
+    capturedAt: '2026-09-03T01:01:00.000Z', inputIdentitySha256: 'c'.repeat(64),
+    expectationSetSha256: 'd'.repeat(64), fixtureCount: 1,
+    fixtures: clone(input.loggingEvidence[0].fixtures), observerRequestCount: 0,
+    observerReceipts: [], redactionPolicy: { mode: 'allowlist_projection', excludedFieldNames: ['result'],
+      rawSensitiveMaterialDisposition: 'reject' },
+    effectsAttempted: false, repairAttempted: false, retryAttempted: false,
+  };
+  input.loggingEvidence = [{ ...liveBody, corpusSha256: stableP158AnalysisHash(liveBody) }];
+  const cleanReport = analyze(input);
+  assert(!cleanReport.findings.some((finding) => finding.code === 'logging_evidence_corpus_integrity_invalid'));
+  input.loggingEvidence[0].environmentId = 'E1';
+  const tamperedReport = analyze(input);
+  assert(tamperedReport.findings.some((finding) => finding.code === 'logging_evidence_corpus_integrity_invalid'));
+});
+
 runTest('retains historical reproduction in clusters timelines and criterion judgment', () => {
   const report = analyze(cleanEvidence({
     resultState: 'reproduced_historical_failure',

@@ -384,6 +384,16 @@ function historicalReproduction(registry, results) {
 }
 
 function summarizeIndependentAudits(input, analyzedAt, findings, results) {
+  for (const [index, corpus] of (input.loggingEvidence ?? []).entries()) {
+    if (corpus?.schemaVersion !== 'agent-browser.p158-logging-evidence-corpus.v1') continue;
+    const body = without(corpus, ['corpusSha256']);
+    if (corpus.corpusSha256 !== stableP158AnalysisHash(body) || corpus.runId !== input.runId ||
+        corpus.candidateSha256 !== input.manifest?.candidate?.candidateSha256) {
+      integrityFinding(findings, 'logging_evidence_corpus_integrity_invalid', 'W10.2',
+        [corpus.corpusSha256 ?? `logging-corpus-${index}`],
+        'A live logging corpus is not self-hashed and bound to the sealed campaign identity.');
+    }
+  }
   const logging = (input.loggingEvidence ?? []).map((fixtureSet, index) => auditCausalEnvelopes({
     fixtureSet,
     options: { runId: input.runId, auditId: `${input.runId}:w10:logging:${index}`, auditedAt: analyzedAt },

@@ -7,7 +7,9 @@
   "required": [
     "schemaVersion", "planId", "syntheticOnly", "runId", "candidateSha256", "phaseId",
     "environmentId", "environmentSealSha256", "sourceBinding", "window", "capturedAt",
-    "inputIdentitySha256", "fixtureCount", "fixtures", "redactionPolicy", "effectsAttempted", "repairAttempted",
+    "inputIdentitySha256", "expectationSetSha256", "fixtureCount", "fixtures",
+    "observerRequestCount", "observerReceipts", "redactionPolicy",
+    "effectsAttempted", "repairAttempted",
     "retryAttempted", "corpusSha256"
   ],
   "properties": {
@@ -39,11 +41,29 @@
     },
     "capturedAt": { "type": "string", "format": "date-time" },
     "inputIdentitySha256": { "$ref": "#/$defs/sha256" },
+    "expectationSetSha256": { "$ref": "#/$defs/sha256" },
     "fixtureCount": { "type": "integer", "minimum": 1 },
     "fixtures": {
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "p158-logging-causal-fixtures.v1.schema.json#/$defs/fixture" }
+    },
+    "observerRequestCount": { "type": "integer", "minimum": 0 },
+    "observerReceipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["receiptId", "expectationId", "environmentId", "capturePlane", "operation", "requestSha256"],
+        "properties": {
+          "receiptId": { "$ref": "#/$defs/id" },
+          "expectationId": { "$ref": "#/$defs/id" },
+          "environmentId": { "$ref": "#/$defs/id" },
+          "capturePlane": { "const": true },
+          "operation": { "enum": ["service_trace", "service_events", "service_job", "service_incident", "injected_observer"] },
+          "requestSha256": { "$ref": "#/$defs/sha256" }
+        },
+        "additionalProperties": false
+      }
     },
     "redactionPolicy": {
       "type": "object",

@@ -8,6 +8,8 @@ import addFormats from 'ajv-formats';
 
 import { sha256 } from './lib/p158-campaign-controller.js';
 import {
+  canonicalP158LoggingExpectationSetDigest,
+  createP158LoggingHarvestHook,
   createP158ServiceLoggingObserver,
   harvestP158LoggingEvidence,
   p158LoggingEvidenceSourceBinding,
@@ -25,20 +27,22 @@ const validateCorpus = ajv.compile(JSON.parse(await readFile(
   'docs/dev/contracts/p158-logging-evidence-corpus.v1.schema.json', 'utf8')));
 const requestId = `p158:${runId}:A01-E0-r001:request`;
 const expectation = {
-  campaignRunId: runId, phaseId: 'W7', environmentId: 'E0', caseId: 'A01',
+  campaignRunId: runId, expectationId: 'A01-E0-r001:open:001', requestKind: 'accepted_request',
+  phaseId: 'W7', environmentId: 'E0', caseId: 'A01',
   attemptId: 'A01-E0-r001', requestId, jobId: 'job-1', eventId: 'event-1', traceId: 'trace-1',
   incidentExpected: false, operatorVisible: false, executionMode: 'concrete_live',
   expectedSurfaceRoles: ['ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome'],
 };
 function causalEnvelope(entry = expectation, overrides = {}) {
-  const body = {
-    schemaVersion: 'agent-browser.p158-causal-envelope.v1', runId,
-    attemptId: entry.attemptId, phaseId: entry.phaseId, environmentId: entry.environmentId,
-    requestId: entry.requestId, jobId: entry.jobId ?? null, eventId: entry.eventId ?? null,
-    traceId: entry.traceId ?? null, incidentId: entry.incidentId ?? null,
+  return {
+    expectationId: entry.expectationId, actionId: entry.actionId ?? null,
+    environmentId: entry.environmentId, expectedRequestId: entry.requestId,
+    observedCausalIds: {
+      requestId: entry.requestId, jobId: entry.jobId ?? null, eventId: entry.eventId ?? null,
+      traceId: entry.traceId ?? null, incidentId: entry.incidentId ?? null,
+    },
     ...overrides,
   };
-  return { ...body, envelopeSha256: sha256(body) };
 }
 const provenance = {
   schemaVersion: 'agent-browser.service-request-provenance.v1', requestId, jobId: 'job-1', traceId: 'trace-1',
@@ -95,6 +99,17 @@ function memoryStore() {
   };
 }
 
+function observerResult(records, target = expectation) {
+  return {
+    records: structuredClone(records),
+    observerReceipts: [{
+      receiptId: `${target.expectationId}:observer:01`, expectationId: target.expectationId,
+      environmentId: target.environmentId, capturePlane: true, operation: 'injected_observer',
+      requestSha256: sha256({ expectationId: target.expectationId, operation: 'injected_observer' }),
+    }],
+  };
+}
+
 function baseInput({ observer, artifactStore = memoryStore(), expectations = [expectation],
   causalEnvelopes = expectations.map((entry) => causalEnvelope(entry)),
   checkpointRecords = [record('ingress_request'), record('immediate_response')],
@@ -105,7 +120,8 @@ function baseInput({ observer, artifactStore = memoryStore(), expectations = [ex
       runtimeLane: 'development', production: false },
     environmentSealSha256: '22'.repeat(32),
     window: { startedAt: '2026-09-03T10:00:00.000Z', completedAt: '2026-09-03T10:01:00.000Z' },
-    expectations, causalEnvelopes, checkpointRecords, dashboardProjections, observer,
+    expectations, expectationSetSha256: canonicalP158LoggingExpectationSetDigest(expectations),
+    causalEnvelopes, checkpointRecords, dashboardProjections, observer,
     artifactStore, runRoot: '/tmp/p158-harvester-provider-free', capturedAt: '2026-09-03T10:00:59.000Z',
   };
 }
@@ -113,7 +129,7 @@ function baseInput({ observer, artifactStore = memoryStore(), expectations = [ex
 async function harvestWith(observerRecords, overrides = {}) {
   let calls = 0;
   const input = baseInput({
-    observer: async () => { calls += 1; return structuredClone(observerRecords); },
+    observer: async ({ expectation: target }) => { calls += 1; return observerResult(observerRecords, target); },
     ...overrides,
   });
   const original = structuredClone({
@@ -136,8 +152,7 @@ function findingCodes(corpus) {
 
 const serviceRecords = [record('durable_job'), record('terminal_event'), record('trace_outcome')];
 const liveObserverCalls = [];
-const liveObserver = createP158ServiceLoggingObserver({
-  fetch: async (url) => {
+const liveFetch = async (url) => {
     liveObserverCalls.push(String(url));
     const pathname = new URL(url).pathname;
     const terminalOutcome = { effectState: 'verified_effect', retryDisposition: 'do_not_retry', failure: null };
@@ -151,15 +166,16 @@ const liveObserver = createP158ServiceLoggingObserver({
       : pathname.endsWith('/events') ? { events: [event] }
         : { job };
     return { ok: true, async json() { return { success: true, data }; } };
-  },
-});
+  };
+const liveObserver = createP158ServiceLoggingObserver({ fetch: liveFetch });
 const observedFromService = await liveObserver({
-  environment: baseInput({ observer: async () => [] }).environment,
+  environment: baseInput({ observer: async () => observerResult([]) }).environment,
   expectation,
-  window: baseInput({ observer: async () => [] }).window,
+  window: baseInput({ observer: async () => observerResult([]) }).window,
 });
-assert.deepEqual(observedFromService.map((entry) => entry.surfaceRole),
+assert.deepEqual(observedFromService.records.map((entry) => entry.surfaceRole),
   ['durable_job', 'terminal_event', 'trace_outcome']);
+assert.equal(observedFromService.observerReceipts.length, 3);
 assert.equal(liveObserverCalls.length, 3);
 assert(liveObserverCalls.filter((url) => !url.endsWith('/api/service/jobs/job-1'))
   .every((url) => new URL(url).searchParams.get('requestId') === requestId));
@@ -168,6 +184,8 @@ assert(liveObserverCalls.some((url) => url.endsWith('/api/service/jobs/job-1')))
 const clean = await harvestWith(serviceRecords);
 assert.equal(clean.calls, 1);
 assert.equal(clean.corpus.fixtureCount, 1);
+assert.equal(clean.corpus.observerRequestCount, 1);
+assert.equal(clean.corpus.observerReceipts[0].capturePlane, true);
 assert.equal(clean.corpus.effectsAttempted, false);
 assert.equal(clean.corpus.redactionPolicy.mode, 'allowlist_projection');
 assert.equal(clean.corpus.redactionPolicy.rawSensitiveMaterialDisposition, 'reject');
@@ -189,7 +207,8 @@ assert.equal(replayCalls, 0);
 assert.equal(clean.store.writes, 1);
 assert.deepEqual(replay.corpus, clean.corpus);
 const tamperedStore = memoryStore();
-const tamperedInput = baseInput({ observer: async () => serviceRecords, artifactStore: tamperedStore });
+const tamperedInput = baseInput({ observer: async ({ expectation: target }) =>
+  observerResult(serviceRecords, target), artifactStore: tamperedStore });
 await harvestP158LoggingEvidence(tamperedInput);
 const tamperedPath = [...tamperedStore.entries.keys()][0];
 const tamperedCorpus = JSON.parse(tamperedStore.entries.get(tamperedPath).toString('utf8'));
@@ -221,6 +240,9 @@ assert.deepEqual(reordered.corpus.fixtures[0].records.map((entry) => entry.recor
 const nullFailure = await harvestWith(serviceRecords.map((entry) => entry.surfaceRole === 'terminal_event'
   ? { ...entry, state: 'failed', failure: null } : entry));
 assert.deepEqual(findingCodes(nullFailure.corpus), ['null_failure']);
+const nullProvenance = await harvestWith(serviceRecords.map((entry) => entry.surfaceRole === 'terminal_event'
+  ? { ...entry, provenance: null } : entry));
+assert.deepEqual(findingCodes(nullProvenance.corpus), ['null_provenance']);
 
 await assert.rejects(() => harvestWith([record('durable_job', { campaignRunId: 'another-run' })]),
   (error) => error instanceof P158LoggingEvidenceError && error.code === 'cross_run_record_rejected');
@@ -230,6 +252,7 @@ await assert.rejects(() => harvestWith([record('durable_job', { authorization: '
 function combinedEnvelopeInput(environmentId, complete, artifactStore) {
   const combinedExpectation = {
     ...expectation, attemptId: 'X10-E1_E2-r001', caseId: 'X10', environmentId,
+    expectationId: `X10-E1_E2-r001:${environmentId}:epoch:001`,
     requestId: `p158:${runId}:X10-E1_E2-r001:${environmentId}:request`,
     jobId: `job-${environmentId}`, eventId: `event-${environmentId}`, traceId: `trace-${environmentId}`,
   };
@@ -238,6 +261,7 @@ function combinedEnvelopeInput(environmentId, complete, artifactStore) {
     const recordId = `${environmentId}-${surfaceRole}`;
     return {
       ...record(surfaceRole), attemptId: combinedExpectation.attemptId,
+      expectationId: combinedExpectation.expectationId,
       requestId: combinedExpectation.requestId, jobId: combinedExpectation.jobId,
       eventId: ['terminal_event', 'trace_outcome'].includes(surfaceRole) ? combinedExpectation.eventId : undefined,
       traceId: combinedExpectation.traceId, recordId,
@@ -253,7 +277,7 @@ function combinedEnvelopeInput(environmentId, complete, artifactStore) {
   return baseInput({
     artifactStore, expectations: [combinedExpectation], causalEnvelopes: [causalEnvelope(combinedExpectation)],
     checkpointRecords: rows.filter((entry) => ['ingress_request', 'immediate_response'].includes(entry.surfaceRole)),
-    observer: async () => serviceRows,
+    observer: async ({ expectation: target }) => observerResult(serviceRows, target),
   });
 }
 
@@ -271,8 +295,39 @@ assert.equal(e2.corpus.fixtures[0].records.some((entry) => entry.traceId === 'tr
   'E1 evidence incorrectly satisfied E2');
 assert.notEqual(e1.relativePath, e2.relativePath);
 
+const secondExpectation = {
+  ...expectation, expectationId: 'A01-E0-r001:release:001', requestKind: 'accepted_request',
+  requestId: `p158:${runId}:A01-E0-r001:release:001`, jobId: 'job-2', eventId: 'event-2', traceId: 'trace-2',
+};
+function rewriteRequest(entry, target) {
+  const suffix = target.expectationId.includes('release') ? '-2' : '-1';
+  return {
+    ...entry, expectationId: target.expectationId, requestId: target.requestId,
+    jobId: target.jobId, eventId: entry.eventId ? target.eventId : undefined,
+    traceId: target.traceId, recordId: `${entry.recordId}${suffix}`,
+    parentId: entry.parentId ? `${entry.parentId}${suffix}` : null,
+    provenance: { ...entry.provenance, requestId: target.requestId, jobId: target.jobId, traceId: target.traceId },
+  };
+}
+const multiRequestRows = [expectation, secondExpectation].flatMap((target) =>
+  [record('ingress_request'), record('immediate_response')].map((entry) => rewriteRequest(entry, target)));
+const multiRequestServiceRows = [expectation, secondExpectation].flatMap((target) =>
+  serviceRecords.map((entry) => rewriteRequest(entry, target)));
+const multiRequest = await harvestP158LoggingEvidence(baseInput({
+  expectations: [expectation, secondExpectation],
+  causalEnvelopes: [causalEnvelope(expectation), causalEnvelope(secondExpectation)],
+  checkpointRecords: multiRequestRows,
+  observer: async ({ expectation: target }) => observerResult(multiRequestServiceRows.filter((entry) =>
+    entry.expectationId === target.expectationId), target),
+}));
+assert.equal(multiRequest.corpus.fixtureCount, 2);
+assert.deepEqual(multiRequest.corpus.fixtures.map((fixture) => fixture.fixtureId),
+  [expectation.expectationId, secondExpectation.expectationId]);
+assert.deepEqual(auditCausalEnvelopes({ fixtureSet: multiRequest.corpus }).findings, []);
+
 const blockedExpectation = {
-  campaignRunId: runId, phaseId: 'W7', environmentId: 'E0', caseId: 'A11', attemptId: 'A11-E0-r001',
+  campaignRunId: runId, expectationId: 'A11-E0-r001:blocker', requestKind: 'rejected_request',
+  phaseId: 'W7', environmentId: 'E0', caseId: 'A11', attemptId: 'A11-E0-r001',
   requestId: `p158:${runId}:A11-E0-r001:request`, executionMode: 'explicit_blocked',
   incidentExpected: false, operatorVisible: false,
   expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
@@ -281,6 +336,7 @@ const blockedProvenance = { ...provenance, requestId: blockedExpectation.request
   jobId: 'blocked-controller-job', traceId: null, action: 'explicit_blocked' };
 const blockedRows = ['controller_transition', 'pre_execution_blocker', 'terminal_event'].map((surfaceRole, index) => ({
   campaignRunId: runId, attemptId: blockedExpectation.attemptId, surfaceRole, transport: 'service',
+  expectationId: blockedExpectation.expectationId,
   recordId: `blocked-${surfaceRole}`, requestId: blockedExpectation.requestId,
   jobId: 'blocked-controller-job', timestamp: `2026-09-03T10:00:0${index + 1}.000Z`,
   parentId: index === 0 ? null : `blocked-${blockedExpectation.expectedSurfaceRoles[index - 1]}`,
@@ -296,5 +352,61 @@ const blocked = await harvestWith([], {
 });
 assert.equal(blockedObserverCalls, 0);
 assert.deepEqual(auditCausalEnvelopes({ fixtureSet: blocked.corpus }).findings, []);
+
+const hookStore = memoryStore();
+const loggingExpectations = [expectation];
+const hook = createP158LoggingHarvestHook({
+  configuration: {
+    runId, scheduleSha256: '51'.repeat(32), candidateSha256: '11'.repeat(32),
+    environments: { E0: baseInput({ observer: async () => observerResult([]) }).environment },
+    environmentSealSha256s: { E0: '22'.repeat(32) },
+    loggingExpectations,
+    loggingExpectationsSha256: sha256(loggingExpectations),
+    windowsByEnvironmentPhase: { 'W7:E0': baseInput({ observer: async () => observerResult([]) }).window },
+  },
+  artifactStore: hookStore, runRoot: '/tmp/p158-harvester-hook-provider-free',
+  clock: { wallNow: () => '2026-09-03T10:01:00.000Z' },
+  fetchByEnvironment: { E0: liveFetch },
+});
+const hookReceipt = await hook.execute({
+  schedule: { scheduleSha256: '51'.repeat(32) }, target: { runId },
+  sourceDigest: '52'.repeat(32), causalEnvelopes: [causalEnvelope(expectation)],
+  checkpointRecords: [record('ingress_request'), record('immediate_response')],
+});
+const { receiptSha256, ...hookReceiptBody } = hookReceipt;
+assert.equal(receiptSha256, sha256(hookReceiptBody));
+assert.equal(hookReceipt.state, 'complete');
+assert.equal(hookReceipt.artifactIds.length, 1);
+assert.equal(hookReceipt.repairAttempted, false);
+assert.equal(hookReceipt.retryAttempted, false);
+await assert.rejects(() => hook.execute({
+  schedule: { scheduleSha256: 'bad' }, target: { runId }, sourceDigest: '52'.repeat(32),
+  causalEnvelopes: [causalEnvelope(expectation)], checkpointRecords: [],
+}), (error) => error.code === 'logging_harvest_execution_binding_invalid');
+
+const gapFetch = async (url) => {
+  const response = await liveFetch(url);
+  const payload = await response.json();
+  if (new URL(url).pathname.endsWith('/trace')) payload.data.outcomes = [];
+  return { ok: true, async json() { return payload; } };
+};
+const gapHook = createP158LoggingHarvestHook({
+  configuration: {
+    runId, scheduleSha256: '51'.repeat(32), candidateSha256: '11'.repeat(32),
+    environments: { E0: baseInput({ observer: async () => observerResult([]) }).environment },
+    environmentSealSha256s: { E0: '22'.repeat(32) }, loggingExpectations,
+    loggingExpectationsSha256: sha256(loggingExpectations),
+    windowsByEnvironmentPhase: { 'W7:E0': baseInput({ observer: async () => observerResult([]) }).window },
+  },
+  artifactStore: memoryStore(), runRoot: '/tmp/p158-harvester-gap-hook-provider-free',
+  clock: { wallNow: () => '2026-09-03T10:01:00.000Z' }, fetchByEnvironment: { E0: gapFetch },
+});
+const gapReceipt = await gapHook.execute({
+  schedule: { scheduleSha256: '51'.repeat(32) }, target: { runId }, sourceDigest: '52'.repeat(32),
+  causalEnvelopes: [causalEnvelope(expectation)],
+  checkpointRecords: [record('ingress_request'), record('immediate_response')],
+});
+assert.equal(gapReceipt.state, 'capture_gap');
+assert.deepEqual(gapReceipt.findingCodes, ['capture_gap']);
 
 process.stdout.write('P158 logging evidence harvester passed exact live, adversarial, blocked, and resume contracts\n');

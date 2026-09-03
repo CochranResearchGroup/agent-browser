@@ -10,6 +10,7 @@ import {
   getServiceTrace,
 } from '../../packages/client/src/service-observability.js';
 import { canonicalJson, sha256 } from './p158-campaign-controller.js';
+import { auditCausalEnvelopes } from './p158-logging-auditor.js';
 
 export const P158_LOGGING_EVIDENCE_SOURCE_PATH = 'scripts/lib/p158-logging-evidence-harvester.js';
 export const P158_LOGGING_SURFACE_ROLES = Object.freeze([
@@ -121,11 +122,15 @@ function validateExpectations(expectations, runId, phaseId, environmentId) {
   if (!Array.isArray(expectations) || expectations.length === 0) {
     fail('logging_expectations_missing', 'At least one frozen logging expectation is required');
   }
-  const attemptIds = new Set();
+  const expectationIds = new Set();
+  const requestIds = new Set();
   return expectations.map((entry) => {
-    if (typeof entry?.attemptId !== 'string' || attemptIds.has(entry.attemptId) ||
+    if (typeof entry?.expectationId !== 'string' || expectationIds.has(entry.expectationId) ||
+        typeof entry?.attemptId !== 'string' || requestIds.has(entry.requestId) ||
         entry.phaseId !== phaseId || entry.environmentId !== environmentId ||
         typeof entry.requestId !== 'string' || !entry.requestId.includes(`:${runId}:`) ||
+        !['accepted_request', 'rejected_request', 'transition', 'dashboard_action']
+          .includes(entry.requestKind) ||
         !Array.isArray(entry.expectedSurfaceRoles) || entry.expectedSurfaceRoles.length === 0 ||
         new Set(entry.expectedSurfaceRoles).size !== entry.expectedSurfaceRoles.length ||
         entry.expectedSurfaceRoles.some((role) => !P158_LOGGING_SURFACE_ROLES.includes(role))) {
@@ -136,35 +141,43 @@ function validateExpectations(expectations, runId, phaseId, environmentId) {
         JSON.stringify([...BLOCKED_ROLES].sort())) {
       fail('logging_expectation_invalid', `${entry.attemptId} has invalid blocked surfaces`);
     }
-    attemptIds.add(entry.attemptId);
+    expectationIds.add(entry.expectationId);
+    requestIds.add(entry.requestId);
     return freeze(clone(entry));
-  }).sort((left, right) => left.attemptId.localeCompare(right.attemptId));
+  }).sort((left, right) => left.expectationId.localeCompare(right.expectationId));
+}
+
+export function canonicalP158LoggingExpectationSetDigest(expectations) {
+  return sha256([...clone(expectations ?? [])]
+    .sort((left, right) => String(left.expectationId).localeCompare(String(right.expectationId))));
 }
 
 function validateCausalEnvelopes(causalEnvelopes, expectations, runId, phaseId, environmentId) {
   if (!Array.isArray(causalEnvelopes) || causalEnvelopes.length !== expectations.length) {
     fail('causal_envelope_cardinality_invalid', 'Every environment-specific expectation needs one terminal causal envelope');
   }
-  const byAttempt = new Map();
+  const byExpectation = new Map();
   for (const envelope of causalEnvelopes) {
-    const { envelopeSha256, ...body } = envelope ?? {};
-    if (envelopeSha256 !== sha256(body) || envelope.schemaVersion !== 'agent-browser.p158-causal-envelope.v1' ||
-        envelope.runId !== runId || envelope.phaseId !== phaseId || envelope.environmentId !== environmentId ||
-        typeof envelope.attemptId !== 'string' || byAttempt.has(envelope.attemptId) ||
-        typeof envelope.requestId !== 'string') {
+    if (envelope?.environmentId !== environmentId ||
+        typeof envelope.expectationId !== 'string' ||
+        byExpectation.has(envelope.expectationId) ||
+        typeof envelope.expectedRequestId !== 'string' || !envelope.observedCausalIds ||
+        envelope.observedCausalIds.requestId !== envelope.expectedRequestId) {
       fail('causal_envelope_invalid', `Invalid causal envelope for ${envelope?.attemptId ?? 'unknown'}`);
     }
-    byAttempt.set(envelope.attemptId, freeze(clone(envelope)));
+    byExpectation.set(envelope.expectationId, freeze(clone(envelope)));
   }
   return expectations.map((expectation) => {
-    const envelope = byAttempt.get(expectation.attemptId);
-    if (!envelope || envelope.requestId !== expectation.requestId) {
+    const envelope = byExpectation.get(expectation.expectationId);
+    if (!envelope || envelope.actionId !== (expectation.actionId ?? null) ||
+        envelope.expectedRequestId !== expectation.requestId) {
       fail('causal_envelope_invalid', `${expectation.attemptId} causal identity does not match preparation`);
     }
+    const ids = envelope.observedCausalIds;
     return freeze({
-      ...clone(expectation), jobId: envelope.jobId ?? null, eventId: envelope.eventId ?? null,
-      traceId: envelope.traceId ?? null, incidentId: envelope.incidentId ?? null,
-      causalEnvelopeSha256: envelope.envelopeSha256,
+      ...clone(expectation), jobId: ids.jobId ?? null, eventId: ids.eventId ?? null,
+      traceId: ids.traceId ?? null, incidentId: ids.incidentId ?? null,
+      causalEnvelopeSha256: sha256(envelope),
     });
   });
 }
@@ -180,11 +193,11 @@ function causalIds(record, expectation) {
   };
 }
 
-function normalizeRecord(record, expectation, index, window) {
+function normalizeRecord(record, expectation, index, window, runId) {
   if (!P158_LOGGING_SURFACE_ROLES.includes(record?.surfaceRole)) {
     fail('logging_record_invalid', `${expectation.attemptId} record ${index} has an unknown surface`);
   }
-  if (record.campaignRunId !== undefined && record.campaignRunId !== expectation.campaignRunId) {
+  if (record.campaignRunId !== undefined && record.campaignRunId !== runId) {
     fail('cross_run_record_rejected', `${expectation.attemptId} record belongs to another run`);
   }
   assertNoSensitiveMaterial(record);
@@ -224,7 +237,7 @@ function missingRecord(expectation, role, ordinal, capturedAt) {
   return {
     surfaceRole: role,
     transport: role === 'dashboard_projection' ? 'dashboard' : 'service',
-    recordId: `${expectation.attemptId}:${role}:capture-gap:${ordinal}`,
+    recordId: `${expectation.expectationId}:${role}:capture-gap:${ordinal}`,
     requestId: expectation.requestId,
     ...(expectation.jobId ? { jobId: expectation.jobId } : {}),
     ...(expectation.eventId ? { eventId: expectation.eventId } : {}),
@@ -281,13 +294,28 @@ export function createP158ServiceLoggingObserver({ fetch = globalThis.fetch } = 
     assertNoSensitiveMaterial({ trace, events, job, incident });
     const matching = (records) => (records ?? []).filter((record) =>
       (record.provenance?.requestId ?? record.requestId) === expectation.requestId);
-    return [
+    const records = [
       ...matching(job ? [job.job ?? job] : trace.jobs).map((record) => serviceRecord('durable_job', record, expectation)),
       ...matching(events.events ?? trace.events).map((record) => serviceRecord('terminal_event', record, expectation)),
       ...matching(incident ? [incident.incident ?? incident] : trace.incidents)
         .map((record) => serviceRecord('incident', record, expectation)),
       ...matching(trace.outcomes).map((record) => serviceRecord('trace_outcome', record, expectation)),
     ];
+    const operations = [
+      { operation: 'service_trace', query },
+      { operation: 'service_events', query },
+      ...(expectation.jobId ? [{ operation: 'service_job', id: expectation.jobId }] : []),
+      ...(expectation.incidentId ? [{ operation: 'service_incident', id: expectation.incidentId }] : []),
+    ];
+    return {
+      records,
+      observerReceipts: operations.map((operation, index) => ({
+        receiptId: `${expectation.expectationId}:observer:${String(index + 1).padStart(2, '0')}`,
+        expectationId: expectation.expectationId, environmentId: environment.environmentId,
+        capturePlane: true, operation: operation.operation,
+        requestSha256: sha256(operation),
+      })),
+    };
   };
 }
 
@@ -305,7 +333,8 @@ function verifyCorpus(corpus, identitySha256) {
 
 export async function harvestP158LoggingEvidence({
   runId, candidateSha256, phaseId, environment, environmentSealSha256, window,
-  expectations, causalEnvelopes, checkpointRecords = [], dashboardProjections = [], observer,
+  expectations, expectationSetSha256, causalEnvelopes,
+  checkpointRecords = [], dashboardProjections = [], observer,
   artifactStore, runRoot, capturedAt,
 }) {
   const times = validateIdentity({ runId, candidateSha256, phaseId, environment, environmentSealSha256, window });
@@ -320,10 +349,10 @@ export async function harvestP158LoggingEvidence({
     fail('logging_dependency_missing', 'Logging harvest requires observer and append-only artifact store');
   }
   parseTime(capturedAt, 'capturedAt');
-  const preparedExpectations = validateExpectations(
-    expectations.map((entry) => ({ ...entry, campaignRunId: runId })),
-    runId, phaseId, environment.environmentId,
-  );
+  const preparedExpectations = validateExpectations(expectations, runId, phaseId, environment.environmentId);
+  if (expectationSetSha256 !== canonicalP158LoggingExpectationSetDigest(preparedExpectations)) {
+    fail('logging_expectation_set_unfrozen', 'Logging request expectations do not match their pre-freeze digest');
+  }
   const normalizedExpectations = validateCausalEnvelopes(
     causalEnvelopes, preparedExpectations, runId, phaseId, environment.environmentId,
   );
@@ -333,7 +362,7 @@ export async function harvestP158LoggingEvidence({
   const inputIdentity = {
     runId, candidateSha256, phaseId, environmentId: environment.environmentId,
     environmentSealSha256, serviceOrigin: new URL(environment.serviceOrigin).origin,
-    window: clone(window), expectations: normalizedExpectations, sourceBinding,
+    window: clone(window), expectationSetSha256, expectations: normalizedExpectations, sourceBinding,
   };
   const inputIdentitySha256 = sha256(inputIdentity);
   const relativePath = artifactPath(environment.environmentId, phaseId);
@@ -349,15 +378,25 @@ export async function harvestP158LoggingEvidence({
   const suppliedRecords = [...checkpointRecords, ...dashboardProjections];
   assertNoSensitiveMaterial(suppliedRecords);
   const fixtures = [];
+  const observerReceipts = [];
   for (const expectation of normalizedExpectations) {
-    const records = suppliedRecords.filter((record) => record.attemptId === expectation.attemptId);
+    const records = suppliedRecords.filter((record) =>
+      record.expectationId === expectation.expectationId ||
+      (record.requestId === expectation.requestId && record.attemptId === expectation.attemptId));
     if (expectation.executionMode !== 'explicit_blocked' &&
         expectation.expectedSurfaceRoles.some((role) => SERVICE_ROLES.has(role))) {
       const observed = await observer({ environment: clone(environment), expectation: clone(expectation), window: clone(window) });
-      if (!Array.isArray(observed)) fail('logging_observer_invalid', 'Logging observer must return records');
-      records.push(...observed);
+      if (!Array.isArray(observed?.records) || !Array.isArray(observed?.observerReceipts) ||
+          observed.observerReceipts.length === 0 || observed.observerReceipts.some((receipt) =>
+            receipt.capturePlane !== true || receipt.expectationId !== expectation.expectationId ||
+            !/^[a-f0-9]{64}$/u.test(receipt.requestSha256 ?? ''))) {
+        fail('logging_observer_invalid', 'Logging observer must expose capture-plane request receipts');
+      }
+      assertNoSensitiveMaterial(observed);
+      records.push(...observed.records);
+      observerReceipts.push(...observed.observerReceipts.map(clone));
     }
-    const normalized = records.map((record, index) => normalizeRecord(record, expectation, index, times));
+    const normalized = records.map((record, index) => normalizeRecord(record, expectation, index, times, runId));
     for (const [ordinal, role] of expectation.expectedSurfaceRoles.entries()) {
       if (!normalized.some((record) => record.surfaceRole === role)) {
         normalized.push(missingRecord(expectation, role, ordinal, capturedAt));
@@ -366,8 +405,8 @@ export async function harvestP158LoggingEvidence({
     normalized.sort((left, right) => left.timestamp.localeCompare(right.timestamp) ||
       left.recordId.localeCompare(right.recordId));
     fixtures.push({
-      fixtureId: expectation.attemptId,
-      description: `Live logging evidence for ${expectation.attemptId}`,
+      fixtureId: expectation.expectationId,
+      description: `Live logging evidence for ${expectation.expectationId}`,
       operatorVisible: expectation.operatorVisible === true,
       incidentExpected: expectation.incidentExpected === true,
       expectedSurfaceRoles: [...expectation.expectedSurfaceRoles],
@@ -379,7 +418,9 @@ export async function harvestP158LoggingEvidence({
     schemaVersion: 'agent-browser.p158-logging-evidence-corpus.v1', planId: 'P158', syntheticOnly: false,
     runId, candidateSha256, phaseId, environmentId: environment.environmentId, environmentSealSha256,
     sourceBinding, window: clone(window), capturedAt, inputIdentitySha256,
-    fixtureCount: fixtures.length, fixtures,
+    expectationSetSha256, fixtureCount: fixtures.length, fixtures,
+    observerRequestCount: observerReceipts.length,
+    observerReceipts: observerReceipts.sort((left, right) => left.receiptId.localeCompare(right.receiptId)),
     redactionPolicy: {
       mode: 'allowlist_projection', excludedFieldNames: [...REDACTED_SOURCE_FIELDS],
       rawSensitiveMaterialDisposition: 'reject',
@@ -389,6 +430,84 @@ export async function harvestP158LoggingEvidence({
   const corpus = freeze({ ...body, corpusSha256: sha256(body) });
   await artifactStore.writeOnce(relativePath, canonicalJson(corpus));
   return { corpus, resumed: false, relativePath };
+}
+
+export function createP158LoggingHarvestHook({
+  configuration = null, artifactStore, runRoot, clock = { wallNow: () => new Date().toISOString() },
+  fetchByEnvironment = {}, ...direct
+}) {
+  const config = configuration ?? direct;
+  const {
+    runId, scheduleSha256, candidateSha256, environments, environmentSealSha256s,
+    loggingExpectations, loggingExpectationsSha256, windowsByEnvironmentPhase,
+    dashboardProjections = [],
+  } = config;
+  if (loggingExpectationsSha256 !== sha256(loggingExpectations) ||
+      !/^[a-f0-9]{64}$/u.test(scheduleSha256 ?? '') || typeof clock?.wallNow !== 'function') {
+    fail('logging_expectation_set_unfrozen', 'Pre-seal harvest requires the exact preparation expectation seal');
+  }
+  const sourcePath = P158_LOGGING_EVIDENCE_SOURCE_PATH;
+  const sourceDigest = sourceSha256();
+  const frozenExpectations = freeze(clone(loggingExpectations));
+  return freeze({
+    sourcePath,
+    sourceSha256: sourceDigest,
+    async execute({ schedule, target, sourceDigest: executionSourceDigest,
+      causalEnvelopes, checkpointRecords }) {
+      if (schedule?.scheduleSha256 !== scheduleSha256 || target?.runId !== runId ||
+          !/^[a-f0-9]{64}$/u.test(executionSourceDigest ?? '') ||
+          !Array.isArray(causalEnvelopes) || !Array.isArray(checkpointRecords)) {
+        fail('logging_harvest_execution_binding_invalid', 'Pre-seal harvest invocation is not campaign-bound');
+      }
+      const groups = new Map();
+      for (const expectation of frozenExpectations) {
+        const key = `${expectation.phaseId}:${expectation.environmentId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(expectation);
+      }
+      const artifactIds = [];
+      const corpusSha256s = [];
+      const findingCodes = new Set();
+      for (const key of [...groups.keys()].sort()) {
+        const [phaseId, environmentId] = key.split(':');
+        const expectations = groups.get(key);
+        const environment = environments?.[environmentId];
+        const window = windowsByEnvironmentPhase?.[key];
+        if (!environment || !window) {
+          fail('logging_harvest_group_unconfigured', `Missing logging harvest group ${key}`);
+        }
+        const matchingEnvelopeIds = new Set(expectations.map((entry) => entry.expectationId));
+        const groupEnvelopes = causalEnvelopes.filter((entry) =>
+          matchingEnvelopeIds.has(entry.expectationId) && entry.environmentId === environmentId);
+        const observer = createP158ServiceLoggingObserver({
+          fetch: fetchByEnvironment[environmentId] ?? globalThis.fetch,
+        });
+        const result = await harvestP158LoggingEvidence({
+          runId, candidateSha256, phaseId, environment,
+          environmentSealSha256: environmentSealSha256s?.[environmentId],
+          window, expectations,
+          expectationSetSha256: canonicalP158LoggingExpectationSetDigest(expectations),
+          causalEnvelopes: groupEnvelopes, checkpointRecords,
+          dashboardProjections, observer, artifactStore, runRoot,
+          capturedAt: window.capturedAt ?? clock.wallNow(),
+        });
+        const audit = auditCausalEnvelopes({ fixtureSet: result.corpus });
+        for (const finding of audit.findings) findingCodes.add(finding.code);
+        artifactIds.push(`p158-logging-evidence:${result.corpus.corpusSha256}`);
+        corpusSha256s.push(result.corpus.corpusSha256);
+      }
+      const body = {
+        schemaVersion: 'agent-browser.p158-logging-harvest-receipt.v1', runId, scheduleSha256,
+        sourcePath, sourceSha256: sourceDigest, executionSourceDigest,
+        state: findingCodes.size === 0 ? 'complete' : 'capture_gap',
+        artifactIds: artifactIds.sort(), corpusSha256s: corpusSha256s.sort(),
+        findingCodes: [...findingCodes].sort(),
+        completedAt: clock.wallNow(),
+        repairAttempted: false, retryAttempted: false,
+      };
+      return freeze({ ...body, receiptSha256: sha256(body) });
+    },
+  });
 }
 
 export function p158LoggingEvidenceSourceBinding() {
