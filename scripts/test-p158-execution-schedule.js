@@ -59,7 +59,7 @@ function compileReady(seed = 'p158-exhaustive-seed', executeByCase = {}) {
 
 function attemptsFor(schedule, caseId, environmentId) {
   return schedule.attempts.filter((attempt) =>
-    attempt.caseId === caseId && attempt.environmentId === environmentId);
+    attempt.caseId === caseId && attempt.environmentIds.includes(environmentId));
 }
 
 function cardinality(contract, id) {
@@ -87,9 +87,9 @@ const second = compileP158ExecutionSchedule({ registry, seed: 'frozen-seed' });
 assert.deepEqual(first, second);
 assert.deepEqual(registry, originalRegistry, 'compiler mutated the frozen registry');
 assert.equal(first.caseCount, 54);
-assert.equal(first.attemptCount, 1941);
-assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 1941);
-assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 1941);
+assert.equal(first.attemptCount, 1592);
+assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 1592);
+assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 1592);
 assert.deepEqual([...new Set(first.attempts.map((entry) => entry.phaseId))], ['W7', 'W8', 'W9']);
 assert.deepEqual(first.environments.map((entry) => entry.environmentId), ['E0', 'E1', 'E2', 'E3']);
 
@@ -103,21 +103,29 @@ for (const contract of first.caseContracts) {
   const source = registryCases.get(contract.caseId);
   assert.deepEqual(contract.executionContract, source.executionContract);
   assert.equal(typeof contract.executionContractSha256, 'string');
-  for (const environmentId of contract.environmentIds) {
-    const attempts = attemptsFor(first, contract.caseId, environmentId);
+  const workloads = contract.executionContract.environmentMode === 'combined'
+    ? [contract.environmentIds]
+    : contract.environmentIds.map((environmentId) => [environmentId]);
+  for (const workloadEnvironmentIds of workloads) {
+    const attempts = first.attempts.filter((attempt) =>
+      attempt.caseId === contract.caseId &&
+      JSON.stringify(attempt.environmentIds) === JSON.stringify(workloadEnvironmentIds));
+    const environmentKey = workloadEnvironmentIds.join('_');
     assert.equal(attempts.length, contract.executionContract.expansion.count, contract.caseId);
+    assert(attempts.every((attempt) =>
+      JSON.stringify(attempt.environmentIds) === JSON.stringify(workloadEnvironmentIds)));
     assert.deepEqual(attempts.map((entry) => entry.repetition),
       Array.from({ length: attempts.length }, (_, index) => index + 1));
     assert.deepEqual(attempts.map((entry) => entry.attemptId),
       Array.from({ length: attempts.length }, (_, index) =>
-        `${contract.caseId}-${environmentId}-r${String(index + 1).padStart(3, '0')}`));
+        `${contract.caseId}-${environmentKey}-r${String(index + 1).padStart(3, '0')}`));
     for (const declared of contract.executionContract.cardinalities) {
       const allocations = attempts.map((attempt) =>
         attempt.cardinalityAllocations.find((entry) => entry.id === declared.id));
       assert(allocations.every(Boolean), `${contract.caseId} omitted ${declared.id} allocation`);
       if (declared.scope === 'aggregate') {
         assert.equal(assignedTotal(attempts, declared.id), declared.value,
-          `${contract.caseId}/${environmentId}/${declared.id} multiplied its aggregate`);
+          `${contract.caseId}/${environmentKey}/${declared.id} multiplied its aggregate`);
       } else {
         assert(allocations.every((entry) => entry.assignedValue === declared.value));
       }
@@ -144,9 +152,9 @@ for (const attempt of first.attempts) {
   assert.deepEqual(attempt.dependsOnAttemptIds, expectedDependencies);
   assert(attempt.dependsOnAttemptIds.every((id) =>
     scheduleSequence.get(id) < attempt.scheduleSequence));
-  const expectedIngress = attempt.environmentId === 'E2' && (
+  const expectedIngress = attempt.environmentIds.includes('E2') && (
     ['external', 'dashboard', 'combined'].includes(source.evidenceProfile) ||
-    ['X06', 'X10'].includes(source.id)
+    ['A15', 'X06', 'X10'].includes(source.id)
   );
   assert.equal(attempt.externalIngressRequired, expectedIngress, attempt.attemptId);
 }
@@ -187,18 +195,28 @@ for (const [caseId, environmentId, lastOffset] of [
       attempts[index - 1].executionUnit.plannedOffsetSeconds));
 }
 
-for (const environmentId of ['E1', 'E2']) {
-  const c02 = attemptsFor(first, 'C02', environmentId);
-  assert.equal(assignedTotal(c02, 'service_commands'), 2000);
-  assert.equal(assignedTotal(c02, 'dashboard_actions'), 500);
-  assert.equal(assignedTotal(c02, 'reconnects'), 100);
-  assert.equal(assignedTotal(c02, 'browser_crashes'), 20);
-  const c04 = attemptsFor(first, 'C04', environmentId);
-  assert.equal(assignedTotal(c04, 'service_commands'), 10000);
-  assert.equal(assignedTotal(c04, 'dashboard_actions'), 2000);
-  assert.equal(assignedTotal(c04, 'reconnects'), 200);
-  assert.equal(assignedTotal(c04, 'browser_crashes'), 50);
+const c01 = first.attempts.filter((attempt) => attempt.caseId === 'C01');
+assert.equal(c01.length, 10);
+assert(c01.every((attempt) =>
+  JSON.stringify(attempt.environmentIds) === JSON.stringify(['E1', 'E2'])));
+assert.equal(assignedTotal(c01, 'service_commands'), 500);
+assert.equal(assignedTotal(c01, 'dashboard_actions'), 50);
+assert.equal(assignedTotal(c01, 'reconnects'), 10);
+for (const [caseId, repetitions, totals] of [
+  ['C02', 100, { service_commands: 2000, dashboard_actions: 500, reconnects: 100, browser_crashes: 20 }],
+  ['C04', 200, { service_commands: 10000, dashboard_actions: 2000, reconnects: 200, browser_crashes: 50 }],
+]) {
+  const combinedAttempts = first.attempts.filter((attempt) => attempt.caseId === caseId);
+  assert.equal(combinedAttempts.length, repetitions);
+  assert(combinedAttempts.every((attempt) =>
+    JSON.stringify(attempt.environmentIds) === JSON.stringify(['E1', 'E2'])));
+  for (const [cardinalityId, total] of Object.entries(totals)) {
+    assert.equal(assignedTotal(combinedAttempts, cardinalityId), total);
+  }
 }
+const a15 = first.attempts.filter((attempt) => attempt.caseId === 'A15');
+assert.equal(a15.length, 1);
+assert.deepEqual(a15[0].environmentIds, ['E0', 'E1', 'E2', 'E3']);
 
 const d09 = registryCases.get('D09').executionContract;
 assert.equal(cardinality(d09, 'profiles').value, 100);
@@ -248,12 +266,13 @@ const bridged = compileP158ControllerScheduleInput({
   seed: 'bridge-seed',
   adapters,
 });
-assert.equal(bridged.executionSchedule.attemptCount, 1941);
-assert.equal(bridged.controllerSchedule.length, 1941);
+assert.equal(bridged.executionSchedule.attemptCount, 1592);
+assert.equal(bridged.controllerSchedule.length, 1592);
 assert.deepEqual(bridged.controllerSchedule[0], {
   caseId: bridged.executionSchedule.attempts[0].caseId,
   attemptId: bridged.executionSchedule.attempts[0].attemptId,
   environmentId: bridged.executionSchedule.attempts[0].environmentId,
+  environmentIds: bridged.executionSchedule.attempts[0].environmentIds,
   seed: bridged.executionSchedule.attempts[0].seed,
   dependsOn: bridged.executionSchedule.attempts[0].dependsOnAttemptIds,
 });
@@ -268,6 +287,9 @@ for (const [code, mutate] of [
   }],
   ['execution_contract_cardinality_invalid', (draft) => {
     draft.cases[0].executionContract.cardinalities[0].scope = 'unknown';
+  }],
+  ['execution_contract_environment_mode_invalid', (draft) => {
+    draft.cases[0].executionContract.environmentMode = 'unknown';
   }],
 ]) {
   const draft = structuredClone(registry);

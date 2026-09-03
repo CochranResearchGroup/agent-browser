@@ -679,6 +679,7 @@
       "executionBound": "100 sequential and 25 concurrent self-declared clients",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -738,6 +739,7 @@
       "executionBound": "10 clients sharing one retained browser, repeated 20 times",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "repeat",
           "unit": "sharing_repetition",
@@ -789,6 +791,7 @@
       "executionBound": "10 same-label clients with distinct connection instances",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -853,6 +856,7 @@
       "executionBound": "all role, mode, operation, and allow-deny combinations",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -920,6 +924,7 @@
       "executionBound": "widen, narrow, admission, release, conflict, and drain at fixed barriers",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "barrier_transition",
@@ -962,6 +967,7 @@
       "executionBound": "queued and atomic revocation plus graceful and exact forced eviction",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1009,6 +1015,7 @@
       "executionBound": "one controlled Chrome crash at every supported command boundary",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1058,6 +1065,7 @@
       "executionBound": "unproven and inconsistent fixtures through four observed actions",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1106,6 +1114,7 @@
       "executionBound": "missing, dead, duplicate, blank, popup, close, switch, and navigation targets",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1150,6 +1159,7 @@
       "executionBound": "owned and foreign CDP resources under inventory churn",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1196,6 +1206,7 @@
       "executionBound": "every queue, scheduler, cancellation, worker, and persistence terminal boundary",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1240,6 +1251,7 @@
       "executionBound": "lock wait and timeout before effect, after effect, and after disconnect",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1283,6 +1295,7 @@
       "executionBound": "25 scheduled daemon or supervisor generation transitions",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "repeat",
           "unit": "generation_transition",
@@ -1329,6 +1342,7 @@
       "executionBound": "four rejected shutdown plans and one exact sacrificial shutdown",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "shutdown_plan",
@@ -1375,6 +1389,7 @@
       "executionBound": "unique markers through CLI, HTTP, MCP, dashboard, and remote control",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1421,6 +1436,7 @@
       "executionBound": "two external runners open, interact, disconnect, and reopen one handoff",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1475,6 +1491,7 @@
       "executionBound": "scan every client-visible URL role and injected host or scheme variation",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1541,6 +1558,7 @@
       "executionBound": "viewer, route, display, and provider-session replacement",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "rebind_transition",
@@ -1587,6 +1605,7 @@
       "executionBound": "8 observers and 2 controller contenders",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1636,6 +1655,7 @@
       "executionBound": "agent-human-agent input transfer at fixed barriers",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "controller_transfer",
@@ -1677,6 +1697,7 @@
       "executionBound": "windows, tabs, popups, prompts, minimize, obscure, and focus states",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1720,6 +1741,7 @@
       "executionBound": "all routes held by healthy non-parkable controllers plus one request",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1775,6 +1797,7 @@
       "executionBound": "six presentation failure injections",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1817,6 +1840,7 @@
       "executionBound": "fixed latency, jitter, bandwidth, loss, interruption, TLS, and idle profiles",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "network_profile",
@@ -1866,6 +1890,7 @@
       "executionBound": "scheduled browser crash and service or supervisor transitions",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "dimension",
           "unit": "disruption_transition",
@@ -1914,6 +1939,7 @@
       "executionBound": "synthetic prompts plus bounded non-production vault and passkey fixtures",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -1956,6 +1982,7 @@
       "executionBound": "500 reconnects over at least 24 hours using one unchanged handoff",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "repeat",
           "unit": "handoff_reconnect",
@@ -2010,6 +2037,7 @@
       "executionBound": "one old PrivateTmp generation holds display 90 while frozen host starts",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2062,6 +2090,7 @@
       "executionBound": "separate daemon allocator requests at deterministic barriers",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2109,6 +2138,7 @@
       "executionBound": "stale lock, live sockets, dead and reused PID, and owner mismatch combinations",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2153,6 +2183,7 @@
       "executionBound": "occupy displays 90 through 129 with owned and foreign fixtures",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2215,6 +2246,7 @@
       "executionBound": "cookie, authority file, user, environment, and display ownership matrix",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2290,6 +2322,7 @@
       "executionBound": "terminal, absent, wrong, obscured, popup, resize, and focus window states",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2331,6 +2364,7 @@
       "executionBound": "25 stale, unresponsive, delayed, duplicate-listener, and replacement transitions",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "repeat",
           "unit": "supervisor_transition",
@@ -2378,6 +2412,7 @@
       "executionBound": "transfer, refusal, full shutdown, interruption, resume, and rollback evidence",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "install_path_transition",
@@ -2422,6 +2457,7 @@
       "executionBound": "six digest or generation axes singly and in combinations",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2477,6 +2513,7 @@
       "executionBound": "boot, process, socket, route, handoff, and browser epochs",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "dimension",
           "unit": "epoch_transition",
@@ -2519,6 +2556,7 @@
       "executionBound": "empty, sparse, normal, and dense authoritative inventories",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2559,6 +2597,7 @@
       "executionBound": "eight resource lifecycle transitions at fixed barriers",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "dimension",
           "unit": "resource_transition",
@@ -2606,6 +2645,7 @@
       "executionBound": "duplicate labels, tabs, windows, foreign, historical, and ambiguous rows",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2648,6 +2688,7 @@
       "executionBound": "10 external dashboard clients with navigation and selection interleavings",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2698,6 +2739,7 @@
       "executionBound": "six missing-resource deep-link classes",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2740,6 +2782,7 @@
       "executionBound": "Cartesian runtime, convergence, access, and acquisition health axes",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2791,6 +2834,7 @@
       "executionBound": "delayed, duplicate, dropped, and reordered snapshot and stream responses",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2842,6 +2886,7 @@
       "executionBound": "scan every dashboard copy and open action",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2880,6 +2925,7 @@
       "executionBound": "100 Profiles, 500 browsers, 2000 tabs, 10000 jobs, and 10000 events",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -2951,6 +2997,7 @@
       "executionBound": "p50, p95, p99, and worst for seven interactions",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -3005,6 +3052,7 @@
       "executionBound": "8-hour browser resource stability session",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -3052,6 +3100,7 @@
       "executionBound": "small, typical, wide, keyboard, focus, motion, loading, error, and overflow states",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "separate",
         "expansion": {
           "strategy": "aggregate",
           "unit": "case",
@@ -3105,6 +3154,7 @@
       "executionBound": "20 minutes, 25 agents, 2 viewers, 1 controller, 500 commands, 50 dashboard actions, 10 reconnects",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "repeat",
           "unit": "handoff_reconnect",
@@ -3177,6 +3227,7 @@
       "executionBound": "100 agents, 10 dashboards, full routes, 2000 commands, 500 actions, 100 reconnects, 20 crashes",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "repeat",
           "unit": "handoff_reconnect",
@@ -3251,6 +3302,7 @@
       "executionBound": "25 scheduled supervisor transitions under mixed load",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "repeat",
           "unit": "supervisor_transition",
@@ -3298,6 +3350,7 @@
       "executionBound": "8 hours, 10000 commands, 2000 dashboard actions, 200 reconnects, 50 crashes",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "repeat",
           "unit": "handoff_reconnect",
@@ -3356,6 +3409,7 @@
       "executionBound": "24 hours and 500 reconnects with one unchanged durable handoff",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "environmentMode": "combined",
         "expansion": {
           "strategy": "repeat",
           "unit": "handoff_reconnect",

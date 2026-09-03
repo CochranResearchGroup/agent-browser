@@ -372,18 +372,24 @@ export function buildDeterministicSchedule({ registry, schedule, seed }) {
       });
     }
     attemptIds.add(attempt.attemptId);
-    if (!(registryCases.get(attempt.caseId).environmentIds ?? []).includes(attempt.environmentId)) {
-      fail('INVALID_ATTEMPT_ENVIRONMENT', 'Attempt environment is not declared by its case', {
+    const environmentIds = [...new Set(attempt.environmentIds ?? [attempt.environmentId])];
+    const environmentId = attempt.environmentId ?? environmentIds[0];
+    if (environmentIds.length === 0 || !environmentIds.includes(environmentId) ||
+        environmentIds.some((candidate) =>
+          !(registryCases.get(attempt.caseId).environmentIds ?? []).includes(candidate))) {
+      fail('INVALID_ATTEMPT_ENVIRONMENT', 'Attempt environments are not declared by its case', {
         caseId: attempt.caseId,
-        environmentId: attempt.environmentId,
+        environmentId,
+        environmentIds,
       });
     }
     return {
       caseId: attempt.caseId,
       attemptId: attempt.attemptId,
-      environmentId: attempt.environmentId,
+      environmentId,
+      environmentIds,
       seed:
-        attempt.seed ?? deriveAttemptSeed(seed, attempt.caseId, attempt.attemptId, attempt.environmentId),
+        attempt.seed ?? deriveAttemptSeed(seed, attempt.caseId, attempt.attemptId, environmentId),
       dependsOn: [...new Set(attempt.dependsOn ?? registryCases.get(attempt.caseId).dependsOn ?? [])].sort(),
       suppliedIndex,
     };
@@ -403,13 +409,13 @@ export function buildDeterministicSchedule({ registry, schedule, seed }) {
     (left, right) =>
       caseOrder.get(left.caseId) - caseOrder.get(right.caseId) ||
       left.caseId.localeCompare(right.caseId) ||
-      left.environmentId.localeCompare(right.environmentId) ||
+      left.environmentIds.join(',').localeCompare(right.environmentIds.join(',')) ||
       left.attemptId.localeCompare(right.attemptId) ||
       left.suppliedIndex - right.suppliedIndex,
   );
   const repetitions = new Map();
   const ordered = normalized.map(({ suppliedIndex: _suppliedIndex, ...attempt }, scheduleIndex) => {
-    const repetitionKey = `${attempt.caseId}\0${attempt.environmentId}`;
+    const repetitionKey = `${attempt.caseId}\0${attempt.environmentIds.join(',')}`;
     const repetition = (repetitions.get(repetitionKey) ?? 0) + 1;
     repetitions.set(repetitionKey, repetition);
     return {
@@ -418,13 +424,12 @@ export function buildDeterministicSchedule({ registry, schedule, seed }) {
       scheduleSequence: scheduleIndex,
       scheduleId: `${attempt.caseId}:${attempt.attemptId}`,
       repetition,
-      environmentIds: [attempt.environmentId],
       preconditionIds: [],
       stimuli: [],
       evidenceProfile: registryCases.get(attempt.caseId).evidenceProfile,
       externalIngressRequired:
-        attempt.environmentId === 'E2' &&
-        (/^[HDC]/.test(attempt.caseId) || ['X06', 'X10'].includes(attempt.caseId)),
+        attempt.environmentIds.includes('E2') &&
+        (/^[HDC]/.test(attempt.caseId) || ['A15', 'X06', 'X10'].includes(attempt.caseId)),
     };
   });
   for (const attempt of ordered) {

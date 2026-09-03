@@ -94,11 +94,11 @@ function topologicalCases(cases) {
   return ordered;
 }
 
-function externalIngressRequired(testCase, environmentId) {
+function externalIngressRequired(testCase, environmentIds) {
   const caseId = testCase.caseId ?? testCase.id;
-  return environmentId === 'E2' && (
+  return environmentIds.includes('E2') && (
     ['external', 'dashboard', 'combined'].includes(testCase.evidenceProfile) ||
-    ['X06', 'X10'].includes(caseId)
+    ['A15', 'X06', 'X10'].includes(caseId)
   );
 }
 
@@ -106,6 +106,10 @@ function validateExecutionContract(testCase) {
   const contract = testCase.executionContract;
   if (contract?.schemaVersion !== 'agent-browser.p158-case-execution-contract.v1') {
     fail('execution_contract_missing', `${testCase.id} has no machine-readable execution contract`);
+  }
+  if (!['separate', 'combined'].includes(contract.environmentMode)) {
+    fail('execution_contract_environment_mode_invalid',
+      `${testCase.id} has an invalid execution environment mode`);
   }
   const expansion = contract.expansion;
   if (!['aggregate', 'repeat', 'dimension'].includes(expansion?.strategy) ||
@@ -345,13 +349,17 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
     };
   });
   const caseOrder = new Map(caseContracts.map((contract, index) => [contract.caseId, index]));
-  const attempts = caseContracts.flatMap((contract) => contract.environmentIds.flatMap(
-    (environmentId) => Array.from(
+  const attempts = caseContracts.flatMap((contract) => {
+    const workloads = contract.executionContract.environmentMode === 'combined'
+      ? [contract.environmentIds]
+      : contract.environmentIds.map((environmentId) => [environmentId]);
+    return workloads.flatMap((workloadEnvironmentIds) => Array.from(
       { length: contract.executionContract.expansion.count },
       (_, index) => {
         const repetition = index + 1;
         const suffix = `r${String(repetition).padStart(3, '0')}`;
-        const attemptId = `${contract.caseId}-${environmentId}-${suffix}`;
+        const environmentKey = workloadEnvironmentIds.join('_');
+        const attemptId = `${contract.caseId}-${environmentKey}-${suffix}`;
         const expandedDimension = contract.executionContract.expansion.strategy === 'dimension'
           ? contract.executionContract.dimensions.find(
             (dimension) => dimension.id === contract.executionContract.expansion.dimensionId,
@@ -361,11 +369,11 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
           caseId: contract.caseId,
           attemptId,
           phaseId: contract.phaseId,
-          environmentId,
-          environmentIds: [environmentId],
+          environmentId: workloadEnvironmentIds[0],
+          environmentIds: [...workloadEnvironmentIds],
           repetition,
           seed: Number.parseInt(
-            sha256(`${seed}\0${contract.caseId}\0${environmentId}\0${suffix}`).slice(0, 13),
+            sha256(`${seed}\0${contract.caseId}\0${environmentKey}\0${suffix}`).slice(0, 13),
             16,
           ),
           evidenceProfile: contract.evidenceProfile,
@@ -394,19 +402,20 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
           ),
           adapterId: contract.adapterId,
           declaredEffectIds: contract.declaredEffectIds,
-          externalIngressRequired: externalIngressRequired(contract, environmentId),
+          externalIngressRequired: externalIngressRequired(contract, workloadEnvironmentIds),
           dependsOnCaseIds: contract.dependsOnCaseIds,
         };
       },
-    ),
-  ));
+    ));
+  });
   const attemptsByCase = new Map(caseContracts.map((contract) => [
     contract.caseId,
     attempts.filter((attempt) => attempt.caseId === contract.caseId).map((attempt) => attempt.attemptId),
   ]));
   attempts.sort((left, right) =>
     caseOrder.get(left.caseId) - caseOrder.get(right.caseId) ||
-    left.environmentId.localeCompare(right.environmentId));
+    left.environmentIds.join(',').localeCompare(right.environmentIds.join(',')) ||
+    left.repetition - right.repetition);
   for (const [sequence, attempt] of attempts.entries()) {
     attempt.scheduleSequence = sequence;
     attempt.scheduleId = `${attempt.phaseId}:${attempt.attemptId}`;
@@ -426,7 +435,8 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
     };
   });
   const environments = [...environmentIds].sort().map((environmentId) => {
-    const environmentAttempts = attempts.filter((attempt) => attempt.environmentId === environmentId);
+    const environmentAttempts = attempts.filter((attempt) =>
+      attempt.environmentIds.includes(environmentId));
     return {
       environmentId,
       description: registry.environments[environmentId],
@@ -473,6 +483,7 @@ export function compileP158ControllerScheduleInput({ registry, seed, adapters })
       caseId: attempt.caseId,
       attemptId: attempt.attemptId,
       environmentId: attempt.environmentId,
+      environmentIds: [...attempt.environmentIds],
       seed: attempt.seed,
       dependsOn: [...attempt.dependsOnAttemptIds],
     })),

@@ -320,8 +320,7 @@ await runTest('requires external ingress for every E2 operator-visible and combi
     const byCase = Object.fromEntries(
       fixture.controller.snapshot().manifest.schedule.map((attempt) => [attempt.caseId, attempt]),
     );
-    assert.equal(byCase.A15.externalIngressRequired, false, 'non-operator logging case was overclassified');
-    for (const caseId of ['H01', 'X06', 'X10', 'D01', 'C01']) {
+    for (const caseId of ['A15', 'H01', 'X06', 'X10', 'D01', 'C01']) {
       assert.equal(byCase[caseId].externalIngressRequired, true, `${caseId} omitted its E2 ingress gate`);
     }
   } finally {

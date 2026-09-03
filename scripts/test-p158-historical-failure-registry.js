@@ -15,7 +15,8 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const registry = JSON.parse(readFileSync(registryPath, 'utf8'));
+const registrySource = readFileSync(registryPath, 'utf8');
+const registry = JSON.parse(registrySource);
 const executionContractSchema = JSON.parse(readFileSync(executionContractSchemaPath, 'utf8'));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateExecutionContract = ajv.compile(executionContractSchema);
@@ -68,6 +69,10 @@ const expectedCases = [
 ];
 const caseIds = new Set(registry.cases.map((testCase) => testCase.id));
 assert(registry.cases.length === 54, 'P158 must freeze 49 scenarios and 5 combined phases');
+assert(
+  (registrySource.match(/"environmentMode"/g) ?? []).length === registry.cases.length,
+  'P158 must have exactly one source-level environmentMode key per case',
+);
 assert(expectedCases.every((id) => caseIds.has(id)), 'P158 scenario arsenal is incomplete');
 
 for (const testCase of registry.cases) {
@@ -78,6 +83,12 @@ for (const testCase of registry.cases) {
   assert(
     validateExecutionContract(testCase.executionContract),
     `${testCase.id} execution contract is invalid: ${ajv.errorsText(validateExecutionContract.errors)}`,
+  );
+  assert(
+    testCase.executionContract.environmentMode ===
+      (['A15', 'H07', 'H10', 'H11', 'X10', 'C01', 'C02', 'C03', 'C04', 'C05']
+        .includes(testCase.id) ? 'combined' : 'separate'),
+    `${testCase.id} execution environment mode drifted`,
   );
   assert(Object.hasOwn(registry.evidenceProfiles, testCase.evidenceProfile), `${testCase.id} has no evidence profile`);
   assert(testCase.environmentIds.every((id) => Object.hasOwn(registry.environments, id)), `${testCase.id} cites an unknown environment`);

@@ -4,9 +4,10 @@
   "title": "P158 machine-readable case execution contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "expansion", "dimensions", "cardinalities"],
+  "required": ["schemaVersion", "environmentMode", "expansion", "dimensions", "cardinalities"],
   "properties": {
     "schemaVersion": { "const": "agent-browser.p158-case-execution-contract.v1" },
+    "environmentMode": { "enum": ["separate", "combined"] },
     "expansion": { "$ref": "#/$defs/expansion" },
     "dimensions": {
       "type": "array",

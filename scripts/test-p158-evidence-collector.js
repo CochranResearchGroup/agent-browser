@@ -180,7 +180,7 @@ await runTest('assembles nineteen byte-bound preparation artifacts including the
     assert.equal(collected.input.artifacts.length, 19);
     assert.equal(new Set(collected.input.artifacts.map((artifact) => artifact.kind)).size, 19);
     assert.equal(collected.input.campaignMode, 'live');
-    assert.equal(collected.input.schedule.length, 1941);
+    assert.equal(collected.input.schedule.length, 1592);
     for (const artifact of collected.input.artifacts) {
       const bytes = Buffer.from(artifact.content, 'base64');
       assert.equal(artifact.declaredSha256, sha256(bytes));
@@ -301,7 +301,7 @@ await runTest('persists only prepared and frozen state behind the explicit freez
     ), 'utf8'));
     assert.equal(validateCampaignManifest(manifest), true,
       schemaAjv.errorsText(validateCampaignManifest.errors));
-    assert.equal(manifest.schedule.length, 1941);
+    assert.equal(manifest.schedule.length, 1592);
     assert(manifest.artifactBindings.some((binding) => binding.kind === 'execution_schedule'));
     const records = readdirSync(join(context.freezeRoot, 'ledger'))
       .map((path) => JSON.parse(readFileSync(join(context.freezeRoot, 'ledger', path), 'utf8')));
