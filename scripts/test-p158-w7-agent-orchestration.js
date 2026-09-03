@@ -154,14 +154,31 @@ const compiled = compileP158W7AgentOrchestration({
   schedule, target, actionPlans: plans, manifest, drivers,
 });
 assert.deepEqual(manifest, originalManifest, 'compile must not mutate the frozen manifest input');
-assert.deepEqual(compiled.concreteCaseIds, P158_W7_AGENT_ORCHESTRATION_CASE_IDS);
-assert.deepEqual(compiled.blockedCaseIds, []);
+assert.deepEqual(compiled.concreteCaseIds, []);
+assert.deepEqual(compiled.blockedCaseIds, P158_W7_AGENT_ORCHESTRATION_CASE_IDS);
 assert.deepEqual(compiled.productBlockedCaseIds, ['A11', 'A12', 'A14']);
 assert.equal(compiled.effectsExecuted, false);
-assert.equal(compiled.freezeEligible, true);
+assert.equal(compiled.freezeEligible, false);
+assert.equal(compiled.sourceBound, true);
 assert.equal(compiled.driverSource.sourcePath, 'scripts/lib/p158-w7-agent-orchestration.js');
 assert.match(compiled.driverSource.sourceSha256, /^[a-f0-9]{64}$/);
-assert.equal(compiled.adapters.length, P158_W7_AGENT_ORCHESTRATION_CASE_IDS.length);
+assert.equal(compiled.driverSource.mode, 'transport_only');
+assert.equal(compiled.driverSource.freezeEligible, false);
+assert.equal(compiled.adapters.length, 0);
+assert.deepEqual(Object.keys(compiled.effects), []);
+assert.deepEqual(Object.fromEntries(compiled.blockers.map(({ caseId, code }) => [caseId, code])), {
+  A01: 'client_resource_identity_oracle_missing',
+  A02: 'shared_browser_ownership_oracle_missing',
+  A03: 'connection_tab_identity_oracle_missing',
+  A04: 'acl_decision_oracle_missing',
+  A05: 'barrier_release_seam_missing',
+  A06: 'revocation_barrier_release_seam_missing',
+  A08: 'profile_identity_oracle_missing',
+  A09: 'target_pathology_oracle_missing',
+  A10: 'inventory_ownership_oracle_missing',
+  A15: 'cross_transport_history_oracle_missing',
+});
+assert.equal(driverCalls.length, 0, 'compilation must never probe a live transport');
 
 const injectedOnly = compileP158W7AgentOrchestration({
   schedule,
@@ -229,8 +246,8 @@ const integrated = createP158W7LiveDevelopmentAdapterBundle({
   agentWorkflowDrivers: drivers,
 });
 assert.equal(integrated.w7Adapters.length, 25);
-assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'concrete_live').length, 13);
-assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'explicit_blocked').length, 12);
+assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'concrete_live').length, 3);
+assert.equal(integrated.adapterBindings.filter((entry) => entry.mode === 'explicit_blocked').length, 22);
 assert.deepEqual(integrated.adapterBindings.filter((entry) => ['A11', 'A12', 'A14'].includes(entry.caseId))
   .map((entry) => [entry.caseId, entry.mode]), [
   ['A11', 'explicit_blocked'], ['A12', 'explicit_blocked'], ['A14', 'explicit_blocked'],
@@ -243,26 +260,6 @@ assert.deepEqual(actionCounts, {
   A01: 260, A02: 440, A03: 50, A04: 216, A05: 12,
   A06: 8, A08: 24, A09: 16, A10: 8, A15: 6,
 });
-
-for (const adapter of compiled.adapters) {
-  const attempt = schedule.attempts.find((entry) => entry.caseId === adapter.caseId);
-  const effectId = schedule.caseContracts.find((entry) => entry.caseId === adapter.caseId).declaredEffectIds[0];
-  const before = driverCalls.length;
-  const outcome = await adapter.execute({
-    attempt,
-    requestEffect: (requestedEffectId, payload) => {
-      assert.equal(requestedEffectId, effectId);
-      return compiled.effects[effectId](payload);
-    },
-  });
-  assert.equal(outcome.resultState, 'passed', adapter.caseId);
-  assert.equal(outcome.actionCount, outcome.receipts.length);
-  assert.equal(new Set(outcome.actionIds).size, outcome.actionIds.length);
-  assert(outcome.receipts.every((receipt) => receipt.receiptSha256.length === 64));
-  assert(outcome.receipts.every((receipt) => receipt.stepReceipts.every((step) =>
-    step.correlationIds.campaignRunId === target.campaignRunId && step.artifactIds.length > 0)));
-  assert(driverCalls.length > before);
-}
 
 const incomplete = structuredClone(manifest);
 incomplete.actions = incomplete.actions.filter((entry) => entry.caseId !== 'A09').slice();
@@ -298,35 +295,6 @@ assert.throws(
   (error) => error instanceof P158W7OrchestrationError && error.code === 'history_transport_binding_invalid',
 );
 
-const failingCalls = [];
-const failingDrivers = createP158W7ExistingSeamDrivers({
-  fetchImpl: async () => ({ ok: true, redirected: false, status: 200, json: async () => ({ success: true }) }),
-  execFile: async () => {
-    failingCalls.push('browser_cli');
-    const error = new Error('first observation failed');
-    error.code = 'synthetic_first_failure';
-    throw error;
-  },
-});
-const failed = compileP158W7AgentOrchestration({
-  schedule,
-  target,
-  actionPlans: plans,
-  manifest,
-  drivers: failingDrivers,
-});
-const a09Adapter = failed.adapters.find((adapter) => adapter.caseId === 'A09');
-const a09Attempt = schedule.attempts.find((entry) => entry.caseId === 'A09');
-const a09Effect = schedule.caseContracts.find((entry) => entry.caseId === 'A09').declaredEffectIds[0];
-const failure = await a09Adapter.execute({
-  attempt: a09Attempt,
-  requestEffect: (_effectId, payload) => failed.effects[a09Effect](payload),
-});
-assert.equal(failure.resultState, 'new_product_failure');
-assert.equal(failingCalls.length, failure.actionCount, 'independent actions continue once without retry');
-assert(failure.receipts.every((receipt) => receipt.stepCount === 1 &&
-  receipt.stepReceipts[0].errorCode === 'synthetic_first_failure'));
-assert(failure.receipts.every((receipt) => receipt.retryAttempted === false &&
-  receipt.repairAttempted === false && receipt.garbageCollectionAttempted === false));
+assert.equal(driverCalls.length, 0, 'blocked workflows must perform no effects');
 
-console.log(`p158 W7 agent orchestration passed (${selectedPlans.length} exact action workflows)`);
+console.log(`p158 W7 agent orchestration blocked safely (${selectedPlans.length} exact action workflows)`);

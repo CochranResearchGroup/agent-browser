@@ -4,11 +4,22 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { createP158CaseAdapter } from './p158-execution-schedule.js';
 import { sha256 } from './p158-campaign-controller.js';
 
 const CASES = Object.freeze(['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A08', 'A09', 'A10', 'A15']);
 const PRODUCT_BLOCKED = new Set(['A11', 'A12', 'A14']);
+const CASE_READINESS_BLOCKERS = Object.freeze({
+  A01: 'client_resource_identity_oracle_missing',
+  A02: 'shared_browser_ownership_oracle_missing',
+  A03: 'connection_tab_identity_oracle_missing',
+  A04: 'acl_decision_oracle_missing',
+  A05: 'barrier_release_seam_missing',
+  A06: 'revocation_barrier_release_seam_missing',
+  A08: 'profile_identity_oracle_missing',
+  A09: 'target_pathology_oracle_missing',
+  A10: 'inventory_ownership_oracle_missing',
+  A15: 'cross_transport_history_oracle_missing',
+});
 const SEAMS = new Set([
   'service_http',
   'browser_cli',
@@ -33,10 +44,6 @@ const EXISTING_SERVICE_ACTIONS = new Set([
   'cdp_free_launch', 'remote_view_open', 'view_focus', 'diagnostics',
   'service_profile_upsert', 'service_session_upsert', 'service_profile_policy_mutate',
   'service_profile_tab_evict', 'service_browsers', 'service_tabs',
-]);
-const RESULT_PRIORITY = Object.freeze([
-  'safety_stopped', 'harness_failure', 'new_product_failure',
-  'reproduced_historical_failure', 'inconclusive', 'skipped_blocked', 'passed',
 ]);
 const DRIVER_BRAND = Symbol('p158-w7-existing-seam-drivers');
 const SOURCE_PATH = 'scripts/lib/p158-w7-agent-orchestration.js';
@@ -209,60 +216,6 @@ function validateCrossActionInvariants(caseId, bindings) {
   }
 }
 
-function terminalState(receipts) {
-  return RESULT_PRIORITY.find((state) => receipts.some((receipt) => receipt.resultState === state)) ?? 'harness_failure';
-}
-
-async function executeBinding(binding, drivers) {
-  const stepReceipts = [];
-  let resultState = 'passed';
-  for (const step of binding.steps) {
-    const driver = drivers?.[step.seam];
-    if (typeof driver !== 'function') fail('workflow_driver_missing', step.seam);
-    try {
-      const result = await driver(structuredClone(step), structuredClone(binding));
-      const receipt = freeze({
-        stepId: step.stepId,
-        seam: step.seam,
-        operation: step.operation,
-        resultSha256: sha256(result),
-        correlationIds: structuredClone(step.correlationIds),
-        artifactIds: Array.isArray(result?.artifactIds) && result.artifactIds.length > 0
-          ? [...result.artifactIds]
-          : [`p158:${binding.campaignRunId}:${step.stepId}:${sha256(result)}`],
-        terminal: true,
-      });
-      stepReceipts.push(receipt);
-    } catch (error) {
-      resultState = error?.resultState ?? 'new_product_failure';
-      stepReceipts.push(freeze({
-        stepId: step.stepId,
-        seam: step.seam,
-        operation: step.operation,
-        errorCode: error?.code ?? error?.name ?? 'workflow_step_failed',
-        errorMessage: error?.message ?? String(error),
-        correlationIds: structuredClone(step.correlationIds),
-        artifactIds: [`p158:${binding.campaignRunId}:${step.stepId}:failure`],
-        terminal: true,
-      }));
-      break;
-    }
-  }
-  const body = {
-    schemaVersion: 'agent-browser.p158-w7-agent-action-receipt.v1',
-    actionId: binding.actionId,
-    caseId: binding.caseId,
-    attemptId: binding.attemptId,
-    resultState,
-    stepCount: stepReceipts.length,
-    stepReceipts,
-    repairAttempted: false,
-    retryAttempted: false,
-    garbageCollectionAttempted: false,
-  };
-  return freeze({ ...body, receiptSha256: sha256(body) });
-}
-
 export function createP158W7ExistingSeamDrivers({
   fetchImpl = globalThis.fetch,
   execFile = promisify(nodeExecFile),
@@ -318,8 +271,8 @@ export function createP158W7ExistingSeamDrivers({
   };
   Object.defineProperty(drivers, DRIVER_BRAND, { value: true });
   Object.defineProperty(drivers, 'metadata', { value: freeze({
-    mode: 'concrete_live',
-    freezeEligible: true,
+    mode: 'transport_only',
+    freezeEligible: false,
     sourcePath: SOURCE_PATH,
     sourceSha256: sourceSha256(),
     effectsExecuted: false,
@@ -341,9 +294,8 @@ export function compileP158W7AgentOrchestration({ schedule, target, actionPlans,
     if (!action) fail('workflow_action_unexpected', binding?.actionId);
     supplied.set(binding.actionId, validateBinding(binding, action, target));
   }
-  const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
-  const freezeEligible = drivers?.[DRIVER_BRAND] === true &&
-    drivers.metadata?.mode === 'concrete_live' && drivers.metadata?.freezeEligible === true &&
+  const sourceBound = drivers?.[DRIVER_BRAND] === true &&
+    drivers.metadata?.mode === 'transport_only' && drivers.metadata?.freezeEligible === false &&
     drivers.metadata?.sourcePath === SOURCE_PATH && /^[a-f0-9]{64}$/.test(drivers.metadata?.sourceSha256);
   const concreteCaseIds = [];
   const blocked = [];
@@ -352,7 +304,7 @@ export function compileP158W7AgentOrchestration({ schedule, target, actionPlans,
   for (const caseId of CASES) {
     const caseActions = expected.filter((action) => action.caseId === caseId);
     const bindings = caseActions.map((action) => supplied.get(action.actionId)).filter(Boolean);
-    if (!freezeEligible) {
+    if (!sourceBound) {
       blocked.push(freeze({ caseId, code: 'driver_bundle_not_freeze_eligible', expectedActionCount: caseActions.length, boundActionCount: bindings.length }));
       continue;
     }
@@ -361,32 +313,14 @@ export function compileP158W7AgentOrchestration({ schedule, target, actionPlans,
       continue;
     }
     validateCrossActionInvariants(caseId, bindings);
-    concreteCaseIds.push(caseId);
-    const contract = contracts.get(caseId);
-    const effectId = contract.declaredEffectIds[0];
-    const byActionId = new Map(bindings.map((binding) => [binding.actionId, binding]));
-    effects[effectId] = ({ actionId }) => executeBinding(byActionId.get(actionId), drivers);
-    adapters.push(createP158CaseAdapter({
+    // These bindings prove only that an owned development transport can be
+    // called. They do not yet prove the case-specific postcondition. A 2xx
+    // response or zero CLI exit is never promoted to campaign evidence.
+    blocked.push(freeze({
       caseId,
-      evidenceProfile: contract.evidenceProfile,
-      executionContract: contract.executionContract,
-      execute: async ({ attempt, requestEffect }) => {
-        const current = caseActions.filter((action) => action.attemptId === attempt.attemptId);
-        const serial = current.filter((action) => byActionId.get(action.actionId).dispatchMode !== 'concurrent');
-        const concurrent = current.filter((action) => byActionId.get(action.actionId).dispatchMode === 'concurrent');
-        const receipts = [];
-        for (const action of serial) receipts.push(await requestEffect(effectId, { actionId: action.actionId }));
-        receipts.push(...await Promise.all(concurrent.map((action) => requestEffect(effectId, { actionId: action.actionId }))));
-        return freeze({
-          resultState: terminalState(receipts),
-          actionCount: current.length,
-          actionIds: current.map((action) => action.actionId),
-          receipts,
-          repairAttempted: false,
-          retryAttempted: false,
-          garbageCollectionAttempted: false,
-        });
-      },
+      code: CASE_READINESS_BLOCKERS[caseId],
+      expectedActionCount: caseActions.length,
+      boundActionCount: bindings.length,
     }));
   }
   return freeze({
@@ -398,8 +332,9 @@ export function compileP158W7AgentOrchestration({ schedule, target, actionPlans,
     effects,
     productBlockedCaseIds: [...PRODUCT_BLOCKED],
     effectsExecuted: false,
-    freezeEligible,
-    driverSource: freezeEligible ? drivers.metadata : null,
+    freezeEligible: concreteCaseIds.length > 0,
+    sourceBound,
+    driverSource: sourceBound ? drivers.metadata : null,
   });
 }
 
