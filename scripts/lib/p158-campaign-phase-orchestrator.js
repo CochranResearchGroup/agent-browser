@@ -103,7 +103,10 @@ function terminalResult({ attempt, result, phaseId, runId, checkpointPath }) {
   return body;
 }
 
-export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle, liveHookManifestSha256 }) {
+export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle, liveHookManifestSha256, runId }) {
+  if (typeof runId !== 'string' || runId.length === 0) {
+    fail('phase_run_id_missing', 'Preparation requires the exact frozen campaign run ID');
+  }
   const bundles = {
     W7: validateBundle({ phaseId: 'W7', bundle: w7Bundle, schedule, liveHookManifestSha256 }),
     W8: validateBundle({ phaseId: 'W8', bundle: w8Bundle, schedule, liveHookManifestSha256 }),
@@ -123,7 +126,7 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
     }));
   const loggingExpectations = schedule.attempts.map((attempt) => ({
     attemptId: attempt.attemptId,
-    requestId: `p158:${attempt.attemptId}:request`,
+    requestId: `p158:${runId}:${attempt.attemptId}:request`,
     incidentExpected: false,
     operatorVisible: attempt.externalIngressRequired === true,
     expectedSurfaceRoles: [
@@ -134,6 +137,7 @@ export function buildP158CampaignPhasePreparation({ schedule, w7Bundle, w8Bundle
   const body = {
     schemaVersion: 'agent-browser.p158-campaign-phase-preparation.v1',
     scheduleSha256: schedule.scheduleSha256,
+    runId,
     liveHookManifestSha256,
     preExecutionBlockers,
     loggingExpectations,
@@ -176,7 +180,7 @@ export async function runP158CampaignPhases({
     W8: validateBundle({ phaseId: 'W8', bundle: w8Bundle, schedule, liveHookManifestSha256 }),
   };
   const expectedPreparation = buildP158CampaignPhasePreparation({
-    schedule, w7Bundle, w8Bundle, liveHookManifestSha256,
+    schedule, w7Bundle, w8Bundle, liveHookManifestSha256, runId: w9.target.runId,
   });
   if (sha256(phasePreparation) !== sha256(expectedPreparation)) {
     fail('phase_preparation_unproven', 'Execution requires the exact preparation-time blocker and logging declaration');
@@ -224,11 +228,24 @@ export async function runP158CampaignPhases({
             ), observedAt: clock.wallNow(),
           });
           const adapter = bundles[phaseId].adapters.get(attempt.caseId);
+          const binding = bundles[phaseId].bindings.get(attempt.caseId);
           let effectOrdinal = 0;
-          const result = await adapter.execute({
+          const preparedBlocker = phasePreparation.preExecutionBlockers
+            .find((entry) => entry.attemptId === attempt.attemptId);
+          const result = binding.mode === 'explicit_blocked' ? {
+            resultState: 'skipped_blocked',
+            effectState: 'not_started',
+            retryDisposition: 'prohibited_opportunistic_retry',
+            requestedEffects: [],
+            blocker: clone(preparedBlocker?.blocker),
+            repairAttempted: false,
+            retryAttempted: false,
+            garbageCollectionAttempted: false,
+          } : await adapter.execute({
             attempt: clone(attempt),
             requestEffect: async (effectId, payload) => {
-              if (!attempt.declaredEffectIds.includes(effectId) || typeof bundle.effects?.[effectId] !== 'function') {
+              if (binding.effectsAllowed !== true || !attempt.declaredEffectIds.includes(effectId) ||
+                  typeof bundle.effects?.[effectId] !== 'function') {
                 fail('undeclared_phase_effect', `${attempt.attemptId} requested ${effectId}`);
               }
               effectOrdinal += 1;

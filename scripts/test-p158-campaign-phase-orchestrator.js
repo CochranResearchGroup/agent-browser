@@ -60,10 +60,10 @@ function bundle(phaseId, { blockedCaseId, interruptAttemptId = null, calls = [] 
       liveHookIds: [...binding.hookIds],
       blocker: binding.blocker,
       execute: async ({ attempt, requestEffect }) => {
-        if (binding.mode === 'explicit_blocked') return {
-          resultState: 'skipped_blocked', effectState: 'not_started', blocker: binding.blocker,
-          retryDisposition: 'prohibited', repairAttempted: false, retryAttempted: false,
-        };
+        if (binding.mode === 'explicit_blocked') {
+          await requestEffect(effectId, { attemptId: attempt.attemptId });
+          assert.fail('an explicit_blocked adapter must never be invoked');
+        }
         await requestEffect(effectId, { attemptId: attempt.attemptId });
         return { resultState: 'passed', effectState: 'verified_effect', retryDisposition: 'prohibited',
           repairAttempted: false, retryAttempted: false };
@@ -156,6 +156,7 @@ await withRoot(async (runRoot) => {
   const w9Starts = [];
   const phasePreparation = buildP158CampaignPhasePreparation({
     schedule, w7Bundle: w7, w8Bundle: w8, liveHookManifestSha256: LIVE_MANIFEST,
+    runId: 'p158-integrated-run',
   });
   const controllerSchedule = applyP158PhasePreparationToControllerSchedule({
     controllerSchedule: schedule.attempts.map((attempt) => ({
@@ -181,6 +182,7 @@ await withRoot(async (runRoot) => {
   assert.equal(calls.length, preAttempts.filter((attempt) => !['A01', 'D01'].includes(attempt.caseId)).length);
   assert.equal(result.loggingExpectations.length, schedule.attempts.length);
   assert.ok(result.loggingExpectations.every((entry) => entry.requestId.includes(entry.attemptId)));
+  assert.ok(result.loggingExpectations.every((entry) => entry.requestId.startsWith('p158:p158-integrated-run:')));
   assert.ok(controller.snapshot().results.find((entry) => entry.caseId === 'A01').evidence.artifactIds[0]
     .includes('p158-integrated-run'));
   assert.ok(store.paths().includes('campaign-phases/pre-execution-blockers.json'));
@@ -194,6 +196,7 @@ await withRoot(async (runRoot) => {
   const store = createMemoryArtifactStore();
   const phasePreparation = buildP158CampaignPhasePreparation({
     schedule, w7Bundle: w7, w8Bundle: w8, liveHookManifestSha256: LIVE_MANIFEST,
+    runId: 'p158-integrated-run',
   });
   const controller = controllerHarness(applyP158PhasePreparationToControllerSchedule({
     controllerSchedule: schedule.attempts.map((attempt) => ({
