@@ -1422,3 +1422,35 @@ this feature commit only after rechecking the protected synthetic environment.
 Production remains read-only. The terminal shared-local replacement friction,
 the absence of an installed post-generation session-conflict probe, and the
 historical generic E6 journal records remain explicit W10 review inputs.
+
+Default-branch registration PR 12 merged with only
+`.github/workflows/p158-external-vantage.yml`; provider-free external-runner and
+handoff-oracle tests passed before registration. The protected
+`p158-external-vantage` environment exists and exposes all six required secret
+names. No secret values were read back or copied into campaign artifacts.
+
+The mandatory pre-dispatch live check then found another blocking defect. The
+development dashboard reported runtime multiplicity drift by combining the
+production dashboard backend generation with the development runtime-host
+generation. Both runtimes were individually coherent and their distinct
+systemd units, executable paths, ports, and environment bindings were live.
+The warning was manufactured by `runtime_multiplicity_report_from_doctor_inputs`:
+it always queried `agent-browser-dashboard-backend.service` and always trusted
+the production workstation-selected generation, even when executing with
+`AGENT_BROWSER_RUNTIME_ENVIRONMENT=development`.
+
+The bounded repair makes multiplicity projection environment-scoped. The
+production path retains the production dashboard unit and workstation-selected
+generation. The development path queries
+`agent-browser-dev-dashboard-backend.service` and accepts a selected generation
+only when the observed development runtime hosts agree on exactly one
+generation. It does not kill, transfer, or reinterpret either environment's
+processes. Five focused multiplicity tests, formatting, and workspace clippy
+with warnings denied pass.
+
+Revised next action: commit the environment-scoped projector, build and install
+a new isolated candidate, and require development runtime multiplicity to read
+`steady_current` with one dashboard, one runtime host, no legacy daemons, and
+one selected generation. Only then recreate or recover the synthetic durable
+handoff and dispatch the registered readiness workflow under a fresh evidence
+identity.
