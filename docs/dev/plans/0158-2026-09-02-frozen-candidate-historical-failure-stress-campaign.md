@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_candidate_installed_provider_ready_a11_predispatch_live_passed_freeze_open`
+Execution state: `w6_candidate_installed_provider_ready_remote_view_checkout_failure_reproduced_freeze_open`
 
 Lane: P157
 
@@ -1046,3 +1046,80 @@ workflow can execute it, run the two-client off-host readiness and frozen
 20-minute calibration receipts, finish the five-surface live journal
 calibration, and seal exact E1 and E2 identities. Only then may the controller
 write the zero-start freeze receipt.
+
+### W6 External Handoff Admission and Checkout Finding
+
+The immutable source checkpoint is commit
+`0070fb0d3c70c364166f3cc6f9a396ab45fed041`, published to
+`origin/plan/profile-permissions-and-request-provenance`. A fresh development
+Service status read found four warm idle presentation slots and no retained
+development browser or durable handoff that could be reused for the external
+fixture.
+
+One explicit unknown durable profile reproduced
+`existing_session_profile_identity_unproven` before browser launch as job
+`r925418`. The failure journal retained the typed profile-lease axis, no-effect
+classification, `inspect_before_retry` disposition, and hard stops against a
+blind retry or duplicate profile lane. The broker-first access plan for the
+same synthetic request then selected deterministic disposable profile
+`managed-ephemeral-55469e27a903`, admitted the self-declared client under the
+shared-local policy, and required no lease choreography. This demonstrates
+that the new promiscuous default works when clients follow the access plan,
+while an explicit unknown durable identity still enters the strict legacy
+path.
+
+Two route-bound launches using that managed-one-time profile successfully
+started headed stealth Chromium, navigated to the loopback-only synthetic
+fixture, and retained launch, tab, stderr-path, and polite-close events. Both
+then failed during route checkout. Automatic Route 1 job `r729795` and explicit
+Route 2 job `r156356` each changed the selected route to `pending` during
+acquisition and then rejected that same route as
+`route_pool_entry_unavailable`. In both cases the newly launched browser was
+closed politely and the acquisition rollback reported the route and pool entry
+restored. The repeated failure is therefore a deterministic
+acquisition-to-checkout state-transition defect, not Chrome launch pressure or
+a lack of provider capacity.
+
+Code-level diagnosis confirms the transaction-ordering defect. The coordinator
+calls `begin_route_bound_handoff_plan_acquisition()` before browser launch and
+later calls `runtime.checkout_route()` with the original checkout command.
+Checkout rebuilds the acquisition plan from the newly persisted state. At that
+point the selected entry is `state=pending`, its readiness component is
+`remote_view_open_acquisition`, and its route is not yet bound to the new
+browser. `service_remote_view_acquisition_plan_from_state()` accepts pending
+only when `checked_out_route_matches_owner()` already succeeds, while the
+separate `ensure_route_pool_entry_ready_for_checkout()` helper explicitly
+allows this acquisition-owned pending state. The planner therefore rejects the
+coordinator's own reservation before checkout can create the owner binding.
+The repair must make those two readiness gates agree without admitting foreign
+or stale pending acquisitions.
+
+The two checkout failures are durably present in Service jobs and correlated
+terminal events, and the browser launch, synthetic URL navigation, stderr log
+path, and cleanup are present in Service events. Their generic failure objects
+degrade to `service_operation_failed`, `axis=unknown`, and
+`effectState=effect_uncertain` even though the appended error text reports a
+completed rollback and closed browser. That mismatch is an additional failure
+normalization defect. No third route was attempted, no route repair or broad
+cleanup was applied, and no durable public handoff was minted. The protected
+GitHub environment for `.github/workflows/p158-external-vantage.yml` is also not
+currently available through the authenticated repository API, so the off-host
+readiness workflow remains undispatched rather than producing a predictable
+missing-secret failure.
+
+The normalization mismatch also has a direct code cause. The rollback payload
+is appended to the legacy error text, but `attach_service_failure_recourse()`
+has no typed branch for `route_pool_entry_unavailable` or a parsed completed
+rollback. It falls through to the default `ServiceFailureRecourse`, whose
+unknown axis and effect-uncertain defaults override the stronger compensation
+evidence. The repair must derive no-effect or compensated-effect state from a
+structured coordinator result, not by reparsing arbitrary diagnostic text.
+
+Revised next action: keep the campaign unfrozen and preserve all current
+records. Diagnose the route acquisition and checkout transition against jobs
+`r729795` and `r156356`, including why completed rollback is normalized as
+effect-uncertain. Do not dispatch the external workflow until one durable
+`/remote-view/<handoff-id>` URL has `operatorVisible.state=ready` and the
+protected environment contains the exact synthetic identity, marker region,
+attestation, and dashboard credentials. The 20-minute calibration and E1/E2
+seal remain downstream of that readiness gate.
