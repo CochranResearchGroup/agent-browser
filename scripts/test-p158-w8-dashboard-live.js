@@ -8,17 +8,55 @@ import {
   P158_DASHBOARD_DENSE_COUNTS,
   P158W8DashboardLiveError,
   auditP158DashboardLiveProjection,
+  buildP158DashboardPreseedPlan,
   buildP158DashboardServiceState,
   captureP158DashboardLiveProjection,
   materializeP158DashboardServiceState,
+  materializeP158DashboardPreseedPlan,
 } from './lib/p158-w8-dashboard-live.js';
 import { generateDenseDashboardFixture } from './lib/p158-dashboard-oracle.js';
+import { buildP158W8ActionPlan } from './lib/p158-w8-hd-adapters.js';
 import { sha256 } from './lib/p158-campaign-controller.js';
+import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
 
 const corpus = JSON.parse(readFileSync(
   new URL('../docs/dev/fixtures/p158/dashboard-oracle-fixtures.v1.json', import.meta.url),
   'utf8',
 ));
+const registry = JSON.parse(readFileSync(
+  new URL('../docs/dev/contracts/p158-historical-failure-registry.v1.json', import.meta.url),
+  'utf8',
+));
+
+const schedule = compileP158ExecutionSchedule({ registry, seed: 'p158-dashboard-live-test' });
+const scheduledDashboardActions = ['D01', 'D09'].flatMap((caseId) => {
+  const testCase = registry.cases.find((entry) => entry.id === caseId);
+  return schedule.attempts.filter((attempt) => attempt.caseId === caseId)
+    .flatMap((attempt) => buildP158W8ActionPlan({ testCase, attempt }).actions);
+});
+const preseedPlan = buildP158DashboardPreseedPlan({
+  actions: scheduledDashboardActions,
+  campaignRoot: '/tmp/p158-dashboard-campaign',
+});
+assert.equal(preseedPlan.actionCount, 12);
+assert.equal(new Set(preseedPlan.roots.map((entry) => entry.target.disposableRoot)).size, 12);
+assert.equal(preseedPlan.roots.filter((entry) => entry.caseId === 'D01').length, 8);
+assert.equal(preseedPlan.roots.filter((entry) => entry.caseId === 'D09').length, 4);
+assert.deepEqual(
+  [...new Set(preseedPlan.roots.filter((entry) => entry.caseId === 'D01').map((entry) => entry.density))].sort(),
+  ['dense', 'empty', 'normal', 'sparse'],
+);
+assert(preseedPlan.roots.every((entry) => entry.target.statePath.startsWith(`${entry.target.disposableRoot}/home/`)));
+const dryPreseed = await materializeP158DashboardPreseedPlan({
+  plan: buildP158DashboardPreseedPlan({
+    actions: [scheduledDashboardActions.find((entry) => entry.caseId === 'D01' &&
+      entry.assignment.inventory_density === 'empty')],
+    campaignRoot: '/tmp/p158-dashboard-campaign-small',
+  }),
+});
+assert.equal(dryPreseed.actionCount, 1);
+assert.equal(dryPreseed.receipts[0].written, false);
+assert.equal(dryPreseed.postFreezeStateMutationAttempted, false);
 
 function target(root) {
   return {

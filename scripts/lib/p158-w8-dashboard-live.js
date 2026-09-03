@@ -202,6 +202,103 @@ export async function materializeP158DashboardServiceState({
   return { ...built, parserReceipt: structuredClone(parserReceipt), written: true };
 }
 
+export function buildP158DashboardPreseedPlan({ actions, campaignRoot }) {
+  if (!Array.isArray(actions) || actions.length === 0 ||
+      typeof campaignRoot !== 'string' || !campaignRoot.startsWith('/tmp/p158-')) {
+    fail('preseed_plan_invalid', 'Dashboard preseed plan requires frozen actions and a disposable P158 campaign root');
+  }
+  const actionIds = new Set();
+  const roots = actions.map((action) => {
+    if (!['D01', 'D09'].includes(action?.caseId) || !action.actionId || actionIds.has(action.actionId) ||
+        !['E0', 'E2'].includes(action.environmentId)) {
+      fail('preseed_plan_invalid', 'Dashboard preseed action identity is invalid or duplicated');
+    }
+    actionIds.add(action.actionId);
+    const density = action.caseId === 'D01' ? action.assignment?.inventory_density : 'dense';
+    if (!DENSITY_COUNTS[density]) fail('preseed_plan_invalid', `${action.actionId} has no materializable density`);
+    const runId = `p158-${createHash('sha256').update(action.actionId).digest('hex').slice(0, 20)}`;
+    const disposableRoot = join(campaignRoot, runId);
+    const pseudoHome = join(disposableRoot, 'home');
+    const target = {
+      runtimeLane: 'development', production: false, foreign: false, tenantDataPresent: false,
+      ownership: 'p158_campaign', providerFree: false, serviceStopped: true,
+      runId, disposableRoot, pseudoHome,
+      statePath: join(pseudoHome, '.agent-browser', 'service', 'state.json'),
+    };
+    return {
+      actionId: action.actionId,
+      attemptId: action.attemptId,
+      caseId: action.caseId,
+      environmentId: action.environmentId,
+      externalIngressRequired: action.externalIngressRequired,
+      density,
+      streamState: action.assignment?.stream_state ?? null,
+      cardinalityActionIdsSha256: sha256(Object.values(action.cardinalities ?? {})
+        .flatMap((entry) => entry.actionIds ?? [])),
+      target,
+    };
+  });
+  if (new Set(roots.map((entry) => entry.target.disposableRoot)).size !== roots.length) {
+    fail('preseed_plan_invalid', 'Every dashboard action must own a distinct immutable runtime root');
+  }
+  const body = {
+    schemaVersion: 'agent-browser.p158-dashboard-preseed-plan.v1',
+    planId: 'P158',
+    campaignRoot,
+    actionCount: roots.length,
+    roots,
+    postFreezeMaterializationAllowed: false,
+    repairAllowed: false,
+    retryAllowed: false,
+  };
+  return { ...body, planSha256: sha256(body) };
+}
+
+export async function materializeP158DashboardPreseedPlan({
+  plan,
+  apply = false,
+  validateState = null,
+}) {
+  const { planSha256, ...body } = plan ?? {};
+  if (plan?.schemaVersion !== 'agent-browser.p158-dashboard-preseed-plan.v1' ||
+      planSha256 !== sha256(body) || plan.postFreezeMaterializationAllowed !== false ||
+      new Set(plan.roots?.map((entry) => entry.actionId)).size !== plan.actionCount) {
+    fail('preseed_plan_invalid', 'Dashboard preseed plan is missing, changed, or incomplete');
+  }
+  const receipts = [];
+  for (const root of plan.roots) {
+    const materialized = await materializeP158DashboardServiceState({
+      target: root.target,
+      density: root.density,
+      apply,
+      validateState: validateState === null ? null : (input) => validateState({ ...input, root }),
+    });
+    receipts.push({
+      actionId: root.actionId,
+      attemptId: root.attemptId,
+      caseId: root.caseId,
+      environmentId: root.environmentId,
+      streamState: root.streamState,
+      materializationReceipt: materialized.receipt,
+      parserReceipt: materialized.parserReceipt ?? null,
+      written: materialized.written,
+    });
+  }
+  const receiptBody = {
+    schemaVersion: 'agent-browser.p158-dashboard-preseed-receipt.v1',
+    planId: 'P158',
+    planSha256,
+    actionCount: receipts.length,
+    receipts,
+    allRootsDistinct: true,
+    materializedBeforeFreeze: apply,
+    postFreezeStateMutationAttempted: false,
+    repairAttempted: false,
+    retryAttempted: false,
+  };
+  return { ...receiptBody, receiptSha256: sha256(receiptBody) };
+}
+
 function collectionIdentity(snapshot) {
   const collection = (name) => (snapshot[name]?.[name] ?? snapshot[name] ?? []).map((entry) => entry.id).sort();
   return {

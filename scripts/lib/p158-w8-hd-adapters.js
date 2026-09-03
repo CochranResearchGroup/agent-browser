@@ -38,7 +38,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   H10: 'durable_handoff_disruption_driver_missing',
   H11: 'secure_surface_action_driver_and_operator_gate_missing',
   H12: 'scheduled_24_hour_reconnect_driver_missing',
-  D01: 'action_bound_external_dashboard_execution_missing',
+  D01: 'action_bound_multi_root_external_dashboard_execution_missing',
   D02: 'live_resource_transition_barrier_driver_missing',
   D03: 'live_ambiguous_rail_fixture_driver_missing',
   D04: 'external_multi_client_dashboard_driver_missing',
@@ -46,7 +46,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   D06: 'live_health_axis_matrix_driver_missing',
   D07: 'live_snapshot_stream_fault_driver_missing',
   D08: 'external_dashboard_handoff_action_scan_missing',
-  D09: 'action_bound_external_dashboard_execution_missing',
+  D09: 'declared_active_churn_stream_driver_and_external_execution_missing',
   D10: 'live_interaction_timing_capture_driver_missing',
   D11: 'scheduled_8_hour_resource_capture_driver_missing',
   D12: 'live_responsive_accessibility_matrix_driver_missing',
@@ -86,8 +86,8 @@ export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
   dashboardLiveFoundation: Object.freeze({
     path: 'scripts/lib/p158-w8-dashboard-live.js',
     cases: Object.freeze(['D01', 'D09']),
-    coverage: 'Exact disposable Service State density materialization plus authoritative API, full browser-rail, action, warning, screenshot, and navigation-performance capture through public external ingress.',
-    missing: 'It requires an installed-candidate parser receipt and is not yet scheduled by an action-bound external workflow, so D01 and D09 remain explicitly blocked.',
+    coverage: 'Exact twelve-action pre-freeze root plan, disposable Service State density materialization, and authoritative API, full rail, action, warning, screenshot, and navigation-performance capture through public external ingress.',
+    missing: 'It requires installed-candidate parser receipts and an external runtime selector; D09 also lacks a reviewed declared active-churn stream driver.',
   }),
 });
 
