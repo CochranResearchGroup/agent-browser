@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-evidence-collector-config.v1.schema.json",
+  "title": "Plan 0158 evidence collector configuration",
+  "type": "object",
+  "required": [
+    "schemaVersion", "runId", "seed", "expectedAggregateSha256", "aggregateCapturedAt",
+    "dryRunFrozenAt", "candidate", "artifactFiles", "environments", "calibration",
+    "freezeId", "schedule", "scheduledTeardown"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-evidence-collector-config.v1" },
+    "runId": { "$ref": "#/$defs/id" },
+    "seed": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "integer", "minimum": 0 }] },
+    "expectedAggregateSha256": { "$ref": "#/$defs/sha256" },
+    "aggregateCapturedAt": { "$ref": "#/$defs/dateTime" },
+    "dryRunFrozenAt": { "$ref": "#/$defs/dateTime" },
+    "candidate": { "$ref": "#/$defs/candidate" },
+    "artifactFiles": { "$ref": "#/$defs/artifactFiles" },
+    "environments": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/environment" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "environmentId": { "const": "E1" } }, "required": ["environmentId"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "type": "object", "properties": { "environmentId": { "const": "E2" } }, "required": ["environmentId"] }, "minContains": 1, "maxContains": 1 }
+      ]
+    },
+    "calibration": { "$ref": "#/$defs/calibration" },
+    "freezeId": { "$ref": "#/$defs/id" },
+    "schedule": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/attempt" } },
+    "scheduledTeardown": { "$ref": "#/$defs/attempt" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "sourceCommit", "binarySha256", "dashboardSha256", "installedGenerationId",
+        "browserExecutableSha256", "runtimeManifestRevision", "providerConfigurationRevision",
+        "externalIngressDeploymentRevision", "preparedAt"
+      ],
+      "properties": {
+        "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "binarySha256": { "$ref": "#/$defs/sha256" },
+        "dashboardSha256": { "$ref": "#/$defs/sha256" },
+        "installedGenerationId": { "$ref": "#/$defs/id" },
+        "browserExecutableSha256": { "$ref": "#/$defs/sha256" },
+        "runtimeManifestRevision": { "$ref": "#/$defs/id" },
+        "providerConfigurationRevision": { "$ref": "#/$defs/id" },
+        "externalIngressDeploymentRevision": { "$ref": "#/$defs/id" },
+        "preparedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "artifactDescriptor": {
+      "type": "object",
+      "required": ["path", "expectedSha256", "capturedAt"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "artifactId": { "$ref": "#/$defs/id" },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "expectedSha256": { "$ref": "#/$defs/sha256" },
+        "expectedByteCount": { "type": "integer", "minimum": 0 },
+        "capturedAt": { "$ref": "#/$defs/dateTime" },
+        "mediaType": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "artifactFiles": {
+      "type": "object",
+      "required": [
+        "installation_receipt", "runtime_status_receipt", "runtime_doctor_receipt", "runtime_manifest",
+        "provider_plan_receipt", "provider_stage_receipt", "provider_preflight_receipt",
+        "provider_apply_receipt", "provider_status_receipt", "provider_doctor_receipt",
+        "provider_configuration", "external_ingress_deployment", "external_vantage",
+        "external_handoff_oracle_report", "calibration_raw", "calibration_summary", "calibration_budget"
+      ],
+      "properties": {
+        "installation_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "runtime_status_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "runtime_doctor_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "runtime_manifest": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_plan_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_stage_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_preflight_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_apply_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_status_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_doctor_receipt": { "$ref": "#/$defs/artifactDescriptor" },
+        "provider_configuration": { "$ref": "#/$defs/artifactDescriptor" },
+        "external_ingress_deployment": { "$ref": "#/$defs/artifactDescriptor" },
+        "external_vantage": { "$ref": "#/$defs/artifactDescriptor" },
+        "external_handoff_oracle_report": { "$ref": "#/$defs/artifactDescriptor" },
+        "calibration_raw": { "$ref": "#/$defs/artifactDescriptor" },
+        "calibration_summary": { "$ref": "#/$defs/artifactDescriptor" },
+        "calibration_budget": { "$ref": "#/$defs/artifactDescriptor" }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["environmentId", "identityId", "identity", "sealedAt"],
+      "properties": {
+        "environmentId": { "enum": ["E1", "E2"] },
+        "identityId": { "$ref": "#/$defs/id" },
+        "identity": { "type": "object", "minProperties": 1 },
+        "sealedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "calibration": {
+      "type": "object",
+      "required": ["calibrationId", "environmentIds", "startedAt", "completedAt", "clean", "workload", "environmentRelativeBudgets"],
+      "properties": {
+        "calibrationId": { "$ref": "#/$defs/id" },
+        "environmentIds": { "const": ["E1", "E2"] },
+        "startedAt": { "$ref": "#/$defs/dateTime" },
+        "completedAt": { "$ref": "#/$defs/dateTime" },
+        "clean": { "const": true },
+        "workload": {
+          "type": "object",
+          "required": ["durationMinutes", "agentClients", "externalViewers", "controllers", "serviceCommands", "dashboardActions", "handoffReconnects"],
+          "properties": {
+            "durationMinutes": { "const": 20 },
+            "agentClients": { "const": 25 },
+            "externalViewers": { "const": 2 },
+            "controllers": { "const": 1 },
+            "serviceCommands": { "const": 500 },
+            "dashboardActions": { "const": 50 },
+            "handoffReconnects": { "const": 10 }
+          },
+          "additionalProperties": false
+        },
+        "environmentRelativeBudgets": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number", "minimum": 0 } }
+      },
+      "additionalProperties": false
+    },
+    "attempt": {
+      "type": "object",
+      "required": ["caseId", "environmentId", "dependsOn"],
+      "properties": {
+        "caseId": { "$ref": "#/$defs/id" },
+        "attemptId": { "$ref": "#/$defs/id" },
+        "environmentId": { "enum": ["E0", "E1", "E2", "E3"] },
+        "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}
