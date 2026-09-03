@@ -81,6 +81,38 @@ pub struct ServiceFailureRecourse {
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
     let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
+    let route_bound_blocker_code = failure_metadata_value(error, "route_bound_blocker_code");
+    let route_bound_compensation_state =
+        failure_metadata_value(error, "route_bound_compensation_state");
+    if let (Some(code), Some(compensation_state)) =
+        (route_bound_blocker_code, route_bound_compensation_state)
+    {
+        let rollback_complete = compensation_state == "rolled_back";
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: code.to_string(),
+            axis: ServiceFailureAxis::Presentation,
+            phase: ServiceFailurePhase::Finalize,
+            effect_state: if rollback_complete {
+                ServiceEffectState::NoEffect
+            } else {
+                ServiceEffectState::EffectUncertain
+            },
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: if rollback_complete {
+                "address_blocker_then_retry".to_string()
+            } else {
+                "inspect_job_and_route_cleanup".to_string()
+            },
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_job".to_string(),
+                "inspect_service_trace".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if error == "Control queue is full" {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),

@@ -303,9 +303,13 @@ impl RouteBoundOpenOutcome {
             | Self::Reopened { opened: plan }
             | Self::Opened { opened: plan } => Ok(plan.into_value()),
             Self::RolledBack {
+                blocker,
+                compensation,
                 compatibility_error,
-                ..
-            } => Err(compatibility_error),
+            } => Err(format!(
+                "{compatibility_error}; route_bound_blocker_code={}; route_bound_compensation_state={}",
+                blocker.code, compensation.state
+            )),
         }
     }
 }

@@ -396,6 +396,55 @@ pub fn checked_out_route_matches_owner(
     })
 }
 
+fn pending_route_pool_entry_matches_acquisition_owner(
+    state: &ServiceState,
+    entry: &RoutePoolEntry,
+    browser_id: &str,
+    session_id: &str,
+    route_id: &str,
+    display_allocation_id: &str,
+) -> bool {
+    if entry.state != "pending" || entry.current_route_allocation_id.as_deref() != Some(route_id) {
+        return false;
+    }
+    let Some(readiness) = entry.readiness.as_ref() else {
+        return false;
+    };
+    if readiness.get("state").and_then(Value::as_str) != Some("pending")
+        || readiness.get("component").and_then(Value::as_str)
+            != Some("remote_view_open_acquisition")
+    {
+        return false;
+    }
+    let Some(lease_id) = readiness.get("leaseId").and_then(Value::as_str) else {
+        return false;
+    };
+    state
+        .remote_view_acquisition_leases
+        .get(lease_id)
+        .is_some_and(|lease| {
+            lease.id == lease_id
+                && lease.state == "pending"
+                && matches!(
+                    lease.phase.as_str(),
+                    "reserved"
+                        | "display_ready"
+                        | "browser_attached"
+                        | "tab_acquired"
+                        | "proof_ready"
+                )
+                && lease.browser_id == browser_id
+                && lease.session_id == session_id
+                && lease.route_id == route_id
+                && lease.display_allocation_id == display_allocation_id
+                && lease.route_pool_entry_id.as_deref() == Some(entry.id.as_str())
+                && crate::process_identity::boot_epoch_status(
+                    lease.boot_epoch.as_deref(),
+                    crate::process_identity::current_boot_epoch().as_deref(),
+                ) == crate::process_identity::BootEpochStatus::Current
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn checked_out_route_pool_entry_id_for_owner(
     state: &ServiceState,
@@ -971,8 +1020,22 @@ pub fn plan_remote_view_acquisition(
                     &display_allocation_id,
                 )
             });
+        // Provider observation can refresh its physical route row while a
+        // coordinator-owned acquisition is still pending. The exact current-boot
+        // acquisition lease remains authoritative for checkout ownership.
+        let same_owner_pending_acquisition = reusable_route_id.is_some_and(|route_id| {
+            pending_route_pool_entry_matches_acquisition_owner(
+                state,
+                entry,
+                browser_id,
+                session_id,
+                route_id,
+                &display_allocation_id,
+            )
+        });
         let entry_available = entry.state == "available"
             || same_owner_checked_out
+            || same_owner_pending_acquisition
             || (entry.state != "checked_out"
                 && entry.readiness.as_ref().is_some_and(|readiness| {
                     readiness
@@ -2188,7 +2251,9 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::super::service_model::{BrowserProcess, RemoteViewRoute};
+    use super::super::service_model::{
+        BrowserProcess, RemoteViewAcquisitionLease, RemoteViewRoute,
+    };
     use super::*;
 
     #[test]
@@ -2932,6 +2997,107 @@ mod tests {
         assert_eq!(plan.selected_route_pool_entry_id.as_deref(), Some("pool-a"));
         assert_eq!(plan.selected_route_id, "route-a");
         assert_eq!(plan.display_allocation_id, "remote-view-display:41");
+    }
+
+    #[test]
+    fn acquisition_plan_reuses_exact_pending_lease_when_provider_refreshes_route_projection() {
+        let lease_id = "remote-view-open:current:route-a:observed";
+        let state = ServiceState {
+            route_pool: BTreeMap::from([(
+                "pool-a".to_string(),
+                RoutePoolEntry {
+                    id: "pool-a".to_string(),
+                    route_id: "route-a".to_string(),
+                    frame_url: Some("https://guac.example/#/client/route-a".to_string()),
+                    target: json!({
+                        "displayName": ":41",
+                        "displayIsolation": "shared_display"
+                    }),
+                    state: "pending".to_string(),
+                    current_route_allocation_id: Some("route-a".to_string()),
+                    readiness: Some(json!({
+                        "state": "pending",
+                        "component": "remote_view_open_acquisition",
+                        "leaseId": lease_id,
+                    })),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            display_allocations: BTreeMap::from([(
+                "remote-view-display:route-a".to_string(),
+                DisplayAllocation {
+                    id: "remote-view-display:route-a".to_string(),
+                    boot_epoch: crate::process_identity::current_boot_epoch(),
+                    display_name: Some(":41".to_string()),
+                    display_isolation: "shared_display".to_string(),
+                    owner_browser_id: Some("session:current".to_string()),
+                    owner_session_id: Some("current".to_string()),
+                    state: "pending".to_string(),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            // A provider refresh can restore its physical route projection before
+            // checkout. The acquisition lease remains the ownership authority.
+            remote_view_routes: BTreeMap::from([(
+                "route-a".to_string(),
+                RemoteViewRoute {
+                    id: "route-a".to_string(),
+                    display_allocation_id: Some("provider-display-a".to_string()),
+                    browser_id: None,
+                    session_id: None,
+                    state: "ready".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            remote_view_acquisition_leases: BTreeMap::from([(
+                lease_id.to_string(),
+                RemoteViewAcquisitionLease {
+                    id: lease_id.to_string(),
+                    boot_epoch: crate::process_identity::current_boot_epoch(),
+                    browser_id: "session:current".to_string(),
+                    session_id: "current".to_string(),
+                    route_id: "route-a".to_string(),
+                    display_allocation_id: "remote-view-display:route-a".to_string(),
+                    route_pool_entry_id: Some("pool-a".to_string()),
+                    state: "pending".to_string(),
+                    phase: "reserved".to_string(),
+                    ..RemoteViewAcquisitionLease::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let intent = normalize_remote_view_open_intent(&json!({
+            "action": "remote_view_open",
+            "routePoolEntryId": "pool-a",
+            "routeId": "route-a",
+            "displayAllocationId": "remote-view-display:route-a",
+            "dryRun": true
+        }))
+        .unwrap();
+
+        let plan =
+            plan_remote_view_acquisition(&state, &intent, None, "session:current", "current")
+                .unwrap();
+
+        assert_eq!(plan.selected_route_pool_entry_id.as_deref(), Some("pool-a"));
+        assert_eq!(plan.selected_route_id, "route-a");
+        assert_eq!(plan.display_allocation_id, "remote-view-display:route-a");
+
+        let mut foreign_state = state;
+        foreign_state
+            .remote_view_acquisition_leases
+            .get_mut(lease_id)
+            .unwrap()
+            .browser_id = "session:other".to_string();
+        let error = plan_remote_view_acquisition(
+            &foreign_state,
+            &intent,
+            None,
+            "session:current",
+            "current",
+        )
+        .unwrap_err();
+        assert!(error.starts_with("route_pool_entry_unavailable:"));
     }
 
     #[test]

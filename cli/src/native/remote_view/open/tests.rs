@@ -1628,6 +1628,34 @@ fn typed_terminal_failure_selects_rollback_state_without_parsing_compatibility_t
     }
 }
 
+#[test]
+fn completed_route_bound_rollback_survives_compatibility_failure_normalization() {
+    let outcome = rolled_back_outcome(route_bound_message_error_with_cleanup(
+        "checkout_failed",
+        "route pool checkout failed".to_string(),
+        json!({"state": "rolled_back", "leaseId": "lease-a"}),
+        "opaque cleanup summary",
+    ))
+    .unwrap();
+    let compatibility_error = outcome.into_compatibility_result().unwrap_err();
+
+    let recourse = crate::native::service_failure::classify_service_failure(&compatibility_error);
+
+    assert_eq!(recourse.code, "checkout_failed");
+    assert_eq!(
+        recourse.axis,
+        crate::native::service_failure::ServiceFailureAxis::Presentation
+    );
+    assert_eq!(
+        recourse.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert_eq!(
+        recourse.retry_disposition,
+        crate::native::service_failure::ServiceRetryDisposition::InspectBeforeRetry
+    );
+}
+
 struct PendingRepository;
 
 impl RouteBoundOpenRepository for PendingRepository {
