@@ -394,7 +394,9 @@ impl ServiceStateStore for JsonServiceStateStore {
     }
 }
 
-fn parse_service_state_json(raw: String, path: &Path) -> Result<ServiceState, String> {
+/// Parse one Service State document with the same bounded-stack reader used by
+/// the durable store. This function performs no recovery or persistence.
+pub(crate) fn parse_service_state_json(raw: String, path: &Path) -> Result<ServiceState, String> {
     let display_path = path.display().to_string();
     // Large service histories can exhaust a Tokio worker's comparatively small stack
     // inside serde_json. Keep that recursive work on an explicitly bounded stack.

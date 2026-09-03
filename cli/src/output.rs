@@ -6345,6 +6345,7 @@ Examples:
 agent-browser service - Inspect service-mode state
 
 Usage:
+  agent-browser service state validate --path <absolute-path> --json
   agent-browser service status [--full-tab-history]
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
@@ -6419,6 +6420,7 @@ without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReaso
   agent-browser service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>]
 
 Commands:
+  state validate        Validate exact Service State bytes with this installed parser without writing or starting a service
   status                Show worker state, browser health, profile lease waits, redacted crash recovery progress, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
@@ -6462,6 +6464,7 @@ Commands:
 
 Notes:
   - It does not launch a browser.
+  - service state validate reads only the supplied absolute path and the running executable. It returns the exact state SHA-256, the parser executable SHA-256, and an accepted or error classification. It never consults, locks, recovers, or writes the default Service State store.
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited and unreachable browser records require --process-exited-browsers because they may carry failure evidence. With --abandoned-sessions, that explicit flag can also remove old failed retained session lanes that have no retained tabs.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
@@ -6561,6 +6564,7 @@ Global Options:
   --session <name>     Use specific session
 
 Examples:
+  agent-browser service state validate --path /tmp/candidate-state.json --json
   agent-browser service status
   agent-browser service status --full-tab-history
   agent-browser service status --watch --interval 1000
@@ -7113,6 +7117,7 @@ Desktop observation:
                              Run one guarded synthetic recipe; production input is unavailable
 
 Service:
+  service state validate     Validate an absolute-path Service State file with the installed parser without writes
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted records and optionally refresh authoritative route definitions

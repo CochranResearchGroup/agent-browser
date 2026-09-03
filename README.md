@@ -700,6 +700,7 @@ agent-browser desktop capture --browser-id <id> # Capture one service-bound desk
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
+agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -3250,6 +3251,20 @@ the returned job and trace locators before retrying. For
 access plan and reuse a browser only when that current plan supplies both the
 exact `browserId` and `sessionName`. Neither condition permits a blind retry or
 a duplicate profile lane.
+
+Validate an explicitly selected Service State file with the installed
+candidate before using those bytes as runtime state:
+
+```bash
+agent-browser service state validate --path /tmp/candidate-state.json --json
+```
+
+The path must be absolute. The command uses the same bounded-stack parser and
+cross-record invariant checker as the durable store and returns
+`stateSha256`, `parserIdentitySha256`, `accepted`, and an `accepted` or
+`error` classification. The parser identity is the SHA-256 of the running
+`agent-browser` executable. Validation never starts a service and never
+consults, locks, recovers, or writes the default Service State store.
 
 Current `service status` responses include
 `serviceStateLockDiagnostics`, a bounded process-local view of active lock

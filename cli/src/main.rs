@@ -1873,14 +1873,15 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().skip(1).collect();
+    let clean = clean_args(&args);
     if matches!(
-        args.first().map(String::as_str),
+        clean.first().map(String::as_str),
         Some("service") | Some("runtime")
-    ) {
+    ) && !flags::is_explicit_service_state_validation(&args)
+    {
         let _ = refresh_persisted_profile_seeding_handoffs();
     }
     let mut flags = parse_flags(&args);
-    let clean = clean_args(&args);
 
     let has_help = args.iter().any(|a| a == "--help" || a == "-h");
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
@@ -2207,6 +2208,39 @@ fn main() {
         };
         let output_opts = OutputOptions::from_flags(&flags);
         output::print_response_with_opts(&resp, action, &output_opts);
+        if !resp.success {
+            exit(1);
+        }
+        return;
+    }
+
+    // Validate an explicitly selected Service State file before any daemon or
+    // default-store path. The receipt binds the exact bytes to this executable.
+    if let Some(result) = native::service_state_validation::dispatch_service_state_validation(&cmd)
+    {
+        let action = cmd.get("action").and_then(|value| value.as_str());
+        let resp = match result {
+            Ok(receipt) => {
+                let success = receipt.accepted;
+                let error = receipt
+                    .error
+                    .as_ref()
+                    .map(|validation_error| validation_error.message.clone());
+                connection::Response {
+                    success,
+                    data: serde_json::to_value(receipt).ok(),
+                    error,
+                    warning: None,
+                }
+            }
+            Err(error) => connection::Response {
+                success: false,
+                data: None,
+                error: Some(error),
+                warning: None,
+            },
+        };
+        output::print_response_with_opts(&resp, action, &OutputOptions::from_flags(&flags));
         if !resp.success {
             exit(1);
         }

@@ -47,6 +47,7 @@ agent-browser desktop capture --browser-id <id> # Capture one service-bound desk
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
+agent-browser service state validate --path /tmp/candidate-state.json --json # Validate exact state bytes with this installed executable
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -675,6 +676,7 @@ Mode](/service-mode#run-a-guarded-synthetic-desktop-interaction).
 For the full service model, including queueing, HTTP and MCP access, browser health recovery, and release validation, see [Service Mode](/service-mode).
 
 ```bash
+agent-browser service state validate --path /tmp/candidate-state.json --json
 agent-browser service status          # Inspect worker state, browser health, queue depth, profile lease waits, site policies, and providers
 agent-browser service status --watch --interval 1000
 agent-browser service status --full-tab-history
@@ -735,6 +737,16 @@ agent-browser remote-view open https://www.linkedin.com/ --runtime-profile steal
 agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --route-pool-entry-id guacamole-rdp-a --dry-run
 agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch
 ```
+
+<code>service state validate --path &lt;absolute-path&gt; --json</code> is a
+read-only installed-candidate gate for exact Service State bytes. It uses the
+same bounded-stack parser and cross-record invariant checker as the durable
+store and returns <code>stateSha256</code>,
+<code>parserIdentitySha256</code>, <code>accepted</code>, and an
+<code>accepted</code> or <code>error</code> classification. The parser identity
+is the SHA-256 of the running <code>agent-browser</code> executable. The command
+does not start a service or browser and does not consult, lock, recover, or
+write the default Service State store.
 
 For operator access, copy only the returned
 <code>/remote-view/&lt;handoff-id&gt;</code> value from <code>handoffUrl</code>.

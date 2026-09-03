@@ -1185,7 +1185,9 @@ fn stamp_current_versions(state: &mut ServiceState) {
         super::service_profile_lease::PROFILE_LEASE_SCHEMA_VERSION.to_string();
 }
 
-fn validate_service_state_invariants(state: &ServiceState) -> Result<(), String> {
+/// Validate the cross-record relationships required by a persisted Service
+/// State document without modifying the decoded snapshot or durable storage.
+pub(crate) fn validate_service_state_invariants(state: &ServiceState) -> Result<(), String> {
     for (key, profile) in &state.profiles {
         if profile.id.trim().is_empty() || profile.id != *key {
             return Err(format!("service_state_profile_key_mismatch:{key}"));

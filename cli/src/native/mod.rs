@@ -176,6 +176,7 @@ pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;
 pub(crate) mod service_state_migration;
+pub(crate) mod service_state_validation;
 #[allow(dead_code)]
 pub mod service_status_projection;
 #[allow(dead_code)]

@@ -396,6 +396,15 @@ fn service_state_from_store(configured: ServiceState) -> ServiceState {
     state
 }
 
+/// Return true for the explicit-path Service State validator. That command
+/// must not consult or lock the default durable store while preparing flags.
+pub(crate) fn is_explicit_service_state_validation(args: &[String]) -> bool {
+    let clean = clean_args(args);
+    clean.first().map(String::as_str) == Some("service")
+        && clean.get(1).map(String::as_str) == Some("state")
+        && clean.get(2).map(String::as_str) == Some("validate")
+}
+
 fn merge_runtime_profile_maps(
     base: Option<HashMap<String, RuntimeProfileConfig>>,
     overlay: Option<HashMap<String, RuntimeProfileConfig>>,
@@ -1497,7 +1506,11 @@ pub fn parse_flags(args: &[String]) -> Flags {
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let configured_service_state = config.service_state_snapshot();
-    let mut service_state = service_state_from_store(configured_service_state.clone());
+    let mut service_state = if is_explicit_service_state_validation(args) {
+        ServiceState::default()
+    } else {
+        service_state_from_store(configured_service_state.clone())
+    };
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
     let service_job_timeout_ms = service_job_timeout_from_sources(&config);
     let service_monitor_interval_ms = service_monitor_interval_from_sources(&config);
