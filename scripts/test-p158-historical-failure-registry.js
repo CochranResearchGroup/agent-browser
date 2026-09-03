@@ -56,6 +56,10 @@ for (const testCase of registry.cases) {
   assert(Object.hasOwn(registry.evidenceProfiles, testCase.evidenceProfile), `${testCase.id} has no evidence profile`);
   assert(testCase.environmentIds.every((id) => Object.hasOwn(registry.environments, id)), `${testCase.id} cites an unknown environment`);
   assert(testCase.familyIds.every((id) => familyIds.has(id)), `${testCase.id} cites an unknown family`);
+  for (const familyId of testCase.familyIds) {
+    const family = registry.families.find((candidate) => candidate.id === familyId);
+    assert(family.caseIds.includes(testCase.id), `${testCase.id} and ${familyId} mapping is not bidirectional`);
+  }
   assert(testCase.sourceIds.every((id) => sourceIds.has(id)), `${testCase.id} cites an unknown source`);
   assert(testCase.dependsOn.every((id) => caseIds.has(id) && id !== testCase.id), `${testCase.id} has an invalid dependency`);
 }
