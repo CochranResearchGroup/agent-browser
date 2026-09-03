@@ -363,7 +363,7 @@ assert.equal(reviewed.ready, false);
 assert.deepEqual(reviewed.concreteCaseIds, []);
 assert.deepEqual(reviewed.explicitlyBlockedCaseIds, P158_W8_CASE_IDS);
 assert.equal(reviewed.blockerCount, 24);
-assert.equal(reviewed.reviewedSourceCount, 10);
+assert.equal(reviewed.reviewedSourceCount, 12);
 assert.equal(reviewed.effectsExecuted, false);
 assert.equal(reviewed.scheduledActionCount, 1017);
 assert.deepEqual(readinessInputs, originalReadinessInputs);

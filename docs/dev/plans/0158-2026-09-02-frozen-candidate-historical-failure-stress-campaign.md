@@ -386,6 +386,18 @@ console logs, browser performance traces, and selected-record API readback.
 | D11 | Browser resource stability | Run an eight-hour dashboard session with churn, route video, selection changes, and reconnect; record heap, DOM nodes, listeners, CPU, network, and long tasks |
 | D12 | Responsive, keyboard, and focus behavior | Cover small, typical, and wide viewports, keyboard-only operation, visible focus, modal focus return, reduced motion, loading, error, and overflow states |
 
+External D03, D04, and supported D05 observations run only through the manually
+dispatched `p158-w8-dashboard-external.yml` workflow. The workflow binds one
+frozen action manifest to an exact action-specific public HTTPS route digest,
+runs Chromium on a GitHub-hosted runner, and uploads an immutable terminal
+result even when capture fails. It has no automatic trigger or retry. D05 tab
+and target recovery are executable because the dashboard itself replaces the
+stale tab selection and renders the recovery explanation. Browser, session,
+view, and handoff target classes remain `skipped_blocked` until an equivalent
+semantic product recovery route exists. A separate service-host handshake is
+still required to keep the exact isolated runtime alive while this manual
+external action runs; the workflow does not start or stop that runtime.
+
 ### C: Combined Deterministic Pressure
 
 Run the combined phases only after their declared prerequisites have terminal

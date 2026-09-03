@@ -15,6 +15,12 @@ import {
   validateP158ExternalPlaywrightRunner,
 } from './lib/p158-w8-dashboard-campaign.js';
 import { sealP158DashboardScenarioReceipt } from './lib/p158-w8-dashboard-scenarios.js';
+import {
+  buildP158DashboardGithubRunnerAttestation,
+  sealP158DashboardExternalResult,
+  validateP158DashboardExternalActionUrl,
+  validateP158DashboardExternalManifest,
+} from './lib/p158-w8-dashboard-external.js';
 
 const argv = process.argv.slice(2).filter((argument) => argument !== '--');
 const command = argv.shift();
@@ -418,6 +424,61 @@ async function exerciseD05({ pageHandle, publicUrl, scenarioPlan }) {
   return scenarioReceipt;
 }
 
+async function openDirectExternalPage(publicUrl) {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  const clients = new Map();
+  const openClient = async (clientId, clientUrl) => {
+    if (clients.has(clientId)) throw new Error(`Dashboard client ${clientId} was opened twice`);
+    if (clients.size === 1 && clients.has('primary')) {
+      const primary = clients.get('primary');
+      clients.delete('primary');
+      clients.set(clientId, primary);
+      await primary.page.goto(clientUrl, { waitUntil: 'networkidle' });
+      return primary.page;
+    }
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    clients.set(clientId, { context, page });
+    await page.goto(clientUrl, { waitUntil: 'networkidle' });
+    const username = process.env.AGENT_BROWSER_P158_DASHBOARD_USERNAME;
+    const password = process.env.AGENT_BROWSER_P158_DASHBOARD_PASSWORD;
+    if (username || password) {
+      if (!username || !password) throw new Error('Both external dashboard credential variables are required');
+      const authenticated = await page.evaluate(async ({ login, secret }) => {
+        const response = await fetch('/api/dashboard-auth/login', {
+          method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username: login, password: secret }),
+        });
+        return response.ok;
+      }, { login: username, secret: password });
+      if (!authenticated) throw new Error('External dashboard authentication failed');
+      await page.reload({ waitUntil: 'networkidle' });
+    }
+    return page;
+  };
+  try {
+    const page = await openClient('primary', publicUrl);
+    return {
+      page,
+      openClient,
+      clientPage: (clientId) => {
+        const client = clients.get(clientId);
+        if (!client) throw new Error(`Dashboard client ${clientId} is not open`);
+        return client.page;
+      },
+      close: async () => {
+        for (const { context } of clients.values()) await context.close();
+        await browser.close();
+      },
+    };
+  } catch (error) {
+    for (const { context } of clients.values()) await context.close();
+    await browser.close();
+    throw error;
+  }
+}
+
 function createLiveEffects(executionInput) {
   return {
     startExact: async (root) => {
@@ -583,7 +644,69 @@ async function main() {
   if (argv.length > 0) throw new Error(`Unexpected arguments: ${argv.join(' ')}`);
   const input = await jsonFile(resolve(inputPath), 'Input');
   let output;
-  if (command === 'plan') {
+  if (command === 'external-capture') {
+    if (!apply) throw new Error('external-capture requires --apply');
+    const manifest = validateP158DashboardExternalManifest(input);
+    let publicUrl = null;
+    let runnerAttestation = null;
+    let pageHandle = null;
+    let terminalError = null;
+    try {
+      runnerAttestation = buildP158DashboardGithubRunnerAttestation(process.env);
+      publicUrl = validateP158DashboardExternalActionUrl({
+        manifest,
+        publicUrl: process.env.AGENT_BROWSER_P158_DASHBOARD_ACTION_URL,
+      });
+      pageHandle = await openDirectExternalPage(publicUrl);
+      const request = {
+        pageHandle,
+        publicUrl,
+        publicPath: manifest.publicPath,
+        selectionReceiptSha256: manifest.selectionReceiptSha256,
+        externalProof: {
+          offHost: runnerAttestation.offHost,
+          outsideServiceNetworkNamespace: runnerAttestation.outsideServiceNetworkNamespace,
+          publicHttps: true,
+          operatorVisibleState: 'ready',
+        },
+        scenarioPlan: manifest.scenarioPlan,
+      };
+      const scenarioReceipt = manifest.caseId === 'D03'
+        ? await exerciseD03(request)
+        : manifest.caseId === 'D04' ? await exerciseD04(request) : await exerciseD05(request);
+      output = sealP158DashboardExternalResult({ manifest, scenarioReceipt, runnerAttestation });
+    } catch (error) {
+      terminalError = error;
+      output = sealP158DashboardExternalResult({
+        manifest,
+        failure: {
+          code: error.code ?? 'external_capture_failed',
+          message: 'External dashboard capture failed; consult the restricted workflow log',
+        },
+      });
+    } finally {
+      if (pageHandle) {
+        try {
+          await pageHandle.close();
+        } catch (error) {
+          terminalError ??= error;
+          if (output?.success === true) {
+            output = sealP158DashboardExternalResult({
+              manifest,
+              failure: {
+                code: error.code ?? 'external_capture_teardown_failed',
+                message: 'External dashboard capture teardown failed; consult the restricted workflow log',
+              },
+            });
+          }
+        }
+      }
+    }
+    await writeNewJson(resolve(outputPath), output);
+    if (terminalError) throw terminalError;
+    process.stdout.write(`${JSON.stringify({ success: true, outputPath: resolve(outputPath) })}\n`);
+    return;
+  } else if (command === 'plan') {
     if (apply) throw new Error('plan does not accept --apply');
     output = buildP158DashboardCampaignPlan(input);
   } else if (command === 'prepare') {

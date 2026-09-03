@@ -29,6 +29,8 @@ const REVIEWED_SOURCE_URLS = Object.freeze({
   dashboardLiveSmoke: new URL('../smoke-dashboard-operator-plan0022-live.js', import.meta.url),
   dashboardLiveFoundation: new URL('./p158-w8-dashboard-live.js', import.meta.url),
   dashboardCampaignRunner: new URL('../run-p158-w8-dashboard-campaign.js', import.meta.url),
+  dashboardExternalWorkflow: new URL('../../.github/workflows/p158-w8-dashboard-external.yml', import.meta.url),
+  dashboardExternalLibrary: new URL('./p158-w8-dashboard-external.js', import.meta.url),
   h03ExternalWorkflow: new URL('../../.github/workflows/p158-w8-h03-external.yml', import.meta.url),
   h03ExternalRunner: new URL('../run-p158-w8-h03-external.js', import.meta.url),
   h03ExternalLibrary: new URL('./p158-w8-h03-external.js', import.meta.url),
@@ -103,6 +105,18 @@ export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
     cases: Object.freeze(['D01', 'D03', 'D04', 'D05', 'D09']),
     coverage: 'Installed-parser-bound immutable preseeds, isolated per-action runtimes, duplicate-label selection, ten-client navigation isolation, supported stale-link recovery, reviewed HTTPS routing, exact teardown, and append-only terminal receipts.',
     missing: 'Concrete dashboard cases remain blocked until a frozen reviewed aggregate is supplied. D05 session, view, and handoff targets and D09 active churn remain explicitly blocked.',
+  }),
+  dashboardExternalWorkflow: Object.freeze({
+    path: '.github/workflows/p158-w8-dashboard-external.yml',
+    cases: Object.freeze(['D03', 'D04', 'D05']),
+    coverage: 'Manual GitHub-hosted Chromium execution against one exact action-specific public HTTPS dashboard route with immutable result upload.',
+    missing: 'A host-side freeze and resume handshake must keep the exact isolated action runtime alive while the manual workflow executes.',
+  }),
+  dashboardExternalLibrary: Object.freeze({
+    path: 'scripts/lib/p158-w8-dashboard-external.js',
+    cases: Object.freeze(['D03', 'D04', 'D05']),
+    coverage: 'Sealed external action manifests, secret URL digest validation, exact scenario-result oracles, and append-only failure classification.',
+    missing: 'It does not start, stop, repair, retry, or garbage-collect the service-host runtime.',
   }),
   h03ExternalWorkflow: Object.freeze({
     path: '.github/workflows/p158-w8-h03-external.yml', cases: Object.freeze(['H03']),
