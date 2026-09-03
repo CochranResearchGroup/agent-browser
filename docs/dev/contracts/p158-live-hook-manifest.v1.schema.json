@@ -23,7 +23,7 @@
     "hookBindings": {
       "type": "array",
       "minItems": 0,
-      "maxItems": 20,
+      "maxItems": 21,
       "items": { "$ref": "#/$defs/hookBinding" }
     },
     "adapterBindings": {

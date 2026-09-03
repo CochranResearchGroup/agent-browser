@@ -9,7 +9,7 @@ const REQUESTED_CASES = Object.freeze([
   'A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A08', 'A09', 'A10', 'A15',
   'X01', 'X02', 'X03', 'X04', 'X05', 'X07', 'X08', 'X09', 'X10',
 ]);
-const PRODUCT_BLOCKERS = Object.freeze(['A11', 'A12', 'A14']);
+const PRODUCT_BLOCKERS = Object.freeze(['A04', 'A06', 'A11', 'A12', 'A14']);
 
 const FINDINGS = Object.freeze({
   A01: ['distinct_client_transport_identity_unproven', 'resource_ownership_postcondition_missing'],
@@ -45,6 +45,7 @@ const REVIEWED_SOURCES = Object.freeze([
   'cli/src/native/authentication_run.rs',
   'cli/src/native/service_model.rs',
   'scripts/lib/p158-w7-development-adapters.js',
+  'scripts/lib/p158-w7-a04-a06-live.js',
 ]);
 
 function sourceDigest(relativePath) {
@@ -59,7 +60,8 @@ function freeze(value) {
   return value;
 }
 
-export function auditP158W7LiveHookReadiness({ candidateSha256, environmentSealSha256s }) {
+export function auditP158W7LiveHookReadiness({ candidateSha256, environmentSealSha256s,
+  a04A06LiveBundle = null }) {
   if (!/^[a-f0-9]{64}$/u.test(candidateSha256 ?? '') ||
       !environmentSealSha256s || Object.values(environmentSealSha256s)
         .some((digest) => !/^[a-f0-9]{64}$/u.test(digest))) {
@@ -71,24 +73,38 @@ export function auditP158W7LiveHookReadiness({ candidateSha256, environmentSealS
     sourcePath,
     sourceSha256: sourceDigest(sourcePath),
   }));
-  const cases = [...REQUESTED_CASES, ...PRODUCT_BLOCKERS].map((caseId) => ({
-    caseId,
-    requestedMode: 'concrete_live',
-    implementationKind: 'explicit_blocked',
-    blockerKind: PRODUCT_BLOCKERS.includes(caseId) ? 'product_source' : 'campaign_harness',
-    findingCodes: [...FINDINGS[caseId]],
-    effectsAllowed: false,
-    implementedActionCount: 0,
-    ownershipReceiptState: 'missing_or_not_effect_time_revalidated',
-  }));
+  const a05Concrete = a04A06LiveBundle !== null &&
+    a04A06LiveBundle.freezeEligible === true && a04A06LiveBundle.providerFree === false &&
+    a04A06LiveBundle.candidateSha256 === candidateSha256 &&
+    JSON.stringify(a04A06LiveBundle.concreteCaseIds) === JSON.stringify(['A05']) &&
+    a04A06LiveBundle.readiness?.counts?.A05?.executable === 12 &&
+    a04A06LiveBundle.driverSource?.sourcePath === 'scripts/lib/p158-w7-a04-a06-live.js' &&
+    a04A06LiveBundle.driverSource?.sourceSha256 === sourceDigest('scripts/lib/p158-w7-a04-a06-live.js');
+  const cases = [...new Set([...REQUESTED_CASES, ...PRODUCT_BLOCKERS])].map((caseId) => {
+    if (caseId === 'A05' && a05Concrete) return {
+      caseId, requestedMode: 'concrete_live', implementationKind: 'concrete_live',
+      blockerKind: null, findingCodes: [], effectsAllowed: true, implementedActionCount: 12,
+      ownershipReceiptState: 'frozen_and_effect_time_revalidated',
+    };
+    return {
+      caseId, requestedMode: 'concrete_live', implementationKind: 'explicit_blocked',
+      blockerKind: PRODUCT_BLOCKERS.includes(caseId) ? 'product_source' : 'campaign_harness',
+      findingCodes: [...FINDINGS[caseId]], effectsAllowed: false, implementedActionCount: 0,
+      ownershipReceiptState: 'missing_or_not_effect_time_revalidated',
+    };
+  });
+  const concreteCaseIds = cases.filter((entry) => entry.implementationKind === 'concrete_live')
+    .map((entry) => entry.caseId);
+  const explicitBlockedCaseIds = cases.filter((entry) => entry.implementationKind === 'explicit_blocked')
+    .map((entry) => entry.caseId);
   const body = {
     schemaVersion: 'agent-browser.p158-w7-live-hook-readiness.v1',
     candidateSha256,
     environmentSealSha256s: structuredClone(environmentSealSha256s),
     sourceEvidence,
     reviewedCaseCount: cases.length,
-    concreteCaseIds: [],
-    explicitBlockedCaseIds: cases.map((entry) => entry.caseId),
+    concreteCaseIds,
+    explicitBlockedCaseIds,
     cases,
     effectsAttempted: false,
     repairAttempted: false,

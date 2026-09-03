@@ -21,12 +21,13 @@ assert.deepEqual(input, original);
 assert.equal(report.reviewedCaseCount, 22);
 assert.deepEqual(report.concreteCaseIds, []);
 assert.deepEqual(report.explicitBlockedCaseIds,
-  [...P158_W7_LIVE_HOOK_AUDIT_CASE_IDS, ...P158_W7_PRODUCT_BLOCKED_CASE_IDS]);
+  [...new Set([...P158_W7_LIVE_HOOK_AUDIT_CASE_IDS, ...P158_W7_PRODUCT_BLOCKED_CASE_IDS])]);
 assert.ok(report.cases.every((entry) => entry.implementationKind === 'explicit_blocked' &&
   entry.effectsAllowed === false && entry.implementedActionCount === 0 && entry.findingCodes.length > 0));
 assert.ok(report.cases.filter((entry) => P158_W7_PRODUCT_BLOCKED_CASE_IDS.includes(entry.caseId))
   .every((entry) => entry.blockerKind === 'product_source'));
 assert.ok(report.cases.filter((entry) => P158_W7_LIVE_HOOK_AUDIT_CASE_IDS.includes(entry.caseId))
+  .filter((entry) => !P158_W7_PRODUCT_BLOCKED_CASE_IDS.includes(entry.caseId))
   .every((entry) => entry.blockerKind === 'campaign_harness'));
 assert.equal(report.effectsAttempted, false);
 assert.equal(report.repairAttempted, false);
@@ -38,6 +39,28 @@ for (const source of report.sourceEvidence) {
 }
 const binding = p158W7LiveHookReadinessSourceBinding();
 assert.equal(binding.sourceSha256, sha256(await readFile(binding.sourcePath)));
+
+const promoted = auditP158W7LiveHookReadiness({
+  ...input,
+  a04A06LiveBundle: {
+    freezeEligible: true,
+    providerFree: false,
+    candidateSha256: input.candidateSha256,
+    concreteCaseIds: ['A05'],
+    readiness: { counts: { A05: { executable: 12 } } },
+    driverSource: {
+      sourcePath: 'scripts/lib/p158-w7-a04-a06-live.js',
+      sourceSha256: sha256(await readFile('scripts/lib/p158-w7-a04-a06-live.js')),
+    },
+  },
+});
+assert.deepEqual(promoted.concreteCaseIds, ['A05']);
+assert.equal(promoted.explicitBlockedCaseIds.includes('A05'), false);
+assert.deepEqual(promoted.cases.find((entry) => entry.caseId === 'A05'), {
+  caseId: 'A05', requestedMode: 'concrete_live', implementationKind: 'concrete_live',
+  blockerKind: null, findingCodes: [], effectsAllowed: true, implementedActionCount: 12,
+  ownershipReceiptState: 'frozen_and_effect_time_revalidated',
+});
 
 for (const invalid of [
   { ...input, candidateSha256: 'bad' },

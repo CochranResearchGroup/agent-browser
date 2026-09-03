@@ -180,6 +180,8 @@ function makeLiveHookContext(context) {
     ? 'scripts/lib/p158-w7-agent-orchestration.js'
     : hookId === 'w7.a01_a03.service_concurrency'
       ? 'scripts/lib/p158-w7-a01-a03-live.js'
+    : hookId === 'w7.a04_a06.profile_policy'
+      ? 'scripts/lib/p158-w7-a04-a06-live.js'
     : hookId.startsWith('w7.')
     ? 'scripts/lib/p158-w7-development-adapters.js'
     : hookId.startsWith('w8.external') || hookId === 'w8.playwright'
@@ -196,8 +198,10 @@ function makeLiveHookContext(context) {
       sourceSha256: aggregateEntries.get(sourcePath).sha256,
     };
   });
-  const sourcePathForCase = (caseId) => caseId.startsWith('A') || caseId.startsWith('X')
-    ? 'scripts/lib/p158-w7-development-adapters.js'
+  const sourcePathForCase = (caseId) => caseId === 'A05'
+    ? 'scripts/lib/p158-w7-a04-a06-live.js'
+    : caseId.startsWith('A') || caseId.startsWith('X')
+      ? 'scripts/lib/p158-w7-development-adapters.js'
     : caseId.startsWith('H') || caseId.startsWith('D')
       ? 'scripts/lib/p158-w8-hd-adapters.js'
       : 'scripts/lib/p158-w9-campaign-orchestrator.js';
@@ -207,8 +211,10 @@ function makeLiveHookContext(context) {
       (subtotal, allocation) => subtotal + allocation.actionIds.length,
       0,
     )), 0);
-  const hookIdsFor = (caseId) => caseId.startsWith('A') || caseId.startsWith('X')
-    ? ['w7.cli']
+  const hookIdsFor = (caseId) => caseId === 'A05'
+    ? ['w7.a04_a06.profile_policy']
+    : caseId.startsWith('A') || caseId.startsWith('X')
+      ? ['w7.cli']
     : caseId.startsWith('H')
       ? ['w8.external_workflow', 'w8.playwright', 'w8.stimulus']
       : caseId.startsWith('D')

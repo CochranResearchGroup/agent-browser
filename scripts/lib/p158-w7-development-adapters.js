@@ -19,9 +19,9 @@ export const P158_W7_LIVE_HOOK_GAPS = Object.freeze({
   A01: 'multi_client_identity_load_driver',
   A02: 'shared_browser_concurrency_driver',
   A03: 'same_label_connection_driver',
-  A04: 'acl_matrix_fixture_driver',
+  A04: 'arbitrary_profile_operation_decision_oracle_missing',
   A05: 'acl_barrier_transition_driver',
-  A06: 'revocation_eviction_barrier_driver',
+  A06: 'queued_command_barrier_seam_missing',
   A08: 'identity_proof_fixture_driver',
   A09: 'cdp_target_pathology_driver',
   A10: 'owned_foreign_inventory_churn_driver',
@@ -54,16 +54,16 @@ export const P158_W7_REQUIRED_SEAMS = Object.freeze({
     minimalSeam: 'Open ten existing Service clients with one shared label and distinct immutable connection IDs.',
   },
   A04: {
-    kind: 'campaign_harness',
-    minimalSeam: 'Materialize existing profile access policies for every frozen role, mode, operation, and decision cell.',
+    kind: 'product_source',
+    minimalSeam: 'Expose an access-decision contract for arbitrary profile operations; the current access-plan path hardcodes tab_create.',
   },
   A05: {
     kind: 'campaign_harness',
     minimalSeam: 'Apply existing revisioned profile-policy updates at six frozen workload barriers.',
   },
   A06: {
-    kind: 'campaign_harness',
-    minimalSeam: 'Sequence existing administrative revocation and exact tab-eviction APIs at the four frozen matrix cells.',
+    kind: 'product_source',
+    minimalSeam: 'Add a development-only queued-command hold and exact once release contract around existing revocation and tab eviction.',
   },
   A08: {
     kind: 'campaign_harness',
@@ -869,6 +869,7 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   agentWorkflowManifest = null,
   agentWorkflowDrivers = null,
   a01A03LiveBundle = null,
+  a04A06LiveBundle = null,
   additionalAdapters = [],
   liveHookManifestSha256,
 }) {
@@ -922,7 +923,23 @@ export function createP158W7LiveDevelopmentAdapterBundle({
        !Array.isArray(a01A03LiveBundle.liveHookIds) || a01A03LiveBundle.liveHookIds.length !== 1)) {
     fail('a01_a03_live_bundle_unproven', 'A01-A03 promotion requires the exact frozen live bundle');
   }
-  const specializedCaseIds = new Set(a01A03LiveBundle?.concreteCaseIds ?? []);
+  if (a04A06LiveBundle !== null &&
+      (a04A06LiveBundle.freezeEligible !== true || a04A06LiveBundle.providerFree !== false ||
+       a04A06LiveBundle.liveHookManifestSha256 !== liveHookManifestSha256 ||
+       a04A06LiveBundle.campaignRunId !== target.campaignRunId ||
+       a04A06LiveBundle.candidateSha256 !== target.candidateSha256 ||
+       !/^[a-f0-9]{64}$/u.test(a04A06LiveBundle.ownershipManifestSha256 ?? '') ||
+       !/^[a-f0-9]{64}$/u.test(a04A06LiveBundle.driverSource?.sourceSha256 ?? '') ||
+       typeof a04A06LiveBundle.driverSource?.sourcePath !== 'string' ||
+       JSON.stringify(a04A06LiveBundle.concreteCaseIds) !== JSON.stringify(['A05']) ||
+       !Array.isArray(a04A06LiveBundle.adapters) || a04A06LiveBundle.adapters.length !== 1 ||
+       !Array.isArray(a04A06LiveBundle.liveHookIds) || a04A06LiveBundle.liveHookIds.length !== 1)) {
+    fail('a04_a06_live_bundle_unproven', 'A05 promotion requires the exact frozen A04-A06 boundary bundle');
+  }
+  const specializedBundles = [a01A03LiveBundle, a04A06LiveBundle].filter(Boolean);
+  const specializedByCase = new Map(specializedBundles.flatMap((bundle) =>
+    bundle.concreteCaseIds.map((caseId) => [caseId, bundle])));
+  const specializedCaseIds = new Set(specializedByCase.keys());
   // Reviewed command shapes are not sufficient ownership proof. Until frozen
   // candidate/environment receipts bind and are revalidated against each PID,
   // unit, profile, display, browser, and target at effect time, every W7 case
@@ -964,20 +981,21 @@ export function createP158W7LiveDevelopmentAdapterBundle({
     const concreteLive = concreteCaseIds.has(caseId);
     const agentConcrete = agentConcreteCaseIds.has(caseId);
     const specialized = specializedCaseIds.has(caseId);
+    const specializedBundle = specializedByCase.get(caseId);
     const partial = ['A09', 'A15'].includes(caseId);
     return deepFreeze({
       caseId,
       mode: concreteLive ? 'concrete_live' : 'explicit_blocked',
       providerFree: false,
       sourcePath: specialized
-        ? a01A03LiveBundle.driverSource.sourcePath
+        ? specializedBundle.driverSource.sourcePath
         : (agentConcrete ? agentOrchestration.driverSource.sourcePath : W7_SOURCE_PATH),
       sourceSha256: specialized
-        ? a01A03LiveBundle.driverSource.sourceSha256
+        ? specializedBundle.driverSource.sourceSha256
         : (agentConcrete ? agentOrchestration.driverSource.sourceSha256 : sourceSha256),
       hookIds: concreteLive
         ? (specialized
-            ? [...a01A03LiveBundle.liveHookIds]
+            ? [...specializedBundle.liveHookIds]
             : (agentConcrete
             ? ['w7.agent_existing_seam_workflow']
             : (caseId === 'A07'
@@ -1001,6 +1019,7 @@ export function createP158W7LiveDevelopmentAdapterBundle({
     ...concrete.w7Adapters,
     ...(agentOrchestration?.adapters ?? []),
     ...(a01A03LiveBundle?.adapters ?? []),
+    ...(a04A06LiveBundle?.adapters ?? []),
     ...explicitBlockedAdapters,
   ].map((adapter) => [adapter.caseId, adapter]));
   const w7Adapters = P158_W7_CASE_IDS.map((caseId) => {

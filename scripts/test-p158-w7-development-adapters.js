@@ -197,8 +197,8 @@ assert.equal(reviewedLive.blockerCount, 22);
 assert.equal(reviewedLive.effectsExecuted, false);
 assert.deepEqual(Object.entries(P158_W7_REQUIRED_SEAMS)
   .filter(([, seam]) => seam.kind === 'product_source')
-  .map(([caseId]) => caseId), ['A11', 'A12', 'A14']);
-for (const caseId of ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A08', 'A09', 'A10', 'A15']) {
+  .map(([caseId]) => caseId), ['A04', 'A06', 'A11', 'A12', 'A14']);
+for (const caseId of ['A01', 'A02', 'A03', 'A05', 'A08', 'A09', 'A10', 'A15']) {
   assert.equal(P158_W7_REQUIRED_SEAMS[caseId].kind, 'campaign_harness');
 }
 for (const caseId of Object.keys(P158_W7_REQUIRED_SEAMS)) {
