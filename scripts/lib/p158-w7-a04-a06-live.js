@@ -101,9 +101,6 @@ function a05LoggingRequestDescriptors(action, campaignRunId, environmentId) {
       caseId: 'A05',
       phaseId: 'W7',
       environmentId,
-      ...(suffix === 'fixture-setup' ? {
-        expectedSurfaceRoles: ['ingress_request', 'immediate_response', 'terminal_event'],
-      } : {}),
     };
   });
 }

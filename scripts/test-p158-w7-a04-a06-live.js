@@ -239,6 +239,9 @@ assert.ok(enumeratedLoggingRequests.every((entry) => entry.expectationId === ent
   ['accepted_request', 'rejected_request'].includes(entry.requestKind) &&
   entry.requestId.includes(entry.actionId)));
 assert.equal(enumeratedLoggingRequests.filter((entry) => entry.requestKind === 'rejected_request').length, 2);
+assert.ok(enumeratedLoggingRequests.filter((entry) => entry.operationKind === 'fixture-setup')
+  .every((entry) => entry.expectedSurfaceRoles === undefined),
+'fixture setup must retain the full accepted-request causal surface default');
 assert.deepEqual([...new Set(enumeratedLoggingRequests.map((entry) => entry.operationKind))].sort(), [
   'admission-probe', 'conflict-a', 'conflict-b', 'drain-complete', 'fixture-setup',
   'occupant-open', 'own-release', 'policy-mutate',
