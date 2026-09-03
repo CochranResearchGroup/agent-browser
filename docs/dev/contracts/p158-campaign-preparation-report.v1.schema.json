@@ -35,6 +35,7 @@
     "fixtureSealSha256": { "$ref": "#/$defs/sha256" },
     "externalVantageSha256": { "$ref": "#/$defs/sha256" },
     "w4ReportSha256": { "$ref": "#/$defs/sha256" },
+    "executionScheduleSha256": { "$ref": "#/$defs/sha256" },
     "freezeReceipt": { "$ref": "#/$defs/freezeReceiptWithStorage" },
     "controllerState": { "const": "frozen" },
     "zeroStartedCaseCount": { "const": 0 },
@@ -82,7 +83,7 @@
         "artifact_byte_count_mismatch", "artifact_hash_mismatch", "candidate_digest_mismatch",
         "controller_not_pristine", "duplicate_artifact_id", "environment_digest_mismatch",
         "external_client_identity_invalid", "external_ingress_observation_missing",
-        "fixture_digest_mismatch", "invalid_calibration", "missing_artifact_kind",
+        "execution_schedule_mismatch", "fixture_digest_mismatch", "invalid_calibration", "missing_artifact_kind",
         "referenced_artifact_missing", "w4_oracle_not_clean"
       ]
     },

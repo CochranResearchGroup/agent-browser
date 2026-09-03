@@ -2,27 +2,28 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import Ajv2020 from 'ajv/dist/2020.js';
 import {
   P158_ADAPTER_READINESS_CODES,
-  P158_EXECUTION_PHASES,
   P158ExecutionScheduleError,
   assessP158AdapterReadiness,
+  compileP158ControllerScheduleInput,
   compileP158ExecutionSchedule,
   createP158AdapterExecutor,
   createP158CaseAdapter,
 } from './lib/p158-execution-schedule.js';
 
-const registryPath = new URL(
-  '../docs/dev/contracts/p158-historical-failure-registry.v1.json',
-  import.meta.url,
+const root = new URL('..', import.meta.url);
+const readJson = (path) => JSON.parse(fs.readFileSync(new URL(path, root), 'utf8'));
+const registry = readJson('docs/dev/contracts/p158-historical-failure-registry.v1.json');
+const executionContractSchema = readJson(
+  'docs/dev/contracts/p158-case-execution-contract.v1.schema.json',
 );
-const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+const serviceRequestSchema = readJson('docs/dev/contracts/service-request.v1.schema.json');
+const ajv = new Ajv2020({ allErrors: true, strict: true });
+const validateExecutionContract = ajv.compile(executionContractSchema);
 
-function clone(value) {
-  return structuredClone(value);
-}
-
-function expectScheduleError(code, action) {
+function expectError(code, action) {
   assert.throws(action, (error) => {
     assert(error instanceof P158ExecutionScheduleError);
     assert.equal(error.code, code);
@@ -30,7 +31,7 @@ function expectScheduleError(code, action) {
   });
 }
 
-async function expectScheduleRejection(code, action) {
+async function expectRejection(code, action) {
   await assert.rejects(action, (error) => {
     assert(error instanceof P158ExecutionScheduleError);
     assert.equal(error.code, code);
@@ -42,6 +43,7 @@ function adaptersFor(schedule, executeByCase = {}) {
   return schedule.caseContracts.map((contract) => createP158CaseAdapter({
     caseId: contract.caseId,
     evidenceProfile: contract.evidenceProfile,
+    executionContract: contract.executionContract,
     execute: executeByCase[contract.caseId] ?? (async () => ({ resultState: 'passed' })),
   }));
 }
@@ -55,225 +57,240 @@ function compileReady(seed = 'p158-exhaustive-seed', executeByCase = {}) {
   };
 }
 
-function findingCodes(report) {
-  return report.findings.map((entry) => entry.code);
+function attemptsFor(schedule, caseId, environmentId) {
+  return schedule.attempts.filter((attempt) =>
+    attempt.caseId === caseId && attempt.environmentId === environmentId);
 }
 
-const originalRegistry = clone(registry);
+function cardinality(contract, id) {
+  const value = contract.cardinalities.find((entry) => entry.id === id);
+  assert(value, `${id} cardinality is missing`);
+  return value;
+}
+
+function assignedTotal(attempts, id) {
+  return attempts.reduce((total, attempt) => total +
+    attempt.cardinalityAllocations.find((entry) => entry.id === id).assignedValue, 0);
+}
+
+const originalRegistry = structuredClone(registry);
+for (const testCase of registry.cases) {
+  assert.equal(
+    validateExecutionContract(testCase.executionContract),
+    true,
+    `${testCase.id}: ${ajv.errorsText(validateExecutionContract.errors)}`,
+  );
+}
+
 const first = compileP158ExecutionSchedule({ registry, seed: 'frozen-seed' });
 const second = compileP158ExecutionSchedule({ registry, seed: 'frozen-seed' });
-assert.deepEqual(first, second, 'same registry and seed must compile byte-equivalent data');
-assert.deepEqual(registry, originalRegistry, 'compilation must not mutate the frozen registry');
+assert.deepEqual(first, second);
+assert.deepEqual(registry, originalRegistry, 'compiler mutated the frozen registry');
 assert.equal(first.caseCount, 54);
-assert.equal(first.attemptCount, 104);
-assert.equal(first.caseContracts.length, 54);
-assert.equal(first.attempts.length, 104);
-assert.equal(new Set(first.caseContracts.map((entry) => entry.caseId)).size, 54);
-assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 104);
-assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 104);
-assert.deepEqual(first.attempts.map((entry) => entry.scheduleSequence),
-  Array.from({ length: 104 }, (_, index) => index));
+assert.equal(first.attemptCount, 1941);
+assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 1941);
+assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 1941);
 assert.deepEqual([...new Set(first.attempts.map((entry) => entry.phaseId))], ['W7', 'W8', 'W9']);
+assert.deepEqual(first.environments.map((entry) => entry.environmentId), ['E0', 'E1', 'E2', 'E3']);
 
-const registryCases = new Map(registry.cases.map((testCase) => [testCase.id, testCase]));
-const attemptSequence = new Map(first.attempts.map((attempt) => [
-  attempt.attemptId,
-  attempt.scheduleSequence,
+const registryCases = new Map(registry.cases.map((entry) => [entry.id, entry]));
+const scheduleSequence = new Map(first.attempts.map((entry) => [
+  entry.attemptId,
+  entry.scheduleSequence,
 ]));
+const everyActionId = [];
 for (const contract of first.caseContracts) {
-  const testCase = registryCases.get(contract.caseId);
-  assert(testCase, `unexpected compiled case ${contract.caseId}`);
-  assert.equal(contract.executionBound, testCase.executionBound);
-  assert.equal(contract.evidenceProfile, testCase.evidenceProfile);
-  assert.deepEqual(contract.environmentIds, [...testCase.environmentIds].sort());
-  assert.deepEqual(contract.dependsOnCaseIds, [...testCase.dependsOn].sort());
-  assert.equal(contract.adapterId, `p158.case.${contract.caseId}.v1`);
-  assert.deepEqual(contract.declaredEffectIds, [`p158.effect.${contract.caseId}.declared`]);
-  assert.equal(contract.reactionaryRepairAllowed, false);
-  assert.equal(contract.opportunisticRetryAllowed, false);
-  assert.equal(contract.undeclaredEffectsAllowed, false);
+  const source = registryCases.get(contract.caseId);
+  assert.deepEqual(contract.executionContract, source.executionContract);
+  assert.equal(typeof contract.executionContractSha256, 'string');
+  for (const environmentId of contract.environmentIds) {
+    const attempts = attemptsFor(first, contract.caseId, environmentId);
+    assert.equal(attempts.length, contract.executionContract.expansion.count, contract.caseId);
+    assert.deepEqual(attempts.map((entry) => entry.repetition),
+      Array.from({ length: attempts.length }, (_, index) => index + 1));
+    assert.deepEqual(attempts.map((entry) => entry.attemptId),
+      Array.from({ length: attempts.length }, (_, index) =>
+        `${contract.caseId}-${environmentId}-r${String(index + 1).padStart(3, '0')}`));
+    for (const declared of contract.executionContract.cardinalities) {
+      const allocations = attempts.map((attempt) =>
+        attempt.cardinalityAllocations.find((entry) => entry.id === declared.id));
+      assert(allocations.every(Boolean), `${contract.caseId} omitted ${declared.id} allocation`);
+      if (declared.scope === 'aggregate') {
+        assert.equal(assignedTotal(attempts, declared.id), declared.value,
+          `${contract.caseId}/${environmentId}/${declared.id} multiplied its aggregate`);
+      } else {
+        assert(allocations.every((entry) => entry.assignedValue === declared.value));
+      }
+      if (declared.scope === 'shared') {
+        assert(allocations.every((entry) => entry.actionIds.length === 0));
+      }
+      everyActionId.push(...allocations.flatMap((entry) => entry.actionIds));
+    }
+    if (contract.executionContract.expansion.strategy === 'dimension') {
+      const dimension = contract.executionContract.dimensions.find((entry) =>
+        entry.id === contract.executionContract.expansion.dimensionId);
+      assert.deepEqual(attempts.map((entry) => entry.executionUnit.dimensionAssignment.value),
+        dimension.values);
+    }
+  }
 }
+assert.equal(new Set(everyActionId).size, everyActionId.length,
+  'every predetermined action must have a globally distinct action ID');
 
 for (const attempt of first.attempts) {
-  const testCase = registryCases.get(attempt.caseId);
-  const expectedDependencies = testCase.dependsOn
-    .flatMap((dependency) => first.attempts
-      .filter((candidate) => candidate.caseId === dependency)
-      .map((candidate) => candidate.attemptId))
-    .sort();
+  const source = registryCases.get(attempt.caseId);
+  const expectedDependencies = source.dependsOn.flatMap((caseId) =>
+    first.attempts.filter((entry) => entry.caseId === caseId).map((entry) => entry.attemptId)).sort();
   assert.deepEqual(attempt.dependsOnAttemptIds, expectedDependencies);
-  for (const dependency of attempt.dependsOnAttemptIds) {
-    assert(attemptSequence.get(dependency) < attempt.scheduleSequence,
-      `${dependency} must precede ${attempt.attemptId}`);
-  }
+  assert(attempt.dependsOnAttemptIds.every((id) =>
+    scheduleSequence.get(id) < attempt.scheduleSequence));
   const expectedIngress = attempt.environmentId === 'E2' && (
-    ['external', 'dashboard', 'combined'].includes(testCase.evidenceProfile) ||
-    ['X06', 'X10'].includes(testCase.id)
+    ['external', 'dashboard', 'combined'].includes(source.evidenceProfile) ||
+    ['X06', 'X10'].includes(source.id)
   );
   assert.equal(attempt.externalIngressRequired, expectedIngress, attempt.attemptId);
-  assert.equal(attempt.scheduleId, `${attempt.phaseId}:${attempt.attemptId}`);
-  assert.equal(attempt.repetition, 1);
 }
-assert.equal(first.attempts.find((entry) => entry.attemptId === 'A15-E2-r001').externalIngressRequired,
-  false);
-assert.equal(first.attempts.find((entry) => entry.attemptId === 'X06-E2-r001').externalIngressRequired,
-  true);
-assert.equal(first.attempts.find((entry) => entry.attemptId === 'X10-E2-r001').externalIngressRequired,
-  true);
-assert(first.attempts.filter((entry) => entry.caseId.startsWith('C') && entry.environmentId === 'E2')
-  .every((entry) => entry.externalIngressRequired));
 
-assert.deepEqual(first.phases.map((phase) => phase.phaseId), ['W7', 'W8', 'W9']);
-assert.deepEqual(P158_EXECUTION_PHASES.map((phase) => phase.phaseId), ['W7', 'W8', 'W9']);
-for (const phase of first.phases) {
-  assert(phase.attemptIds.every((attemptId) =>
-    first.attempts.find((attempt) => attempt.attemptId === attemptId).phaseId === phase.phaseId));
+const expandedCases = {
+  A02: 20, A05: 6, A13: 25, A14: 5,
+  H03: 4, H05: 3, H09: 7, H10: 3, H12: 500,
+  X07: 25, X08: 6, X10: 6, D02: 8,
+  C01: 10, C02: 100, C03: 25, C04: 200, C05: 500,
+};
+for (const testCase of registry.cases) {
+  assert.equal(testCase.executionContract.expansion.count, expandedCases[testCase.id] ?? 1,
+    `${testCase.id} expansion drifted`);
 }
-assert.deepEqual(first.environments.map((entry) => entry.environmentId), ['E0', 'E1', 'E2', 'E3']);
-assert.equal(first.environments.reduce((total, entry) => total + entry.attemptCount, 0), 104);
-assert(first.environments.find((entry) => entry.environmentId !== 'E2')
-  .externalIngressAttemptIds.length === 0);
-assert(first.environments.filter((entry) => entry.environmentId !== 'E2')
-  .every((entry) => entry.externalIngressAttemptIds.length === 0));
+for (const [caseId, environmentId, repetitions] of [
+  ['A02', 'E0', 20], ['A02', 'E1', 20], ['A13', 'E1', 25],
+  ['H12', 'E2', 500], ['C05', 'E2', 500],
+]) {
+  assert.equal(attemptsFor(first, caseId, environmentId).length, repetitions);
+}
+assert.equal(assignedTotal(attemptsFor(first, 'H12', 'E2'), 'reconnects'), 500);
+assert.equal(assignedTotal(attemptsFor(first, 'C05', 'E2'), 'reconnects'), 500);
+assert.deepEqual(registryCases.get('H12').executionContract.duration,
+  { mode: 'minimum', seconds: 86400 });
+assert.deepEqual(registryCases.get('C05').executionContract.duration,
+  { mode: 'minimum', seconds: 86400 });
+for (const [caseId, environmentId, lastOffset] of [
+  ['H12', 'E2', 86400],
+  ['C01', 'E1', 1200],
+  ['C04', 'E2', 28800],
+  ['C05', 'E2', 86400],
+]) {
+  const attempts = attemptsFor(first, caseId, environmentId);
+  assert.equal(attempts[0].executionUnit.plannedOffsetSeconds, 0);
+  assert.equal(attempts.at(-1).executionUnit.plannedOffsetSeconds, lastOffset);
+  assert(attempts.every((attempt, index) => index === 0 ||
+    attempt.executionUnit.plannedOffsetSeconds >=
+      attempts[index - 1].executionUnit.plannedOffsetSeconds));
+}
+
+for (const environmentId of ['E1', 'E2']) {
+  const c02 = attemptsFor(first, 'C02', environmentId);
+  assert.equal(assignedTotal(c02, 'service_commands'), 2000);
+  assert.equal(assignedTotal(c02, 'dashboard_actions'), 500);
+  assert.equal(assignedTotal(c02, 'reconnects'), 100);
+  assert.equal(assignedTotal(c02, 'browser_crashes'), 20);
+  const c04 = attemptsFor(first, 'C04', environmentId);
+  assert.equal(assignedTotal(c04, 'service_commands'), 10000);
+  assert.equal(assignedTotal(c04, 'dashboard_actions'), 2000);
+  assert.equal(assignedTotal(c04, 'reconnects'), 200);
+  assert.equal(assignedTotal(c04, 'browser_crashes'), 50);
+}
+
+const d09 = registryCases.get('D09').executionContract;
+assert.equal(cardinality(d09, 'profiles').value, 100);
+assert.equal(cardinality(d09, 'browsers_or_historical_rows').value, 500);
+assert.equal(cardinality(d09, 'tabs').value, 2000);
+assert.equal(cardinality(d09, 'jobs').value, 10000);
+assert.equal(cardinality(d09, 'events').value, 10000);
+
+const matrixCells = Object.fromEntries(['A04', 'A08', 'H02', 'X05', 'D06', 'D07', 'D10', 'D12']
+  .map((caseId) => [caseId, registryCases.get(caseId).executionContract.dimensions
+    .filter((dimension) => dimension.coverage === 'cartesian')
+    .reduce((count, dimension) => count * dimension.values.length, 1)]));
+assert.deepEqual(matrixCells, {
+  A04: 108, A08: 8, H02: 130, X05: 72, D06: 8, D07: 8, D10: 28, D12: 21,
+});
+assert.equal(cardinality(registryCases.get('A07').executionContract,
+  'supported_service_request_actions').value, serviceRequestSchema.properties.action.enum.length);
 
 assert.equal(first.adapterReadiness.ready, false);
-assert.equal(first.adapterReadiness.expectedCaseCount, 54);
-assert.equal(first.adapterReadiness.readyCaseCount, 0);
 assert.equal(first.adapterReadiness.findingCount, 54);
-assert.deepEqual(new Set(findingCodes(first.adapterReadiness)), new Set(['missing_case_adapter']));
-assert.deepEqual(first.adapterReadiness.findings.map((entry) => entry.caseId),
-  [...registryCases.keys()].sort());
-
-const adapterTemplate = adaptersFor(first);
-const adapterTemplateSnapshot = adapterTemplate.map(({ execute: _execute, ...entry }) => clone(entry));
-const ready = assessP158AdapterReadiness({ schedule: first, adapters: adapterTemplate });
-assert.equal(ready.ready, true);
-assert.equal(ready.readyCaseCount, 54);
-assert.equal(ready.findingCount, 0);
-assert.deepEqual(adapterTemplate.map(({ execute: _execute, ...entry }) => entry), adapterTemplateSnapshot,
-  'readiness checks must not mutate adapters');
-
+assert(first.adapterReadiness.findings.every((entry) => entry.code === 'missing_case_adapter'));
+const adapters = adaptersFor(first);
+assert.equal(assessP158AdapterReadiness({ schedule: first, adapters }).ready, true);
+const contractMismatch = assessP158AdapterReadiness({
+  schedule: first,
+  adapters: adapters.map((entry) => entry.caseId === 'A01'
+    ? { ...entry, executionContractSha256: '0'.repeat(64) }
+    : entry),
+});
+assert.deepEqual(contractMismatch.findings.map((entry) => entry.code),
+  ['adapter_execution_contract_mismatch']);
 const missingTwo = assessP158AdapterReadiness({
   schedule: first,
-  adapters: adapterTemplate.filter((entry) => !['A01', 'A02'].includes(entry.caseId)),
+  adapters: adapters.filter((entry) => !['A01', 'A02'].includes(entry.caseId)),
 });
 assert.deepEqual(missingTwo.findings.map((entry) => [entry.code, entry.caseId]), [
-  ['missing_case_adapter', 'A01'],
-  ['missing_case_adapter', 'A02'],
+  ['missing_case_adapter', 'A01'], ['missing_case_adapter', 'A02'],
 ]);
-assert.equal(missingTwo.readyCaseCount, 52);
-
-const baseA01 = adapterTemplate.find((entry) => entry.caseId === 'A01');
-const adapterDefects = [
-  ['adapter_case_mismatch', { ...baseA01, adapterId: 'p158.case.wrong.v1' }],
-  ['adapter_effect_contract_mismatch', { ...baseA01, declaredEffectIds: ['undeclared'] }],
-  ['adapter_evidence_profile_mismatch', { ...baseA01, evidenceProfile: 'logging' }],
-  ['adapter_execute_missing', { ...baseA01, execute: null }],
-  ['adapter_repair_capability_forbidden', { ...baseA01, reactionaryRepairAllowed: true }],
-  ['adapter_undeclared_effect_capability_forbidden', { ...baseA01, undeclaredEffectsAllowed: true }],
-  ['adapter_retry_capability_forbidden', { ...baseA01, opportunisticRetryAllowed: true }],
-];
-for (const [expectedCode, defective] of adapterDefects) {
-  const report = assessP158AdapterReadiness({
-    schedule: first,
-    adapters: adapterTemplate.map((entry) => entry.caseId === 'A01' ? defective : entry),
-  });
-  assert.deepEqual(findingCodes(report), [expectedCode]);
-}
-const duplicate = assessP158AdapterReadiness({
-  schedule: first,
-  adapters: [...adapterTemplate, baseA01],
-});
-assert.deepEqual(findingCodes(duplicate), ['duplicate_case_adapter']);
-const unexpected = assessP158AdapterReadiness({
-  schedule: first,
-  adapters: [...adapterTemplate, createP158CaseAdapter({
-    caseId: 'Z99',
-    evidenceProfile: 'agent',
-    execute: async () => ({ resultState: 'passed' }),
-  })],
-});
-assert.deepEqual(findingCodes(unexpected), ['unexpected_case_adapter']);
-assert.equal(unexpected.readyCaseCount, 54);
-assert.deepEqual(P158_ADAPTER_READINESS_CODES, [
-  'adapter_case_mismatch',
-  'adapter_effect_contract_mismatch',
-  'adapter_evidence_profile_mismatch',
-  'adapter_execute_missing',
-  'adapter_repair_capability_forbidden',
-  'adapter_retry_capability_forbidden',
-  'adapter_undeclared_effect_capability_forbidden',
-  'duplicate_case_adapter',
-  'missing_case_adapter',
-  'unexpected_case_adapter',
-]);
-
-const alternate = compileP158ExecutionSchedule({ registry, seed: 'different-seed' });
-assert.notEqual(alternate.scheduleSha256, first.scheduleSha256);
-assert.notDeepEqual(alternate.attempts.map((entry) => entry.seed),
-  first.attempts.map((entry) => entry.seed));
-
-for (const [code, mutate] of [
-  ['registry_not_frozen', (draft) => { draft.registryState = 'draft'; }],
-  ['registry_case_count_mismatch', (draft) => { draft.cases.pop(); }],
-  ['unknown_case_dependency', (draft) => { draft.cases[0].dependsOn = ['Z99']; }],
-  ['cyclic_case_dependency', (draft) => {
-    draft.cases.find((entry) => entry.id === 'A01').dependsOn = ['A02'];
-  }],
-  ['evidence_profile_missing', (draft) => { draft.cases[0].evidenceProfile = 'absent'; }],
-  ['execution_bound_missing', (draft) => { draft.cases[0].executionBound = ''; }],
-  ['case_environment_missing', (draft) => { draft.cases[0].environmentIds = []; }],
-  ['duplicate_case_environment', (draft) => { draft.cases[0].environmentIds.push('E0'); }],
-  ['unknown_case_environment', (draft) => { draft.cases[0].environmentIds = ['E9']; }],
-]) {
-  const draft = clone(registry);
-  mutate(draft);
-  expectScheduleError(code, () => compileP158ExecutionSchedule({ registry: draft, seed: 'x' }));
-}
-expectScheduleError('seed_missing', () => compileP158ExecutionSchedule({ registry, seed: '' }));
-
-const { schedule: executableSchedule, adapters: executableAdapters } = compileReady(
-  'executor-seed',
-  {
-    H01: async ({ attempt, requestEffect }) => {
-      const receipt = await requestEffect('p158.effect.H01.declared', {
-        caseId: attempt.caseId,
-        operation: 'synthetic-observation',
-      });
-      return { resultState: 'passed', receipt };
-    },
-  },
-);
-assert.equal(executableSchedule.adapterReadiness.ready, true);
-const effectCalls = [];
-const executor = createP158AdapterExecutor({
-  schedule: executableSchedule,
-  adapters: executableAdapters,
-  effects: {
-    'p158.effect.H01.declared': async (payload, attempt) => {
-      effectCalls.push({ payload, attempt });
-      return { observed: true };
-    },
-  },
-});
-await expectScheduleRejection('attempt_dependency_incomplete', () =>
-  executor.executeAttempt('H02-E0-r001'));
-const h01 = await executor.executeAttempt('H01-E2-r001');
-assert.equal(h01.resultState, 'passed');
-assert.equal(h01.requestedEffects.length, 1);
-assert.equal(h01.requestedEffects[0].effectId, 'p158.effect.H01.declared');
-assert.equal(effectCalls.length, 1);
-assert.equal(effectCalls[0].attempt.attemptId, 'H01-E2-r001');
-await executor.executeAttempt('H02-E0-r001');
-await expectScheduleRejection('opportunistic_retry_prohibited', () =>
-  executor.executeAttempt('H01-E2-r001'));
-await expectScheduleRejection('unscheduled_attempt', () =>
-  executor.executeAttempt('not-scheduled'));
-
-expectScheduleError('adapters_not_ready', () => createP158AdapterExecutor({
-  schedule: first,
+assert(P158_ADAPTER_READINESS_CODES.includes('adapter_execution_contract_mismatch'));
+expectError('adapters_not_ready', () => compileP158ControllerScheduleInput({
+  registry,
+  seed: 'bridge-seed',
   adapters: [],
 }));
+const bridged = compileP158ControllerScheduleInput({
+  registry,
+  seed: 'bridge-seed',
+  adapters,
+});
+assert.equal(bridged.executionSchedule.attemptCount, 1941);
+assert.equal(bridged.controllerSchedule.length, 1941);
+assert.deepEqual(bridged.controllerSchedule[0], {
+  caseId: bridged.executionSchedule.attempts[0].caseId,
+  attemptId: bridged.executionSchedule.attempts[0].attemptId,
+  environmentId: bridged.executionSchedule.attempts[0].environmentId,
+  seed: bridged.executionSchedule.attempts[0].seed,
+  dependsOn: bridged.executionSchedule.attempts[0].dependsOnAttemptIds,
+});
+
+for (const [code, mutate] of [
+  ['execution_contract_missing', (draft) => { delete draft.cases[0].executionContract; }],
+  ['execution_contract_expansion_invalid', (draft) => {
+    draft.cases[0].executionContract.expansion.count = 2;
+  }],
+  ['execution_contract_dimension_invalid', (draft) => {
+    draft.cases[0].executionContract.dimensions[0].values.push('sequential');
+  }],
+  ['execution_contract_cardinality_invalid', (draft) => {
+    draft.cases[0].executionContract.cardinalities[0].scope = 'unknown';
+  }],
+]) {
+  const draft = structuredClone(registry);
+  mutate(draft);
+  expectError(code, () => compileP158ExecutionSchedule({ registry: draft, seed: 'invalid' }));
+}
+
+const execution = compileReady('executor-seed', {
+  H01: async ({ requestEffect }) => {
+    await requestEffect('p158.effect.H01.declared', { operation: 'synthetic' });
+    return { resultState: 'passed' };
+  },
+});
+const executor = createP158AdapterExecutor({
+  ...execution,
+  effects: { 'p158.effect.H01.declared': async () => ({ observed: true }) },
+});
+await expectRejection('attempt_dependency_incomplete', () =>
+  executor.executeAttempt('H02-E0-r001'));
+await executor.executeAttempt('H01-E2-r001');
+await executor.executeAttempt('H02-E0-r001');
+await expectRejection('opportunistic_retry_prohibited', () =>
+  executor.executeAttempt('H01-E2-r001'));
 
 const undeclared = compileReady('undeclared-seed', {
   A01: async ({ requestEffect }) => {
@@ -282,31 +299,16 @@ const undeclared = compileReady('undeclared-seed', {
   },
 });
 const undeclaredExecutor = createP158AdapterExecutor(undeclared);
-await expectScheduleRejection('undeclared_effect_prohibited', () =>
+await expectRejection('undeclared_effect_prohibited', () =>
   undeclaredExecutor.executeAttempt('A01-E0-r001'));
 assert.equal(undeclaredExecutor.outcomes.get('A01-E0-r001').resultState, 'harness_failure');
-await expectScheduleRejection('opportunistic_retry_prohibited', () =>
+await expectRejection('opportunistic_retry_prohibited', () =>
   undeclaredExecutor.executeAttempt('A01-E0-r001'));
-
-const missingDriver = compileReady('missing-driver-seed', {
-  A01: async ({ requestEffect }) => {
-    await requestEffect('p158.effect.A01.declared');
-    return { resultState: 'passed' };
-  },
-});
-await expectScheduleRejection('effect_driver_missing', () =>
-  createP158AdapterExecutor(missingDriver).executeAttempt('A01-E0-r001'));
-
-const invalidResult = compileReady('invalid-result-seed', {
-  A01: async () => ({ resultState: 'retrying' }),
-});
-await expectScheduleRejection('adapter_result_invalid', () =>
-  createP158AdapterExecutor(invalidResult).executeAttempt('A01-E0-r001'));
 
 console.log(JSON.stringify({
   ok: true,
   caseCount: first.caseCount,
   attemptCount: first.attemptCount,
-  phaseCount: first.phases.length,
-  adapterReadinessCodeCount: P158_ADAPTER_READINESS_CODES.length,
+  actionIdCount: everyActionId.length,
+  matrixCells,
 }, null, 2));

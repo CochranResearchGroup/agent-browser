@@ -1,4 +1,5 @@
 import { sha256 as controllerSha256 } from './p158-campaign-controller.js';
+import { compileP158ControllerScheduleInput } from './p158-execution-schedule.js';
 
 export const P158_PREPARATION_FINDING_CODES = Object.freeze([
   'artifact_byte_count_mismatch',
@@ -7,6 +8,7 @@ export const P158_PREPARATION_FINDING_CODES = Object.freeze([
   'controller_not_pristine',
   'duplicate_artifact_id',
   'environment_digest_mismatch',
+  'execution_schedule_mismatch',
   'external_client_identity_invalid',
   'external_ingress_observation_missing',
   'fixture_digest_mismatch',
@@ -126,7 +128,7 @@ function artifactProjection(artifact, bytes, actualSha256) {
   };
 }
 
-function inspectArtifacts(artifacts, findings) {
+function inspectArtifacts(artifacts, findings, campaignMode) {
   const entries = [];
   const byId = new Map();
   for (const artifact of artifacts ?? []) {
@@ -149,12 +151,78 @@ function inspectArtifacts(artifacts, findings) {
     byId.set(artifact.artifactId, entry);
     entries.push(entry);
   }
-  for (const kind of REQUIRED_ARTIFACT_KINDS) {
+  const requiredKinds = campaignMode === 'live'
+    ? [...REQUIRED_ARTIFACT_KINDS, 'execution_schedule']
+    : REQUIRED_ARTIFACT_KINDS;
+  for (const kind of requiredKinds) {
     if (!entries.some((entry) => entry.binding.kind === kind)) {
       addFinding(findings, 'missing_artifact_kind', 'artifacts.kind', kind, null);
     }
   }
   return { entries, byId };
+}
+
+function inspectExecutionSchedule(input, artifacts, findings, executionContext, controllerSnapshot) {
+  if (input.campaignMode !== 'live') return;
+  const artifact = artifacts.byId.get(input.executionScheduleSeal?.artifactId);
+  let persisted = null;
+  try {
+    persisted = artifact ? JSON.parse(artifact.bytes.toString('utf8')) : null;
+  } catch {
+    persisted = null;
+  }
+  const seal = input.executionScheduleSeal;
+  const expectedAttempts = persisted?.attempts?.map((attempt) => ({
+    caseId: attempt.caseId,
+    attemptId: attempt.attemptId,
+    environmentId: attempt.environmentId,
+    seed: attempt.seed,
+    dependsOn: attempt.dependsOnAttemptIds,
+  })) ?? null;
+  let independentlyCompiled = null;
+  try {
+    independentlyCompiled = compileP158ControllerScheduleInput({
+      registry: executionContext?.registry,
+      seed: executionContext?.seed,
+      adapters: executionContext?.adapters,
+    });
+  } catch {
+    independentlyCompiled = null;
+  }
+  const valid =
+    artifact?.binding.kind === 'execution_schedule' &&
+    artifact.binding.sha256 === seal?.artifactSha256 &&
+    persisted?.schemaVersion === 'agent-browser.p158-execution-schedule.v1' &&
+    persisted?.scheduleSha256 === seal?.scheduleSha256 &&
+    persisted?.caseCount === 54 &&
+    persisted?.attemptCount === 1941 &&
+    seal?.attemptCount === 1941 &&
+    persisted?.adapterReadiness?.ready === true &&
+    persisted?.adapterReadiness?.readyCaseCount === 54 &&
+    independentlyCompiled !== null &&
+    independentlyCompiled.executionSchedule.registrySha256 === controllerSnapshot.registrySha256 &&
+    digest(persisted) === digest(independentlyCompiled.executionSchedule) &&
+    Array.isArray(input.schedule) &&
+    input.schedule.length === 1941 &&
+    digest(input.schedule) === digest(expectedAttempts) &&
+    digest(input.schedule) === digest(independentlyCompiled.controllerSchedule);
+  if (!valid) {
+    addFinding(findings, 'execution_schedule_mismatch', 'executionScheduleSeal', {
+      caseCount: 54,
+      attemptCount: 1941,
+      adaptersReady: true,
+      exactControllerSchedule: true,
+    }, {
+      artifactKind: artifact?.binding.kind ?? null,
+      artifactSha256: artifact?.binding.sha256 ?? null,
+      seal: seal ?? null,
+      caseCount: persisted?.caseCount ?? null,
+      attemptCount: persisted?.attemptCount ?? null,
+      adaptersReady: persisted?.adapterReadiness?.ready ?? null,
+      independentlyCompiled: independentlyCompiled !== null,
+      controllerAttemptCount: input.schedule?.length ?? null,
+    });
+  }
 }
 
 function requireArtifactIds(ids, byId, findings, field) {
@@ -352,7 +420,7 @@ function reportFor(input, findings, additions = {}) {
   };
 }
 
-export async function prepareAndFreezeCampaign(input) {
+export async function prepareAndFreezeCampaign(input, executionContext = undefined) {
   const original = clone(without(input, ['controller', 'clock']));
   const findings = [];
   const preparationObservedAt = input.clock?.wallNow?.() ?? new Date().toISOString();
@@ -361,7 +429,12 @@ export async function prepareAndFreezeCampaign(input) {
     addFinding(findings, 'controller_not_pristine', 'controller.snapshot', 'unprepared controller with zero terminal results', snapshot);
   }
 
-  const artifacts = inspectArtifacts(input.artifacts, findings);
+  if (!['fixture', 'live'].includes(input.campaignMode)) {
+    addFinding(findings, 'execution_schedule_mismatch', 'campaignMode', 'fixture or live',
+      input.campaignMode ?? null);
+  }
+  const artifacts = inspectArtifacts(input.artifacts, findings, input.campaignMode);
+  inspectExecutionSchedule(input, artifacts, findings, executionContext, snapshot);
   const environmentSeals = buildEnvironmentSeals(input.environments, artifacts.byId, findings, preparationObservedAt);
   inspectCandidateBinding(input.candidate, input.environments, findings);
   if (!Number.isFinite(Date.parse(input.candidate?.preparedAt)) || Date.parse(input.candidate.preparedAt) > Date.parse(preparationObservedAt)) {
@@ -420,6 +493,9 @@ export async function prepareAndFreezeCampaign(input) {
   if (prepared.counts.terminal !== 0 || prepared.results.length !== 0 || prepared.state !== 'prepared') {
     throw new Error('P158 preparation started or terminalized a campaign attempt before freeze');
   }
+  if (input.campaignMode === 'live' && prepared.counts.total !== input.executionScheduleSeal.attemptCount) {
+    throw new Error('P158 controller was not initialized from the sealed full execution schedule');
+  }
   for (const entry of artifacts.entries) {
     await input.controller.writeArtifact({
       artifactId: entry.binding.artifactId,
@@ -447,6 +523,9 @@ export async function prepareAndFreezeCampaign(input) {
     fixtureSealSha256: digest(input.fixtureSeal),
     externalVantageSha256: digest(input.externalVantage),
     w4ReportSha256: digest(input.w4Report),
+    ...(input.campaignMode === 'live'
+      ? { executionScheduleSha256: input.executionScheduleSeal.scheduleSha256 }
+      : {}),
     freezeReceipt: clone(frozen.freezeReceipt),
     controllerState: frozen.state,
     zeroStartedCaseCount: frozen.freezeReceipt.startedCaseCount,

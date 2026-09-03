@@ -99,12 +99,75 @@
     "sensitiveValueLeaks": 0
   },
   "evidenceProfiles": {
-    "agent": ["request", "response", "job", "event", "trace", "incident", "service_snapshot", "process_census"],
-    "logging": ["request", "response", "job", "event", "trace", "incident", "dashboard_projection", "projection_counts"],
-    "external": ["durable_handoff", "dns", "tls", "redirects", "cookies_metadata", "har", "websocket", "console", "video", "screenshots", "input_timing", "pixel_marker", "service_snapshot"],
-    "display": ["process_census", "listener_census", "x11_socket_census", "x11_lock_census", "namespace_identity", "window_proof", "service_snapshot", "journal_slice"],
-    "dashboard": ["service_snapshot", "snapshot_revision", "dom_rows", "accessibility_snapshot", "screenshot", "selected_record_readback", "network", "console", "performance_trace", "resource_samples"],
-    "combined": ["request", "response", "job", "event", "trace", "incident", "service_snapshot", "external_telemetry", "dashboard_projection", "resource_samples"]
+    "agent": [
+      "request",
+      "response",
+      "job",
+      "event",
+      "trace",
+      "incident",
+      "service_snapshot",
+      "process_census"
+    ],
+    "logging": [
+      "request",
+      "response",
+      "job",
+      "event",
+      "trace",
+      "incident",
+      "dashboard_projection",
+      "projection_counts"
+    ],
+    "external": [
+      "durable_handoff",
+      "dns",
+      "tls",
+      "redirects",
+      "cookies_metadata",
+      "har",
+      "websocket",
+      "console",
+      "video",
+      "screenshots",
+      "input_timing",
+      "pixel_marker",
+      "service_snapshot"
+    ],
+    "display": [
+      "process_census",
+      "listener_census",
+      "x11_socket_census",
+      "x11_lock_census",
+      "namespace_identity",
+      "window_proof",
+      "service_snapshot",
+      "journal_slice"
+    ],
+    "dashboard": [
+      "service_snapshot",
+      "snapshot_revision",
+      "dom_rows",
+      "accessibility_snapshot",
+      "screenshot",
+      "selected_record_readback",
+      "network",
+      "console",
+      "performance_trace",
+      "resource_samples"
+    ],
+    "combined": [
+      "request",
+      "response",
+      "job",
+      "event",
+      "trace",
+      "incident",
+      "service_snapshot",
+      "external_telemetry",
+      "dashboard_projection",
+      "resource_samples"
+    ]
   },
   "forbiddenCapturedFields": [
     "credentialCharacters",
@@ -118,28 +181,117 @@
     "providerAccountLabels"
   ],
   "sources": [
-    {"id": "S-P158", "path": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md", "kind": "governing_plan"},
-    {"id": "S-P157", "path": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md", "kind": "identity_acl_and_logging_history"},
-    {"id": "S-P156", "path": "docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md", "kind": "installer_and_shutdown_history"},
-    {"id": "S-P148", "path": "docs/dev/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md", "kind": "supervisor_history"},
-    {"id": "S-P147", "path": "docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md", "kind": "ingress_generation_history"},
-    {"id": "S-P142", "path": "docs/dev/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md", "kind": "lock_and_timeout_history"},
-    {"id": "S-P134", "path": "docs/dev/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md", "kind": "epoch_and_identity_history"},
-    {"id": "S-N135", "path": "docs/dev/notes/0135-2026-08-28-retained-bill-browser-route-recovery-handoff.md", "kind": "retained_identity_incident"},
-    {"id": "S-N136", "path": "docs/dev/notes/0136-2026-08-28-last30days-terminal-replacement-launch-handoff.md", "kind": "ambiguous_identity_incident"},
-    {"id": "S-N133", "path": "docs/dev/notes/0133-2026-08-25-operator-visible-window-focus-gap-handoff.md", "kind": "window_visibility_incident"},
-    {"id": "S-P112", "path": "docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md", "kind": "dashboard_reconnect_history"},
-    {"id": "S-P100", "path": "docs/dev/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md", "kind": "projection_and_timeout_history"},
-    {"id": "S-P096", "path": "docs/dev/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md", "kind": "durable_handoff_contract"},
-    {"id": "S-P067", "path": "docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md", "kind": "route_restart_and_rail_history"},
-    {"id": "S-P063", "path": "docs/dev/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md", "kind": "foreign_cdp_history"},
-    {"id": "S-P062", "path": "docs/dev/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md", "kind": "stale_target_history"},
-    {"id": "S-P046", "path": "docs/dev/notes/2026-06-24-p46-stress-hardening-execution.md", "kind": "remote_view_and_dashboard_failure_log"},
-    {"id": "S-ROUTE", "path": "docs/dev/notes/2026-07-05-route-staleness-and-operator-handoff-defect.md", "kind": "operator_handoff_incident"},
-    {"id": "S-DASH-STREAM", "path": "packages/dashboard/src/store/stream.ts", "kind": "external_stream_implementation"},
-    {"id": "S-P67-HARNESS", "path": "scripts/test-p67-rdp-stress-hardening-live.js", "kind": "historical_harness_with_loopback_fallback"},
-    {"id": "S-P46-HARNESS", "path": "scripts/run-p46-stress-scenario.js", "kind": "historical_harness_with_repair_and_reset"},
-    {"id": "S-PROD-200", "path": "user-scoped production Service job readback at 2026-09-02T18:00:00Z", "kind": "redacted_aggregate_only", "committable": false}
+    {
+      "id": "S-P158",
+      "path": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+      "kind": "governing_plan"
+    },
+    {
+      "id": "S-P157",
+      "path": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+      "kind": "identity_acl_and_logging_history"
+    },
+    {
+      "id": "S-P156",
+      "path": "docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md",
+      "kind": "installer_and_shutdown_history"
+    },
+    {
+      "id": "S-P148",
+      "path": "docs/dev/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md",
+      "kind": "supervisor_history"
+    },
+    {
+      "id": "S-P147",
+      "path": "docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md",
+      "kind": "ingress_generation_history"
+    },
+    {
+      "id": "S-P142",
+      "path": "docs/dev/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md",
+      "kind": "lock_and_timeout_history"
+    },
+    {
+      "id": "S-P134",
+      "path": "docs/dev/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md",
+      "kind": "epoch_and_identity_history"
+    },
+    {
+      "id": "S-N135",
+      "path": "docs/dev/notes/0135-2026-08-28-retained-bill-browser-route-recovery-handoff.md",
+      "kind": "retained_identity_incident"
+    },
+    {
+      "id": "S-N136",
+      "path": "docs/dev/notes/0136-2026-08-28-last30days-terminal-replacement-launch-handoff.md",
+      "kind": "ambiguous_identity_incident"
+    },
+    {
+      "id": "S-N133",
+      "path": "docs/dev/notes/0133-2026-08-25-operator-visible-window-focus-gap-handoff.md",
+      "kind": "window_visibility_incident"
+    },
+    {
+      "id": "S-P112",
+      "path": "docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md",
+      "kind": "dashboard_reconnect_history"
+    },
+    {
+      "id": "S-P100",
+      "path": "docs/dev/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md",
+      "kind": "projection_and_timeout_history"
+    },
+    {
+      "id": "S-P096",
+      "path": "docs/dev/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md",
+      "kind": "durable_handoff_contract"
+    },
+    {
+      "id": "S-P067",
+      "path": "docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md",
+      "kind": "route_restart_and_rail_history"
+    },
+    {
+      "id": "S-P063",
+      "path": "docs/dev/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md",
+      "kind": "foreign_cdp_history"
+    },
+    {
+      "id": "S-P062",
+      "path": "docs/dev/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md",
+      "kind": "stale_target_history"
+    },
+    {
+      "id": "S-P046",
+      "path": "docs/dev/notes/2026-06-24-p46-stress-hardening-execution.md",
+      "kind": "remote_view_and_dashboard_failure_log"
+    },
+    {
+      "id": "S-ROUTE",
+      "path": "docs/dev/notes/2026-07-05-route-staleness-and-operator-handoff-defect.md",
+      "kind": "operator_handoff_incident"
+    },
+    {
+      "id": "S-DASH-STREAM",
+      "path": "packages/dashboard/src/store/stream.ts",
+      "kind": "external_stream_implementation"
+    },
+    {
+      "id": "S-P67-HARNESS",
+      "path": "scripts/test-p67-rdp-stress-hardening-live.js",
+      "kind": "historical_harness_with_loopback_fallback"
+    },
+    {
+      "id": "S-P46-HARNESS",
+      "path": "scripts/run-p46-stress-scenario.js",
+      "kind": "historical_harness_with_repair_and_reset"
+    },
+    {
+      "id": "S-PROD-200",
+      "path": "user-scoped production Service job readback at 2026-09-02T18:00:00Z",
+      "kind": "redacted_aggregate_only",
+      "committable": false
+    }
   ],
   "productionSample": {
     "environment": "E3",
@@ -151,111 +303,3147 @@
     "failedOrTimedOutWithNullTopLevelFailure": 39,
     "failedOrTimedOutWithNullTopLevelProvenance": 39,
     "signatures": [
-      {"id": "PF01", "signature": "existing_session_profile_identity_unproven", "count": 14, "actions": ["launch", "remote_view_open", "tab_switch", "view_focus"], "caseIds": ["A08", "A13"]},
-      {"id": "PF02", "signature": "existing_session_profile_identity_inconsistent", "count": 3, "actions": ["launch", "view_focus"], "caseIds": ["A08", "A13", "X10"]},
-      {"id": "PF03", "signature": "xvfb_display_90_automatic_launch_failure", "count": 8, "actions": ["tab_new"], "caseIds": ["X01", "X02", "X03"]},
-      {"id": "PF04", "signature": "service_resource_timeout", "count": 5, "actions": ["service_resource_read"], "caseIds": ["A12", "D07", "D10"]},
-      {"id": "PF05", "signature": "route_pool_failure", "count": 4, "actions": ["remote_view_open"], "caseIds": ["H07", "H08"]},
-      {"id": "PF06", "signature": "presentation_proof_or_authority_failure", "count": 2, "actions": ["remote_view_open", "service_remote_view_browser_reattach"], "caseIds": ["H08", "H10", "X06"]},
-      {"id": "PF07", "signature": "other_launch_or_reattach_failure", "count": 3, "actions": ["launch", "service_remote_view_browser_reattach"], "caseIds": ["A07", "A13", "H10", "X10"]}
+      {
+        "id": "PF01",
+        "signature": "existing_session_profile_identity_unproven",
+        "count": 14,
+        "actions": [
+          "launch",
+          "remote_view_open",
+          "tab_switch",
+          "view_focus"
+        ],
+        "caseIds": [
+          "A08",
+          "A13"
+        ]
+      },
+      {
+        "id": "PF02",
+        "signature": "existing_session_profile_identity_inconsistent",
+        "count": 3,
+        "actions": [
+          "launch",
+          "view_focus"
+        ],
+        "caseIds": [
+          "A08",
+          "A13",
+          "X10"
+        ]
+      },
+      {
+        "id": "PF03",
+        "signature": "xvfb_display_90_automatic_launch_failure",
+        "count": 8,
+        "actions": [
+          "tab_new"
+        ],
+        "caseIds": [
+          "X01",
+          "X02",
+          "X03"
+        ]
+      },
+      {
+        "id": "PF04",
+        "signature": "service_resource_timeout",
+        "count": 5,
+        "actions": [
+          "service_resource_read"
+        ],
+        "caseIds": [
+          "A12",
+          "D07",
+          "D10"
+        ]
+      },
+      {
+        "id": "PF05",
+        "signature": "route_pool_failure",
+        "count": 4,
+        "actions": [
+          "remote_view_open"
+        ],
+        "caseIds": [
+          "H07",
+          "H08"
+        ]
+      },
+      {
+        "id": "PF06",
+        "signature": "presentation_proof_or_authority_failure",
+        "count": 2,
+        "actions": [
+          "remote_view_open",
+          "service_remote_view_browser_reattach"
+        ],
+        "caseIds": [
+          "H08",
+          "H10",
+          "X06"
+        ]
+      },
+      {
+        "id": "PF07",
+        "signature": "other_launch_or_reattach_failure",
+        "count": 3,
+        "actions": [
+          "launch",
+          "service_remote_view_browser_reattach"
+        ],
+        "caseIds": [
+          "A07",
+          "A13",
+          "H10",
+          "X10"
+        ]
+      }
     ]
   },
   "fixtureContract": {
-    "preserve": ["fixtureId", "sourceId", "historicalSignature", "action", "transport", "observedCount", "timestampBucket", "caseIds", "syntheticCausalIds", "syntheticCallerIdentity", "syntheticRuntimeEpochs", "syntheticProfileLifecycle", "syntheticResourceLinks", "terminalProjectionPresence", "effectState", "retryDisposition", "timingOffsets", "pressureClass", "shutdownAndSupervisorShape", "historyParity", "canaryDetectionResult"],
-    "substitute": ["all tenant names", "all account labels", "all URLs", "all profile paths", "all process identifiers", "all provider connection names", "all credential-adjacent values"],
+    "preserve": [
+      "fixtureId",
+      "sourceId",
+      "historicalSignature",
+      "action",
+      "transport",
+      "observedCount",
+      "timestampBucket",
+      "caseIds",
+      "syntheticCausalIds",
+      "syntheticCallerIdentity",
+      "syntheticRuntimeEpochs",
+      "syntheticProfileLifecycle",
+      "syntheticResourceLinks",
+      "terminalProjectionPresence",
+      "effectState",
+      "retryDisposition",
+      "timingOffsets",
+      "pressureClass",
+      "shutdownAndSupervisorShape",
+      "historyParity",
+      "canaryDetectionResult"
+    ],
+    "substitute": [
+      "all tenant names",
+      "all account labels",
+      "all URLs",
+      "all profile paths",
+      "all process identifiers",
+      "all provider connection names",
+      "all credential-adjacent values"
+    ],
     "relationshipRule": "Synthetic identifiers must preserve equality, inequality, parentage, ownership, ordering, and stale-versus-current relationships from the source without preserving source values."
   },
   "fixtureArtifacts": [
     "docs/dev/fixtures/p158/historical-failure-seeds.v1.json"
   ],
   "families": [
-    {"id": "F01", "name": "profile identity and retained reuse", "sourceIds": ["S-P157", "S-P134", "S-N135", "S-N136", "S-PROD-200"], "caseIds": ["A01", "A02", "A03", "A07", "A08", "A13", "X10"]},
-    {"id": "F02", "name": "profile ACL, occupancy, revocation, and eviction", "sourceIds": ["S-P157"], "caseIds": ["A04", "A05", "A06", "A14"]},
-    {"id": "F03", "name": "causal provenance and terminal logging", "sourceIds": ["S-P157", "S-P142", "S-PROD-200"], "caseIds": ["A11", "A12", "A15", "D07", "C01", "C02", "C03", "C04", "C05"]},
-    {"id": "F04", "name": "targets, tabs, history, and focus truth", "sourceIds": ["S-P062", "S-P063", "S-P046"], "caseIds": ["A09", "A10", "A15", "H06", "D03", "D05"]},
-    {"id": "F05", "name": "route, display, and presentation lifecycle", "sourceIds": ["S-P046", "S-P067", "S-ROUTE", "S-PROD-200"], "caseIds": ["H01", "H03", "H04", "H05", "H07", "H08", "H10", "H12", "X02", "X03", "X04", "X06", "X10"]},
-    {"id": "F06", "name": "external ingress and durable handoff hygiene", "sourceIds": ["S-P096", "S-P112", "S-P067", "S-P67-HARNESS", "S-DASH-STREAM"], "caseIds": ["H01", "H02", "H03", "H09", "H10", "H12", "D04", "D08"]},
-    {"id": "F07", "name": "X11 authority, Xvfb allocation, and desktop location", "sourceIds": ["S-P046", "S-N133", "S-PROD-200"], "caseIds": ["H06", "H08", "H11", "X01", "X02", "X03", "X04", "X05", "X06"]},
-    {"id": "F08", "name": "supervisor, generation, installation, and shutdown coherence", "sourceIds": ["S-P147", "S-P148", "S-P156"], "caseIds": ["A13", "A14", "H10", "X07", "X08", "X09", "X10", "D06", "C03"]},
-    {"id": "F09", "name": "locks, timeouts, pressure, cancellation, and crash epochs", "sourceIds": ["S-P142", "S-P134", "S-P100"], "caseIds": ["A07", "A11", "A12", "A13", "H09", "H10", "X10", "D07", "D09", "D10", "D11", "C02", "C03", "C04", "C05"]},
-    {"id": "F10", "name": "dashboard rail, selection, warnings, and performance", "sourceIds": ["S-P046", "S-P067", "S-P100", "S-P112", "S-DASH-STREAM"], "caseIds": ["D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "D11", "D12"]},
-    {"id": "F11", "name": "secure and native human-visible surfaces", "sourceIds": ["S-N133", "S-P158"], "caseIds": ["H06", "H11", "D12"]}
+    {
+      "id": "F01",
+      "name": "profile identity and retained reuse",
+      "sourceIds": [
+        "S-P157",
+        "S-P134",
+        "S-N135",
+        "S-N136",
+        "S-PROD-200"
+      ],
+      "caseIds": [
+        "A01",
+        "A02",
+        "A03",
+        "A07",
+        "A08",
+        "A13",
+        "X10"
+      ]
+    },
+    {
+      "id": "F02",
+      "name": "profile ACL, occupancy, revocation, and eviction",
+      "sourceIds": [
+        "S-P157"
+      ],
+      "caseIds": [
+        "A04",
+        "A05",
+        "A06",
+        "A14"
+      ]
+    },
+    {
+      "id": "F03",
+      "name": "causal provenance and terminal logging",
+      "sourceIds": [
+        "S-P157",
+        "S-P142",
+        "S-PROD-200"
+      ],
+      "caseIds": [
+        "A11",
+        "A12",
+        "A15",
+        "D07",
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05"
+      ]
+    },
+    {
+      "id": "F04",
+      "name": "targets, tabs, history, and focus truth",
+      "sourceIds": [
+        "S-P062",
+        "S-P063",
+        "S-P046"
+      ],
+      "caseIds": [
+        "A09",
+        "A10",
+        "A15",
+        "H06",
+        "D03",
+        "D05"
+      ]
+    },
+    {
+      "id": "F05",
+      "name": "route, display, and presentation lifecycle",
+      "sourceIds": [
+        "S-P046",
+        "S-P067",
+        "S-ROUTE",
+        "S-PROD-200"
+      ],
+      "caseIds": [
+        "H01",
+        "H03",
+        "H04",
+        "H05",
+        "H07",
+        "H08",
+        "H10",
+        "H12",
+        "X02",
+        "X03",
+        "X04",
+        "X06",
+        "X10"
+      ]
+    },
+    {
+      "id": "F06",
+      "name": "external ingress and durable handoff hygiene",
+      "sourceIds": [
+        "S-P096",
+        "S-P112",
+        "S-P067",
+        "S-P67-HARNESS",
+        "S-DASH-STREAM"
+      ],
+      "caseIds": [
+        "H01",
+        "H02",
+        "H03",
+        "H09",
+        "H10",
+        "H12",
+        "D04",
+        "D08"
+      ]
+    },
+    {
+      "id": "F07",
+      "name": "X11 authority, Xvfb allocation, and desktop location",
+      "sourceIds": [
+        "S-P046",
+        "S-N133",
+        "S-PROD-200"
+      ],
+      "caseIds": [
+        "H06",
+        "H08",
+        "H11",
+        "X01",
+        "X02",
+        "X03",
+        "X04",
+        "X05",
+        "X06"
+      ]
+    },
+    {
+      "id": "F08",
+      "name": "supervisor, generation, installation, and shutdown coherence",
+      "sourceIds": [
+        "S-P147",
+        "S-P148",
+        "S-P156"
+      ],
+      "caseIds": [
+        "A13",
+        "A14",
+        "H10",
+        "X07",
+        "X08",
+        "X09",
+        "X10",
+        "D06",
+        "C03"
+      ]
+    },
+    {
+      "id": "F09",
+      "name": "locks, timeouts, pressure, cancellation, and crash epochs",
+      "sourceIds": [
+        "S-P142",
+        "S-P134",
+        "S-P100"
+      ],
+      "caseIds": [
+        "A07",
+        "A11",
+        "A12",
+        "A13",
+        "H09",
+        "H10",
+        "X10",
+        "D07",
+        "D09",
+        "D10",
+        "D11",
+        "C02",
+        "C03",
+        "C04",
+        "C05"
+      ]
+    },
+    {
+      "id": "F10",
+      "name": "dashboard rail, selection, warnings, and performance",
+      "sourceIds": [
+        "S-P046",
+        "S-P067",
+        "S-P100",
+        "S-P112",
+        "S-DASH-STREAM"
+      ],
+      "caseIds": [
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D10",
+        "D11",
+        "D12"
+      ]
+    },
+    {
+      "id": "F11",
+      "name": "secure and native human-visible surfaces",
+      "sourceIds": [
+        "S-N133",
+        "S-P158"
+      ],
+      "caseIds": [
+        "H06",
+        "H11",
+        "D12"
+      ]
+    }
   ],
   "cases": [
-    {"id":"A01","environmentIds":["E0","E1"],"familyIds":["F01"],"sourceIds":["S-P157"],"dependsOn":[],"evidenceProfile":"agent","executionBound":"100 sequential and 25 concurrent self-declared clients"},
-    {"id":"A02","environmentIds":["E0","E1"],"familyIds":["F01"],"sourceIds":["S-P157"],"dependsOn":["A01"],"evidenceProfile":"agent","executionBound":"10 clients sharing one retained browser, repeated 20 times"},
-    {"id":"A03","environmentIds":["E0","E1"],"familyIds":["F01"],"sourceIds":["S-P157"],"dependsOn":["A01"],"evidenceProfile":"agent","executionBound":"10 same-label clients with distinct connection instances"},
-    {"id":"A04","environmentIds":["E0","E1"],"familyIds":["F02"],"sourceIds":["S-P157"],"dependsOn":["A01"],"evidenceProfile":"agent","executionBound":"all role, mode, operation, and allow-deny combinations"},
-    {"id":"A05","environmentIds":["E0","E1"],"familyIds":["F02"],"sourceIds":["S-P157"],"dependsOn":["A04"],"evidenceProfile":"agent","executionBound":"widen, narrow, admission, release, conflict, and drain at fixed barriers"},
-    {"id":"A06","environmentIds":["E0","E1"],"familyIds":["F02"],"sourceIds":["S-P157"],"dependsOn":["A04"],"evidenceProfile":"logging","executionBound":"queued and atomic revocation plus graceful and exact forced eviction"},
-    {"id":"A07","environmentIds":["E0","E1"],"familyIds":["F01","F09"],"sourceIds":["S-P134","S-P157"],"dependsOn":["A01"],"evidenceProfile":"logging","executionBound":"one controlled Chrome crash at every supported command boundary"},
-    {"id":"A08","environmentIds":["E0","E1","E3"],"familyIds":["F01"],"sourceIds":["S-N135","S-N136","S-PROD-200"],"dependsOn":["A01"],"evidenceProfile":"logging","executionBound":"unproven and inconsistent fixtures through four observed actions"},
-    {"id":"A09","environmentIds":["E0","E1"],"familyIds":["F04"],"sourceIds":["S-P062","S-P046"],"dependsOn":["A01"],"evidenceProfile":"agent","executionBound":"missing, dead, duplicate, blank, popup, close, switch, and navigation targets"},
-    {"id":"A10","environmentIds":["E0","E1"],"familyIds":["F04"],"sourceIds":["S-P063","S-P46-HARNESS"],"dependsOn":["A01"],"evidenceProfile":"agent","executionBound":"owned and foreign CDP resources under inventory churn"},
-    {"id":"A11","environmentIds":["E0","E1"],"familyIds":["F03","F09"],"sourceIds":["S-P157","S-P142","S-PROD-200"],"dependsOn":[],"evidenceProfile":"logging","executionBound":"every queue, scheduler, cancellation, worker, and persistence terminal boundary"},
-    {"id":"A12","environmentIds":["E0","E1","E3"],"familyIds":["F03","F09"],"sourceIds":["S-P142","S-PROD-200"],"dependsOn":["A11"],"evidenceProfile":"logging","executionBound":"lock wait and timeout before effect, after effect, and after disconnect"},
-    {"id":"A13","environmentIds":["E1"],"familyIds":["F01","F08","F09"],"sourceIds":["S-P134","S-P148","S-P157"],"dependsOn":["A07","A08"],"evidenceProfile":"logging","executionBound":"25 scheduled daemon or supervisor generation transitions"},
-    {"id":"A14","environmentIds":["E0","E1"],"familyIds":["F02","F08"],"sourceIds":["S-P156","S-P157"],"dependsOn":["A06"],"evidenceProfile":"logging","executionBound":"four rejected shutdown plans and one exact sacrificial shutdown"},
-    {"id":"A15","environmentIds":["E0","E1","E2","E3"],"familyIds":["F03","F04"],"sourceIds":["S-P158","S-PROD-200"],"dependsOn":["A09","A11"],"evidenceProfile":"logging","executionBound":"unique markers through CLI, HTTP, MCP, dashboard, and remote control"},
-
-    {"id":"H01","environmentIds":["E2"],"familyIds":["F05","F06"],"sourceIds":["S-P096","S-ROUTE"],"dependsOn":[],"evidenceProfile":"external","executionBound":"two external runners open, interact, disconnect, and reopen one handoff"},
-    {"id":"H02","environmentIds":["E0","E2"],"familyIds":["F06"],"sourceIds":["S-P096","S-P67-HARNESS","S-DASH-STREAM"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"scan every client-visible URL role and injected host or scheme variation"},
-    {"id":"H03","environmentIds":["E2"],"familyIds":["F05","F06"],"sourceIds":["S-P067","S-P096","S-ROUTE"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"viewer, route, display, and provider-session replacement"},
-    {"id":"H04","environmentIds":["E2"],"familyIds":["F05"],"sourceIds":["S-P067"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"8 observers and 2 controller contenders"},
-    {"id":"H05","environmentIds":["E2"],"familyIds":["F05"],"sourceIds":["S-P067"],"dependsOn":["H04"],"evidenceProfile":"external","executionBound":"agent-human-agent input transfer at fixed barriers"},
-    {"id":"H06","environmentIds":["E2"],"familyIds":["F04","F07","F11"],"sourceIds":["S-N133","S-P046"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"windows, tabs, popups, prompts, minimize, obscure, and focus states"},
-    {"id":"H07","environmentIds":["E1","E2"],"familyIds":["F05"],"sourceIds":["S-P046","S-PROD-200"],"dependsOn":["H04"],"evidenceProfile":"external","executionBound":"all routes held by healthy non-parkable controllers plus one request"},
-    {"id":"H08","environmentIds":["E0","E1","E2","E3"],"familyIds":["F05","F07"],"sourceIds":["S-P046","S-ROUTE","S-PROD-200"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"six presentation failure injections"},
-    {"id":"H09","environmentIds":["E2"],"familyIds":["F06","F09"],"sourceIds":["S-P067","S-P112"],"dependsOn":["H01"],"evidenceProfile":"external","executionBound":"fixed latency, jitter, bandwidth, loss, interruption, TLS, and idle profiles"},
-    {"id":"H10","environmentIds":["E1","E2"],"familyIds":["F05","F06","F08","F09"],"sourceIds":["S-P067","S-P147","S-P148","S-P156"],"dependsOn":["H03"],"evidenceProfile":"external","executionBound":"scheduled browser crash and service or supervisor transitions"},
-    {"id":"H11","environmentIds":["E1","E2"],"familyIds":["F07","F11"],"sourceIds":["S-N133","S-P158"],"dependsOn":["H06"],"evidenceProfile":"external","executionBound":"synthetic prompts plus bounded non-production vault and passkey fixtures"},
-    {"id":"H12","environmentIds":["E2"],"familyIds":["F05","F06"],"sourceIds":["S-P096","S-P067"],"dependsOn":["H03","H09","H10"],"evidenceProfile":"external","executionBound":"500 reconnects over at least 24 hours using one unchanged handoff"},
-
-    {"id":"X01","environmentIds":["E0","E1"],"familyIds":["F07"],"sourceIds":["S-PROD-200","S-P158"],"dependsOn":[],"evidenceProfile":"display","executionBound":"one old PrivateTmp generation holds display 90 while frozen host starts"},
-    {"id":"X02","environmentIds":["E0","E1"],"familyIds":["F05","F07"],"sourceIds":["S-P046","S-PROD-200"],"dependsOn":["X01"],"evidenceProfile":"display","executionBound":"separate daemon allocator requests at deterministic barriers"},
-    {"id":"X03","environmentIds":["E0","E1"],"familyIds":["F05","F07"],"sourceIds":["S-P046","S-P067"],"dependsOn":["X01"],"evidenceProfile":"display","executionBound":"stale lock, live sockets, dead and reused PID, and owner mismatch combinations"},
-    {"id":"X04","environmentIds":["E0","E1"],"familyIds":["F05","F07"],"sourceIds":["S-P046","S-PROD-200"],"dependsOn":["X02","X03"],"evidenceProfile":"display","executionBound":"occupy displays 90 through 129 with owned and foreign fixtures"},
-    {"id":"X05","environmentIds":["E0","E1"],"familyIds":["F07"],"sourceIds":["S-P046"],"dependsOn":["X03"],"evidenceProfile":"display","executionBound":"cookie, authority file, user, environment, and display ownership matrix"},
-    {"id":"X06","environmentIds":["E0","E1","E2"],"familyIds":["F05","F07"],"sourceIds":["S-N133","S-P046","S-PROD-200"],"dependsOn":["X05"],"evidenceProfile":"display","executionBound":"terminal, absent, wrong, obscured, popup, resize, and focus window states"},
-    {"id":"X07","environmentIds":["E0","E1"],"familyIds":["F08"],"sourceIds":["S-P147","S-P148"],"dependsOn":[],"evidenceProfile":"display","executionBound":"25 stale, unresponsive, delayed, duplicate-listener, and replacement transitions"},
-    {"id":"X08","environmentIds":["E0","E1"],"familyIds":["F08"],"sourceIds":["S-P156"],"dependsOn":["X07"],"evidenceProfile":"display","executionBound":"transfer, refusal, full shutdown, interruption, resume, and rollback evidence"},
-    {"id":"X09","environmentIds":["E0","E1"],"familyIds":["F08"],"sourceIds":["S-P147","S-P148","S-P156"],"dependsOn":["X07"],"evidenceProfile":"display","executionBound":"six digest or generation axes singly and in combinations"},
-    {"id":"X10","environmentIds":["E1","E2"],"familyIds":["F01","F05","F08","F09"],"sourceIds":["S-P067","S-P134","S-P147","S-P148"],"dependsOn":["X07"],"evidenceProfile":"display","executionBound":"boot, process, socket, route, handoff, and browser epochs"},
-
-    {"id":"D01","environmentIds":["E0","E2"],"familyIds":["F10"],"sourceIds":["S-P046","S-P067","S-P100"],"dependsOn":[],"evidenceProfile":"dashboard","executionBound":"empty, sparse, normal, and dense authoritative inventories"},
-    {"id":"D02","environmentIds":["E0","E2"],"familyIds":["F10"],"sourceIds":["S-P046","S-P067"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"eight resource lifecycle transitions at fixed barriers"},
-    {"id":"D03","environmentIds":["E0","E2"],"familyIds":["F04","F10"],"sourceIds":["S-P062","S-P063","S-P067"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"duplicate labels, tabs, windows, foreign, historical, and ambiguous rows"},
-    {"id":"D04","environmentIds":["E2"],"familyIds":["F06","F10"],"sourceIds":["S-P046","S-P067"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"10 external dashboard clients with navigation and selection interleavings"},
-    {"id":"D05","environmentIds":["E0","E2"],"familyIds":["F04","F10"],"sourceIds":["S-P062","S-P046","S-P112"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"six missing-resource deep-link classes"},
-    {"id":"D06","environmentIds":["E0","E2"],"familyIds":["F08","F10"],"sourceIds":["S-P157"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"Cartesian runtime, convergence, access, and acquisition health axes"},
-    {"id":"D07","environmentIds":["E0","E2"],"familyIds":["F03","F09","F10"],"sourceIds":["S-P100","S-P112","S-DASH-STREAM"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"delayed, duplicate, dropped, and reordered snapshot and stream responses"},
-    {"id":"D08","environmentIds":["E0","E2"],"familyIds":["F06","F10"],"sourceIds":["S-P096","S-P67-HARNESS","S-DASH-STREAM"],"dependsOn":["D01","H01"],"evidenceProfile":"dashboard","executionBound":"scan every dashboard copy and open action"},
-    {"id":"D09","environmentIds":["E0","E2"],"familyIds":["F09","F10"],"sourceIds":["S-P100"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"100 Profiles, 500 browsers, 2000 tabs, 10000 jobs, and 10000 events"},
-    {"id":"D10","environmentIds":["E0","E2"],"familyIds":["F09","F10"],"sourceIds":["S-P046","S-P100","S-P112"],"dependsOn":["D09"],"evidenceProfile":"dashboard","executionBound":"p50, p95, p99, and worst for seven interactions"},
-    {"id":"D11","environmentIds":["E2"],"familyIds":["F09","F10"],"sourceIds":["S-P067","S-DASH-STREAM"],"dependsOn":["D07","D09"],"evidenceProfile":"dashboard","executionBound":"8-hour browser resource stability session"},
-    {"id":"D12","environmentIds":["E0","E2"],"familyIds":["F10","F11"],"sourceIds":["S-N133","S-P158"],"dependsOn":["D01"],"evidenceProfile":"dashboard","executionBound":"small, typical, wide, keyboard, focus, motion, loading, error, and overflow states"},
-
-    {"id":"C01","environmentIds":["E1","E2"],"familyIds":["F03"],"sourceIds":["S-P158"],"dependsOn":["A01","H01","D01"],"evidenceProfile":"combined","executionBound":"20 minutes, 25 agents, 2 viewers, 1 controller, 500 commands, 50 dashboard actions, 10 reconnects"},
-    {"id":"C02","environmentIds":["E1","E2"],"familyIds":["F03","F09"],"sourceIds":["S-P158"],"dependsOn":["C01","H07","D09"],"evidenceProfile":"combined","executionBound":"100 agents, 10 dashboards, full routes, 2000 commands, 500 actions, 100 reconnects, 20 crashes"},
-    {"id":"C03","environmentIds":["E1","E2"],"familyIds":["F03","F08","F09"],"sourceIds":["S-P158"],"dependsOn":["C02","X07"],"evidenceProfile":"combined","executionBound":"25 scheduled supervisor transitions under mixed load"},
-    {"id":"C04","environmentIds":["E1","E2"],"familyIds":["F03","F09"],"sourceIds":["S-P158"],"dependsOn":["C03","D11"],"evidenceProfile":"combined","executionBound":"8 hours, 10000 commands, 2000 dashboard actions, 200 reconnects, 50 crashes"},
-    {"id":"C05","environmentIds":["E2"],"familyIds":["F03","F09"],"sourceIds":["S-P158"],"dependsOn":["C04","H12"],"evidenceProfile":"combined","executionBound":"24 hours and 500 reconnects with one unchanged durable handoff"}
+    {
+      "id": "A01",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F01"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "agent",
+      "executionBound": "100 sequential and 25 concurrent self-declared clients",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "client_mode",
+            "coverage": "each",
+            "values": [
+              "sequential",
+              "concurrent"
+            ]
+          },
+          {
+            "id": "lifecycle_action",
+            "coverage": "each",
+            "values": [
+              "acquire_session",
+              "acquire_tab",
+              "release_own_resources"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "sequential_clients",
+            "mode": "exact",
+            "value": 100,
+            "scope": "aggregate"
+          },
+          {
+            "id": "concurrent_clients",
+            "mode": "exact",
+            "value": 25,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A02",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F01"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "10 clients sharing one retained browser, repeated 20 times",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "sharing_repetition",
+          "count": 20
+        },
+        "dimensions": [
+          {
+            "id": "sharing_action",
+            "coverage": "each",
+            "values": [
+              "join_retained_browser",
+              "create_attributable_tab",
+              "release_own_tab"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "clients_per_repetition",
+            "mode": "exact",
+            "value": 10,
+            "scope": "per_attempt"
+          },
+          {
+            "id": "retained_browsers",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A03",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F01"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "10 same-label clients with distinct connection instances",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "client_identity",
+            "coverage": "each",
+            "values": [
+              "same_label_distinct_connection"
+            ]
+          },
+          {
+            "id": "isolation_probe",
+            "coverage": "each",
+            "values": [
+              "command_targeting",
+              "tab_targeting",
+              "release_targeting"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "live_clients",
+            "mode": "exact",
+            "value": 10,
+            "scope": "aggregate"
+          },
+          {
+            "id": "distinct_connection_instances",
+            "mode": "exact",
+            "value": 10,
+            "scope": "aggregate"
+          },
+          {
+            "id": "shared_labels",
+            "mode": "exact",
+            "value": 1,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A04",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F02"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "all role, mode, operation, and allow-deny combinations",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "role",
+            "coverage": "cartesian",
+            "values": [
+              "administrator",
+              "participant",
+              "observer"
+            ]
+          },
+          {
+            "id": "profile_mode",
+            "coverage": "cartesian",
+            "values": [
+              "shared_local",
+              "restricted",
+              "exclusive"
+            ]
+          },
+          {
+            "id": "operation",
+            "coverage": "cartesian",
+            "values": [
+              "acquire",
+              "navigate",
+              "tab_create",
+              "own_tab_release",
+              "policy_mutate",
+              "evict"
+            ]
+          },
+          {
+            "id": "decision",
+            "coverage": "cartesian",
+            "values": [
+              "allow",
+              "deny"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A05",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F02"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A04"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "widen, narrow, admission, release, conflict, and drain at fixed barriers",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "barrier_transition",
+          "count": 6,
+          "dimensionId": "transition"
+        },
+        "dimensions": [
+          {
+            "id": "transition",
+            "coverage": "each",
+            "values": [
+              "widen",
+              "narrow",
+              "admission",
+              "own_tab_release",
+              "revision_conflict",
+              "drain_completion"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A06",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F02"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A04"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "queued and atomic revocation plus graceful and exact forced eviction",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "command_state",
+            "coverage": "cartesian",
+            "values": [
+              "atomic",
+              "queued"
+            ]
+          },
+          {
+            "id": "eviction_mode",
+            "coverage": "cartesian",
+            "values": [
+              "graceful",
+              "forced_exact"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A07",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F01",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P134",
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "one controlled Chrome crash at every supported command boundary",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "command_boundary",
+            "coverage": "cartesian",
+            "values": [
+              "before_dispatch",
+              "after_dispatch",
+              "before_effect",
+              "after_effect"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "supported_service_request_actions",
+            "mode": "exact",
+            "value": 108,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A08",
+      "environmentIds": [
+        "E0",
+        "E1",
+        "E3"
+      ],
+      "familyIds": [
+        "F01"
+      ],
+      "sourceIds": [
+        "S-N135",
+        "S-N136",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "unproven and inconsistent fixtures through four observed actions",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "identity_state",
+            "coverage": "cartesian",
+            "values": [
+              "unproven",
+              "inconsistent"
+            ]
+          },
+          {
+            "id": "action",
+            "coverage": "cartesian",
+            "values": [
+              "launch",
+              "remote_view_open",
+              "tab_switch",
+              "view_focus"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A09",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F04"
+      ],
+      "sourceIds": [
+        "S-P062",
+        "S-P046"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "missing, dead, duplicate, blank, popup, close, switch, and navigation targets",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "target_pathology",
+            "coverage": "each",
+            "values": [
+              "missing",
+              "dead",
+              "duplicate_same_origin",
+              "blank",
+              "popup",
+              "rapid_close",
+              "rapid_switch",
+              "rapid_navigation"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A10",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F04"
+      ],
+      "sourceIds": [
+        "S-P063",
+        "S-P46-HARNESS"
+      ],
+      "dependsOn": [
+        "A01"
+      ],
+      "evidenceProfile": "agent",
+      "executionBound": "owned and foreign CDP resources under inventory churn",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "ownership",
+            "coverage": "cartesian",
+            "values": [
+              "owned",
+              "foreign"
+            ]
+          },
+          {
+            "id": "inventory_state",
+            "coverage": "cartesian",
+            "values": [
+              "stable",
+              "churn"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A11",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F03",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P157",
+        "S-P142",
+        "S-PROD-200"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "logging",
+      "executionBound": "every queue, scheduler, cancellation, worker, and persistence terminal boundary",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "terminal_boundary",
+            "coverage": "each",
+            "values": [
+              "queue_full",
+              "wait_reschedule",
+              "cancellation",
+              "worker_stop",
+              "pre_dispatch_denial",
+              "terminal_persistence_failure"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A12",
+      "environmentIds": [
+        "E0",
+        "E1",
+        "E3"
+      ],
+      "familyIds": [
+        "F03",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P142",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "A11"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "lock wait and timeout before effect, after effect, and after disconnect",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "uncertainty_point",
+            "coverage": "each",
+            "values": [
+              "lock_wait",
+              "timeout_before_effect",
+              "timeout_after_effect",
+              "client_disconnect"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A13",
+      "environmentIds": [
+        "E1"
+      ],
+      "familyIds": [
+        "F01",
+        "F08",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P134",
+        "S-P148",
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A07",
+        "A08"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "25 scheduled daemon or supervisor generation transitions",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "generation_transition",
+          "count": 25
+        },
+        "dimensions": [
+          {
+            "id": "transition_owner",
+            "coverage": "each",
+            "values": [
+              "daemon",
+              "supervisor"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "planned_transitions",
+            "mode": "exact",
+            "value": 25,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A14",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F02",
+        "F08"
+      ],
+      "sourceIds": [
+        "S-P156",
+        "S-P157"
+      ],
+      "dependsOn": [
+        "A06"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "four rejected shutdown plans and one exact sacrificial shutdown",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "shutdown_plan",
+          "count": 5,
+          "dimensionId": "shutdown_plan"
+        },
+        "dimensions": [
+          {
+            "id": "shutdown_plan",
+            "coverage": "each",
+            "values": [
+              "unauthorized",
+              "stale_digest",
+              "mismatched_target",
+              "profile_mutating",
+              "authorized_sacrificial"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "A15",
+      "environmentIds": [
+        "E0",
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "familyIds": [
+        "F03",
+        "F04"
+      ],
+      "sourceIds": [
+        "S-P158",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "A09",
+        "A11"
+      ],
+      "evidenceProfile": "logging",
+      "executionBound": "unique markers through CLI, HTTP, MCP, dashboard, and remote control",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "control_transport",
+            "coverage": "each",
+            "values": [
+              "cli",
+              "http",
+              "mcp",
+              "dashboard",
+              "remote_control"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "unique_markers_per_transport",
+            "mode": "exact",
+            "value": 1,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H01",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F05",
+        "F06"
+      ],
+      "sourceIds": [
+        "S-P096",
+        "S-ROUTE"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "external",
+      "executionBound": "two external runners open, interact, disconnect, and reopen one handoff",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "runner_action",
+            "coverage": "each",
+            "values": [
+              "open",
+              "interact",
+              "disconnect",
+              "reopen"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "external_runners",
+            "mode": "exact",
+            "value": 2,
+            "scope": "shared"
+          },
+          {
+            "id": "durable_handoffs",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H02",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F06"
+      ],
+      "sourceIds": [
+        "S-P096",
+        "S-P67-HARNESS",
+        "S-DASH-STREAM"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "scan every client-visible URL role and injected host or scheme variation",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "url_role",
+            "coverage": "cartesian",
+            "values": [
+              "handoff",
+              "location",
+              "iframe_src",
+              "form_action",
+              "websocket",
+              "reconnect",
+              "copied_link",
+              "error_action",
+              "provider_external_url",
+              "route_binding",
+              "local_embed",
+              "dashboard_embed",
+              "health"
+            ]
+          },
+          {
+            "id": "host_or_scheme",
+            "coverage": "cartesian",
+            "values": [
+              "public_https",
+              "localhost",
+              "ipv4_loopback",
+              "ipv6_loopback",
+              "rfc1918",
+              "link_local",
+              "dot_local",
+              "raw_guacamole",
+              "non_https",
+              "public_dns_private_resolution"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H03",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F05",
+        "F06"
+      ],
+      "sourceIds": [
+        "S-P067",
+        "S-P096",
+        "S-ROUTE"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "viewer, route, display, and provider-session replacement",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "rebind_transition",
+          "count": 4,
+          "dimensionId": "rebind_transition"
+        },
+        "dimensions": [
+          {
+            "id": "rebind_transition",
+            "coverage": "each",
+            "values": [
+              "viewer_expiry",
+              "route_switch",
+              "display_replacement",
+              "provider_session_replacement"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "durable_handoffs",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H04",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F05"
+      ],
+      "sourceIds": [
+        "S-P067"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "8 observers and 2 controller contenders",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "participant_role",
+            "coverage": "each",
+            "values": [
+              "observer",
+              "controller_contender"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "observers",
+            "mode": "exact",
+            "value": 8,
+            "scope": "shared"
+          },
+          {
+            "id": "controller_contenders",
+            "mode": "exact",
+            "value": 2,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H05",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F05"
+      ],
+      "sourceIds": [
+        "S-P067"
+      ],
+      "dependsOn": [
+        "H04"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "agent-human-agent input transfer at fixed barriers",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "controller_transfer",
+          "count": 3,
+          "dimensionId": "controller_transfer"
+        },
+        "dimensions": [
+          {
+            "id": "controller_transfer",
+            "coverage": "each",
+            "values": [
+              "agent_to_human",
+              "human_control",
+              "human_to_agent"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H06",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F04",
+        "F07",
+        "F11"
+      ],
+      "sourceIds": [
+        "S-N133",
+        "S-P046"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "windows, tabs, popups, prompts, minimize, obscure, and focus states",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "visible_state",
+            "coverage": "each",
+            "values": [
+              "multiple_windows",
+              "tabs",
+              "popup",
+              "native_prompt",
+              "minimized",
+              "obscured",
+              "focus_change"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H07",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F05"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "H04"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "all routes held by healthy non-parkable controllers plus one request",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "route_request",
+            "coverage": "each",
+            "values": [
+              "hold_all_non_parkable",
+              "request_excess"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "excess_requests",
+            "mode": "exact",
+            "value": 1,
+            "scope": "aggregate"
+          },
+          {
+            "id": "route_occupancy",
+            "mode": "capacity",
+            "value": 1,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H08",
+      "environmentIds": [
+        "E0",
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "familyIds": [
+        "F05",
+        "F07"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-ROUTE",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "six presentation failure injections",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "failure_injection",
+            "coverage": "each",
+            "values": [
+              "route_unavailable",
+              "proof_timeout",
+              "finalization_interruption",
+              "stale_checkout",
+              "wrong_display",
+              "browser_window_not_visible"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H09",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F06",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P067",
+        "S-P112"
+      ],
+      "dependsOn": [
+        "H01"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "fixed latency, jitter, bandwidth, loss, interruption, TLS, and idle profiles",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "network_profile",
+          "count": 7,
+          "dimensionId": "network_profile"
+        },
+        "dimensions": [
+          {
+            "id": "network_profile",
+            "coverage": "each",
+            "values": [
+              "latency",
+              "jitter",
+              "bandwidth",
+              "packet_loss",
+              "websocket_interruption",
+              "tls_reconnect",
+              "long_idle_expiry"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H10",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F05",
+        "F06",
+        "F08",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P067",
+        "S-P147",
+        "S-P148",
+        "S-P156"
+      ],
+      "dependsOn": [
+        "H03"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "scheduled browser crash and service or supervisor transitions",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "disruption_transition",
+          "count": 3,
+          "dimensionId": "disruption_transition"
+        },
+        "dimensions": [
+          {
+            "id": "disruption_transition",
+            "coverage": "each",
+            "values": [
+              "browser_crash",
+              "service_client_transition",
+              "supervisor_transition"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "durable_handoffs",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ]
+      }
+    },
+    {
+      "id": "H11",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F07",
+        "F11"
+      ],
+      "sourceIds": [
+        "S-N133",
+        "S-P158"
+      ],
+      "dependsOn": [
+        "H06"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "synthetic prompts plus bounded non-production vault and passkey fixtures",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "secure_fixture",
+            "coverage": "each",
+            "values": [
+              "synthetic_chooser",
+              "synthetic_prompt",
+              "nonproduction_lastpass_vault",
+              "test_passkey_relying_party"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "H12",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F05",
+        "F06"
+      ],
+      "sourceIds": [
+        "S-P096",
+        "S-P067"
+      ],
+      "dependsOn": [
+        "H03",
+        "H09",
+        "H10"
+      ],
+      "evidenceProfile": "external",
+      "executionBound": "500 reconnects over at least 24 hours using one unchanged handoff",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "handoff_reconnect",
+          "count": 500
+        },
+        "dimensions": [
+          {
+            "id": "lease_or_client_state",
+            "coverage": "each",
+            "values": [
+              "client_restart",
+              "viewer_lease_expired",
+              "controller_lease_expired"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "reconnects",
+            "mode": "exact",
+            "value": 500,
+            "scope": "aggregate"
+          },
+          {
+            "id": "durable_handoffs",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ],
+        "duration": {
+          "mode": "minimum",
+          "seconds": 86400
+        }
+      }
+    },
+    {
+      "id": "X01",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F07"
+      ],
+      "sourceIds": [
+        "S-PROD-200",
+        "S-P158"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "display",
+      "executionBound": "one old PrivateTmp generation holds display 90 while frozen host starts",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "generation",
+            "coverage": "each",
+            "values": [
+              "old_private_tmp",
+              "frozen_host"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "display_number",
+            "mode": "exact",
+            "value": 90,
+            "scope": "aggregate"
+          },
+          {
+            "id": "orphan_xvfb_processes",
+            "mode": "exact",
+            "value": 1,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "X02",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F05",
+        "F07"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "X01"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "separate daemon allocator requests at deterministic barriers",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "allocator_barrier",
+            "coverage": "each",
+            "values": [
+              "ready",
+              "simultaneous_request",
+              "assignment"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "daemon_processes",
+            "mode": "minimum",
+            "value": 2,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "X03",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F05",
+        "F07"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-P067"
+      ],
+      "dependsOn": [
+        "X01"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "stale lock, live sockets, dead and reused PID, and owner mismatch combinations",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "display_evidence_state",
+            "coverage": "each",
+            "values": [
+              "stale_lock",
+              "live_socket_without_visible_lock",
+              "abstract_socket",
+              "dead_pid",
+              "pid_reuse",
+              "owner_generation_mismatch"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "X04",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F05",
+        "F07"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "X02",
+        "X03"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "occupy displays 90 through 129 with owned and foreign fixtures",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "occupant_ownership",
+            "coverage": "each",
+            "values": [
+              "owned",
+              "foreign"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "first_display",
+            "mode": "exact",
+            "value": 90,
+            "scope": "aggregate"
+          },
+          {
+            "id": "last_display",
+            "mode": "exact",
+            "value": 129,
+            "scope": "aggregate"
+          },
+          {
+            "id": "occupied_displays",
+            "mode": "exact",
+            "value": 40,
+            "scope": "aggregate"
+          },
+          {
+            "id": "excess_requests",
+            "mode": "exact",
+            "value": 1,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "X05",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F07"
+      ],
+      "sourceIds": [
+        "S-P046"
+      ],
+      "dependsOn": [
+        "X03"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "cookie, authority file, user, environment, and display ownership matrix",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "cookie",
+            "coverage": "cartesian",
+            "values": [
+              "valid",
+              "missing",
+              "wrong"
+            ]
+          },
+          {
+            "id": "authority_file",
+            "coverage": "cartesian",
+            "values": [
+              "valid",
+              "missing",
+              "wrong"
+            ]
+          },
+          {
+            "id": "user",
+            "coverage": "cartesian",
+            "values": [
+              "owner",
+              "foreign"
+            ]
+          },
+          {
+            "id": "environment",
+            "coverage": "cartesian",
+            "values": [
+              "matching",
+              "mismatched"
+            ]
+          },
+          {
+            "id": "display_ownership",
+            "coverage": "cartesian",
+            "values": [
+              "owned",
+              "foreign"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "X06",
+      "environmentIds": [
+        "E0",
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F05",
+        "F07"
+      ],
+      "sourceIds": [
+        "S-N133",
+        "S-P046",
+        "S-PROD-200"
+      ],
+      "dependsOn": [
+        "X05"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "terminal, absent, wrong, obscured, popup, resize, and focus window states",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "window_state",
+            "coverage": "each",
+            "values": [
+              "terminal_topmost",
+              "absent",
+              "wrong_browser",
+              "obscured",
+              "transient_popup",
+              "resize_race",
+              "focus_race"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "X07",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F08"
+      ],
+      "sourceIds": [
+        "S-P147",
+        "S-P148"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "display",
+      "executionBound": "25 stale, unresponsive, delayed, duplicate-listener, and replacement transitions",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "supervisor_transition",
+          "count": 25
+        },
+        "dimensions": [
+          {
+            "id": "transition_state",
+            "coverage": "each",
+            "values": [
+              "stale_owner",
+              "unresponsive_owner",
+              "delayed_exit",
+              "duplicate_listener",
+              "generation_replacement"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "planned_transitions",
+            "mode": "exact",
+            "value": 25,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "X08",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F08"
+      ],
+      "sourceIds": [
+        "S-P156"
+      ],
+      "dependsOn": [
+        "X07"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "transfer, refusal, full shutdown, interruption, resume, and rollback evidence",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "install_path_transition",
+          "count": 6,
+          "dimensionId": "install_path_transition"
+        },
+        "dimensions": [
+          {
+            "id": "install_path_transition",
+            "coverage": "each",
+            "values": [
+              "coherent_transfer",
+              "refused_transfer",
+              "sealed_full_shutdown",
+              "interrupted_effect",
+              "resume",
+              "rollback"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "X09",
+      "environmentIds": [
+        "E0",
+        "E1"
+      ],
+      "familyIds": [
+        "F08"
+      ],
+      "sourceIds": [
+        "S-P147",
+        "S-P148",
+        "S-P156"
+      ],
+      "dependsOn": [
+        "X07"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "six digest or generation axes singly and in combinations",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "digest_or_generation_axis",
+            "coverage": "cartesian",
+            "values": [
+              "host",
+              "backend",
+              "dashboard",
+              "manifest",
+              "helper",
+              "browser"
+            ]
+          },
+          {
+            "id": "combination_mode",
+            "coverage": "cartesian",
+            "values": [
+              "single_axis",
+              "multiple_axes"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "X10",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F01",
+        "F05",
+        "F08",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P067",
+        "S-P134",
+        "S-P147",
+        "S-P148"
+      ],
+      "dependsOn": [
+        "X07"
+      ],
+      "evidenceProfile": "display",
+      "executionBound": "boot, process, socket, route, handoff, and browser epochs",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "epoch_transition",
+          "count": 6,
+          "dimensionId": "epoch_transition"
+        },
+        "dimensions": [
+          {
+            "id": "epoch_transition",
+            "coverage": "each",
+            "values": [
+              "boot",
+              "process",
+              "socket",
+              "route",
+              "handoff",
+              "retained_browser"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D01",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-P067",
+        "S-P100"
+      ],
+      "dependsOn": [],
+      "evidenceProfile": "dashboard",
+      "executionBound": "empty, sparse, normal, and dense authoritative inventories",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "inventory_density",
+            "coverage": "each",
+            "values": [
+              "empty",
+              "sparse",
+              "normal",
+              "dense"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D02",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-P067"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "eight resource lifecycle transitions at fixed barriers",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "dimension",
+          "unit": "resource_transition",
+          "count": 8,
+          "dimensionId": "resource_transition"
+        },
+        "dimensions": [
+          {
+            "id": "resource_transition",
+            "coverage": "each",
+            "values": [
+              "create",
+              "update",
+              "crash",
+              "recover",
+              "transfer",
+              "close",
+              "evict",
+              "expire"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D03",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F04",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P062",
+        "S-P063",
+        "S-P067"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "duplicate labels, tabs, windows, foreign, historical, and ambiguous rows",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "row_ambiguity",
+            "coverage": "each",
+            "values": [
+              "duplicate_labels",
+              "many_tabs",
+              "two_windows",
+              "foreign_cdp",
+              "historical_rows",
+              "access_ambiguity"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D04",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F06",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-P067"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "10 external dashboard clients with navigation and selection interleavings",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "navigation_action",
+            "coverage": "each",
+            "values": [
+              "navigate",
+              "refresh",
+              "back_forward",
+              "deep_link",
+              "swap_selection"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "external_dashboard_clients",
+            "mode": "exact",
+            "value": 10,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "D05",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F04",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P062",
+        "S-P046",
+        "S-P112"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "six missing-resource deep-link classes",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "missing_resource",
+            "coverage": "each",
+            "values": [
+              "browser",
+              "session",
+              "tab",
+              "target",
+              "view",
+              "handoff"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D06",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F08",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P157"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "Cartesian runtime, convergence, access, and acquisition health axes",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "health_axis",
+            "coverage": "cartesian",
+            "values": [
+              "runtime",
+              "convergence",
+              "access",
+              "acquisition"
+            ]
+          },
+          {
+            "id": "health_state",
+            "coverage": "cartesian",
+            "values": [
+              "healthy",
+              "failed"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D07",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F03",
+        "F09",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P100",
+        "S-P112",
+        "S-DASH-STREAM"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "delayed, duplicate, dropped, and reordered snapshot and stream responses",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "response_fault",
+            "coverage": "cartesian",
+            "values": [
+              "delayed",
+              "duplicate",
+              "dropped",
+              "reordered"
+            ]
+          },
+          {
+            "id": "response_transport",
+            "coverage": "cartesian",
+            "values": [
+              "snapshot",
+              "stream"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D08",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F06",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P096",
+        "S-P67-HARNESS",
+        "S-DASH-STREAM"
+      ],
+      "dependsOn": [
+        "D01",
+        "H01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "scan every dashboard copy and open action",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "handoff_action",
+            "coverage": "each",
+            "values": [
+              "copy",
+              "open"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D09",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F09",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P100"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "100 Profiles, 500 browsers, 2000 tabs, 10000 jobs, and 10000 events",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "stream_state",
+            "coverage": "each",
+            "values": [
+              "initial",
+              "active_churn"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "profiles",
+            "mode": "exact",
+            "value": 100,
+            "scope": "aggregate"
+          },
+          {
+            "id": "browsers_or_historical_rows",
+            "mode": "exact",
+            "value": 500,
+            "scope": "aggregate"
+          },
+          {
+            "id": "tabs",
+            "mode": "exact",
+            "value": 2000,
+            "scope": "aggregate"
+          },
+          {
+            "id": "jobs",
+            "mode": "exact",
+            "value": 10000,
+            "scope": "aggregate"
+          },
+          {
+            "id": "events",
+            "mode": "exact",
+            "value": 10000,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "D10",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F09",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P046",
+        "S-P100",
+        "S-P112"
+      ],
+      "dependsOn": [
+        "D09"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "p50, p95, p99, and worst for seven interactions",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "interaction",
+            "coverage": "cartesian",
+            "values": [
+              "initial_load",
+              "rail_update",
+              "selection",
+              "filtering",
+              "inspector_open",
+              "viewport_ready",
+              "action_feedback"
+            ]
+          },
+          {
+            "id": "percentile",
+            "coverage": "cartesian",
+            "values": [
+              "p50",
+              "p95",
+              "p99",
+              "worst"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "D11",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F09",
+        "F10"
+      ],
+      "sourceIds": [
+        "S-P067",
+        "S-DASH-STREAM"
+      ],
+      "dependsOn": [
+        "D07",
+        "D09"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "8-hour browser resource stability session",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "resource_metric",
+            "coverage": "each",
+            "values": [
+              "heap",
+              "dom_nodes",
+              "listeners",
+              "cpu",
+              "network",
+              "long_tasks"
+            ]
+          }
+        ],
+        "cardinalities": [],
+        "duration": {
+          "mode": "minimum",
+          "seconds": 28800
+        }
+      }
+    },
+    {
+      "id": "D12",
+      "environmentIds": [
+        "E0",
+        "E2"
+      ],
+      "familyIds": [
+        "F10",
+        "F11"
+      ],
+      "sourceIds": [
+        "S-N133",
+        "S-P158"
+      ],
+      "dependsOn": [
+        "D01"
+      ],
+      "evidenceProfile": "dashboard",
+      "executionBound": "small, typical, wide, keyboard, focus, motion, loading, error, and overflow states",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "aggregate",
+          "unit": "case",
+          "count": 1
+        },
+        "dimensions": [
+          {
+            "id": "viewport",
+            "coverage": "cartesian",
+            "values": [
+              "small",
+              "typical",
+              "wide"
+            ]
+          },
+          {
+            "id": "ui_state",
+            "coverage": "cartesian",
+            "values": [
+              "keyboard_only",
+              "visible_focus",
+              "modal_focus_return",
+              "reduced_motion",
+              "loading",
+              "error",
+              "overflow"
+            ]
+          }
+        ],
+        "cardinalities": []
+      }
+    },
+    {
+      "id": "C01",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F03"
+      ],
+      "sourceIds": [
+        "S-P158"
+      ],
+      "dependsOn": [
+        "A01",
+        "H01",
+        "D01"
+      ],
+      "evidenceProfile": "combined",
+      "executionBound": "20 minutes, 25 agents, 2 viewers, 1 controller, 500 commands, 50 dashboard actions, 10 reconnects",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "handoff_reconnect",
+          "count": 10
+        },
+        "dimensions": [],
+        "cardinalities": [
+          {
+            "id": "agent_clients",
+            "mode": "exact",
+            "value": 25,
+            "scope": "shared"
+          },
+          {
+            "id": "external_viewers",
+            "mode": "exact",
+            "value": 2,
+            "scope": "shared"
+          },
+          {
+            "id": "controllers",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          },
+          {
+            "id": "service_commands",
+            "mode": "exact",
+            "value": 500,
+            "scope": "aggregate"
+          },
+          {
+            "id": "dashboard_actions",
+            "mode": "exact",
+            "value": 50,
+            "scope": "aggregate"
+          },
+          {
+            "id": "reconnects",
+            "mode": "exact",
+            "value": 10,
+            "scope": "aggregate"
+          }
+        ],
+        "duration": {
+          "mode": "exact",
+          "seconds": 1200
+        }
+      }
+    },
+    {
+      "id": "C02",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F03",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P158"
+      ],
+      "dependsOn": [
+        "C01",
+        "H07",
+        "D09"
+      ],
+      "evidenceProfile": "combined",
+      "executionBound": "100 agents, 10 dashboards, full routes, 2000 commands, 500 actions, 100 reconnects, 20 crashes",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "handoff_reconnect",
+          "count": 100
+        },
+        "dimensions": [],
+        "cardinalities": [
+          {
+            "id": "agent_clients",
+            "mode": "exact",
+            "value": 100,
+            "scope": "shared"
+          },
+          {
+            "id": "dashboard_clients",
+            "mode": "exact",
+            "value": 10,
+            "scope": "shared"
+          },
+          {
+            "id": "route_occupancy",
+            "mode": "capacity",
+            "value": 1,
+            "scope": "shared"
+          },
+          {
+            "id": "service_commands",
+            "mode": "exact",
+            "value": 2000,
+            "scope": "aggregate"
+          },
+          {
+            "id": "dashboard_actions",
+            "mode": "exact",
+            "value": 500,
+            "scope": "aggregate"
+          },
+          {
+            "id": "reconnects",
+            "mode": "exact",
+            "value": 100,
+            "scope": "aggregate"
+          },
+          {
+            "id": "browser_crashes",
+            "mode": "exact",
+            "value": 20,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C03",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F03",
+        "F08",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P158"
+      ],
+      "dependsOn": [
+        "C02",
+        "X07"
+      ],
+      "evidenceProfile": "combined",
+      "executionBound": "25 scheduled supervisor transitions under mixed load",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "supervisor_transition",
+          "count": 25
+        },
+        "dimensions": [
+          {
+            "id": "mixed_load",
+            "coverage": "each",
+            "values": [
+              "retained_browser_commands",
+              "dashboard_use",
+              "durable_handoff_reopen"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "supervisor_transitions",
+            "mode": "exact",
+            "value": 25,
+            "scope": "aggregate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C04",
+      "environmentIds": [
+        "E1",
+        "E2"
+      ],
+      "familyIds": [
+        "F03",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P158"
+      ],
+      "dependsOn": [
+        "C03",
+        "D11"
+      ],
+      "evidenceProfile": "combined",
+      "executionBound": "8 hours, 10000 commands, 2000 dashboard actions, 200 reconnects, 50 crashes",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "handoff_reconnect",
+          "count": 200
+        },
+        "dimensions": [],
+        "cardinalities": [
+          {
+            "id": "service_commands",
+            "mode": "minimum",
+            "value": 10000,
+            "scope": "aggregate"
+          },
+          {
+            "id": "dashboard_actions",
+            "mode": "minimum",
+            "value": 2000,
+            "scope": "aggregate"
+          },
+          {
+            "id": "reconnects",
+            "mode": "exact",
+            "value": 200,
+            "scope": "aggregate"
+          },
+          {
+            "id": "browser_crashes",
+            "mode": "exact",
+            "value": 50,
+            "scope": "aggregate"
+          }
+        ],
+        "duration": {
+          "mode": "minimum",
+          "seconds": 28800
+        }
+      }
+    },
+    {
+      "id": "C05",
+      "environmentIds": [
+        "E2"
+      ],
+      "familyIds": [
+        "F03",
+        "F09"
+      ],
+      "sourceIds": [
+        "S-P158"
+      ],
+      "dependsOn": [
+        "C04",
+        "H12"
+      ],
+      "evidenceProfile": "combined",
+      "executionBound": "24 hours and 500 reconnects with one unchanged durable handoff",
+      "executionContract": {
+        "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
+        "expansion": {
+          "strategy": "repeat",
+          "unit": "handoff_reconnect",
+          "count": 500
+        },
+        "dimensions": [
+          {
+            "id": "endurance_event",
+            "coverage": "each",
+            "values": [
+              "viewer_expiry",
+              "controller_expiry",
+              "client_restart",
+              "scheduled_network_profile"
+            ]
+          }
+        ],
+        "cardinalities": [
+          {
+            "id": "reconnects",
+            "mode": "exact",
+            "value": 500,
+            "scope": "aggregate"
+          },
+          {
+            "id": "durable_handoffs",
+            "mode": "exact",
+            "value": 1,
+            "scope": "shared"
+          }
+        ],
+        "duration": {
+          "mode": "minimum",
+          "seconds": 86400
+        }
+      }
+    }
   ],
   "knownHarnessConstraints": [
-    {"sourceId":"S-P46-HARNESS","constraint":"Contains reset, repair, retry, and cleanup behavior and may not execute unchanged after freeze."},
-    {"sourceId":"S-P67-HARNESS","constraint":"Permits loopback fallback, reconcile, restart, and cleanup behavior and may not serve as the E2 oracle."},
-    {"sourceId":"S-DASH-STREAM","constraint":"Constructs a viewer-localhost WebSocket and requires an external-ingress negative fixture."}
+    {
+      "sourceId": "S-P46-HARNESS",
+      "constraint": "Contains reset, repair, retry, and cleanup behavior and may not execute unchanged after freeze."
+    },
+    {
+      "sourceId": "S-P67-HARNESS",
+      "constraint": "Permits loopback fallback, reconcile, restart, and cleanup behavior and may not serve as the E2 oracle."
+    },
+    {
+      "sourceId": "S-DASH-STREAM",
+      "constraint": "Constructs a viewer-localhost WebSocket and requires an external-ingress negative fixture."
+    }
   ],
   "workUnitGraph": {
     "W1": [],
-    "W2": ["W1"],
-    "W3": ["W1", "W2"],
-    "W4": ["W1", "W2"],
-    "W5": ["W1", "W2", "W3"],
-    "W6": ["W2", "W3", "W4", "W5"],
-    "W7": ["W6"],
-    "W8": ["W6"],
-    "W9": ["W7", "W8"],
-    "W10": ["W9"]
+    "W2": [
+      "W1"
+    ],
+    "W3": [
+      "W1",
+      "W2"
+    ],
+    "W4": [
+      "W1",
+      "W2"
+    ],
+    "W5": [
+      "W1",
+      "W2",
+      "W3"
+    ],
+    "W6": [
+      "W2",
+      "W3",
+      "W4",
+      "W5"
+    ],
+    "W7": [
+      "W6"
+    ],
+    "W8": [
+      "W6"
+    ],
+    "W9": [
+      "W7",
+      "W8"
+    ],
+    "W10": [
+      "W9"
+    ]
   }
 }

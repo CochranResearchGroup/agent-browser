@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-case-execution-contract.v1.schema.json",
+  "title": "P158 machine-readable case execution contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "expansion", "dimensions", "cardinalities"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-case-execution-contract.v1" },
+    "expansion": { "$ref": "#/$defs/expansion" },
+    "dimensions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dimension" }
+    },
+    "cardinalities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cardinality" }
+    },
+    "duration": { "$ref": "#/$defs/duration" }
+  },
+  "anyOf": [
+    { "properties": { "dimensions": { "type": "array", "minItems": 1 } } },
+    { "properties": { "cardinalities": { "type": "array", "minItems": 1 } } },
+    { "properties": { "duration": { "$ref": "#/$defs/duration" } }, "required": ["duration"] }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "expansion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "unit", "count"],
+      "properties": {
+        "strategy": { "enum": ["aggregate", "repeat", "dimension"] },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "count": { "type": "integer", "minimum": 1 },
+        "dimensionId": { "$ref": "#/$defs/identifier" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "strategy": { "const": "dimension" } }, "required": ["strategy"] },
+          "then": {
+            "properties": { "dimensionId": { "$ref": "#/$defs/identifier" } },
+            "required": ["dimensionId"]
+          },
+          "else": { "not": { "required": ["dimensionId"] } }
+        },
+        {
+          "if": { "properties": { "strategy": { "const": "aggregate" } }, "required": ["strategy"] },
+          "then": { "properties": { "count": { "const": 1 } } }
+        }
+      ]
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "coverage", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "coverage": { "enum": ["each", "cartesian"] },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "cardinality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "scope", "value"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "mode": { "enum": ["exact", "minimum", "capacity"] },
+        "scope": { "enum": ["aggregate", "per_attempt", "shared"] },
+        "value": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "duration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "seconds"],
+      "properties": {
+        "mode": { "enum": ["exact", "minimum"] },
+        "seconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

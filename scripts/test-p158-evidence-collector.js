@@ -14,6 +14,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 
 import {
   buildP158AggregateFixtureManifest,
@@ -22,12 +24,31 @@ import {
   P158_SUPPLIED_ARTIFACT_KINDS,
   runP158EvidenceCollector,
 } from './lib/p158-evidence-collector.js';
+import {
+  compileP158ExecutionSchedule,
+  createP158CaseAdapter,
+} from './lib/p158-execution-schedule.js';
+import {
+  createCampaignController,
+  createMemoryArtifactStore,
+} from './lib/p158-campaign-controller.js';
+import { prepareAndFreezeCampaign } from './lib/p158-campaign-preparation.js';
 
 const repoRoot = new URL('..', import.meta.url).pathname;
 const fixedClock = {
   wallNow: () => '2026-09-02T20:01:00.000Z',
   monotonicNow: () => 100,
 };
+const schemaAjv = new Ajv2020({ allErrors: true, strict: true });
+addFormats(schemaAjv);
+const validateCampaignManifest = schemaAjv.compile(JSON.parse(readFileSync(join(
+  repoRoot,
+  'docs/dev/contracts/p158-campaign-manifest.v1.schema.json',
+), 'utf8')));
+const validatePreparationReport = schemaAjv.compile(JSON.parse(readFileSync(join(
+  repoRoot,
+  'docs/dev/contracts/p158-campaign-preparation-report.v1.schema.json',
+), 'utf8')));
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -56,6 +77,20 @@ function makeContext(label) {
     };
   }
   const aggregate = buildP158AggregateFixtureManifest({ repoRoot });
+  const registry = JSON.parse(readFileSync(join(
+    repoRoot,
+    'docs/dev/contracts/p158-historical-failure-registry.v1.json',
+  ), 'utf8'));
+  const preliminary = compileP158ExecutionSchedule({
+    registry,
+    seed: 'p158-collector-fixed-seed',
+  });
+  const adapters = preliminary.caseContracts.map((contract) => createP158CaseAdapter({
+    caseId: contract.caseId,
+    evidenceProfile: contract.evidenceProfile,
+    executionContract: contract.executionContract,
+    execute: async () => ({ resultState: 'passed' }),
+  }));
   const config = {
     schemaVersion: 'agent-browser.p158-evidence-collector-config.v1',
     runId: `p158-collector-${label}`,
@@ -107,12 +142,12 @@ function makeContext(label) {
       environmentRelativeBudgets: { agentCommandP95Ms: 750, handoffPixelsP95Ms: 8000 },
     },
     freezeId: `${label}:freeze`,
-    schedule: [{ caseId: 'A01', attemptId: `${label}:A01`, environmentId: 'E1', dependsOn: [] }],
     scheduledTeardown: { caseId: 'TEARDOWN', environmentId: 'E1', dependsOn: ['A01'] },
   };
   return {
     root,
     config,
+    adapters,
     freezeRoot: join(root, 'campaign'),
     configPath: join(root, 'collector-config.json'),
     cleanup: () => rmSync(root, { recursive: true, force: true }),
@@ -133,16 +168,19 @@ await runTest('builds a deterministic aggregate over the frozen P158 source set'
   assert.equal(first.sha256, sha256(first.bytes));
 });
 
-await runTest('assembles exactly eighteen byte-bound preparation artifacts', async () => {
+await runTest('assembles nineteen byte-bound preparation artifacts including the schedule', async () => {
   const context = makeContext('assemble');
   try {
     const collected = collectP158PreparationEvidence({
       config: context.config,
       repoRoot,
       baseDir: context.root,
+      adapters: context.adapters,
     });
-    assert.equal(collected.input.artifacts.length, 18);
-    assert.equal(new Set(collected.input.artifacts.map((artifact) => artifact.kind)).size, 18);
+    assert.equal(collected.input.artifacts.length, 19);
+    assert.equal(new Set(collected.input.artifacts.map((artifact) => artifact.kind)).size, 19);
+    assert.equal(collected.input.campaignMode, 'live');
+    assert.equal(collected.input.schedule.length, 1941);
     for (const artifact of collected.input.artifacts) {
       const bytes = Buffer.from(artifact.content, 'base64');
       assert.equal(artifact.declaredSha256, sha256(bytes));
@@ -162,13 +200,48 @@ await runTest('defaults to an in-memory dry run and never starts execution', asy
       repoRoot,
       baseDir: context.root,
       clock: fixedClock,
+      adapters: context.adapters,
     });
     assert.equal(report.mode, 'dry_run');
     assert.equal(report.externalEffectsAttempted, false);
     assert.equal(report.executionStarted, false);
     assert.equal(report.preparationReport.controllerState, 'frozen');
     assert.equal(report.preparationReport.zeroStartedAttemptCount, 0);
+    assert.equal(validatePreparationReport(report.preparationReport), true,
+      schemaAjv.errorsText(validatePreparationReport.errors));
+    assert.match(report.preparationReport.executionScheduleSha256, /^[a-f0-9]{64}$/);
     assert.equal(existsSync(context.freezeRoot), false);
+  } finally {
+    context.cleanup();
+  }
+});
+
+await runTest('rejects schedule seal drift before controller preparation', async () => {
+  const context = makeContext('schedule-drift');
+  try {
+    const collected = collectP158PreparationEvidence({
+      config: context.config,
+      repoRoot,
+      baseDir: context.root,
+      adapters: context.adapters,
+    });
+    const input = structuredClone(collected.input);
+    input.executionScheduleSeal.scheduleSha256 = '0'.repeat(64);
+    const controller = createCampaignController({
+      registry: JSON.parse(readFileSync(join(
+        repoRoot,
+        'docs/dev/contracts/p158-historical-failure-registry.v1.json',
+      ), 'utf8')),
+      runId: input.candidate.runId,
+      seed: context.config.seed,
+      store: createMemoryArtifactStore(),
+      clock: fixedClock,
+    });
+    const report = await prepareAndFreezeCampaign({ ...input, controller, clock: fixedClock });
+    assert.equal(report.passed, false);
+    assert.deepEqual(report.findings.map((finding) => finding.code),
+      ['execution_schedule_mismatch']);
+    assert.equal(controller.snapshot().prepared, false);
   } finally {
     context.cleanup();
   }
@@ -180,19 +253,25 @@ await runTest('fails closed on missing evidence and digest drift', async () => {
     const missing = context.config.artifactFiles.runtime_doctor_receipt.path;
     rmSync(missing);
     assert.throws(
-      () => collectP158PreparationEvidence({ config: context.config, repoRoot, baseDir: context.root }),
+      () => collectP158PreparationEvidence({
+        config: context.config, repoRoot, baseDir: context.root, adapters: context.adapters,
+      }),
       (error) => error instanceof P158EvidenceCollectorError && error.code === 'evidence_file_missing',
     );
     writeFileSync(missing, '{}\n');
     assert.throws(
-      () => collectP158PreparationEvidence({ config: context.config, repoRoot, baseDir: context.root }),
+      () => collectP158PreparationEvidence({
+        config: context.config, repoRoot, baseDir: context.root, adapters: context.adapters,
+      }),
       (error) => error instanceof P158EvidenceCollectorError && error.code === 'evidence_hash_drift',
     );
     context.config.artifactFiles.runtime_doctor_receipt.expectedSha256 = sha256(Buffer.from('{}\n'));
     context.config.artifactFiles.runtime_doctor_receipt.expectedByteCount = 3;
     context.config.expectedAggregateSha256 = 'ff'.repeat(32);
     assert.throws(
-      () => collectP158PreparationEvidence({ config: context.config, repoRoot, baseDir: context.root }),
+      () => collectP158PreparationEvidence({
+        config: context.config, repoRoot, baseDir: context.root, adapters: context.adapters,
+      }),
       (error) => error instanceof P158EvidenceCollectorError && error.code === 'aggregate_hash_drift',
     );
   } finally {
@@ -210,11 +289,20 @@ await runTest('persists only prepared and frozen state behind the explicit freez
       freeze: true,
       runRoot: context.freezeRoot,
       clock: fixedClock,
+      adapters: context.adapters,
     });
     assert.equal(report.mode, 'freeze');
     assert.equal(report.executionStarted, false);
     assert.ok(existsSync(join(context.freezeRoot, 'campaign-manifest.json')));
     assert.ok(existsSync(join(context.freezeRoot, 'campaign-freeze.json')));
+    const manifest = JSON.parse(readFileSync(join(
+      context.freezeRoot,
+      'campaign-manifest.json',
+    ), 'utf8'));
+    assert.equal(validateCampaignManifest(manifest), true,
+      schemaAjv.errorsText(validateCampaignManifest.errors));
+    assert.equal(manifest.schedule.length, 1941);
+    assert(manifest.artifactBindings.some((binding) => binding.kind === 'execution_schedule'));
     const records = readdirSync(join(context.freezeRoot, 'ledger'))
       .map((path) => JSON.parse(readFileSync(join(context.freezeRoot, 'ledger', path), 'utf8')));
     const states = records.map((record) => record.controllerState);
@@ -226,17 +314,19 @@ await runTest('persists only prepared and frozen state behind the explicit freez
   }
 });
 
-await runTest('CLI remains dry-run unless the freeze flag is explicit', async () => {
+await runTest('CLI fails closed before freeze when no adapter module is installed', async () => {
   const context = makeContext('cli');
   try {
     writeFileSync(context.configPath, `${JSON.stringify(context.config, null, 2)}\n`);
     const result = spawnSync(process.execPath, [
       join(repoRoot, 'scripts/p158-evidence-collector.js'), '--config', context.configPath,
     ], { cwd: repoRoot, encoding: 'utf8' });
-    assert.equal(result.status, 0, result.stderr);
-    const report = JSON.parse(result.stdout);
-    assert.equal(report.mode, 'dry_run');
-    assert.equal(report.executionStarted, false);
+    assert.notEqual(result.status, 0);
+    const report = JSON.parse(result.stderr);
+    assert.equal(report.success, false);
+    assert.equal(report.code, 'adapter_readiness_failed');
+    assert.equal(report.details.findings.length, 54);
+    assert(report.details.findings.every((finding) => finding.code === 'missing_case_adapter'));
     assert.equal(existsSync(context.freezeRoot), false);
   } finally {
     context.cleanup();

@@ -2,15 +2,23 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import Ajv2020 from 'ajv/dist/2020.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const registryPath = join(root, 'docs/dev/contracts/p158-historical-failure-registry.v1.json');
+const executionContractSchemaPath = join(
+  root,
+  'docs/dev/contracts/p158-case-execution-contract.v1.schema.json',
+);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 const registry = JSON.parse(readFileSync(registryPath, 'utf8'));
+const executionContractSchema = JSON.parse(readFileSync(executionContractSchemaPath, 'utf8'));
+const ajv = new Ajv2020({ allErrors: true, strict: true });
+const validateExecutionContract = ajv.compile(executionContractSchema);
 assert(registry.schemaVersion === 'agent-browser.p158-historical-failure-registry.v1', 'P158 registry version drifted');
 assert(registry.registryState === 'frozen', 'P158 registry is not frozen');
 assert(Object.keys(registry.environments).join(',') === 'E0,E1,E2,E3', 'P158 environment set drifted');
@@ -67,6 +75,10 @@ for (const testCase of registry.cases) {
   assert(testCase.familyIds.length > 0, `${testCase.id} has no historical family`);
   assert(testCase.sourceIds.length > 0, `${testCase.id} has no evidence source`);
   assert(testCase.executionBound?.length > 20, `${testCase.id} has no deterministic execution bound`);
+  assert(
+    validateExecutionContract(testCase.executionContract),
+    `${testCase.id} execution contract is invalid: ${ajv.errorsText(validateExecutionContract.errors)}`,
+  );
   assert(Object.hasOwn(registry.evidenceProfiles, testCase.evidenceProfile), `${testCase.id} has no evidence profile`);
   assert(testCase.environmentIds.every((id) => Object.hasOwn(registry.environments, id)), `${testCase.id} cites an unknown environment`);
   assert(testCase.familyIds.every((id) => familyIds.has(id)), `${testCase.id} cites an unknown family`);

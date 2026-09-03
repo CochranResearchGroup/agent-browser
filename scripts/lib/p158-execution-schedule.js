@@ -10,6 +10,7 @@ export const P158_ADAPTER_READINESS_CODES = Object.freeze([
   'adapter_case_mismatch',
   'adapter_effect_contract_mismatch',
   'adapter_evidence_profile_mismatch',
+  'adapter_execution_contract_mismatch',
   'adapter_execute_missing',
   'adapter_repair_capability_forbidden',
   'adapter_retry_capability_forbidden',
@@ -101,6 +102,86 @@ function externalIngressRequired(testCase, environmentId) {
   );
 }
 
+function validateExecutionContract(testCase) {
+  const contract = testCase.executionContract;
+  if (contract?.schemaVersion !== 'agent-browser.p158-case-execution-contract.v1') {
+    fail('execution_contract_missing', `${testCase.id} has no machine-readable execution contract`);
+  }
+  const expansion = contract.expansion;
+  if (!['aggregate', 'repeat', 'dimension'].includes(expansion?.strategy) ||
+      !Number.isInteger(expansion?.count) || expansion.count < 1 ||
+      typeof expansion?.unit !== 'string' || expansion.unit.length === 0) {
+    fail('execution_contract_expansion_invalid', `${testCase.id} has an invalid attempt expansion`);
+  }
+  if (expansion.strategy === 'aggregate' && expansion.count !== 1) {
+    fail('execution_contract_expansion_invalid', `${testCase.id} aggregate expansion must have count 1`);
+  }
+  if (!Array.isArray(contract.dimensions) || !Array.isArray(contract.cardinalities)) {
+    fail('execution_contract_shape_invalid', `${testCase.id} execution dimensions are incomplete`);
+  }
+  const dimensionIds = new Set();
+  for (const dimension of contract.dimensions) {
+    if (typeof dimension.id !== 'string' || dimensionIds.has(dimension.id) ||
+        !['each', 'cartesian'].includes(dimension.coverage) ||
+        !Array.isArray(dimension.values) || dimension.values.length === 0 ||
+        new Set(dimension.values).size !== dimension.values.length) {
+      fail('execution_contract_dimension_invalid', `${testCase.id} has an invalid dimension`);
+    }
+    dimensionIds.add(dimension.id);
+  }
+  if (expansion.strategy === 'dimension') {
+    const expandedDimension = contract.dimensions.find(
+      (dimension) => dimension.id === expansion.dimensionId,
+    );
+    if (!expandedDimension || expandedDimension.values.length !== expansion.count) {
+      fail('execution_contract_expansion_invalid',
+        `${testCase.id} dimension expansion does not match its declared values`);
+    }
+  }
+  const cardinalityIds = new Set();
+  for (const cardinality of contract.cardinalities) {
+    if (typeof cardinality.id !== 'string' || cardinalityIds.has(cardinality.id) ||
+        !['exact', 'minimum', 'capacity'].includes(cardinality.mode) ||
+        !['aggregate', 'per_attempt', 'shared'].includes(cardinality.scope) ||
+        !Number.isInteger(cardinality.value) || cardinality.value < 1) {
+      fail('execution_contract_cardinality_invalid', `${testCase.id} has an invalid cardinality`);
+    }
+    cardinalityIds.add(cardinality.id);
+  }
+  if (contract.duration !== undefined && (
+    !['exact', 'minimum'].includes(contract.duration?.mode) ||
+    !Number.isInteger(contract.duration?.seconds) || contract.duration.seconds < 1
+  )) {
+    fail('execution_contract_duration_invalid', `${testCase.id} has an invalid duration`);
+  }
+  if (contract.dimensions.length === 0 && contract.cardinalities.length === 0 &&
+      contract.duration === undefined) {
+    fail('execution_contract_empty', `${testCase.id} has an empty execution contract`);
+  }
+  return structuredClone(contract);
+}
+
+function cardinalityAllocations(contract, ordinal, attemptId) {
+  return contract.cardinalities.map((cardinality) => {
+    let assignedValue;
+    let firstActionOrdinal = null;
+    if (cardinality.scope === 'aggregate') {
+      const quotient = Math.floor(cardinality.value / contract.expansion.count);
+      const remainder = cardinality.value % contract.expansion.count;
+      assignedValue = quotient + (ordinal <= remainder ? 1 : 0);
+      firstActionOrdinal = quotient * (ordinal - 1) + Math.min(ordinal - 1, remainder) + 1;
+    } else {
+      assignedValue = cardinality.value;
+      if (cardinality.scope === 'per_attempt') firstActionOrdinal = 1;
+    }
+    const actionIds = firstActionOrdinal === null
+      ? []
+      : Array.from({ length: assignedValue }, (_, index) =>
+        `${attemptId}:${cardinality.id}:${String(firstActionOrdinal + index).padStart(5, '0')}`);
+    return { ...cardinality, assignedValue, actionIds };
+  });
+}
+
 function normalizeAdapters(adapters) {
   if (adapters === undefined) return [];
   if (!Array.isArray(adapters)) fail('invalid_adapters', 'P158 adapters must be an array');
@@ -149,6 +230,12 @@ export function assessP158AdapterReadiness({ schedule, adapters }) {
       findings.push(finding(
         'adapter_evidence_profile_mismatch', caseId, 'evidenceProfile',
         contract.evidenceProfile, candidate.evidenceProfile ?? null,
+      ));
+    }
+    if (candidate.executionContractSha256 !== contract.executionContractSha256) {
+      findings.push(finding(
+        'adapter_execution_contract_mismatch', caseId, 'executionContractSha256',
+        contract.executionContractSha256, candidate.executionContractSha256 ?? null,
       ));
     }
     const actualEffectIds = Array.isArray(candidate.declaredEffectIds)
@@ -228,6 +315,7 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
     if (typeof testCase.executionBound !== 'string' || testCase.executionBound.length === 0) {
       fail('execution_bound_missing', `${testCase.id} has no declared execution bound`);
     }
+    const executionContract = validateExecutionContract(testCase);
     if (!Array.isArray(testCase.environmentIds) || testCase.environmentIds.length === 0) {
       fail('case_environment_missing', `${testCase.id} has no declared environment`);
     }
@@ -245,6 +333,8 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
       evidenceProfile: testCase.evidenceProfile,
       executionBound: testCase.executionBound,
       executionBoundSha256: sha256(testCase.executionBound),
+      executionContract,
+      executionContractSha256: sha256(executionContract),
       environmentIds: [...new Set(testCase.environmentIds)].sort(),
       dependsOnCaseIds: [...new Set(testCase.dependsOn ?? [])].sort(),
       adapterId: adapterId(testCase.id),
@@ -255,25 +345,61 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
     };
   });
   const caseOrder = new Map(caseContracts.map((contract, index) => [contract.caseId, index]));
-  const attempts = caseContracts.flatMap((contract) => contract.environmentIds.map((environmentId) => ({
-    caseId: contract.caseId,
-    attemptId: `${contract.caseId}-${environmentId}-r001`,
-    phaseId: contract.phaseId,
-    environmentId,
-    environmentIds: [environmentId],
-    repetition: 1,
-    seed: Number.parseInt(
-      sha256(`${seed}\0${contract.caseId}\0${environmentId}\0r001`).slice(0, 13),
-      16,
+  const attempts = caseContracts.flatMap((contract) => contract.environmentIds.flatMap(
+    (environmentId) => Array.from(
+      { length: contract.executionContract.expansion.count },
+      (_, index) => {
+        const repetition = index + 1;
+        const suffix = `r${String(repetition).padStart(3, '0')}`;
+        const attemptId = `${contract.caseId}-${environmentId}-${suffix}`;
+        const expandedDimension = contract.executionContract.expansion.strategy === 'dimension'
+          ? contract.executionContract.dimensions.find(
+            (dimension) => dimension.id === contract.executionContract.expansion.dimensionId,
+          )
+          : null;
+        return {
+          caseId: contract.caseId,
+          attemptId,
+          phaseId: contract.phaseId,
+          environmentId,
+          environmentIds: [environmentId],
+          repetition,
+          seed: Number.parseInt(
+            sha256(`${seed}\0${contract.caseId}\0${environmentId}\0${suffix}`).slice(0, 13),
+            16,
+          ),
+          evidenceProfile: contract.evidenceProfile,
+          executionBound: contract.executionBound,
+          executionBoundSha256: contract.executionBoundSha256,
+          executionContractSha256: contract.executionContractSha256,
+          executionUnit: {
+            strategy: contract.executionContract.expansion.strategy,
+            unit: contract.executionContract.expansion.unit,
+            ordinal: repetition,
+            count: contract.executionContract.expansion.count,
+            plannedOffsetSeconds: contract.executionContract.duration
+              ? Math.floor(
+                (repetition - 1) * contract.executionContract.duration.seconds /
+                Math.max(contract.executionContract.expansion.count - 1, 1),
+              )
+              : null,
+            dimensionAssignment: expandedDimension
+              ? { dimensionId: expandedDimension.id, value: expandedDimension.values[index] }
+              : null,
+          },
+          cardinalityAllocations: cardinalityAllocations(
+            contract.executionContract,
+            repetition,
+            attemptId,
+          ),
+          adapterId: contract.adapterId,
+          declaredEffectIds: contract.declaredEffectIds,
+          externalIngressRequired: externalIngressRequired(contract, environmentId),
+          dependsOnCaseIds: contract.dependsOnCaseIds,
+        };
+      },
     ),
-    evidenceProfile: contract.evidenceProfile,
-    executionBound: contract.executionBound,
-    executionBoundSha256: contract.executionBoundSha256,
-    adapterId: contract.adapterId,
-    declaredEffectIds: contract.declaredEffectIds,
-    externalIngressRequired: externalIngressRequired(contract, environmentId),
-    dependsOnCaseIds: contract.dependsOnCaseIds,
-  })));
+  ));
   const attemptsByCase = new Map(caseContracts.map((contract) => [
     contract.caseId,
     attempts.filter((attempt) => attempt.caseId === contract.caseId).map((attempt) => attempt.attemptId),
@@ -334,11 +460,31 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
   };
 }
 
-export function createP158CaseAdapter({ caseId, evidenceProfile, execute }) {
+export function compileP158ControllerScheduleInput({ registry, seed, adapters }) {
+  const executionSchedule = compileP158ExecutionSchedule({ registry, seed, adapters });
+  if (!executionSchedule.adapterReadiness.ready) {
+    fail('adapters_not_ready', 'P158 live freeze requires all case adapters before preparation', {
+      findings: executionSchedule.adapterReadiness.findings,
+    });
+  }
+  return {
+    executionSchedule,
+    controllerSchedule: executionSchedule.attempts.map((attempt) => ({
+      caseId: attempt.caseId,
+      attemptId: attempt.attemptId,
+      environmentId: attempt.environmentId,
+      seed: attempt.seed,
+      dependsOn: [...attempt.dependsOnAttemptIds],
+    })),
+  };
+}
+
+export function createP158CaseAdapter({ caseId, evidenceProfile, executionContract, execute }) {
   return {
     adapterId: adapterId(caseId),
     caseId,
     evidenceProfile,
+    executionContractSha256: executionContract === undefined ? null : sha256(executionContract),
     declaredEffectIds: [effectId(caseId)],
     reactionaryRepairAllowed: false,
     opportunisticRetryAllowed: false,

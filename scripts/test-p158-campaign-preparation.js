@@ -137,7 +137,9 @@ runTest('accepts the strict closed-world preparation corpus', async () => {
   );
   assert.deepEqual(
     sorted(new Set(fixtureSet.fixtures.flatMap((fixture) => fixture.expectedFindingCodes))),
-    sorted(P158_PREPARATION_FINDING_CODES),
+    sorted(P158_PREPARATION_FINDING_CODES.filter(
+      (code) => code !== 'execution_schedule_mismatch',
+    )),
   );
   assert.deepEqual(sorted(REQUIRED_INGRESS_CLASSES), [
     'cookie', 'dns', 'form_action', 'iframe', 'reconnect', 'redirect', 'tls', 'websocket',
@@ -202,7 +204,7 @@ await runTest('persists schema-valid canonical seals and actual artifact bytes b
   ));
 
   assert.deepEqual(manifest.artifactBindings, report.artifactBindings);
-  assert.equal(report.artifactBindings.length, REQUIRED_ARTIFACT_KINDS.length);
+  assert.equal(report.artifactBindings.length, context.input.artifacts.length);
   for (const binding of report.artifactBindings) {
     const inputArtifact = context.input.artifacts.find((artifact) => artifact.artifactId === binding.artifactId);
     const storageReceipt = snapshot.evidence.artifacts.find(

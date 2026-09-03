@@ -18,9 +18,11 @@ import {
   canonicalEnvironmentSealDigest,
   prepareAndFreezeCampaign,
 } from './p158-campaign-preparation.js';
+import { compileP158ControllerScheduleInput } from './p158-execution-schedule.js';
 
 export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'docs/dev/contracts/p158-campaign-freeze.v1.schema.json',
+  'docs/dev/contracts/p158-case-execution-contract.v1.schema.json',
   'docs/dev/contracts/p158-campaign-manifest.v1.schema.json',
   'docs/dev/contracts/p158-campaign-preparation-fixtures.v1.schema.json',
   'docs/dev/contracts/p158-campaign-preparation-report.v1.schema.json',
@@ -33,6 +35,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'docs/dev/contracts/p158-historical-failure-registry.v1.json',
   'docs/dev/contracts/p158-logging-audit-report.v1.schema.json',
   'docs/dev/contracts/p158-logging-causal-fixtures.v1.schema.json',
+  'docs/dev/contracts/service-request.v1.schema.json',
   'docs/dev/fixtures/p158/campaign-preparation.v1.json',
   'docs/dev/fixtures/p158/dashboard-oracle-fixtures.v1.json',
   'docs/dev/fixtures/p158/external-handoff-sessions.v1.json',
@@ -42,6 +45,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-campaign-preparation.js',
   'scripts/lib/p158-dashboard-oracle.js',
   'scripts/lib/p158-external-handoff-oracle.js',
+  'scripts/lib/p158-execution-schedule.js',
   'scripts/lib/p158-logging-auditor.js',
 ]);
 
@@ -224,7 +228,7 @@ function environmentSeal(environment, candidate, artifacts, externalClientIds) {
   return result;
 }
 
-export function collectP158PreparationEvidence({ config, repoRoot, baseDir = repoRoot }) {
+export function collectP158PreparationEvidence({ config, repoRoot, baseDir = repoRoot, adapters }) {
   const configAjv = new Ajv2020({ strict: true, allErrors: true });
   addFormats(configAjv);
   const configSchema = parseJson(
@@ -250,6 +254,27 @@ export function collectP158PreparationEvidence({ config, repoRoot, baseDir = rep
       actual: aggregate.sha256,
     });
   }
+  const registry = parseJson(
+    readRegularFile(
+      resolve(repoRoot, 'docs/dev/contracts/p158-historical-failure-registry.v1.json'),
+      'P158 registry',
+    ),
+    'P158 registry',
+  );
+  let compiled;
+  try {
+    compiled = compileP158ControllerScheduleInput({
+      registry,
+      seed: config.seed,
+      adapters,
+    });
+  } catch (error) {
+    if (error?.code === 'adapters_not_ready') {
+      fail('adapter_readiness_failed', 'P158 case adapters are incomplete before freeze',
+        error.details);
+    }
+    throw error;
+  }
   const artifacts = suppliedArtifacts({ artifactFiles: config.artifactFiles, baseDir });
   artifacts.push({
     artifactId: 'freeze-artifact-18',
@@ -261,6 +286,19 @@ export function collectP158PreparationEvidence({ config, repoRoot, baseDir = rep
     content: aggregate.bytes.toString('base64'),
     declaredSha256: aggregate.sha256,
     declaredByteCount: aggregate.byteCount,
+  });
+  const executionScheduleBytes = Buffer.from(canonicalJson(compiled.executionSchedule), 'utf8');
+  const executionScheduleSha256 = createHash('sha256').update(executionScheduleBytes).digest('hex');
+  artifacts.push({
+    artifactId: 'freeze-artifact-19',
+    kind: 'execution_schedule',
+    relativePath: 'freeze/execution-schedule.json',
+    capturedAt: config.aggregateCapturedAt,
+    mediaType: 'application/json',
+    contentEncoding: 'base64',
+    content: executionScheduleBytes.toString('base64'),
+    declaredSha256: executionScheduleSha256,
+    declaredByteCount: executionScheduleBytes.byteLength,
   });
   const byKind = new Map(artifacts.map((artifact) => [artifact.kind, artifact]));
   const externalVantage = parseJson(
@@ -303,6 +341,7 @@ export function collectP158PreparationEvidence({ config, repoRoot, baseDir = rep
   const result = {
     aggregate,
     input: {
+      campaignMode: 'live',
       candidate,
       artifacts,
       environments,
@@ -320,7 +359,13 @@ export function collectP158PreparationEvidence({ config, repoRoot, baseDir = rep
         requiredStartedCaseCount: 0,
         requiredStartedAttemptCount: 0,
       },
-      schedule: structuredClone(config.schedule),
+      executionScheduleSeal: {
+        artifactId: 'freeze-artifact-19',
+        artifactSha256: executionScheduleSha256,
+        scheduleSha256: compiled.executionSchedule.scheduleSha256,
+        attemptCount: compiled.executionSchedule.attemptCount,
+      },
+      schedule: structuredClone(compiled.controllerSchedule),
       scheduledTeardown: structuredClone(config.scheduledTeardown),
     },
   };
@@ -377,6 +422,7 @@ export async function runP158EvidenceCollector({
   freeze = false,
   runRoot,
   clock,
+  adapters,
 }) {
   if (!freeze && !clock && !Number.isFinite(Date.parse(config.dryRunFrozenAt))) {
     fail('dry_run_time_missing', 'Deterministic dry run requires dryRunFrozenAt');
@@ -385,7 +431,7 @@ export async function runP158EvidenceCollector({
     wallNow: () => config.dryRunFrozenAt,
     monotonicNow: () => 1,
   } : undefined);
-  const collected = collectP158PreparationEvidence({ config, repoRoot, baseDir });
+  const collected = collectP158PreparationEvidence({ config, repoRoot, baseDir, adapters });
   const registry = parseJson(
     readRegularFile(resolve(repoRoot, 'docs/dev/contracts/p158-historical-failure-registry.v1.json'), 'P158 registry'),
     'P158 registry',
@@ -404,7 +450,7 @@ export async function runP158EvidenceCollector({
     ...collected.input,
     controller,
     clock: effectiveClock,
-  });
+  }, { registry, seed: config.seed, adapters });
   if (!report.passed) {
     fail('preparation_not_ready', 'P158 preparation evidence did not pass', { findings: report.findings });
   }

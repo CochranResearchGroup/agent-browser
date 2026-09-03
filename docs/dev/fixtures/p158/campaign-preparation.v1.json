@@ -476,7 +476,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": []
     },
@@ -954,7 +955,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "artifact_byte_count_mismatch"
@@ -1434,7 +1436,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "artifact_hash_mismatch"
@@ -1914,7 +1917,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "candidate_digest_mismatch"
@@ -2394,7 +2398,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "candidate_digest_mismatch"
@@ -2874,7 +2879,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "controller_not_pristine"
@@ -3365,7 +3371,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "duplicate_artifact_id"
@@ -3845,7 +3852,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "environment_digest_mismatch"
@@ -4325,7 +4333,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_client_identity_invalid"
@@ -4805,7 +4814,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_client_identity_invalid"
@@ -5285,7 +5295,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_client_identity_invalid"
@@ -5765,7 +5776,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_client_identity_invalid"
@@ -6245,7 +6257,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -6725,7 +6738,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -7205,7 +7219,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -7685,7 +7700,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -8165,7 +8181,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -8645,7 +8662,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -9125,7 +9143,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -9605,7 +9624,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "external_ingress_observation_missing"
@@ -10085,7 +10105,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "fixture_digest_mismatch"
@@ -10565,7 +10586,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "invalid_calibration"
@@ -11045,7 +11067,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "invalid_calibration"
@@ -11525,7 +11548,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "missing_artifact_kind"
@@ -12005,7 +12029,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "referenced_artifact_missing"
@@ -12499,7 +12524,8 @@
           "attemptId": "TEARDOWN-E1",
           "environmentId": "E1",
           "dependsOn": []
-        }
+        },
+        "campaignMode": "fixture"
       },
       "expectedFindingCodes": [
         "w4_oracle_not_clean"
