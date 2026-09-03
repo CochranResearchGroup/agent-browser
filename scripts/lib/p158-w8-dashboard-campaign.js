@@ -10,6 +10,11 @@ import {
   captureP158DashboardLiveProjection,
   materializeP158DashboardPreseedPlan,
 } from './p158-w8-dashboard-live.js';
+import {
+  applyP158DashboardScenarioToFixture,
+  auditP158DashboardScenarioReceipt,
+  buildP158DashboardScenarioPlan,
+} from './p158-w8-dashboard-scenarios.js';
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
@@ -126,6 +131,7 @@ export function buildP158DashboardCampaignPlan({
       caseId: root.caseId,
       environmentId: root.environmentId,
       density: root.density,
+      scenario: structuredClone(root.scenario),
       streamState: root.streamState,
       target: structuredClone(root.target),
       environment: {
@@ -387,12 +393,45 @@ export async function executeP158DashboardCampaignAction({
   const root = campaignPlan.roots.find((entry) => entry.actionId === actionId);
   if (!root) fail('action_not_planned', 'W8 dashboard action is not present in the frozen campaign plan');
   const preseed = matchingPreseedReceipt(campaignPlan, preparation, root);
-  const sealedPreseed = buildP158DashboardServiceState({ target: root.target, density: root.density });
+  const sealedPreseed = buildP158DashboardServiceState({
+    target: root.target,
+    density: root.density,
+    scenario: root.scenario,
+  });
   if (sealedPreseed.receipt.receiptSha256 !== preseed.materializationReceipt.receiptSha256) {
     fail('preseed_receipt_invalid', `${root.actionId} deterministic preseed truth changed after freeze`);
   }
+  const scenarioPlan = ['D03', 'D04', 'D05'].includes(root.caseId)
+    ? buildP158DashboardScenarioPlan({
+        root,
+        expectedState: sealedPreseed.state,
+        materializationReceipt: preseed.materializationReceipt,
+      })
+    : null;
+  if (root.caseId === 'D05' && scenarioPlan.scenarioTruth.executable === false) {
+    const blocker = structuredClone(scenarioPlan.scenarioTruth.blocker);
+    const body = {
+      schemaVersion: 'agent-browser.p158-dashboard-campaign-action-receipt.v1',
+      planId: 'P158', actionId: root.actionId, attemptId: root.attemptId, caseId: root.caseId,
+      environmentId: root.environmentId, candidateSha256: root.candidate.executableSha256,
+      parserReceiptSha256: sha256(preseed.parserReceipt),
+      materializationReceiptSha256: preseed.materializationReceipt.receiptSha256,
+      externalIngressBindingSha256: root.externalIngress.bindingSha256,
+      scenarioPlanSha256: scenarioPlan.scenarioPlanSha256,
+      projection: null, dashboardFixture: null, oracleBinding: null, scenarioReceipt: null,
+      scenarioOracle: null, churnReceipt: null, firstFailure: null,
+      blocker,
+      teardown: { attempted: false, state: 'not_started', pid: null, failure: null },
+      terminalState: 'completed', resultState: 'skipped_blocked', productionStateTouched: false,
+      repairAttempted: false, retryAttempted: false, garbageCollectionAttempted: false,
+    };
+    return { ...body, receiptSha256: sha256(canonical(body)) };
+  }
   for (const name of ['startExact', 'selectExternalIngress', 'openExternalPage', 'stopExact']) {
     if (typeof effects?.[name] !== 'function') fail('lifecycle_effect_missing', `W8 dashboard effect ${name} is required`);
+  }
+  if (scenarioPlan && typeof effects?.exerciseScenario !== 'function') {
+    fail('lifecycle_effect_missing', `${root.caseId} requires its exact external dashboard scenario effect`);
   }
   let started = null;
   let selected = null;
@@ -401,6 +440,8 @@ export async function executeP158DashboardCampaignAction({
   let projection = null;
   let dashboardFixture = null;
   let oracleBinding = null;
+  let scenarioReceipt = null;
+  let scenarioOracle = null;
   let firstFailure = null;
   let teardown = { attempted: false, state: 'not_started', pid: null, failure: null };
   try {
@@ -446,6 +487,18 @@ export async function executeP158DashboardCampaignAction({
       fail('external_ingress_selection_invalid', 'Reviewed ingress did not select the exact dashboard root');
     }
     pageHandle = await effects.openExternalPage({ publicUrl: publicUrl.href, root: structuredClone(root) });
+    if (scenarioPlan) {
+      scenarioReceipt = await effects.exerciseScenario({
+        pageHandle,
+        publicUrl: publicUrl.href,
+        publicPath: selected.publicPath,
+        selectionReceiptSha256: selected.selectionReceiptSha256,
+        externalProof: structuredClone(selected.externalProof),
+        root: structuredClone(root),
+        scenarioPlan: structuredClone(scenarioPlan),
+      });
+      scenarioOracle = auditP158DashboardScenarioReceipt({ plan: scenarioPlan, receipt: scenarioReceipt });
+    }
     if (root.caseId === 'D09') {
       if (typeof effects.produceChurn !== 'function') fail('lifecycle_effect_missing', 'D09 requires active churn');
       const churnPlan = buildP158D09ChurnPlan({ root });
@@ -471,6 +524,13 @@ export async function executeP158DashboardCampaignAction({
       expectedState: sealedPreseed.state,
       materializationReceipt: preseed.materializationReceipt,
     });
+    if (scenarioPlan) {
+      dashboardFixture = applyP158DashboardScenarioToFixture({
+        fixture: dashboardFixture,
+        plan: scenarioPlan,
+        receipt: scenarioReceipt,
+      });
+    }
     oracleBinding = auditP158DashboardLiveProjection({ projection, dashboardFixture });
     if (!oracleBinding.passed) fail('dashboard_oracle_failed', 'Externally captured dashboard oracle did not pass');
   } catch (error) {
@@ -527,6 +587,9 @@ export async function executeP158DashboardCampaignAction({
     projection,
     dashboardFixture,
     oracleBinding,
+    scenarioPlanSha256: scenarioPlan?.scenarioPlanSha256 ?? null,
+    scenarioReceipt,
+    scenarioOracle,
     churnReceipt,
     firstFailure,
     teardown,
@@ -541,7 +604,7 @@ export async function executeP158DashboardCampaignAction({
   return { ...body, receiptSha256: sha256(canonical(body)) };
 }
 
-/** Aggregate exact D01/D09 action receipts without re-running failed actions. */
+/** Aggregate exact dashboard receipts by case without re-running blocked or failed actions. */
 export function aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts }) {
   validateCampaignPlan(campaignPlan);
   const expected = campaignPlan.roots.map((root) => root.actionId).sort();
@@ -552,7 +615,24 @@ export function aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts 
     fail('action_receipt_set_invalid', 'Dashboard campaign receipts are missing, changed, nonterminal, or foreign');
   }
   const passedCount = receipts.filter((receipt) => receipt.resultState === 'passed').length;
-  const failedCount = receipts.length - passedCount;
+  const skippedBlockedCount = receipts.filter((receipt) => receipt.resultState === 'skipped_blocked').length;
+  const failedCount = receipts.length - passedCount - skippedBlockedCount;
+  const caseResults = [...new Set(campaignPlan.roots.map((root) => root.caseId))].sort().map((caseId) => {
+    const actionIds = campaignPlan.roots.filter((root) => root.caseId === caseId)
+      .map((root) => root.actionId).sort();
+    const caseReceipts = receipts.filter((receipt) => receipt.caseId === caseId);
+    const casePassed = caseReceipts.filter((receipt) => receipt.resultState === 'passed').length;
+    const caseSkippedBlocked = caseReceipts.filter((receipt) => receipt.resultState === 'skipped_blocked').length;
+    const caseFailed = caseReceipts.length - casePassed - caseSkippedBlocked;
+    return {
+      caseId,
+      actionCount: actionIds.length,
+      actionIds,
+      receiptSha256s: caseReceipts.map((receipt) => receipt.receiptSha256).sort(),
+      resultCounts: { passed: casePassed, skippedBlocked: caseSkippedBlocked, failed: caseFailed },
+      success: casePassed === actionIds.length && caseSkippedBlocked === 0 && caseFailed === 0,
+    };
+  });
   const body = {
     schemaVersion: 'agent-browser.p158-dashboard-campaign-aggregate.v1',
     planId: 'P158',
@@ -561,8 +641,13 @@ export function aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts 
     actionCount: receipts.length,
     actionIds: expected,
     receiptSha256s: receipts.map((receipt) => receipt.receiptSha256).sort(),
-    resultCounts: { passed: passedCount, failed: failedCount },
-    success: failedCount === 0,
+    resultCounts: { passed: passedCount, skippedBlocked: skippedBlockedCount, failed: failedCount },
+    caseResults,
+    executableActionIds: receipts.filter((receipt) => receipt.resultState === 'passed')
+      .map((receipt) => receipt.actionId).sort(),
+    blockedActionIds: receipts.filter((receipt) => receipt.resultState === 'skipped_blocked')
+      .map((receipt) => receipt.actionId).sort(),
+    success: failedCount === 0 && skippedBlockedCount === 0,
     repairAttempted: false,
     retryCount: 0,
   };

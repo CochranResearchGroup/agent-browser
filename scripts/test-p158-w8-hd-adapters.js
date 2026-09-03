@@ -620,7 +620,8 @@ try {
 const dashboardResultRoot = mkdtempSync(join(tmpdir(), 'p158-w8-dashboard-result-'));
 const dashboardResultPath = join(dashboardResultRoot, 'result.json');
 const dashboardCampaignPlanSha256 = digest('dashboard-campaign-plan');
-const dashboardActions = schedule.attempts.filter((attempt) => attempt.caseId === 'D01')
+const dashboardConcreteCaseIds = ['D01', 'D03', 'D04'];
+const dashboardActions = schedule.attempts.filter((attempt) => dashboardConcreteCaseIds.includes(attempt.caseId))
   .flatMap((attempt) => buildP158W8ActionPlan({ testCase: cases.get(attempt.caseId), attempt }).actions);
 const dashboardCampaignReceipts = dashboardActions.map((action) => {
   const counts = {
@@ -628,12 +629,14 @@ const dashboardCampaignReceipts = dashboardActions.map((action) => {
     sparse: { profiles: 2, browsers: 5, tabs: 20, jobs: 100, events: 100 },
     normal: { profiles: 10, browsers: 50, tabs: 200, jobs: 1000, events: 1000 },
     dense: { profiles: 100, browsers: 500, tabs: 2000, jobs: 10000, events: 10000 },
-  }[action.assignment.inventory_density];
+  }[action.caseId === 'D01' ? action.assignment.inventory_density : action.caseId === 'D04' ? 'normal' : 'sparse'];
   const actionFixture = generateDenseDashboardFixture({
     ...counts,
     idNamespace: `p158-w8-${action.assignment.inventory_density}`,
   });
-  actionFixture.density = action.assignment.inventory_density;
+  actionFixture.density = action.caseId === 'D01'
+    ? action.assignment.inventory_density
+    : action.caseId === 'D04' ? 'normal' : 'sparse';
   actionFixture.timings = structuredClone(dashboardCorpus.baseline.timings);
   actionFixture.resourceSamples = structuredClone(dashboardCorpus.baseline.resourceSamples);
   actionFixture.resourceSlopeBudgets = structuredClone(dashboardCorpus.baseline.resourceSlopeBudgets);
@@ -650,6 +653,9 @@ const dashboardCampaignReceipts = dashboardActions.map((action) => {
     },
     dashboardFixture: actionFixture,
     oracleBinding: { passed: true, reportSha256: digest(`oracle:${action.actionId}`) },
+    scenarioOracle: ['D03', 'D04'].includes(action.caseId)
+      ? { passed: true, oracleSha256: digest(`scenario:${action.actionId}`) }
+      : null,
     teardown: { state: 'stopped', pid: 1000 + action.ordinal },
     terminalState: 'completed',
     resultState: 'passed',
@@ -667,7 +673,20 @@ const dashboardAggregateBody = {
   actionCount: dashboardCampaignReceipts.length,
   actionIds: dashboardCampaignReceipts.map((receipt) => receipt.actionId).sort(),
   receiptSha256s: dashboardCampaignReceipts.map((receipt) => receipt.receiptSha256).sort(),
-  resultCounts: { passed: dashboardCampaignReceipts.length, failed: 0 },
+  resultCounts: { passed: dashboardCampaignReceipts.length, skippedBlocked: 0, failed: 0 },
+  caseResults: dashboardConcreteCaseIds.map((caseId) => {
+    const caseReceipts = dashboardCampaignReceipts.filter((receipt) => receipt.caseId === caseId);
+    return {
+      caseId,
+      actionCount: caseReceipts.length,
+      actionIds: caseReceipts.map((receipt) => receipt.actionId).sort(),
+      receiptSha256s: caseReceipts.map((receipt) => receipt.receiptSha256).sort(),
+      resultCounts: { passed: caseReceipts.length, skippedBlocked: 0, failed: 0 },
+      success: true,
+    };
+  }),
+  executableActionIds: dashboardCampaignReceipts.map((receipt) => receipt.actionId).sort(),
+  blockedActionIds: [],
   success: true,
   repairAttempted: false,
   retryCount: 0,
@@ -686,16 +705,17 @@ try {
     dashboardCampaignExecution: {
       resultPath: dashboardResultPath,
       campaignPlanSha256: dashboardCampaignPlanSha256,
+      caseIds: dashboardConcreteCaseIds,
     },
   });
   assert.deepEqual(
     dashboardBundle.adapterBindings.filter((binding) => binding.mode === 'concrete_live')
       .map((binding) => binding.caseId),
-    ['D01'],
+    dashboardConcreteCaseIds,
   );
-  assert.equal(dashboardBundle.reviewedLiveSources.blockerCount, 23);
+  assert.equal(dashboardBundle.reviewedLiveSources.blockerCount, 21);
   const adapters = new Map(dashboardBundle.w8Adapters.map((adapter) => [adapter.caseId, adapter]));
-  for (const caseId of ['D01']) {
+  for (const caseId of dashboardConcreteCaseIds) {
     const attempt = schedule.attempts.find((entry) => entry.caseId === caseId);
     const outcome = await adapters.get(caseId).execute({
       attempt,
@@ -704,6 +724,46 @@ try {
     assert.equal(outcome.resultState, 'passed');
     assert.equal(outcome.effectState, 'verified_effect');
   }
+
+  assert.throws(
+    () => createP158W8ReviewedLiveAdapterBundle({
+      registry,
+      schedule,
+      seals,
+      dashboardCampaignExecution: {
+        resultPath: dashboardResultPath,
+        campaignPlanSha256: dashboardCampaignPlanSha256,
+        caseIds: ['D05'],
+      },
+    }),
+    (error) => error instanceof P158W8AdapterError && error.code === 'external_action_manifest_invalid',
+  );
+
+  const incompleteCaseResultPath = join(dashboardResultRoot, 'incomplete-case-result.json');
+  const incompleteAggregateBody = structuredClone(dashboardAggregateBody);
+  incompleteAggregateBody.caseResults.find((entry) => entry.caseId === 'D03').success = false;
+  writeFileSync(incompleteCaseResultPath, `${JSON.stringify({
+    receipts: dashboardCampaignReceipts,
+    aggregate: { ...incompleteAggregateBody, aggregateSha256: sha256(incompleteAggregateBody) },
+  })}\n`);
+  const incompleteBundle = createP158W8ReviewedLiveAdapterBundle({
+    registry,
+    schedule,
+    seals,
+    dashboardCampaignExecution: {
+      resultPath: incompleteCaseResultPath,
+      campaignPlanSha256: dashboardCampaignPlanSha256,
+      caseIds: ['D03'],
+    },
+  });
+  const d03Attempt = schedule.attempts.find((entry) => entry.caseId === 'D03');
+  await assert.rejects(
+    () => incompleteBundle.w8Adapters.find((entry) => entry.caseId === 'D03').execute({
+      attempt: d03Attempt,
+      requestEffect: (effectId, payload) => incompleteBundle.effects[effectId](payload),
+    }),
+    (error) => error instanceof P158W8AdapterError && error.code === 'external_action_result_invalid',
+  );
 
   const failedResultPath = join(dashboardResultRoot, 'failed-result.json');
   const failedReceipts = structuredClone(dashboardCampaignReceipts);
@@ -716,6 +776,7 @@ try {
     dashboardCampaignExecution: {
       resultPath: failedResultPath,
       campaignPlanSha256: dashboardCampaignPlanSha256,
+      caseIds: dashboardConcreteCaseIds,
     },
   });
   const failedAttempt = schedule.attempts.find((entry) => entry.caseId === 'D01');

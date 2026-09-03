@@ -4735,9 +4735,20 @@ export function ServiceDetailInspector({
     );
   }
 
+  const inspectorResourceId = selection.kind === "browser" ? selection.browser.id
+    : selection.kind === "profile" ? selection.allocation.profileId
+      : selection.kind === "incident" ? selection.incident.id
+        : selection.kind === "session" ? selection.session.id
+          : selection.kind === "tab" ? selection.tab.id
+            : selection.job.id;
+
   return (
     <ScrollArea className="h-full">
-      <div className="service-inspector">
+      <div
+        className="service-inspector"
+        data-inspector-kind={selection.kind}
+        data-inspector-resource-id={inspectorResourceId}
+      >
         {selection.kind === "browser" && (
           <BrowserDetailContent
             browser={selection.browser}
@@ -5843,7 +5854,15 @@ function ProfileAllocationDetailContent({
       {(primaryBrowserId || primarySessionId || primaryWaitingJobId || primaryTabId) && (
         <InspectorActionBar>
           {primaryBrowserId && onSelectBrowserId && (
-            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(primaryBrowserId)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              data-action-id="show-browser"
+              data-resource-id={primaryBrowserId}
+              onClick={() => onSelectBrowserId(primaryBrowserId)}
+            >
               <RadioTower className="size-3.5" />
               Show browser
             </Button>

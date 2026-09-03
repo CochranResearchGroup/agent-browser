@@ -68,7 +68,7 @@ function inventoryIdentity(state) {
   };
 }
 
-export function buildP158DashboardServiceState({ target, density = 'dense' }) {
+export function buildP158DashboardServiceState({ target, density = 'dense', scenario = null }) {
   exactDevelopmentTarget(target);
   const counts = DENSITY_COUNTS[density];
   if (!counts) fail('density_invalid', `Unsupported D01 density ${density}`);
@@ -144,6 +144,18 @@ export function buildP158DashboardServiceState({ target, density = 'dense' }) {
       details: { synthetic: true },
     })),
   };
+  if (scenario?.caseId === 'D03') {
+    const duplicateProfiles = Object.values(state.profiles).slice(0, 2);
+    const crossProfileBrowsers = Object.values(state.browsers).slice(0, 2);
+    if (duplicateProfiles.length !== 2 || crossProfileBrowsers.length !== 2) {
+      fail('scenario_preseed_invalid', 'D03 requires at least two Profiles and browsers');
+    }
+    for (const profile of duplicateProfiles) profile.name = 'P158 duplicate Profile label';
+    for (const browser of crossProfileBrowsers) browser.displayName = 'P158 duplicate browser label';
+  }
+  if (scenario?.caseId === 'D05') {
+    for (const tab of Object.values(state.tabs)) tab.lifecycle = 'active';
+  }
   const identity = inventoryIdentity(state);
   const dashboardFixtureDescriptor = {
     generatorVersion: 'p158-dashboard-dense.v1',
@@ -157,6 +169,7 @@ export function buildP158DashboardServiceState({ target, density = 'dense' }) {
     planId: 'P158',
     runId: target.runId,
     density,
+    scenario,
     statePath: target.statePath,
     counts: { ...counts },
     stateSha256: sha256(canonicalJson(state)),
@@ -176,10 +189,11 @@ export function buildP158DashboardServiceState({ target, density = 'dense' }) {
 export async function materializeP158DashboardServiceState({
   target,
   density = 'dense',
+  scenario = null,
   apply = false,
   validateState = null,
 }) {
-  const built = buildP158DashboardServiceState({ target, density });
+  const built = buildP158DashboardServiceState({ target, density, scenario });
   if (!apply) return { ...built, written: false };
   if (typeof validateState !== 'function') {
     fail('service_state_parser_unproven',
@@ -209,12 +223,14 @@ export function buildP158DashboardPreseedPlan({ actions, campaignRoot }) {
   }
   const actionIds = new Set();
   const roots = actions.map((action) => {
-    if (!['D01', 'D09'].includes(action?.caseId) || !action.actionId || actionIds.has(action.actionId) ||
+    if (!['D01', 'D03', 'D04', 'D05', 'D09'].includes(action?.caseId) || !action.actionId || actionIds.has(action.actionId) ||
         !['E0', 'E2'].includes(action.environmentId)) {
       fail('preseed_plan_invalid', 'Dashboard preseed action identity is invalid or duplicated');
     }
     actionIds.add(action.actionId);
-    const density = action.caseId === 'D01' ? action.assignment?.inventory_density : 'dense';
+    const density = action.caseId === 'D01'
+      ? action.assignment?.inventory_density
+      : action.caseId === 'D04' ? 'normal' : action.caseId === 'D09' ? 'dense' : 'sparse';
     if (!DENSITY_COUNTS[density]) fail('preseed_plan_invalid', `${action.actionId} has no materializable density`);
     const runId = `p158-${createHash('sha256').update(action.actionId).digest('hex').slice(0, 20)}`;
     const disposableRoot = join(campaignRoot, runId);
@@ -232,6 +248,10 @@ export function buildP158DashboardPreseedPlan({ actions, campaignRoot }) {
       environmentId: action.environmentId,
       externalIngressRequired: action.externalIngressRequired,
       density,
+      scenario: action.caseId === 'D03' ? { caseId: 'D03', value: action.assignment?.row_ambiguity }
+        : action.caseId === 'D04' ? { caseId: 'D04', value: action.assignment?.navigation_action }
+          : action.caseId === 'D05' ? { caseId: 'D05', value: action.assignment?.missing_resource }
+            : null,
       streamState: action.assignment?.stream_state ?? null,
       cardinalityActionIdsSha256: sha256(Object.values(action.cardinalities ?? {})
         .flatMap((entry) => entry.actionIds ?? [])),
@@ -270,6 +290,7 @@ export async function materializeP158DashboardPreseedPlan({
     const materialized = await materializeP158DashboardServiceState({
       target: root.target,
       density: root.density,
+      scenario: root.scenario,
       apply,
       validateState: validateState === null ? null : (input) => validateState({ ...input, root }),
     });
@@ -279,6 +300,7 @@ export async function materializeP158DashboardPreseedPlan({
       caseId: root.caseId,
       environmentId: root.environmentId,
       streamState: root.streamState,
+      scenario: root.scenario,
       materializationReceipt: materialized.receipt,
       parserReceipt: materialized.parserReceipt ?? null,
       written: materialized.written,

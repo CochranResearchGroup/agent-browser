@@ -1133,6 +1133,7 @@ function WorkspaceNodeRow({
       <button
         type="button"
         className="workspace-nav-row-main"
+        data-workspace-id={node.id}
         onClick={onSelect}
         aria-current={selected ? "true" : undefined}
       >
