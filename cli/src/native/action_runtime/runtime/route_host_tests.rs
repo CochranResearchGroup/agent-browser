@@ -49,6 +49,7 @@ use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
 use crate::native::service_lifecycle::upsert_service_profile_and_session;
+use crate::native::service_profile_access_policy::ServiceProfileAccessPolicy;
 use crate::native::service_profile_acquisition::authenticated_cold_session_name;
 
 #[test]
@@ -3753,6 +3754,59 @@ fn test_retained_profile_route_rejects_unproven_owner() {
         "ws://127.0.0.1:49999/devtools/browser/wrong",
         &state,
     ));
+}
+
+#[test]
+fn shared_local_session_continuity_does_not_require_runtime_owner_proof() {
+    let profile_id = "ephemeral-debug-profile";
+    let session_id = "ephemeral-debug-session";
+    let browser_id = "session:ephemeral-debug-session";
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                name: "Ephemeral debug profile".to_string(),
+                access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![browser_id.to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            browser_id.to_string(),
+            BrowserProcess {
+                id: browser_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                health: ServiceBrowserHealth::ProcessExited,
+                active_session_ids: vec![session_id.to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let mut options = LaunchOptions::default();
+    let reason = apply_existing_session_profile_selection(
+        &mut options,
+        &json!({
+            "action": "navigate",
+            "clientSubjectId": "client:debugger",
+            "identityAssurance": "self-declared"
+        }),
+        Some(session_id),
+        &state,
+    )
+    .expect("shared-local continuity should remain usable without a strict owner binding");
+
+    assert_eq!(reason, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
 }
 
 #[test]

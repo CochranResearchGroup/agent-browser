@@ -408,6 +408,29 @@ impl ControlPlaneHandle {
         let service_name = optional_command_string(&command, "serviceName");
         let agent_name = optional_command_string(&command, "agentName");
         let task_name = optional_command_string(&command, "taskName");
+        if command
+            .get("clientSubjectId")
+            .and_then(Value::as_str)
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            if let Some(subject_id) =
+                super::service_request_provenance::stable_self_declared_subject(
+                    service_name.as_deref(),
+                    agent_name.as_deref(),
+                    task_name.as_deref(),
+                )
+            {
+                command["clientSubjectId"] = json!(subject_id);
+            }
+        }
+        if command
+            .get("clientSubjectId")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+            && command.get("identityAssurance").is_none()
+        {
+            command["identityAssurance"] = json!("self-declared");
+        }
         let naming_warnings = request_naming_warnings(
             service_name.as_deref(),
             agent_name.as_deref(),

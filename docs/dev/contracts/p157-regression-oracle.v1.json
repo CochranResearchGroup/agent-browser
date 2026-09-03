@@ -114,6 +114,28 @@
           }
         }
       }
+    },
+    {
+      "id": "self-declared-ephemeral-client-has-executable-continuity",
+      "implementationWorkUnit": "W11",
+      "currentStatus": "green",
+      "risk": "A trusted local client is admitted by shared-local policy but cannot launch or reconnect because no managed profile or strict runtime-owner proof exists.",
+      "requiredPaths": ["decision.profile.mode", "decision.profile.runtimeProfile", "decision.serviceRequest.available", "decision.continuity.requiresStrictOwnerProof"],
+      "targetValues": {
+        "decision.profile.mode": "managed_ephemeral",
+        "decision.serviceRequest.available": true,
+        "decision.continuity.requiresStrictOwnerProof": false
+      },
+      "currentProjection": {
+        "decision": {
+          "profile": {
+            "mode": "managed_ephemeral",
+            "runtimeProfile": "managed-ephemeral-stable-client"
+          },
+          "serviceRequest": { "available": true },
+          "continuity": { "requiresStrictOwnerProof": false }
+        }
+      }
     }
   ]
 }

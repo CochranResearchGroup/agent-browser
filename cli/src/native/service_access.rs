@@ -918,8 +918,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
         manual_seeding_required,
         browser_capability_evidence,
     );
-    let one_time_profile_recommendation =
-        access_plan_one_time_profile_recommendation(request, selected_profile, service_state);
+    let one_time_profile_recommendation = access_plan_one_time_profile_recommendation(
+        request,
+        selected_profile,
+        service_state,
+        profile_required,
+    );
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let acquisition_plan = decide_profile_acquisition(ProfileAcquisitionInput {
         request,
@@ -1295,16 +1299,15 @@ fn access_plan_one_time_profile_recommendation(
     request: &ServiceAccessPlanRequest,
     selected_profile: Option<&BrowserProfile>,
     service_state: &ServiceState,
+    profile_required: bool,
 ) -> Value {
-    if !access_plan_looks_like_one_time_operator_handoff(request) {
-        return Value::Null;
-    }
     if selected_profile.is_some() {
         return Value::Null;
     }
+    let one_time_handoff = access_plan_looks_like_one_time_operator_handoff(request);
     let recommended_profile_id = access_plan_managed_one_time_profile_id(request);
     if let Some(runtime_profile) = request.runtime_profile.as_deref() {
-        if service_state.profiles.contains_key(runtime_profile) {
+        if service_state.profiles.contains_key(runtime_profile) || !one_time_handoff {
             return Value::Null;
         }
         return json!({
@@ -1316,6 +1319,22 @@ fn access_plan_one_time_profile_recommendation(
             "recommendedProfileId": recommended_profile_id,
             "runtimeProfile": runtime_profile,
             "message": "This access plan looks like a one-time operator handoff but it supplied an unknown runtime profile. Prefer the managed one-time task profile so retries reuse one lane and cleanup can remove abandoned task state safely.",
+        });
+    }
+    if !one_time_handoff {
+        if profile_required {
+            return Value::Null;
+        }
+        let runtime_profile = access_plan_managed_ephemeral_profile_id(request);
+        return json!({
+            "state": "planned",
+            "code": "managed_ephemeral_profile_planned",
+            "profileClass": "managed_one_time",
+            "profileOrigin": "agent_browser_owned",
+            "recommendedProfileId": runtime_profile,
+            "runtimeProfile": runtime_profile,
+            "persistent": false,
+            "message": "No durable profile was selected, so this self-identified client receives a deterministic disposable runtime profile without lease choreography.",
         });
     }
     json!({
@@ -1385,6 +1404,31 @@ fn access_plan_managed_one_time_profile_id(request: &ServiceAccessPlanRequest) -
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     format!("managed-one-time-{suffix}")
+}
+
+fn access_plan_managed_ephemeral_profile_id(request: &ServiceAccessPlanRequest) -> String {
+    let target_services = request.target_service_ids.join(",");
+    let seed = [
+        request
+            .client_subject_id
+            .as_deref()
+            .unwrap_or("self-declared"),
+        request.service_name.as_deref().unwrap_or("service"),
+        request.agent_name.as_deref().unwrap_or("agent"),
+        request.task_name.as_deref().unwrap_or("task"),
+        target_services.as_str(),
+    ]
+    .join("|")
+    .to_ascii_lowercase();
+    let mut hasher = Sha256::new();
+    hasher.update(seed.as_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(6)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("managed-ephemeral-{suffix}")
 }
 
 /// Summarize who should act next without prescribing a UI presentation.
@@ -3290,6 +3334,38 @@ mod tests {
         );
         assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
         assert_eq!(plan["decision"]["profileId"], Value::Null);
+    }
+
+    #[test]
+    fn self_declared_ephemeral_client_receives_an_executable_disposable_profile() {
+        let request = ServiceAccessPlanRequest {
+            service_name: Some("browser-debugger".to_string()),
+            agent_name: Some("codex".to_string()),
+            task_name: Some("inspect-page".to_string()),
+            client_subject_id: Some("client:debugger".to_string()),
+            target_service_ids: vec!["example-site".to_string()],
+            ..ServiceAccessPlanRequest::default()
+        };
+        let first = service_access_plan_for_state(&ServiceState::default(), request.clone());
+        let second = service_access_plan_for_state(&ServiceState::default(), request);
+        let runtime_profile = first["decision"]["serviceRequest"]["request"]["runtimeProfile"]
+            .as_str()
+            .expect("managed ephemeral profile");
+
+        assert!(runtime_profile.starts_with("managed-ephemeral-"));
+        assert_eq!(
+            first["decision"]["oneTimeProfileRecommendation"]["code"],
+            "managed_ephemeral_profile_planned"
+        );
+        assert_eq!(first["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(
+            first["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            second["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            runtime_profile
+        );
     }
 
     #[test]

@@ -75,6 +75,7 @@ pub(crate) fn decide_profile_acquisition(
         lifecycle_replacement: &lifecycle_replacement,
         authenticated_principal: input.authenticated_principal,
         strict_identity_required,
+        managed_profile_recommendation: input.one_time_profile_recommendation,
     });
     let reuse_action = profile_reuse
         .get("recommendedAction")
@@ -197,24 +198,11 @@ fn profile_access_decision(
 }
 
 fn self_declared_subject(request: &ServiceAccessPlanRequest) -> Option<String> {
-    let parts = [
-        request
-            .service_name
-            .as_deref()
-            .map(|value| format!("service:{value}")),
-        request
-            .agent_name
-            .as_deref()
-            .map(|value| format!("agent:{value}")),
-        request
-            .task_name
-            .as_deref()
-            .map(|value| format!("task:{value}")),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
-    (!parts.is_empty()).then(|| parts.join("/"))
+    super::service_request_provenance::stable_self_declared_subject(
+        request.service_name.as_deref(),
+        request.agent_name.as_deref(),
+        request.task_name.as_deref(),
+    )
 }
 
 /// Return the stable daemon route for a registered principal's first browser.
@@ -602,6 +590,7 @@ struct ProfileReuseInput<'a> {
     lifecycle_replacement: &'a Value,
     authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
     strict_identity_required: bool,
+    managed_profile_recommendation: &'a Value,
 }
 
 fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
@@ -614,6 +603,28 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
     let authenticated_principal = input.authenticated_principal;
     let strict_identity_required = input.strict_identity_required;
     let Some(profile) = selected_profile else {
+        if input
+            .managed_profile_recommendation
+            .get("runtimeProfile")
+            .and_then(Value::as_str)
+            .is_some()
+        {
+            return json!({
+                "recommendedAction": "launch_new_browser",
+                "selectedProfileId": null,
+                "reusableBrowserId": null,
+                "reusableSessionName": null,
+                "reusableBrowserIds": [],
+                "compatibleLiveBrowserCount": 0,
+                "sameProfileLiveBrowserCount": 0,
+                "sameProfileLiveBrowserIds": [],
+                "activeLeaseSessionIds": [],
+                "activeLeaseCount": 0,
+                "duplicatePressure": false,
+                "profileLeasePolicy": "wait",
+                "reasons": ["managed_ephemeral_profile_selected"],
+            });
+        }
         return json!({
             "recommendedAction": "register_or_select_profile",
             "selectedProfileId": null,

@@ -4,6 +4,25 @@ use serde_json::Value;
 pub const SERVICE_REQUEST_PROVENANCE_SCHEMA_VERSION: &str =
     "agent-browser.service-request-provenance.v1";
 
+/// Derive the stable self-declared identity used by trusted local clients
+/// that provide ordinary attribution labels instead of a registered
+/// capability.
+pub(crate) fn stable_self_declared_subject(
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Option<String> {
+    let parts = [
+        service_name.map(|value| format!("service:{value}")),
+        agent_name.map(|value| format!("agent:{value}")),
+        task_name.map(|value| format!("task:{value}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
 /// Immutable, redacted causal identity captured when a request enters a
 /// runtime lane. Only contract-approved scalar identifiers are retained.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,5 +210,18 @@ mod tests {
 
         assert_eq!(provenance.identity_assurance, "unknown");
         assert_eq!(provenance.client_subject_id, None);
+    }
+
+    #[test]
+    fn labeled_local_requests_derive_one_stable_self_declared_subject() {
+        assert_eq!(
+            stable_self_declared_subject(
+                Some("research-fieldwork"),
+                Some("codex"),
+                Some("collect-evidence")
+            )
+            .as_deref(),
+            Some("service:research-fieldwork/agent:codex/task:collect-evidence")
+        );
     }
 }

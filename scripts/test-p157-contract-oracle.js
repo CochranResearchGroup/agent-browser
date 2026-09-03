@@ -120,11 +120,20 @@ assert(
 );
 
 const acquisitionSource = readFileSync(join(root, 'cli/src/native/service_profile_acquisition.rs'), 'utf8');
+const serviceAccessSource = readFileSync(join(root, 'cli/src/native/service_access.rs'), 'utf8');
+const routeHostSource = readFileSync(join(root, 'cli/src/native/action_runtime/runtime/daemon.rs'), 'utf8');
 assert(
   acquisitionSource.includes('evaluate_profile_access') &&
     acquisitionSource.includes('strict_identity_required') &&
     acquisitionSource.includes('ProfileAccessMode::SharedLocal'),
   'profile acquisition does not gate strict identity checks on the selected access policy',
+);
+assert(
+  controlPlaneSource.includes('stable_self_declared_subject') &&
+    serviceAccessSource.includes('managed_ephemeral_profile_planned') &&
+    acquisitionSource.includes('managed_ephemeral_profile_selected') &&
+    routeHostSource.includes('apply_shared_local_session_profile_continuity'),
+  'self-declared ephemeral profile launch or shared-local continuity drifted',
 );
 
 const dashboardSource = readFileSync(join(root, 'packages/dashboard/src/app/page.tsx'), 'utf8');
@@ -144,13 +153,14 @@ const expectedCases = new Set([
   'identity-denial-recourse-is-not-circular',
   'shared-local-does-not-require-cryptographic-enrollment',
   'access-ambiguity-cannot-block-runtime-health',
+  'self-declared-ephemeral-client-has-executable-continuity',
 ]);
 assert(oracle.cases.length === expectedCases.size, 'P157 regression case count drifted');
 
 for (const regression of oracle.cases) {
   assert(expectedCases.delete(regression.id), `Unexpected or duplicate P157 case: ${regression.id}`);
   assert(['red', 'green'].includes(regression.currentStatus), `${regression.id} has an invalid status`);
-  assert(/^W[3459]$/.test(regression.implementationWorkUnit), `${regression.id} has no bounded owner`);
+  assert(/^W(?:3|4|5|9|11)$/.test(regression.implementationWorkUnit), `${regression.id} has no bounded owner`);
   assert(regression.risk?.length > 20, `${regression.id} has no named failure risk`);
   assert(regression.requiredPaths?.length > 0, `${regression.id} has no target invariant`);
   for (const requiredPath of regression.requiredPaths) {

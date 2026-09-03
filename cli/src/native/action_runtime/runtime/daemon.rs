@@ -39,6 +39,10 @@ use crate::native::service_model::{
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
     ViewStreamProvider, ViewerLease,
 };
+use crate::native::service_profile_access_policy::{
+    effective_profile_permissions, ProfileAccessMode, ProfileIdentityAssurance, ProfilePermission,
+    ServiceProfileAccessPolicy,
+};
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
 use crate::native::stream_runtime::{
@@ -731,6 +735,9 @@ pub(crate) fn apply_existing_session_profile_selection(
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
+        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
         if apply_authenticated_access_plan_profile_selection(options, command, &session_id, state)?
         {
             return Ok(Some(ProfileSelectionReason::ExplicitProfile));
@@ -768,6 +775,9 @@ pub(crate) fn apply_existing_session_profile_selection(
     }
     if !binding.effect_capable {
         if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
+        if apply_shared_local_session_profile_continuity(options, command, &session_id, state)? {
             return Ok(Some(ProfileSelectionReason::ExistingOwner));
         }
         return Err("existing_session_profile_identity_unproven".to_string());
@@ -1471,6 +1481,88 @@ fn apply_registered_session_profile_continuity(
         )?;
         if requested_digest != profile_digest {
             return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
+        }
+    }
+    options.runtime_profile = Some(profile_id.to_string());
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
+}
+
+fn apply_shared_local_session_profile_continuity(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+) -> Result<bool, String> {
+    let Some(subject_id) = command
+        .get("clientSubjectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+    let assurance = match command.get("identityAssurance").and_then(Value::as_str) {
+        Some("self-declared") => ProfileIdentityAssurance::SelfDeclared,
+        Some("authenticated-ingress") => ProfileIdentityAssurance::AuthenticatedIngress,
+        Some("registered-capability") => ProfileIdentityAssurance::RegisteredCapability,
+        Some("operator") => ProfileIdentityAssurance::Operator,
+        _ => return Ok(false),
+    };
+    let Some(session) = state.sessions.get(session_id) else {
+        return Ok(false);
+    };
+    let Some(profile_id) = session.profile_id.as_deref() else {
+        return Ok(false);
+    };
+    let Some(profile) = state.profiles.get(profile_id) else {
+        return Ok(false);
+    };
+    let policy = profile
+        .access_policy
+        .clone()
+        .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(profile_id));
+    if policy.mode != ProfileAccessMode::SharedLocal
+        || !effective_profile_permissions(&policy, Some(subject_id), assurance)
+            .contains(&ProfilePermission::ProfileUse)
+    {
+        return Ok(false);
+    }
+    if session.browser_ids.iter().any(|browser_id| {
+        state
+            .browsers
+            .get(browser_id)
+            .is_some_and(|browser| browser.profile_id.as_deref() != Some(profile_id))
+    }) {
+        return Err("existing_session_profile_identity_inconsistent".to_string());
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
+    }
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            profile_id,
+        )?);
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(requested_path),
+        )?;
+        let profile_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+        if requested_digest != profile_digest {
+            return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
         }
     }
     options.runtime_profile = Some(profile_id.to_string());
