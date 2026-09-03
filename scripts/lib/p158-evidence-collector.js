@@ -60,6 +60,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-w7-development-adapters.js',
   'scripts/lib/p158-w7-agent-orchestration.js',
   'scripts/lib/p158-w8-hd-adapters.js',
+  'scripts/lib/p158-w8-dashboard-live.js',
   'scripts/lib/p158-w9-campaign-orchestrator.js',
   'scripts/lib/p158-w9-concrete-drivers.js',
   'scripts/generate-p158-campaign-preparation-fixtures.js',
@@ -85,6 +86,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-w7-development-adapters.js',
   'scripts/test-p158-w7-agent-orchestration.js',
   'scripts/test-p158-w8-hd-adapters.js',
+  'scripts/test-p158-w8-dashboard-live.js',
   'scripts/test-p158-w9-campaign-orchestrator.js',
   'scripts/test-p158-w9-concrete-drivers.js',
 ]);
