@@ -12,6 +12,9 @@ import {
 import {
   createP158DevelopmentCommandPrimitives,
   createP158W7DevelopmentAdapterBundle,
+  createP158W7LiveDevelopmentAdapterBundle,
+  validateP158W7LiveBindingManifest,
+  enumerateP158W7ActionPlans,
   P158_W7_CASE_IDS,
   P158W7AdapterError,
 } from './lib/p158-w7-development-adapters.js';
@@ -36,6 +39,8 @@ const target = Object.freeze({
     '/usr/bin/journalctl',
     '/opt/agent-browser-dev',
     '/usr/bin/systemctl',
+    '/opt/p158/bin/p158-w7-driver',
+    '/opt/p158/bin/p158-evidence',
   ],
   allowedSystemdUnits: ['agent-browser-development.service'],
   allowedProcessIds: [4242],
@@ -119,6 +124,94 @@ const schedule = compileP158ExecutionSchedule({
   seed: 'p158-w7-adapter-seed',
   adapters: bundle.adapters,
 });
+const liveActionPlans = enumerateP158W7ActionPlans({ schedule });
+assert.equal(liveActionPlans.filter((action) =>
+  action.caseId === 'A14' && action.requiredStimulus === 'full_shutdown').length, 2);
+assert.equal(liveActionPlans.filter((action) =>
+  action.caseId === 'A14' && action.requiredStimulus === null).length, 8);
+assert.equal(liveActionPlans.filter((action) =>
+  action.caseId === 'X08' && action.requiredStimulus === 'full_shutdown').length, 2);
+assert.equal(liveActionPlans.filter((action) =>
+  action.caseId === 'X10' && action.requiredStimulus === 'host_restart').length, 1);
+const liveBindingManifest = {
+  schemaVersion: 'agent-browser.p158-w7-live-bindings.v1',
+  actions: liveActionPlans.map((action) => ({
+    actionId: action.actionId,
+    caseId: action.caseId,
+    attemptId: action.attemptId,
+    targetId: target.targetId,
+    campaignRunId: target.campaignRunId,
+    hook: action.hook,
+    stimulusKind: action.requiredStimulus,
+    evidenceCommand: {
+      executable: '/opt/p158/bin/p158-evidence',
+      args: ['pre-post', action.actionId],
+    },
+    logCommand: {
+      executable: '/opt/p158/bin/p158-evidence',
+      args: ['logs', action.actionId],
+    },
+    ...(['cli', 'browser', 'display', 'shutdown'].includes(action.hook) ? {
+      command: {
+        executable: '/opt/p158/bin/p158-w7-driver',
+        args: [action.caseId, action.attemptId, action.actionId],
+      },
+    } : {}),
+    ...(action.hook === 'systemd' ? {
+      systemd: { unit: 'agent-browser-development.service', verb: 'restart' },
+    } : {}),
+    ...(action.hook === 'process' ? {
+      process: { pid: 4242, signal: 'SIGTERM' },
+    } : {}),
+  })),
+};
+const liveValidation = validateP158W7LiveBindingManifest({
+  schedule,
+  target,
+  manifest: liveBindingManifest,
+});
+assert.equal(liveValidation.manifest.actionCount, liveActionPlans.length);
+assert.equal(liveValidation.manifest.targetSha256.length, 64);
+assert.equal(liveValidation.manifest.manifestSha256.length, 64);
+assert.equal(liveValidation.liveReady, false);
+assert.equal(liveValidation.blockerCode, 'live_w7_dispatcher_implementation_unproven');
+assert.throws(
+  () => createP158W7LiveDevelopmentAdapterBundle({
+    schedule,
+    target,
+    primitives: recordingPrimitives(),
+    bindingManifest: liveBindingManifest,
+    additionalAdapters: otherAdapters,
+  }),
+  (error) => error instanceof P158W7AdapterError &&
+    error.code === 'live_w7_dispatcher_implementation_unproven',
+);
+assert.throws(
+  () => validateP158W7LiveBindingManifest({
+    schedule,
+    target,
+    manifest: {
+      ...liveBindingManifest,
+      actions: liveBindingManifest.actions.slice(1),
+    },
+  }),
+  (error) => error instanceof P158W7AdapterError &&
+    error.code === 'live_binding_action_missing',
+);
+assert.throws(
+  () => validateP158W7LiveBindingManifest({
+    schedule,
+    target,
+    manifest: {
+      ...liveBindingManifest,
+      actions: liveBindingManifest.actions.map((action, index) => index === 0
+        ? { ...action, command: undefined }
+        : action),
+    },
+  }),
+  (error) => error instanceof P158W7AdapterError &&
+    error.code === 'live_command_binding_invalid',
+);
 const attemptByCase = new Map(P158_W7_CASE_IDS.map((caseId) => [
   caseId,
   schedule.attempts.find((attempt) => attempt.caseId === caseId),

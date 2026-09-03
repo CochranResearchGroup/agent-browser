@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { createP158CaseAdapter } from './p158-execution-schedule.js';
+import { sha256 } from './p158-campaign-controller.js';
 
 export const P158_W7_CASE_IDS = Object.freeze([
   ...Array.from({ length: 15 }, (_, index) => `A${String(index + 1).padStart(2, '0')}`),
@@ -189,6 +190,163 @@ function assertResourceBindings(action, target) {
         !target.allowedProcessIds.includes(action.process.pid))) {
     fail('process_not_owned', `${action.actionId} process is not development-owned`);
   }
+}
+
+function assertCommandBinding(actionId, field, binding) {
+  if (typeof binding?.executable !== 'string' || !binding.executable.startsWith('/') ||
+      !Array.isArray(binding.args) ||
+      binding.args.some((argument) => typeof argument !== 'string')) {
+    fail('live_command_binding_invalid',
+      `${actionId} requires an absolute executable and exact string arguments for ${field}`);
+  }
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+function requiredStimulus(caseId, action, attempt, contract) {
+  const value = (dimensionId) =>
+    action.dimensionAssignments?.find((entry) => entry.dimensionId === dimensionId)?.value;
+  if (caseId === 'A13') {
+    const owner = value('transition_owner') ??
+      contract.executionContract.dimensions.find((entry) =>
+        entry.id === 'transition_owner').values[
+        (attempt.executionUnit.ordinal - 1) %
+          contract.executionContract.dimensions.find((entry) =>
+            entry.id === 'transition_owner').values.length
+      ];
+    return owner === 'daemon'
+      ? 'daemon_transition'
+      : 'supervisor_transition';
+  }
+  if (caseId === 'A14') {
+    return value('shutdown_plan') === 'authorized_sacrificial' ? 'full_shutdown' : null;
+  }
+  if (caseId === 'X08') {
+    return value('install_path_transition') === 'sealed_full_shutdown'
+      ? 'full_shutdown'
+      : 'preserve_transition';
+  }
+  if (caseId === 'X10') {
+    return value('epoch_transition') === 'boot' ? 'host_restart' : 'service_restart';
+  }
+  if (caseId === 'A06') return 'eviction';
+  return CASE_SPECS[caseId].stimuli.length === 1 ? CASE_SPECS[caseId].stimuli[0] : null;
+}
+
+export function enumerateP158W7ActionPlans({ schedule }) {
+  const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
+  const actions = [];
+  for (const attempt of schedule.attempts.filter((entry) =>
+    P158_W7_CASE_IDS.includes(entry.caseId))) {
+    const contract = contracts.get(attempt.caseId);
+    if (!contract) fail('case_contract_missing', `Schedule omitted W7 case ${attempt.caseId}`);
+    for (const action of plannedActions(contract, attempt, () => ({}))) {
+      actions.push({
+        actionId: action.actionId,
+        caseId: attempt.caseId,
+        attemptId: attempt.attemptId,
+        environmentIds: [...attempt.environmentIds],
+        hook: CASE_SPECS[attempt.caseId].hook,
+        allowedStimuli: [...CASE_SPECS[attempt.caseId].stimuli],
+        requiredStimulus: requiredStimulus(attempt.caseId, action, attempt, contract),
+      });
+    }
+  }
+  if (new Set(actions.map((action) => action.actionId)).size !== actions.length) {
+    fail('duplicate_planned_action_id', 'W7 action IDs are not globally unique');
+  }
+  return deepFreeze(structuredClone(actions));
+}
+
+export function validateP158W7LiveBindingManifest({ schedule, target, manifest }) {
+  assertDevelopmentTarget(target);
+  const frozenTarget = structuredClone(target);
+  const expectedActions = enumerateP158W7ActionPlans({ schedule });
+  if (manifest?.schemaVersion !== 'agent-browser.p158-w7-live-bindings.v1' ||
+      !Array.isArray(manifest.actions)) {
+    fail('live_binding_manifest_invalid', 'W7 live binding manifest is missing or malformed');
+  }
+  const expectedById = new Map(expectedActions.map((action) => [action.actionId, action]));
+  const observedById = new Map();
+  for (const supplied of manifest.actions) {
+    if (typeof supplied?.actionId !== 'string' || observedById.has(supplied.actionId)) {
+      fail('live_binding_action_duplicate', supplied?.actionId ?? 'missing actionId');
+    }
+    const expected = expectedById.get(supplied.actionId);
+    if (!expected) fail('live_binding_action_unexpected', supplied.actionId);
+    for (const field of ['caseId', 'attemptId', 'hook']) {
+      if (supplied[field] !== expected[field]) {
+        fail('live_binding_identity_mismatch', `${supplied.actionId} mismatched ${field}`);
+      }
+    }
+    if (supplied.targetId !== frozenTarget.targetId ||
+        supplied.campaignRunId !== frozenTarget.campaignRunId) {
+      fail('foreign_target_prohibited', `${supplied.actionId} has a foreign target binding`);
+    }
+    if (supplied.stimulusKind !== expected.requiredStimulus) {
+      fail('declared_stimulus_binding_missing', supplied.actionId);
+    }
+    if (supplied.repair === true || supplied.retry === true ||
+        supplied.garbageCollect === true) {
+      fail('reactionary_action_prohibited', supplied.actionId);
+    }
+    assertCommandBinding(supplied.actionId, 'evidenceCommand', supplied.evidenceCommand);
+    assertCommandBinding(supplied.actionId, 'logCommand', supplied.logCommand);
+    if (['cli', 'browser', 'display', 'shutdown'].includes(expected.hook)) {
+      assertCommandBinding(supplied.actionId, 'command', supplied.command);
+    } else if (expected.hook === 'systemd') {
+      if (typeof supplied.systemd?.unit !== 'string' ||
+          typeof supplied.systemd?.verb !== 'string') {
+        fail('live_systemd_binding_invalid', supplied.actionId);
+      }
+    } else if (expected.hook === 'process') {
+      if (!Number.isInteger(supplied.process?.pid) || supplied.process.pid < 2 ||
+          typeof supplied.process?.signal !== 'string') {
+        fail('live_process_binding_invalid', supplied.actionId);
+      }
+    }
+    const compiled = {
+      ...structuredClone(supplied),
+      environmentIds: [...expected.environmentIds],
+      repair: false,
+      retry: false,
+      garbageCollect: false,
+    };
+    assertActionPlan(expected.caseId, compiled, frozenTarget);
+    observedById.set(supplied.actionId, compiled);
+  }
+  const missingActionIds = expectedActions
+    .map((action) => action.actionId)
+    .filter((actionId) => !observedById.has(actionId));
+  if (missingActionIds.length > 0) {
+    fail('live_binding_action_missing', 'W7 live binding manifest is incomplete', {
+      missingActionIds,
+    });
+  }
+  const actions = expectedActions.map((action) => observedById.get(action.actionId));
+  const body = {
+    schemaVersion: 'agent-browser.p158-w7-live-bindings.v1',
+    scheduleSha256: schedule.scheduleSha256,
+    target: frozenTarget,
+    targetSha256: sha256(frozenTarget),
+    actionCount: actions.length,
+    actions,
+  };
+  const compiledManifest = deepFreeze({
+    ...body,
+    manifestSha256: sha256(body),
+  });
+  return {
+    manifest: compiledManifest,
+    liveReady: false,
+    blockerCode: 'live_w7_dispatcher_implementation_unproven',
+  };
 }
 
 function assertActionPlan(caseId, action, target) {
@@ -393,4 +551,28 @@ export function createP158W7DevelopmentAdapterBundle({
     effects,
     executedActionIds,
   };
+}
+
+export function createP158W7LiveDevelopmentAdapterBundle({
+  schedule,
+  target,
+  primitives,
+  bindingManifest,
+  additionalAdapters = [],
+}) {
+  const validation = validateP158W7LiveBindingManifest({
+    schedule,
+    target,
+    manifest: bindingManifest,
+  });
+  void primitives;
+  void additionalAdapters;
+  fail(
+    validation.blockerCode,
+    'W7 caller-authored bindings are structurally complete, but no reviewed live dispatcher implements every A/X stimulus',
+    {
+      bindingManifestSha256: validation.manifest.manifestSha256,
+      actionCount: validation.manifest.actionCount,
+    },
+  );
 }
