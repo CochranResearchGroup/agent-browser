@@ -50,6 +50,11 @@ assert.match(workflow, /retention-days: \$\{\{ inputs\.artifact_retention_days \
 assert.match(workflow, /actions\/checkout@[a-f0-9]{40}/g);
 assert.match(workflow, /actions\/setup-node@[a-f0-9]{40}/g);
 assert.match(workflow, /pnpm\/action-setup@[a-f0-9]{40}/g);
+assert.equal(
+  [...workflow.matchAll(/pnpm\/action-setup@([a-f0-9]{40})/g)].map((match) => match[1]).join(','),
+  Array(3).fill('fc06bc1257f339d1d5d8b3a19a8cae5388b55320').join(','),
+  'all pnpm setup uses must pin the API-verified v5 commit',
+);
 assert.match(workflow, /actions\/upload-artifact@[a-f0-9]{40}/g);
 assert.match(workflow, /actions\/download-artifact@[a-f0-9]{40}/g);
 assert.doesNotMatch(workflow, /nick-fields\/retry|retry-count|max-attempts/);
