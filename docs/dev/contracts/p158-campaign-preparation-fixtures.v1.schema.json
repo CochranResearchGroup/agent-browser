@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-campaign-preparation-fixtures.v1.schema.json",
+  "title": "Plan 0158 provider-free campaign preparation fixtures",
+  "type": "object",
+  "required": ["schemaVersion", "planId", "fixtures"],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-campaign-preparation-fixtures.v1" },
+    "planId": { "const": "P158" },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "findingCode": {
+      "enum": [
+        "artifact_byte_count_mismatch", "artifact_hash_mismatch", "candidate_digest_mismatch",
+        "controller_not_pristine", "duplicate_artifact_id", "environment_digest_mismatch",
+        "external_client_identity_invalid", "external_ingress_observation_missing",
+        "fixture_digest_mismatch", "invalid_calibration", "missing_artifact_kind",
+        "referenced_artifact_missing", "w4_oracle_not_clean"
+      ]
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["fixtureId", "controllerSetup", "input", "expectedFindingCodes"],
+      "properties": {
+        "fixtureId": { "$ref": "#/$defs/id" },
+        "controllerSetup": { "enum": ["pristine", "already_prepared"] },
+        "input": { "$ref": "#/$defs/input" },
+        "expectedFindingCodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/findingCode" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "candidate", "artifacts", "environments", "calibration", "externalVantage",
+        "w4Report", "fixtureSeal", "freezeContract", "schedule", "scheduledTeardown"
+      ],
+      "properties": {
+        "candidate": { "$ref": "#/$defs/candidate" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/artifact" }
+        },
+        "environments": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/environment" }
+        },
+        "calibration": { "$ref": "#/$defs/calibration" },
+        "externalVantage": { "$ref": "#/$defs/externalVantage" },
+        "w4Report": {
+          "type": "object",
+          "required": ["passed", "findings"],
+          "properties": {
+            "passed": { "type": "boolean" },
+            "findings": { "type": "array" }
+          },
+          "additionalProperties": true
+        },
+        "fixtureSeal": { "$ref": "#/$defs/fixtureSeal" },
+        "freezeContract": { "$ref": "#/$defs/freezeContract" },
+        "schedule": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/scheduleAttempt" }
+        },
+        "scheduledTeardown": { "$ref": "#/$defs/teardown" }
+      },
+      "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "runId", "candidateSha256", "sourceCommit", "binarySha256", "dashboardSha256",
+        "installedGenerationId", "browserExecutableSha256", "runtimeManifestRevision",
+        "providerConfigurationRevision", "externalIngressDeploymentRevision",
+        "aggregateFixtureManifestSha256", "preparedAt"
+      ],
+      "properties": {
+        "runId": { "$ref": "#/$defs/id" },
+        "candidateSha256": { "$ref": "#/$defs/sha256" },
+        "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "binarySha256": { "$ref": "#/$defs/sha256" },
+        "dashboardSha256": { "$ref": "#/$defs/sha256" },
+        "installedGenerationId": { "$ref": "#/$defs/id" },
+        "browserExecutableSha256": { "$ref": "#/$defs/sha256" },
+        "runtimeManifestRevision": { "$ref": "#/$defs/id" },
+        "providerConfigurationRevision": { "$ref": "#/$defs/id" },
+        "externalIngressDeploymentRevision": { "$ref": "#/$defs/id" },
+        "aggregateFixtureManifestSha256": { "$ref": "#/$defs/sha256" },
+        "preparedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "artifactKind": {
+      "enum": [
+        "installation_receipt", "runtime_status_receipt", "runtime_doctor_receipt", "runtime_manifest",
+        "provider_plan_receipt", "provider_stage_receipt", "provider_preflight_receipt", "provider_apply_receipt",
+        "provider_status_receipt", "provider_doctor_receipt", "provider_configuration",
+        "external_ingress_deployment", "external_vantage", "external_handoff_oracle_report",
+        "calibration_raw", "calibration_summary", "calibration_budget", "fixture_aggregate_manifest"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "artifactId", "kind", "relativePath", "capturedAt", "contentEncoding",
+        "content", "declaredSha256", "declaredByteCount"
+      ],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/artifactKind" },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "capturedAt": { "$ref": "#/$defs/dateTime" },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "contentEncoding": { "enum": ["utf8", "base64"] },
+        "content": { "type": "string" },
+        "declaredSha256": { "$ref": "#/$defs/sha256" },
+        "declaredByteCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "environmentId", "identityId", "identity", "identitySha256", "sealSha256",
+        "sealedAt", "receiptArtifactIds"
+      ],
+      "properties": {
+        "environmentId": { "enum": ["E1", "E2"] },
+        "identityId": { "$ref": "#/$defs/id" },
+        "identity": { "type": "object", "minProperties": 1 },
+        "identitySha256": { "$ref": "#/$defs/sha256" },
+        "sealSha256": { "$ref": "#/$defs/sha256" },
+        "sealedAt": { "$ref": "#/$defs/dateTime" },
+        "receiptArtifactIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "externalClientIds": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "externalVantageArtifactId": { "$ref": "#/$defs/id" },
+        "externalHandoffOracleArtifactId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "calibration": {
+      "type": "object",
+      "required": [
+        "calibrationId", "environmentIds", "startedAt", "completedAt", "clean", "workload",
+        "rawArtifactId", "rawArtifactSha256", "summaryArtifactId", "summaryArtifactSha256",
+        "budgetArtifactId", "budgetSha256", "environmentRelativeBudgets", "declaredSha256"
+      ],
+      "properties": {
+        "calibrationId": { "$ref": "#/$defs/id" },
+        "environmentIds": { "const": ["E1", "E2"] },
+        "startedAt": { "$ref": "#/$defs/dateTime" },
+        "completedAt": { "$ref": "#/$defs/dateTime" },
+        "clean": { "type": "boolean" },
+        "workload": {
+          "type": "object",
+          "required": ["durationMinutes", "agentClients", "externalViewers", "controllers", "serviceCommands", "dashboardActions", "handoffReconnects"],
+          "properties": {
+            "durationMinutes": { "type": "integer", "minimum": 0 },
+            "agentClients": { "type": "integer", "minimum": 0 },
+            "externalViewers": { "type": "integer", "minimum": 0 },
+            "controllers": { "type": "integer", "minimum": 0 },
+            "serviceCommands": { "type": "integer", "minimum": 0 },
+            "dashboardActions": { "type": "integer", "minimum": 0 },
+            "handoffReconnects": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "rawArtifactId": { "$ref": "#/$defs/id" },
+        "rawArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "summaryArtifactId": { "$ref": "#/$defs/id" },
+        "summaryArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "budgetArtifactId": { "$ref": "#/$defs/id" },
+        "budgetSha256": { "$ref": "#/$defs/sha256" },
+        "environmentRelativeBudgets": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number", "minimum": 0 } },
+        "declaredSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "ingressObservation": {
+      "type": "object",
+      "required": ["state", "artifactId"],
+      "properties": {
+        "state": { "enum": ["passed", "failed", "missing"] },
+        "artifactId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "ingressObservations": {
+      "type": "object",
+      "required": ["dns", "tls", "redirect", "cookie", "websocket", "iframe", "form_action", "reconnect"],
+      "properties": {
+        "dns": { "$ref": "#/$defs/ingressObservation" },
+        "tls": { "$ref": "#/$defs/ingressObservation" },
+        "redirect": { "$ref": "#/$defs/ingressObservation" },
+        "cookie": { "$ref": "#/$defs/ingressObservation" },
+        "websocket": { "$ref": "#/$defs/ingressObservation" },
+        "iframe": { "$ref": "#/$defs/ingressObservation" },
+        "form_action": { "$ref": "#/$defs/ingressObservation" },
+        "reconnect": { "$ref": "#/$defs/ingressObservation" }
+      },
+      "additionalProperties": false
+    },
+    "externalVantage": {
+      "type": "object",
+      "required": ["serviceHostId", "serviceNetworkNamespaceId", "clients"],
+      "properties": {
+        "serviceHostId": { "$ref": "#/$defs/id" },
+        "serviceNetworkNamespaceId": { "$ref": "#/$defs/id" },
+        "clients": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "clientId", "hostId", "networkNamespaceId", "outsideServiceHost",
+              "outsideServiceNetworkNamespace", "publicEgressObserved", "ingressObservations"
+            ],
+            "properties": {
+              "clientId": { "$ref": "#/$defs/id" },
+              "hostId": { "$ref": "#/$defs/id" },
+              "networkNamespaceId": { "$ref": "#/$defs/id" },
+              "outsideServiceHost": { "type": "boolean" },
+              "outsideServiceNetworkNamespace": { "type": "boolean" },
+              "publicEgressObserved": { "type": "boolean" },
+              "ingressObservations": { "$ref": "#/$defs/ingressObservations" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "fixtureSeal": {
+      "type": "object",
+      "required": ["aggregateArtifactId", "aggregateSha256", "entryCount", "includedPaths"],
+      "properties": {
+        "aggregateArtifactId": { "$ref": "#/$defs/id" },
+        "aggregateSha256": { "$ref": "#/$defs/sha256" },
+        "entryCount": { "type": "integer", "minimum": 1 },
+        "includedPaths": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "freezeContract": {
+      "type": "object",
+      "required": ["freezeId", "requiredStartedCaseCount", "requiredStartedAttemptCount"],
+      "properties": {
+        "freezeId": { "$ref": "#/$defs/id" },
+        "requiredStartedCaseCount": { "type": "integer", "minimum": 0 },
+        "requiredStartedAttemptCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "scheduleAttempt": {
+      "type": "object",
+      "required": ["caseId", "attemptId", "environmentId", "dependsOn"],
+      "properties": {
+        "caseId": { "$ref": "#/$defs/id" },
+        "attemptId": { "$ref": "#/$defs/id" },
+        "environmentId": { "enum": ["E0", "E1", "E2", "E3"] },
+        "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      },
+      "additionalProperties": false
+    },
+    "teardown": {
+      "type": "object",
+      "required": ["caseId", "environmentId"],
+      "properties": {
+        "caseId": { "$ref": "#/$defs/id" },
+        "attemptId": { "$ref": "#/$defs/id" },
+        "environmentId": { "enum": ["E0", "E1", "E2", "E3"] },
+        "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

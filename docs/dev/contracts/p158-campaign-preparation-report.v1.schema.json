@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-campaign-preparation-report.v1.schema.json",
+  "title": "Plan 0158 campaign preparation and freeze report",
+  "type": "object",
+  "required": [
+    "schemaVersion", "planId", "runId", "inputSha256", "passed",
+    "effectsAttempted", "repairAttempted", "findings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-campaign-preparation-report.v1" },
+    "planId": { "const": "P158" },
+    "runId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "inputSha256": { "$ref": "#/$defs/sha256" },
+    "passed": { "type": "boolean" },
+    "effectsAttempted": { "const": false },
+    "repairAttempted": { "const": false },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "artifactBindings": {
+      "type": "array",
+      "minItems": 18,
+      "items": { "$ref": "#/$defs/artifactBinding" }
+    },
+    "environmentSeals": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/environmentSeal" }
+    },
+    "calibrationSha256": { "$ref": "#/$defs/sha256" },
+    "candidateSha256": { "$ref": "#/$defs/sha256" },
+    "fixtureSealSha256": { "$ref": "#/$defs/sha256" },
+    "externalVantageSha256": { "$ref": "#/$defs/sha256" },
+    "w4ReportSha256": { "$ref": "#/$defs/sha256" },
+    "freezeReceipt": { "$ref": "#/$defs/freezeReceiptWithStorage" },
+    "controllerState": { "const": "frozen" },
+    "zeroStartedCaseCount": { "const": 0 },
+    "zeroStartedAttemptCount": { "const": 0 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "passed": { "const": true } }, "required": ["passed"] },
+      "then": {
+        "required": [
+          "artifactBindings", "environmentSeals", "calibrationSha256", "candidateSha256",
+          "fixtureSealSha256", "externalVantageSha256", "w4ReportSha256", "freezeReceipt",
+          "controllerState", "zeroStartedCaseCount", "zeroStartedAttemptCount"
+        ],
+        "properties": {
+          "artifactBindings": true,
+          "environmentSeals": true,
+          "calibrationSha256": true,
+          "candidateSha256": true,
+          "fixtureSealSha256": true,
+          "externalVantageSha256": true,
+          "w4ReportSha256": true,
+          "freezeReceipt": true,
+          "controllerState": true,
+          "zeroStartedCaseCount": true,
+          "zeroStartedAttemptCount": true,
+          "findings": { "type": "array", "maxItems": 0 }
+        }
+      },
+      "else": { "properties": { "findings": { "type": "array", "minItems": 1 } } }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "findingCode": {
+      "enum": [
+        "artifact_byte_count_mismatch", "artifact_hash_mismatch", "candidate_digest_mismatch",
+        "controller_not_pristine", "duplicate_artifact_id", "environment_digest_mismatch",
+        "external_client_identity_invalid", "external_ingress_observation_missing",
+        "fixture_digest_mismatch", "invalid_calibration", "missing_artifact_kind",
+        "referenced_artifact_missing", "w4_oracle_not_clean"
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "required": ["findingId", "code", "field", "expected", "observed", "repairAttempted"],
+      "properties": {
+        "findingId": { "$ref": "#/$defs/id" },
+        "code": { "$ref": "#/$defs/findingCode" },
+        "field": { "type": "string", "minLength": 1 },
+        "expected": true,
+        "observed": true,
+        "repairAttempted": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "artifactBinding": {
+      "type": "object",
+      "required": ["artifactId", "kind", "relativePath", "sha256", "byteCount", "capturedAt"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" },
+        "kind": { "type": "string", "minLength": 1 },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteCount": { "type": "integer", "minimum": 0 },
+        "capturedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "environmentSeal": {
+      "type": "object",
+      "required": ["environmentId", "identityId", "identitySha256", "sealedAt", "receiptArtifactIds", "sealSha256"],
+      "properties": {
+        "environmentId": { "enum": ["E1", "E2"] },
+        "identityId": { "$ref": "#/$defs/id" },
+        "identitySha256": { "$ref": "#/$defs/sha256" },
+        "sealedAt": { "$ref": "#/$defs/dateTime" },
+        "receiptArtifactIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+        "externalClientIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+        "externalVantageArtifactId": { "$ref": "#/$defs/id" },
+        "externalHandoffOracleArtifactId": { "$ref": "#/$defs/id" },
+        "sealSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "freezeReceiptWithStorage": {
+      "type": "object",
+      "required": [
+        "schemaVersion", "planId", "runId", "freezeId", "controllerState", "manifestSha256",
+        "candidateSha256", "artifactBindingsSha256", "environmentSealsSha256", "calibrationSha256",
+        "fixtureSealSha256", "preparedLedgerHeadSha256", "frozenAt", "monotonicTimeNanoseconds",
+        "startedCaseCount", "startedAttemptCount", "sha256", "byteCount"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.p158-campaign-freeze.v1" },
+        "planId": { "const": "P158" },
+        "runId": { "$ref": "#/$defs/id" },
+        "freezeId": { "$ref": "#/$defs/id" },
+        "controllerState": { "const": "frozen" },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "candidateSha256": { "$ref": "#/$defs/sha256" },
+        "artifactBindingsSha256": { "$ref": "#/$defs/sha256" },
+        "environmentSealsSha256": { "$ref": "#/$defs/sha256" },
+        "calibrationSha256": { "$ref": "#/$defs/sha256" },
+        "fixtureSealSha256": { "$ref": "#/$defs/sha256" },
+        "preparedLedgerHeadSha256": { "$ref": "#/$defs/sha256" },
+        "frozenAt": { "$ref": "#/$defs/dateTime" },
+        "monotonicTimeNanoseconds": { "type": "integer", "minimum": 0 },
+        "startedCaseCount": { "const": 0 },
+        "startedAttemptCount": { "const": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteCount": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

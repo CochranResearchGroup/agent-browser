@@ -31,9 +31,8 @@ const REQUIRED_CANDIDATE_FIELDS = Object.freeze([
   'runtimeManifestRevision',
   'providerConfigurationRevision',
   'externalIngressDeploymentRevision',
-  'fixtureRegistrySha256',
+  'aggregateFixtureManifestSha256',
   'preparedAt',
-  'frozenAt',
 ]);
 
 const RESOURCE_SAMPLE_FIELDS = Object.freeze([
@@ -113,6 +112,11 @@ export function sha256(value) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function candidateIdentityDigest(candidate) {
+  const { candidateSha256: _declaredDigest, ...identity } = candidate ?? {};
+  return sha256(identity);
 }
 
 function assertRelativePath(path) {
@@ -219,7 +223,11 @@ export class AppendOnlyEvidenceWriter {
     return result;
   }
 
-  appendEvent(recordType, payload = {}, { controllerState, artifacts = [] } = {}) {
+  appendEvent(
+    recordType,
+    payload = {},
+    { controllerState, artifacts = [], wallTime, monotonicTimeNanoseconds } = {},
+  ) {
     return this.#serialized(async () => {
       const sequence = this.events.length;
       const recordId = `${this.runId}:record:${String(sequence).padStart(8, '0')}`;
@@ -233,8 +241,8 @@ export class AppendOnlyEvidenceWriter {
         previousRecordSha256: this.parentEventSha256,
         recordType,
         controllerState,
-        wallTime: this.clock.wallNow(),
-        monotonicTimeNanoseconds: this.clock.monotonicNow(),
+        wallTime: wallTime ?? this.clock.wallNow(),
+        monotonicTimeNanoseconds: monotonicTimeNanoseconds ?? this.clock.monotonicNow(),
         clockOffsetMilliseconds: 0,
         payload: clone(payload),
         artifacts: clone(artifacts.map(ledgerArtifact)),
@@ -415,7 +423,8 @@ export function buildDeterministicSchedule({ registry, schedule, seed }) {
       stimuli: [],
       evidenceProfile: registryCases.get(attempt.caseId).evidenceProfile,
       externalIngressRequired:
-        attempt.environmentId === 'E2' && /^[HD]/.test(attempt.caseId),
+        attempt.environmentId === 'E2' &&
+        (/^[HDC]/.test(attempt.caseId) || ['X06', 'X10'].includes(attempt.caseId)),
     };
   });
   for (const attempt of ordered) {
@@ -511,6 +520,13 @@ function assertCandidate(candidate, registry, runId) {
       actual: candidate.runId,
     });
   }
+  const actualCandidateSha256 = candidateIdentityDigest(candidate);
+  if (candidate.candidateSha256 !== actualCandidateSha256) {
+    fail('CANDIDATE_DIGEST_MISMATCH', 'Candidate digest does not bind its canonical identity', {
+      expected: actualCandidateSha256,
+      actual: candidate.candidateSha256,
+    });
+  }
 }
 
 function normalizeTeardown(teardown, seed) {
@@ -553,6 +569,12 @@ export class CampaignController {
     this.frozenInputDigests = null;
     this.seal = null;
     this.manifest = null;
+    this.artifactBindings = [];
+    this.environmentSeals = [];
+    this.calibration = null;
+    this.fixtureSeal = null;
+    this.freezeContract = null;
+    this.freezeReceipt = null;
   }
 
   #assertState(expected) {
@@ -571,6 +593,11 @@ export class CampaignController {
       candidateSha256: sha256(this.frozenInputReferences.candidate),
       scheduleSha256: sha256(this.frozenInputReferences.schedule),
       scheduledTeardownSha256: sha256(this.frozenInputReferences.scheduledTeardown),
+      artifactBindingsSha256: sha256(this.frozenInputReferences.artifactBindings),
+      environmentSealsSha256: sha256(this.frozenInputReferences.environmentSeals),
+      calibrationSha256: sha256(this.frozenInputReferences.calibration),
+      fixtureSealSha256: sha256(this.frozenInputReferences.fixtureSeal),
+      freezeContractSha256: sha256(this.frozenInputReferences.freezeContract),
     };
     for (const [field, expected] of Object.entries(this.frozenInputDigests)) {
       if (actual[field] !== expected) {
@@ -597,7 +624,16 @@ export class CampaignController {
     this.state = next;
   }
 
-  async prepare({ candidate, schedule, scheduledTeardown }) {
+  async prepare({
+    candidate,
+    schedule,
+    scheduledTeardown,
+    artifactBindings,
+    environmentSeals,
+    calibration,
+    fixtureSeal,
+    freezeContract,
+  }) {
     this.#assertState('prepared');
     if (this.prepared) fail('ALREADY_PREPARED', 'Campaign preparation is append-only');
     assertCandidate(candidate, this.registry, this.runId);
@@ -628,7 +664,17 @@ export class CampaignController {
     this.candidateReference = candidate;
     this.scheduleReference = schedule;
     this.scheduledTeardownReference = scheduledTeardown;
+    this.artifactBindingsReference = artifactBindings;
+    this.environmentSealsReference = environmentSeals;
+    this.calibrationReference = calibration;
+    this.fixtureSealReference = fixtureSeal;
+    this.freezeContractReference = freezeContract;
     this.candidate = clone(candidate);
+    this.artifactBindings = clone(artifactBindings);
+    this.environmentSeals = clone(environmentSeals);
+    this.calibration = clone(calibration);
+    this.fixtureSeal = clone(fixtureSeal);
+    this.freezeContract = clone(freezeContract);
     this.schedule = normalizedSchedule;
     this.scheduledTeardown = normalizedTeardown;
     this.manifest = {
@@ -638,6 +684,11 @@ export class CampaignController {
       registrySha256: sha256(this.registry),
       controllerState: 'prepared',
       candidate: clone(this.candidate),
+      artifactBindings: clone(this.artifactBindings),
+      environmentSeals: clone(this.environmentSeals),
+      calibration: clone(this.calibration),
+      fixtureSeal: clone(this.fixtureSeal),
+      freezeContract: clone(this.freezeContract),
       schedule: this.schedule.map(manifestScheduleAttempt),
       freezePolicy: clone(this.registry.freezeRules),
       safetyPolicy: buildSafetyPolicy(this.registry.resourceCeilings),
@@ -670,14 +721,60 @@ export class CampaignController {
       candidate: this.candidateReference,
       schedule: this.scheduleReference,
       scheduledTeardown: this.scheduledTeardownReference,
+      artifactBindings: this.artifactBindingsReference,
+      environmentSeals: this.environmentSealsReference,
+      calibration: this.calibrationReference,
+      fixtureSeal: this.fixtureSealReference,
+      freezeContract: this.freezeContractReference,
     };
     this.frozenInputDigests = {
       registrySha256: sha256(this.registryReference),
       candidateSha256: sha256(this.candidateReference),
       scheduleSha256: sha256(this.scheduleReference),
       scheduledTeardownSha256: sha256(this.scheduledTeardownReference),
+      artifactBindingsSha256: sha256(this.artifactBindingsReference),
+      environmentSealsSha256: sha256(this.environmentSealsReference),
+      calibrationSha256: sha256(this.calibrationReference),
+      fixtureSealSha256: sha256(this.fixtureSealReference),
+      freezeContractSha256: sha256(this.freezeContractReference),
     };
-    await this.#transition('prepared', 'frozen', 'prepared inputs and manifest digests frozen');
+    const frozenAt = this.clock.wallNow();
+    const monotonicTimeNanoseconds = this.clock.monotonicNow();
+    const freezeReceipt = {
+      schemaVersion: 'agent-browser.p158-campaign-freeze.v1',
+      planId: 'P158',
+      runId: this.runId,
+      freezeId: this.freezeContract.freezeId,
+      controllerState: 'frozen',
+      manifestSha256: this.writer.manifestSha256,
+      candidateSha256: this.candidate.candidateSha256,
+      artifactBindingsSha256: sha256(this.artifactBindings),
+      environmentSealsSha256: sha256(this.environmentSeals),
+      calibrationSha256: sha256(this.calibration),
+      fixtureSealSha256: sha256(this.fixtureSeal),
+      preparedLedgerHeadSha256: this.writer.parentEventSha256,
+      frozenAt,
+      monotonicTimeNanoseconds,
+      startedCaseCount: 0,
+      startedAttemptCount: 0,
+    };
+    const freezeContent = canonicalJson(freezeReceipt);
+    await this.writer.store.writeOnce('campaign-freeze.json', freezeContent);
+    this.freezeReceipt = {
+      ...freezeReceipt,
+      sha256: sha256(freezeContent),
+      byteCount: Buffer.byteLength(freezeContent),
+    };
+    this.#assertState('prepared');
+    this.#assertFrozenInputsUnchanged();
+    await this.writer.appendEvent('controller_transition', {
+      kind: 'controller_transition',
+      from: 'prepared',
+      to: 'frozen',
+      reason: 'prepared inputs and manifest digests frozen',
+      terminal: false,
+    }, { controllerState: 'frozen', wallTime: frozenAt, monotonicTimeNanoseconds });
+    this.state = 'frozen';
     return this.snapshot();
   }
 
@@ -1186,9 +1283,10 @@ export class CampaignController {
       prepared: this.prepared,
       registrySha256: sha256(this.registry),
       candidate: this.candidate,
-      candidateSha256: this.candidate ? sha256(this.candidate) : null,
+      candidateSha256: this.candidate?.candidateSha256 ?? null,
       manifest: this.manifest,
       manifestSha256: this.writer.manifestSha256,
+      freezeReceipt: this.freezeReceipt,
       schedule,
       scheduledTeardown: this.scheduledTeardown,
       results: [...this.results.values()].sort((left, right) => {

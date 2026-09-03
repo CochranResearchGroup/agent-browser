@@ -20,7 +20,21 @@ assert(Object.values(registry.freezeRules).every((value) => typeof value === 'bo
 assert(!registry.freezeRules.opportunisticRetryAllowed, 'P158 cannot permit opportunistic retry');
 assert(!registry.freezeRules.reactionaryRepairAllowed, 'P158 cannot permit reactionary repair');
 assert(!registry.freezeRules.reactionaryCleanupAllowed, 'P158 cannot permit reactionary cleanup');
-assert(registry.candidateManifestRequiredFields.length >= 12, 'P158 candidate identity is incomplete');
+assert(registry.candidateManifestRequiredFields.length >= 11, 'P158 candidate identity is incomplete');
+assert(
+  registry.candidateManifestRequiredFields.includes('aggregateFixtureManifestSha256'),
+  'P158 candidate does not bind the canonical aggregate fixture manifest',
+);
+assert(
+  registry.freezeManifestRequiredSections.join(',') ===
+    'artifactBindings,environmentSeals,calibration,fixtureSeal,freezeContract',
+  'P158 pre-freeze seal sections drifted',
+);
+assert(
+  registry.freezeReceiptRequiredFields.includes('frozenAt') &&
+    registry.freezeReceiptRequiredFields.includes('startedAttemptCount'),
+  'P158 actual freeze receipt is incomplete',
+);
 assert(registry.resourceCeilings.artifactQuotaBytes > 0, 'P158 artifact quota is not numeric');
 assert(registry.resourceCeilings.filesystemMaximumUsedPercent === 85, 'P158 filesystem safety ceiling drifted');
 assert(registry.performanceCeilings.internalHandoffUrlLeaks === 0, 'P158 must tolerate zero internal URL leaks');

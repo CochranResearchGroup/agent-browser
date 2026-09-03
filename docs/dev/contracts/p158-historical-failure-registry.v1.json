@@ -37,6 +37,7 @@
   },
   "candidateManifestRequiredFields": [
     "runId",
+    "candidateSha256",
     "sourceCommit",
     "binarySha256",
     "dashboardSha256",
@@ -45,9 +46,29 @@
     "runtimeManifestRevision",
     "providerConfigurationRevision",
     "externalIngressDeploymentRevision",
-    "fixtureRegistrySha256",
-    "preparedAt",
-    "frozenAt"
+    "aggregateFixtureManifestSha256",
+    "preparedAt"
+  ],
+  "freezeManifestRequiredSections": [
+    "artifactBindings",
+    "environmentSeals",
+    "calibration",
+    "fixtureSeal",
+    "freezeContract"
+  ],
+  "freezeReceiptRequiredFields": [
+    "freezeId",
+    "manifestSha256",
+    "candidateSha256",
+    "artifactBindingsSha256",
+    "environmentSealsSha256",
+    "calibrationSha256",
+    "fixtureSealSha256",
+    "preparedLedgerHeadSha256",
+    "frozenAt",
+    "monotonicTimeNanoseconds",
+    "startedCaseCount",
+    "startedAttemptCount"
   ],
   "resourceCeilings": {
     "minimumAvailableMemoryBytes": 4294967296,

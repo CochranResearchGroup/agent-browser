@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-campaign-freeze.v1.schema.json",
+  "title": "Plan 0158 immutable campaign freeze receipt",
+  "description": "Binds the actual freeze instant and zero-start assertion to the prepared campaign manifest and all sealed prerequisite identities.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "planId",
+    "runId",
+    "freezeId",
+    "controllerState",
+    "manifestSha256",
+    "candidateSha256",
+    "artifactBindingsSha256",
+    "environmentSealsSha256",
+    "calibrationSha256",
+    "fixtureSealSha256",
+    "preparedLedgerHeadSha256",
+    "frozenAt",
+    "monotonicTimeNanoseconds",
+    "startedCaseCount",
+    "startedAttemptCount"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-campaign-freeze.v1" },
+    "planId": { "const": "P158" },
+    "runId": { "$ref": "#/$defs/id" },
+    "freezeId": { "$ref": "#/$defs/id" },
+    "controllerState": { "const": "frozen" },
+    "manifestSha256": { "$ref": "#/$defs/sha256" },
+    "candidateSha256": { "$ref": "#/$defs/sha256" },
+    "artifactBindingsSha256": { "$ref": "#/$defs/sha256" },
+    "environmentSealsSha256": { "$ref": "#/$defs/sha256" },
+    "calibrationSha256": { "$ref": "#/$defs/sha256" },
+    "fixtureSealSha256": { "$ref": "#/$defs/sha256" },
+    "preparedLedgerHeadSha256": { "$ref": "#/$defs/sha256" },
+    "frozenAt": { "type": "string", "format": "date-time" },
+    "monotonicTimeNanoseconds": { "type": "integer", "minimum": 0 },
+    "startedCaseCount": { "const": 0 },
+    "startedAttemptCount": { "const": 0 }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
