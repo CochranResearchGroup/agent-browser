@@ -1814,3 +1814,22 @@ one E15c readiness observation using `git rev-parse HEAD` as the commit input.
 If the clients reach capture but the marker still differs, preserve the direct
 iframe-relative crops and diagnose decoded pixel content before changing any
 digest again.
+
+E15c passed the commit and expected-identity gates but stopped at the next
+configuration boundary: both clients reported `Invalid pixel marker region
+JSON` before browser launch. The aggregate again rejected the two failure
+receipts as zero observations. Together, E15b and E15c prove that the earlier
+secret-rotation procedure malformed both changed JSON inputs; they do not
+describe two independent runtime failures.
+
+The pixel region has now been replaced from one fixed compact JSON value and
+parsed locally before publication. Its coordinate space is
+`remote-view-iframe`, all four coordinates are non-negative integers, its
+dimensions are positive, and the region fits the frozen viewport. This changed
+only the protected synthetic marker-region input. No handoff or browser effect
+was requested.
+
+Revised next action: commit this E15c diagnostic checkpoint and dispatch one
+E15d readiness observation from the exact repository head. Treat another
+pre-execution configuration rejection as a preparation-system defect requiring
+repair, not as permission for repeated blind secret edits.
