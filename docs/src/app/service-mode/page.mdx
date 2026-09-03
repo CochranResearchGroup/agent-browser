@@ -1573,7 +1573,12 @@ Profiles without an explicit access policy migrate deterministically. Ordinary
 and ambiguous legacy profiles become <code>shared-local</code>; ambiguity stays
 visible as a nonblocking access advisory and cannot degrade runtime or
 workstation convergence. Proven strict legacy ownership retains an exclusive
-compatibility policy. Human-facing changes use the administrator, participant,
+compatibility policy. When an ordinary self-declared client has no selected
+profile and site policy does not require one, the acquisition owner returns an
+executable request using a deterministic disposable
+<code>managed-ephemeral-*</code> profile. Later requests with the same labels or
+subject can continue a consistent shared-local session without strict
+runtime-owner proof. Human-facing changes use the administrator, participant,
 or observer preset with revision fencing. Narrowing first drains incompatible
 occupancy, and exact tab eviction requires a persisted authorization.
 
