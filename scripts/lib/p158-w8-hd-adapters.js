@@ -8,6 +8,7 @@ import { auditDashboardFixture } from './p158-dashboard-oracle.js';
 import { RETAINED_IDENTITY_FIELDS, classifyOperatorUrl } from './p158-external-handoff-oracle.js';
 import { sha256 } from './p158-campaign-controller.js';
 import { createP158CaseAdapter } from './p158-execution-schedule.js';
+import { aggregateExternalVantageReceipts } from '../run-p158-external-vantage.js';
 
 export const P158_W8_CASE_IDS = Object.freeze([
   ...Array.from({ length: 12 }, (_, index) => `H${String(index + 1).padStart(2, '0')}`),
@@ -21,6 +22,7 @@ const REVIEWED_SOURCE_URLS = Object.freeze({
   syntheticVisualFixture: new URL('../p158-synthetic-visual-fixture.js', import.meta.url),
   dashboardOracle: new URL('./p158-dashboard-oracle.js', import.meta.url),
   dashboardLiveSmoke: new URL('../smoke-dashboard-operator-plan0022-live.js', import.meta.url),
+  dashboardLiveFoundation: new URL('./p158-w8-dashboard-live.js', import.meta.url),
 });
 
 export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
@@ -36,7 +38,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   H10: 'durable_handoff_disruption_driver_missing',
   H11: 'secure_surface_action_driver_and_operator_gate_missing',
   H12: 'scheduled_24_hour_reconnect_driver_missing',
-  D01: 'live_inventory_density_capture_driver_missing',
+  D01: 'action_bound_external_dashboard_execution_missing',
   D02: 'live_resource_transition_barrier_driver_missing',
   D03: 'live_ambiguous_rail_fixture_driver_missing',
   D04: 'external_multi_client_dashboard_driver_missing',
@@ -44,7 +46,7 @@ export const P158_W8_LIVE_HOOK_GAPS = Object.freeze({
   D06: 'live_health_axis_matrix_driver_missing',
   D07: 'live_snapshot_stream_fault_driver_missing',
   D08: 'external_dashboard_handoff_action_scan_missing',
-  D09: 'live_dense_inventory_stream_driver_missing',
+  D09: 'action_bound_external_dashboard_execution_missing',
   D10: 'live_interaction_timing_capture_driver_missing',
   D11: 'scheduled_8_hour_resource_capture_driver_missing',
   D12: 'live_responsive_accessibility_matrix_driver_missing',
@@ -80,6 +82,12 @@ export const P158_W8_REVIEWED_SOURCE_COVERAGE = Object.freeze({
     cases: Object.freeze(['D01', 'D03', 'D04', 'D05', 'D08', 'D12']),
     coverage: 'Development dashboard navigation, selection, action, and UI observation primitives.',
     missing: 'It is a Plan 0022 smoke and does not bind the P158 schedule, matrices, external-client set, or oracle receipt contract.',
+  }),
+  dashboardLiveFoundation: Object.freeze({
+    path: 'scripts/lib/p158-w8-dashboard-live.js',
+    cases: Object.freeze(['D01', 'D09']),
+    coverage: 'Exact disposable Service State density materialization plus authoritative API, full browser-rail, action, warning, screenshot, and navigation-performance capture through public external ingress.',
+    missing: 'It requires an installed-candidate parser receipt and is not yet scheduled by an action-bound external workflow, so D01 and D09 remain explicitly blocked.',
   }),
 });
 
@@ -730,6 +738,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
   seals,
   operatorAssisted = { enabled: false },
   externalActionExecution = null,
+  liveHookManifestSha256 = null,
   additionalAdapters = [],
 }) {
   const readiness = assessP158W8ReviewedLiveSources({
@@ -753,15 +762,37 @@ export function createP158W8ReviewedLiveAdapterBundle({
       caseIds: ['H01'],
     });
     if (sha256(externalActionExecution.manifest) !== sha256(expectedManifest) ||
-        !isAbsolute(externalActionExecution.resultPath ?? '')) {
+        !isAbsolute(externalActionExecution.resultPath ?? '') ||
+        !isAbsolute(externalActionExecution.aggregatePath ?? '') ||
+        !Array.isArray(externalActionExecution.receiptPaths) ||
+        externalActionExecution.receiptPaths.length !== 2 ||
+        externalActionExecution.receiptPaths.some((entry) => !isAbsolute(entry))) {
       fail('external_action_manifest_invalid',
-        'Reviewed W8 external execution requires the exact compiled manifest and an absolute result path');
+        'Reviewed W8 external execution requires the exact manifest, aggregate, result, and two receipt paths');
     }
     concreteCaseIds.add('H01');
     let cached = null;
     loadExternalReceipts = async () => {
       if (cached) return cached;
-      const result = JSON.parse(await readFile(externalActionExecution.resultPath, 'utf8'));
+      const [resultRaw, aggregateRaw, ...receiptRaw] = await Promise.all([
+        readFile(externalActionExecution.resultPath, 'utf8'),
+        readFile(externalActionExecution.aggregatePath, 'utf8'),
+        ...externalActionExecution.receiptPaths.map((entry) => readFile(entry, 'utf8')),
+      ]);
+      const result = JSON.parse(resultRaw);
+      const aggregate = JSON.parse(aggregateRaw);
+      const sourceReceipts = receiptRaw.map((entry) => JSON.parse(entry));
+      let recomputedAggregate;
+      try {
+        recomputedAggregate = aggregateExternalVantageReceipts(sourceReceipts, { runId: aggregate.runId });
+      } catch (error) {
+        fail('external_action_result_invalid', `W8 external provenance is invalid: ${error.message}`);
+      }
+      if (sha256(recomputedAggregate) !== sha256(aggregate) ||
+          result.externalVantageAggregateSha256 !== aggregate.aggregateSha256) {
+        fail('external_action_result_invalid',
+          'W8 external aggregate does not match its two independently verified runner receipts');
+      }
       const { resultSha256, ...body } = result;
       if (result?.schemaVersion !== 'agent-browser.p158-w8-external-action-result.v1' ||
           result.manifestSha256 !== expectedManifest.manifestSha256 ||
@@ -777,7 +808,7 @@ export function createP158W8ReviewedLiveAdapterBundle({
       return cached;
     };
   }
-  const adapters = P158_W8_CASE_IDS.map((caseId) => {
+  const baseAdapters = P158_W8_CASE_IDS.map((caseId) => {
     const contract = contracts.get(caseId);
     if (!contract || contract.phaseId !== 'W8') fail('schedule_invalid', `${caseId} lacks a W8 contract`);
     if (concreteCaseIds.has(caseId)) {
@@ -845,6 +876,8 @@ export function createP158W8ReviewedLiveAdapterBundle({
   });
   const adapterBindings = P158_W8_CASE_IDS.map((caseId) => Object.freeze({
     caseId,
+    adapterId: contracts.get(caseId).adapterId,
+    executionContractSha256: contracts.get(caseId).executionContractSha256,
     mode: concreteCaseIds.has(caseId) ? 'concrete_live' : 'explicit_blocked',
     providerFree: false,
     sourcePath: W8_SOURCE_PATH,
@@ -858,6 +891,25 @@ export function createP158W8ReviewedLiveAdapterBundle({
       detail: P158_W8_LIVE_HOOK_GAPS[caseId],
     }),
   }));
+  const adapters = baseAdapters.map((adapter, index) => {
+    const binding = adapterBindings[index];
+    return Object.freeze({
+      ...adapter,
+      executionMode: binding.mode,
+      providerFree: false,
+      effectsAllowed: binding.effectsAllowed,
+      sourcePath: binding.sourcePath,
+      sourceSha256: binding.sourceSha256,
+      liveHookManifestSha256,
+      liveBindingSha256: sha256(binding),
+      liveHookIds: Object.freeze([...binding.hookIds]),
+      blocker: binding.blocker === null ? null : Object.freeze({
+        ...binding.blocker,
+        sourcePath: binding.sourcePath,
+        sourceSha256: binding.sourceSha256,
+      }),
+    });
+  });
   const activeBlockers = readiness.blockers.filter((entry) => !concreteCaseIds.has(entry.caseId));
   const classifiedReadiness = Object.freeze({
     ...readiness,

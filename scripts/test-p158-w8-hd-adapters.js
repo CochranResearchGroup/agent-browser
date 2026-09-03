@@ -18,6 +18,8 @@ import {
   sealP158W8Receipt,
 } from './lib/p158-w8-hd-adapters.js';
 import {
+  EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
+  aggregateExternalVantageReceipts,
   canonicalHash,
   executeP158W8ExternalActionManifest,
 } from './run-p158-external-vantage.js';
@@ -46,6 +48,7 @@ const seals = {
   fixtureId: 'p158-synthetic-visual-v1',
   expectedIdentity,
 };
+const liveHookManifestSha256 = digest('live-hook-manifest');
 const denseFixture = generateDenseDashboardFixture({
   generatorVersion: 'p158-dashboard-dense.v1',
   seed: 158,
@@ -360,7 +363,7 @@ assert.equal(reviewed.ready, false);
 assert.deepEqual(reviewed.concreteCaseIds, []);
 assert.deepEqual(reviewed.explicitlyBlockedCaseIds, P158_W8_CASE_IDS);
 assert.equal(reviewed.blockerCount, 24);
-assert.equal(reviewed.reviewedSourceCount, 5);
+assert.equal(reviewed.reviewedSourceCount, 6);
 assert.equal(reviewed.effectsExecuted, false);
 assert.equal(reviewed.scheduledActionCount, 1017);
 assert.deepEqual(readinessInputs, originalReadinessInputs);
@@ -388,7 +391,10 @@ assert.match(
   /8_hour/,
 );
 
-const reviewedBundle = createP158W8ReviewedLiveAdapterBundle(readinessInputs);
+const reviewedBundle = createP158W8ReviewedLiveAdapterBundle({
+  ...readinessInputs,
+  liveHookManifestSha256,
+});
 assert.equal(reviewedBundle.ready, true, 'explicitly blocked adapters are freeze-ready');
 assert.equal(reviewedBundle.executionReady, false);
 assert.equal(reviewedBundle.w8Adapters.length, 24);
@@ -400,6 +406,17 @@ assert(reviewedBundle.adapterBindings.every((binding) => binding.effectsAllowed 
 assert(reviewedBundle.adapterBindings.every((binding) => binding.implementedActionCount === 0));
 assert(reviewedBundle.adapterBindings.every((binding) => binding.blockedActionCount > 0));
 assert(reviewedBundle.adapterBindings.every((binding) => binding.blocker.code === 'live_case_hook_missing'));
+for (const [index, adapter] of reviewedBundle.w8Adapters.entries()) {
+  const binding = reviewedBundle.adapterBindings[index];
+  assert.equal(adapter.executionMode, binding.mode);
+  assert.equal(adapter.providerFree, false);
+  assert.equal(adapter.effectsAllowed, binding.effectsAllowed);
+  assert.equal(adapter.sourcePath, binding.sourcePath);
+  assert.equal(adapter.sourceSha256, binding.sourceSha256);
+  assert.equal(adapter.liveHookManifestSha256, liveHookManifestSha256);
+  assert.equal(adapter.liveBindingSha256, sha256(binding));
+  assert.deepEqual(adapter.liveHookIds, binding.hookIds);
+}
 assert.equal(
   reviewedBundle.adapterBindings.reduce((sum, binding) => sum + binding.blockedActionCount, 0),
   reviewed.scheduledActionCount,
@@ -453,22 +470,39 @@ assert.deepEqual(
   [...new Set(externalManifest.actions.map((action) => action.executorKind))].sort(),
   ['external_vantage_aggregate_projection'],
 );
-const aggregateBody = {
-  schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
+const sourceReceipts = ['external-runner-human', 'external-runner-slow'].map((clientId, clientIndex) => ({
+  schemaVersion: EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
   planId: 'P158',
   runId: 'p158-w8-live-test',
+  mode: 'readiness',
+  clientId,
+  paceProfile: clientIndex === 0 ? 'human_controller' : 'slow_concurrency',
   success: true,
   repairAttempted: false,
   retryCount: 0,
-  mode: 'readiness',
-  clientIds: ['external-runner-human', 'external-runner-slow'],
-  runnerIdentitySha256s: [digest('runner-human'), digest('runner-slow')],
-  handoffUrlSha256: externalSeals.handoffUrlSha256,
-  retainedIdentitySha256: digest('retained-identity'),
+  runner: { runnerIdentitySha256: digest(`runner-${clientIndex}`) },
+  handoff: { urlSha256: externalSeals.handoffUrlSha256 },
+  expectedIdentity: externalSeals.expectedIdentity,
+  initialIdentity: externalSeals.expectedIdentity,
+  reconnectIdentity: externalSeals.expectedIdentity,
+  serverPhysicalBrowserLaunchDelta: 0,
+  internalUrlLeakCount: 0,
+  ingressChecks: ['dns', 'tls', 'redirect', 'cookie', 'websocket', 'iframe', 'form_action', 'reconnect']
+    .map((kind) => ({ kind, state: 'passed' })),
+  artifacts: [
+    { relativePath: 'network.redacted.har', sha256: digest(`${clientId}-har`), bytes: 1 },
+    { relativePath: 'initial.png', sha256: digest(`${clientId}-png`), bytes: 1 },
+    { relativePath: 'video/initial.webm', sha256: digest(`${clientId}-video`), bytes: 1 },
+  ],
+  visualFixtureAttestation: {
+    fixtureId: 'p158-synthetic-visual-v1',
+    syntheticOnly: true,
+    forbiddenPrivateFieldsExcluded: true,
+    redactionReceiptSha256: digest(`${clientId}-redaction`),
+  },
+  oracle: { passed: true },
   w8ActionManifestSha256: externalManifest.manifestSha256,
   w8ActionObservations: externalManifest.actions.map((action, actionIndex) => ({
-    actionId: action.actionId,
-    observations: ['external-runner-human', 'external-runner-slow'].map((clientId, clientIndex) => ({
       actionId: action.actionId,
       attemptId: action.attemptId,
       caseId: action.caseId,
@@ -482,21 +516,9 @@ const aggregateBody = {
       retainedIdentityObserved: true,
       retryAttempted: false,
       repairAttempted: false,
-    })),
   })),
-  receiptSha256s: [digest('human-receipt'), digest('slow-receipt')],
-  checks: {
-    distinctOffHostClients: true,
-    sameDurableHandoff: true,
-    exactRetainedIdentity: true,
-    noDuplicateServerBrowserLaunch: true,
-    noInternalUrlLeak: true,
-    allIngressChecks: true,
-    calibrationComplete: null,
-    sharedCalibrationWindow: null,
-  },
-};
-const aggregate = { ...aggregateBody, aggregateSha256: canonicalHash(aggregateBody) };
+}));
+const aggregate = aggregateExternalVantageReceipts(sourceReceipts, { runId: 'p158-w8-live-test' });
 const externalResult = executeP158W8ExternalActionManifest({
   manifest: externalManifest,
   externalVantageAggregate: aggregate,
@@ -526,13 +548,18 @@ assert.throws(
 );
 const resultRoot = mkdtempSync(join(tmpdir(), 'p158-w8-external-result-'));
 const resultPath = join(resultRoot, 'result.json');
+const aggregatePath = join(resultRoot, 'aggregate.json');
+const receiptPaths = sourceReceipts.map((_, index) => join(resultRoot, `receipt-${index}.json`));
 writeFileSync(resultPath, `${JSON.stringify(externalResult)}\n`);
+writeFileSync(aggregatePath, `${JSON.stringify(aggregate)}\n`);
+sourceReceipts.forEach((receipt, index) => writeFileSync(receiptPaths[index], `${JSON.stringify(receipt)}\n`));
 try {
   const concreteBundle = createP158W8ReviewedLiveAdapterBundle({
     registry,
     schedule,
     seals: externalSeals,
-    externalActionExecution: { manifest: externalManifest, resultPath },
+    liveHookManifestSha256,
+    externalActionExecution: { manifest: externalManifest, resultPath, aggregatePath, receiptPaths },
   });
   assert.equal(concreteBundle.executionReady, true);
   assert.deepEqual(
@@ -564,6 +591,25 @@ try {
     () => concreteAdapters.get('H01').execute({
       attempt: repeatedH01,
       requestEffect: (effectId, payload) => concreteBundle.effects[effectId](payload),
+    }),
+    (error) => error instanceof P158W8AdapterError && error.code === 'external_action_result_invalid',
+  );
+  writeFileSync(receiptPaths[0], `${JSON.stringify({
+    ...sourceReceipts[0],
+    initialIdentity: { ...sourceReceipts[0].initialIdentity, browserId: 'forged-browser' },
+  })}\n`);
+  const forgedBundle = createP158W8ReviewedLiveAdapterBundle({
+    registry,
+    schedule,
+    seals: externalSeals,
+    liveHookManifestSha256,
+    externalActionExecution: { manifest: externalManifest, resultPath, aggregatePath, receiptPaths },
+  });
+  const forgedAttempt = schedule.attempts.find((entry) => entry.caseId === 'H01');
+  await assert.rejects(
+    () => forgedBundle.w8Adapters.find((entry) => entry.caseId === 'H01').execute({
+      attempt: forgedAttempt,
+      requestEffect: (effectId, payload) => forgedBundle.effects[effectId](payload),
     }),
     (error) => error instanceof P158W8AdapterError && error.code === 'external_action_result_invalid',
   );
