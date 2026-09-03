@@ -1043,6 +1043,24 @@ Before provider mutation, run `pnpm development-runtime:provider-plan`,
 Cooper ingress after the provider-ready checkpoint. A green provider doctor is
 not capacity proof. Development Service Status must report non-null
 `presentationCapacity` before capacity acceptance.
+For Plan 0158 E2 evidence, use only the manually dispatched **Plan 0158
+External Vantage** GitHub Actions workflow after the durable handoff and exact
+retained identity are frozen. The protected `p158-external-vantage` environment
+holds the handoff, dashboard credentials, expected identity JSON, prepared
+synthetic pixel-marker screenshot region, and synthetic-only visual capture
+attestation as secrets. The expected identity's
+pixel hash must match that exact externally rendered crop. Supply the exact
+full candidate commit SHA and campaign run ID at
+dispatch, plus one shared RFC3339 UTC calibration start at least 30 minutes in
+the future. Both independent GitHub-hosted client receipts and the aggregate
+receipt must pass. The default calibration mode holds each client for at least
+20 minutes on the same hash-bound start and end with exactly 25 dashboard
+actions and five reconnects per client.
+Readiness mode is shorter and does not satisfy C01. Do not rerun a failed probe as if it were clean evidence;
+retain the first failure and adjudicate it before a newly scheduled run.
+The runner constructs its HAR only from filtered network metadata and excludes
+headers, cookies, query strings, and response bodies at capture. Screenshots
+and videos are allowed only under the frozen synthetic visual attestation.
 Elastic provider lifecycle is explicit and changes exactly one development
 route per command. Use
 `pnpm development-runtime:provider-scale-out -- --apply` only after the

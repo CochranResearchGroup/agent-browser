@@ -134,6 +134,37 @@ and cannot create false production multiplicity drift.
 The skill commands publish and verify guidance only inside the development
 pseudo-home. They do not replace the shared user-scoped production skill.
 
+Plan 0158 external ingress evidence uses the manual **Plan 0158 External
+Vantage** GitHub Actions workflow. Configure the protected
+`p158-external-vantage` environment with `P158_DEV_HANDOFF_URL`,
+`P158_DEV_DASHBOARD_USERNAME`, `P158_DEV_DASHBOARD_PASSWORD`, and
+`P158_DEV_EXPECTED_IDENTITY_JSON`, `P158_DEV_PIXEL_MARKER_REGION_JSON`, and
+`P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON` secrets. The attestation must name
+the prepared fixture, assert synthetic-only content and private-field exclusion,
+and bind its redaction receipt SHA-256. The marker region is an <code>x</code>, <code>y</code>,
+<code>width</code>, and <code>height</code> rectangle over the externally
+rendered remote pixels, and the identity's pixel hash is the prepared SHA-256
+digest for that exact crop.
+The identity JSON supplies the exact
+browser, Profile, session, tab, target, visible URL, page marker, and required
+pixel hash. Dispatch the workflow with
+the frozen campaign run ID, exact full candidate commit SHA, and one shared
+RFC3339 UTC calibration start at least 30 minutes in the future. Two independent
+GitHub-hosted clients authenticate without logging credentials, open and
+reconnect the same handoff, capture browser and ingress evidence, and
+produce one aggregate receipt. The default calibration mode runs for at least
+20 minutes and records exactly 25 dashboard actions plus five same-handoff
+reconnects per client against the same hash-bound start and end, giving C01 50
+external actions and 10 reconnects. Each receipt records runner readiness and
+lateness relative to the shared barrier. The
+short readiness mode is not C01 calibration evidence. The lane has no retry or repair path. Individual
+screenshots, videos, and receipts are retained for only one to three days and are not a
+campaign freeze by themselves.
+The runner never creates a raw browser HAR. It constructs a HAR 1.2 file from
+filtered request metadata with headers, cookies, query strings, and response
+content excluded at capture. Visual artifacts are permitted only for the
+attested synthetic fixture.
+
 Development presentation-provider status is included in the development
 doctor. An absent provider is reported as unconfigured and remains nonblocking
 for dashboard-only work. Once configured, exact namespace or manifest drift is

@@ -1,0 +1,215 @@
+name: Plan 0158 External Vantage
+
+on:
+  workflow_dispatch:
+    inputs:
+      campaign_run_id:
+        description: Frozen Plan 0158 campaign run ID
+        type: string
+        required: true
+      expected_commit:
+        description: Exact full commit SHA authorized for this observation
+        type: string
+        required: true
+      calibration_start_at:
+        description: Shared RFC3339 UTC start, set at least 30 minutes in the future
+        type: string
+        required: true
+      artifact_retention_days:
+        description: Restricted evidence retention in days
+        type: choice
+        required: true
+        default: '2'
+        options: ['1', '2', '3']
+      probe_mode:
+        description: Readiness probe or the frozen 20-minute C01 external calibration
+        type: choice
+        required: true
+        default: calibration
+        options: [calibration, readiness]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p158-external-vantage-${{ inputs.campaign_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  human-controller:
+    name: Human-paced external controller
+    runs-on: ubuntu-latest
+    environment: p158-external-vantage
+    timeout-minutes: 75
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Verify authorized commit
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          version: 10.34.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.22.0'
+          cache: pnpm
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Capture human-paced external evidence
+        env:
+          P158_RUN_ID: ${{ inputs.campaign_run_id }}
+          P158_CANDIDATE_COMMIT: ${{ inputs.expected_commit }}
+          P158_CALIBRATION_START_AT: ${{ inputs.calibration_start_at }}
+          P158_DEV_HANDOFF_URL: ${{ secrets.P158_DEV_HANDOFF_URL }}
+          P158_DEV_DASHBOARD_USERNAME: ${{ secrets.P158_DEV_DASHBOARD_USERNAME }}
+          P158_DEV_DASHBOARD_PASSWORD: ${{ secrets.P158_DEV_DASHBOARD_PASSWORD }}
+          P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
+          P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
+          P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: ${{ secrets.P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON }}
+        run: >-
+          node scripts/run-p158-external-vantage.js probe
+          --client-id external-runner-human
+          --pace-profile human_controller
+          --mode ${{ inputs.probe_mode }}
+          --output-dir artifacts/external-runner-human
+
+      - name: Upload restricted human-controller evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: p158-external-runner-human
+          path: artifacts/external-runner-human/
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+  slow-concurrency-client:
+    name: Slow concurrent external client
+    runs-on: ubuntu-latest
+    environment: p158-external-vantage
+    timeout-minutes: 75
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Verify authorized commit
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          version: 10.34.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.22.0'
+          cache: pnpm
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Capture slow concurrency evidence
+        env:
+          P158_RUN_ID: ${{ inputs.campaign_run_id }}
+          P158_CANDIDATE_COMMIT: ${{ inputs.expected_commit }}
+          P158_CALIBRATION_START_AT: ${{ inputs.calibration_start_at }}
+          P158_DEV_HANDOFF_URL: ${{ secrets.P158_DEV_HANDOFF_URL }}
+          P158_DEV_DASHBOARD_USERNAME: ${{ secrets.P158_DEV_DASHBOARD_USERNAME }}
+          P158_DEV_DASHBOARD_PASSWORD: ${{ secrets.P158_DEV_DASHBOARD_PASSWORD }}
+          P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
+          P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
+          P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: ${{ secrets.P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON }}
+        run: >-
+          node scripts/run-p158-external-vantage.js probe
+          --client-id external-runner-slow
+          --pace-profile slow_concurrency
+          --mode ${{ inputs.probe_mode }}
+          --output-dir artifacts/external-runner-slow
+
+      - name: Upload restricted slow-client evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: p158-external-runner-slow
+          path: artifacts/external-runner-slow/
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+  aggregate:
+    name: Seal external-vantage receipt
+    needs: [human-controller, slow-concurrency-client]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Verify authorized commit
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          version: 10.34.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.22.0'
+          cache: pnpm
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download human-controller evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: p158-external-runner-human
+          path: downloaded/p158-external-runner-human
+        continue-on-error: true
+
+      - name: Download slow-client evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: p158-external-runner-slow
+          path: downloaded/p158-external-runner-slow
+        continue-on-error: true
+
+      - name: Aggregate exact external-vantage receipt
+        env:
+          P158_RUN_ID: ${{ inputs.campaign_run_id }}
+          P158_EXTERNAL_JOB_RESULTS_JSON: >-
+            {"human-controller":"${{ needs.human-controller.result }}","slow-concurrency-client":"${{ needs.slow-concurrency-client.result }}"}
+        run: >-
+          node scripts/run-p158-external-vantage.js aggregate
+          --input-root downloaded
+          --output aggregate/p158-external-vantage-receipt.json
+
+      - name: Upload aggregate receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: p158-external-vantage-receipt
+          path: aggregate/p158-external-vantage-receipt.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact_retention_days }}

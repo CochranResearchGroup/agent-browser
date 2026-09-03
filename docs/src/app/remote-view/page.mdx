@@ -235,6 +235,41 @@ Use each URL only for its documented audience.
   </tbody>
 </table>
 
+## Validate from two external clients
+
+Plan 0158 uses the manually dispatched **Plan 0158 External Vantage** GitHub
+Actions workflow for off-host evidence. Configure its protected
+<code>p158-external-vantage</code> environment with the durable handoff,
+dashboard username and password, expected retained identity JSON, a prepared
+synthetic pixel-marker screenshot region, and a synthetic-only visual capture
+attestation as secrets. The attestation binds a reviewed redaction receipt and
+proves forbidden private fields were excluded before capture. The expected
+pixel hash binds the exact crop of externally rendered remote pixels. Dispatch
+it with the frozen campaign run ID, exact full candidate commit SHA, and one
+shared RFC3339 UTC calibration start at least 30 minutes in the future.
+
+The workflow starts two separate GitHub-hosted Ubuntu clients. One performs
+human-paced pointer, keyboard, focus, and scroll observations. The other holds
+a second page concurrently and uses slower pacing. Both authenticate without
+printing credentials, open and reconnect the same durable URL,
+and collect DNS, TLS, redirects, cookie metadata, WebSocket, iframe, form
+action, reconnect, console, network, performance, screenshot, and timing
+evidence. The aggregate receipt fails closed on an internal URL, identity
+change, duplicate server browser launch, missing evidence, retry, or repair.
+Calibration mode lasts at least 20 minutes and records exactly 25 dashboard
+actions plus five reconnects per client against the same hash-bound start and
+end. Receipts retain each runner's readiness and lateness relative to that
+barrier. The shorter readiness mode does not
+satisfy C01.
+Artifacts have a selectable one to three day retention. A failed client may
+leave diagnostic artifacts. The aggregation job always emits a failed
+diagnostic receipt when either client result or receipt is missing; partial
+output is not acceptance evidence.
+The runner constructs a sanitized HAR 1.2 artifact directly from filtered
+request metadata. It never creates a raw HAR, and headers, cookies, query
+strings, and response bodies are excluded at capture. Screenshots and videos
+are permitted only for the attested synthetic fixture.
+
 ## Troubleshoot an RDP handoff
 
 Use the returned state to choose the next action:

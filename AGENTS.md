@@ -154,6 +154,16 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
 - Provider doctor success does not prove Service capacity projection. Require
   non-null `presentationCapacity` from development Service Status before
   running presentation-capacity acceptance.
+- Plan 0158 external-vantage evidence runs only through the manually dispatched
+  `p158-external-vantage.yml` workflow. Its protected GitHub environment must
+  supply the durable handoff, dashboard credentials, expected retained
+  identity, prepared synthetic pixel-marker region, and synthetic-only visual
+  capture attestation as secrets. Never add
+  an automatic trigger or retry to this lane.
+  Dispatch calibration with one shared RFC3339 start at least 30 minutes in
+  the future; both clients bind to its hashed 20-minute schedule and end.
+  The two client jobs must finish successfully before accepting the aggregate
+  receipt; partial artifacts are diagnostic evidence only.
 - Use `pnpm development-runtime:provider-scale-out -- --apply` and
   `pnpm development-runtime:provider-scale-in -- --apply` for one-route elastic
   lifecycle effects. Scale-out is pressure-admitted. Scale-in requires elapsed

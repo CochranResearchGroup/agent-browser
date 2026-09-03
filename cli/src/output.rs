@@ -7304,6 +7304,7 @@ Configuration:
   Set service.defaultBrowserBuild to stealthcdp_chromium after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.stealthcdp_chromium.manifestPath points at the patched Chromium artifact. If no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   Set service.profiles.<id>.browserBuild when a profile must stay on stock_chrome, stealthcdp_chromium, or cdp_free_headed.
   Development provider staging requires AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL to be a reviewed public HTTPS origin and AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION to identify the immutable reviewed ingress deployment. Both must be set together; loopback remains local diagnostics only.
+  Plan 0158 external ingress evidence uses the manual Plan 0158 External Vantage GitHub Actions workflow. Its protected environment supplies the handoff, dashboard credentials, and expected identity as secrets; both client jobs must pass before the aggregate receipt is accepted.
 
   Runtime profiles can also be declared in config:
     {{
