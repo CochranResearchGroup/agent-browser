@@ -2,17 +2,19 @@
 
 Date: 2026-09-02
 
-State: PLANNED
+State: OPEN
 
 Execution state: `harness_and_oracle_design_not_started`
 
-Lane: P157 acceptance successor
+Lane: P157
+
+Role: installed-acceptance successor to Plan 0157
 
 Parent: `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
 
-Branch: `plan/profile-permissions-and-request-provenance`
+Branch: plan/profile-permissions-and-request-provenance
 
-Target: `main`
+Target: main
 
 Source baseline: `e26a6b05c315cfed06a833a5c4d7406803bcc0fb`
 
