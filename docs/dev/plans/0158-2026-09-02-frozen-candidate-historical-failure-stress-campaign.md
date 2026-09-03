@@ -1784,3 +1784,11 @@ only the protected synthetic marker region and expected-identity digest to the
 new iframe-relative crop, explicitly reprepare the retained handoff, and run
 one E15 readiness observation. Do not start calibration or conceal E14's two
 failed receipts.
+
+The first E15 dispatch never entered the browser harness because its manually
+transcribed expected commit suffix did not equal the checked-out branch head.
+The workflow's exact-commit gate rejected both jobs before dependency
+installation, secret use, or browser execution, and therefore produced no
+campaign artifact. This is a dispatch-operator error, not evidence about the
+candidate. The replacement must source the full value directly from
+`git rev-parse HEAD`; no hand-copied commit string is admissible.
