@@ -18,6 +18,7 @@ import {
   createP158W7A04A06LiveBundle,
   createP158W7A04A06OwnershipManifest,
   createP158W7A05DevelopmentService,
+  enumerateP158W7A05LoggingRequests,
   p158W7A04A06SourceBinding,
   P158W7A04A06Error,
 } from './lib/p158-w7-a04-a06-live.js';
@@ -53,6 +54,7 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
   let socketOrdinal = 0;
   let tabOrdinal = 0;
   let requests = 0;
+  const fixtureSetupRequestIds = [];
   const server = createServer(async (request, response) => {
     requests += 1;
     if (!socketIds.has(request.socket)) socketIds.set(request.socket, `connection-${++socketOrdinal}`);
@@ -83,6 +85,7 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
       } } });
     }
     if (request.method === 'POST' && url.pathname.startsWith('/api/service/profiles/')) {
+      fixtureSetupRequestIds.push(request.headers['x-agent-browser-request-id'] ?? null);
       const profile = await body(request);
       const id = decodeURIComponent(url.pathname.split('/').at(-1));
       profiles.set(id, structuredClone(profile));
@@ -173,6 +176,8 @@ function startService({ wrongOutcomeAction = null, retainReleasedTabAction = nul
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
     origin: `http://127.0.0.1:${server.address().port}`,
     requests: () => requests,
+    serviceRequestIds: () => jobs.map((entry) => entry.provenance.requestId),
+    fixtureSetupRequestIds: () => [...fixtureSetupRequestIds],
     close: () => new Promise((done, reject) => server.close((error) => error ? reject(error) : done())),
   })));
 }
@@ -220,6 +225,25 @@ assert.equal(readiness.actions.filter((action) => action.caseId === 'A06' &&
   action.blocker.code === 'queued_command_barrier_seam_missing').length, 4);
 assert.equal(readiness.effectsAttempted, false);
 
+const enumeratedLoggingRequests = enumerateP158W7A05LoggingRequests({
+  schedule, campaignRunId: 'p158-a04-a06-run',
+});
+assert.equal(enumeratedLoggingRequests.length, 40);
+assert.equal(new Set(enumeratedLoggingRequests.map((entry) => entry.expectationId)).size, 40);
+assert.equal(new Set(enumeratedLoggingRequests.map((entry) => entry.requestId)).size, 40);
+assert.deepEqual(enumerateP158W7A05LoggingRequests({
+  schedule, campaignRunId: 'p158-a04-a06-run',
+}), enumeratedLoggingRequests);
+assert.ok(enumeratedLoggingRequests.every((entry) => entry.expectationId === entry.requestId &&
+  entry.caseId === 'A05' && entry.phaseId === 'W7' && ['E0', 'E1'].includes(entry.environmentId) &&
+  ['accepted_request', 'rejected_request'].includes(entry.requestKind) &&
+  entry.requestId.includes(entry.actionId)));
+assert.equal(enumeratedLoggingRequests.filter((entry) => entry.requestKind === 'rejected_request').length, 2);
+assert.deepEqual([...new Set(enumeratedLoggingRequests.map((entry) => entry.operationKind))].sort(), [
+  'admission-probe', 'conflict-a', 'conflict-b', 'drain-complete', 'fixture-setup',
+  'occupant-open', 'own-release', 'policy-mutate',
+]);
+
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'p158-a04-a06-'));
 const adminCapabilityPath = path.join(temporary, 'admin-profile-capability');
 const participantCapabilityPath = path.join(temporary, 'participant-profile-capability');
@@ -249,6 +273,11 @@ async function runCampaign(serverOptions = {}, select = () => true) {
     for (const attempt of schedule.attempts.filter((entry) => entry.caseId === 'A05' && select(entry))) {
       results.push(await adapter.execute({ attempt }));
     }
+    for (const receipt of receipts) {
+      assert.deepEqual(receipt.requestIds, bundle.loggingRequestExpectations
+        .filter((entry) => entry.attemptId === receipt.attemptId)
+        .map((entry) => entry.requestId));
+    }
     assert.equal(JSON.stringify(frozenManifest), manifestBefore, 'live driver mutated its frozen ownership input');
     return { server, service, bundle, receipts, results };
   } catch (error) {
@@ -263,6 +292,11 @@ assert.equal(clean.bundle.freezeEligible, true);
 assert.equal(clean.results.length, 12);
 assert.ok(clean.results.every((result) => result.resultState === 'passed' && result.actionCount === 1));
 assert.equal(clean.receipts.length, 12);
+assert.deepEqual(clean.bundle.loggingRequestExpectations, enumeratedLoggingRequests);
+assert.deepEqual(clean.server.fixtureSetupRequestIds(), enumeratedLoggingRequests
+  .filter((entry) => entry.operationKind === 'fixture-setup').map((entry) => entry.requestId));
+assert.deepEqual(clean.server.serviceRequestIds().sort(), enumeratedLoggingRequests
+  .filter((entry) => entry.operationKind !== 'fixture-setup').map((entry) => entry.requestId).sort());
 assert.equal(new Set(clean.receipts.map((receipt) => receipt.actionId)).size, 12);
 assert.ok(clean.receipts.every((receipt) => receipt.attempt === 1 &&
   receipt.retryAttempted === false && receipt.repairAttempted === false &&

@@ -323,6 +323,25 @@ const multiRequest = await harvestP158LoggingEvidence(baseInput({
 assert.equal(multiRequest.corpus.fixtureCount, 2);
 assert.deepEqual(multiRequest.corpus.fixtures.map((fixture) => fixture.fixtureId),
   [expectation.expectationId, secondExpectation.expectationId]);
+
+const a05Expectation = {
+  ...expectation,
+  expectationId: `${runId}:A05-E0-r001:policy-mutate`,
+  requestId: `${runId}:A05-E0-r001:policy-mutate`,
+  attemptId: 'A05-E0-r001',
+  caseId: 'A05',
+};
+const a05IngressRows = [record('ingress_request'), record('immediate_response')]
+  .map((entry) => rewriteRequest(entry, a05Expectation));
+const a05ServiceRows = serviceRecords.map((entry) => rewriteRequest(entry, a05Expectation));
+const a05PrefixBound = await harvestP158LoggingEvidence(baseInput({
+  expectations: [a05Expectation],
+  causalEnvelopes: [causalEnvelope(a05Expectation)],
+  checkpointRecords: a05IngressRows,
+  observer: async ({ expectation: target }) => observerResult(a05ServiceRows, target),
+}));
+assert.deepEqual(auditCausalEnvelopes({ fixtureSet: a05PrefixBound.corpus }).findings, [],
+  'an exact live driver request ID beginning with the campaign run ID was rejected');
 assert.deepEqual(auditCausalEnvelopes({ fixtureSet: multiRequest.corpus }).findings, []);
 
 const blockedExpectation = {

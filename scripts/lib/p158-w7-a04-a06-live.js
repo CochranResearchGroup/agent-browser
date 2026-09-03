@@ -71,6 +71,53 @@ function actionInventory(schedule) {
     .filter((action) => P158_W7_A04_A06_REVIEWED_CASE_IDS.includes(action.caseId));
 }
 
+function a05RequestSuffixes(action) {
+  const transition = value(action, 'transition');
+  if (transition === 'revision_conflict') return ['fixture-setup', 'conflict-a', 'conflict-b'];
+  const suffixes = ['fixture-setup'];
+  if (['admission', 'own_tab_release', 'drain_completion'].includes(transition)) {
+    suffixes.push('occupant-open');
+  }
+  suffixes.push('policy-mutate');
+  if (transition === 'admission') suffixes.push('admission-probe');
+  if (['own_tab_release', 'drain_completion'].includes(transition)) suffixes.push('own-release');
+  if (transition === 'drain_completion') suffixes.push('drain-complete');
+  return suffixes;
+}
+
+function a05LoggingRequestDescriptors(action, campaignRunId, environmentId) {
+  return a05RequestSuffixes(action).map((suffix) => {
+    const requestId = `${campaignRunId}:${action.actionId}:${suffix}`;
+    return {
+      expectationId: requestId,
+      requestId,
+      // Both CAS contenders are admitted as durable Service jobs; exactly one
+      // later terminates with policy_revision_conflict, without pre-assigning
+      // the nondeterministic winner to a request identity.
+      requestKind: suffix === 'admission-probe' ? 'rejected_request' : 'accepted_request',
+      operationKind: suffix,
+      actionId: action.actionId,
+      attemptId: action.attemptId,
+      caseId: 'A05',
+      phaseId: 'W7',
+      environmentId,
+      ...(suffix === 'fixture-setup' ? {
+        expectedSurfaceRoles: ['ingress_request', 'immediate_response', 'terminal_event'],
+      } : {}),
+    };
+  });
+}
+
+export function enumerateP158W7A05LoggingRequests({ schedule, campaignRunId }) {
+  if (typeof campaignRunId !== 'string' || campaignRunId.length === 0) {
+    fail('campaign_run_id_missing', 'A05 logging request enumeration requires a campaign run ID');
+  }
+  const attemptsById = new Map(schedule.attempts.map((attempt) => [attempt.attemptId, attempt]));
+  return freeze(actionInventory(schedule).filter((action) => action.caseId === 'A05')
+    .flatMap((action) => a05LoggingRequestDescriptors(action, campaignRunId,
+      attemptsById.get(action.attemptId)?.environmentIds?.[0])));
+}
+
 /**
  * Report the exact current-product boundary. A04 cannot be promoted because
  * service_access_plan evaluates only tab_create. A06 atomic cells have the
@@ -257,8 +304,9 @@ export function createP158W7A05DevelopmentService(options = {}) {
       exactSubset(status, context.environment.ownershipStatus);
       return status;
     },
-    upsertProfile: ({ context, profile, fetch }) => upsertServiceProfile({
+    upsertProfile: ({ context, profile, fetch, requestId }) => upsertServiceProfile({
       baseUrl: context.environment.serviceOrigin, fetch, id: context.fixture.profileId, profile,
+      headers: { 'x-agent-browser-request-id': requestId },
     }),
     async mutate({ context, subjectId, capability, expectedRevision, targetPolicy, fetch, suffix }) {
       const requestId = `${context.manifest.campaignRunId}:${context.action.actionId}:${suffix}`;
@@ -309,10 +357,10 @@ function requireSuccess(response, code, expected = true) {
   return responseData(response);
 }
 
-async function setupProfile(context, service, accessPolicy, fetch) {
+async function setupProfile(context, service, accessPolicy, fetch, requestId) {
   await service.revalidate(context, fetch);
   const response = await service.upsertProfile({
-    context, fetch, profile: profileFixture(context.fixture, accessPolicy),
+    context, fetch, requestId, profile: profileFixture(context.fixture, accessPolicy),
   });
   if (response?.success === false) fail('fixture_setup_failed', context.action.actionId, response);
 }
@@ -353,15 +401,19 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
   const restricted = policy(context.fixture.profileId, 'restricted', 1, [], context.fixture.adminSubjectId);
   const targetShared = { mode: 'shared-local', defaultPermissions: [...PARTICIPANT_PERMISSIONS], grants: shared.grants };
   const targetRestricted = { mode: 'restricted', defaultPermissions: [], grants: shared.grants };
-  const requestIds = [];
+  const loggingRequestExpectations = a05LoggingRequestDescriptors(
+    frozenAction, manifest.campaignRunId, environmentId,
+  );
+  const requestIds = loggingRequestExpectations.map((entry) => entry.requestId);
+  const requestIdFor = (suffix) => `${manifest.campaignRunId}:${frozenAction.actionId}:${suffix}`;
   const connectionInstanceIds = [];
   let effectObserved = false;
   try {
-    await setupProfile(context, service, transition === 'widen' ? restricted : shared, adminFetch);
+    await setupProfile(context, service, transition === 'widen' ? restricted : shared, adminFetch,
+      requestIdFor('fixture-setup'));
     let occupant = null;
     if (['admission', 'own_tab_release', 'drain_completion'].includes(transition)) {
       occupant = await openOccupant(context, service, participantFetch, participantCapability);
-      requestIds.push(occupant.requestId);
       connectionInstanceIds.push(occupant.connectionInstanceId);
       effectObserved = true;
     }
@@ -372,7 +424,6 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
       const second = service.mutate({ context, fetch: participantFetch, subjectId: context.fixture.adminSubjectId,
         capability: adminCapability, expectedRevision: 1, targetPolicy: targetRestricted, suffix: 'conflict-b' });
       const results = await Promise.all([first, second]);
-      requestIds.push(...results.map((entry) => entry.requestId));
       const passed = results.filter((entry) => entry.response?.success === true);
       const conflicted = results.filter((entry) => entry.response?.success === false &&
         JSON.stringify(entry.response).includes('policy_revision_conflict'));
@@ -388,7 +439,6 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         context, fetch: adminFetch, subjectId: context.fixture.adminSubjectId,
         capability: adminCapability, expectedRevision: 1, targetPolicy, suffix: 'policy-mutate',
       });
-      requestIds.push(mutated.requestId);
       connectionInstanceIds.push(await assertTrace(
         service, context, mutated.requestId, context.fixture.adminSubjectId, adminFetch,
       ));
@@ -415,7 +465,6 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const denied = await service.open({ context, fetch: participantFetch,
           subjectId: context.fixture.participantSubjectId, capability: participantCapability,
           suffix: 'admission-probe' });
-        requestIds.push(denied.requestId);
         if (denied.response?.success !== false || !JSON.stringify(denied.response).includes('profile_access_denied')) {
           fail('draining_admission_oracle_failed', frozenAction.actionId, denied.response);
         }
@@ -424,7 +473,6 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const released = await service.release({ context, fetch: participantFetch,
           subjectId: context.fixture.participantSubjectId, capability: participantCapability,
           handle: occupant.handle, suffix: 'own-release' });
-        requestIds.push(released.requestId);
         requireSuccess(released.response, 'own_tab_release_oracle_failed');
         const tabs = await service.tabs({ context, fetch: participantFetch });
         const rows = tabs?.tabs ?? tabs?.data?.tabs ?? [];
@@ -437,7 +485,6 @@ async function runA05Transition({ manifest, attempt, service, receiptStore, cloc
         const completed = await service.mutate({ context, fetch: adminFetch,
           subjectId: context.fixture.adminSubjectId, capability: adminCapability,
           expectedRevision: 1, targetPolicy: targetRestricted, suffix: 'drain-complete' });
-        requestIds.push(completed.requestId);
         const completion = requireSuccess(completed.response, 'drain_completion_failed');
         if (completion?.outcome !== 'restricted' || completion.policy?.revision !== 2 ||
             completion.policy?.state !== 'active') {
@@ -515,6 +562,9 @@ export function createP158W7A04A06LiveBundle({
   });
   const source = freeze({ sourcePath: P158_W7_A04_A06_SOURCE_PATH, sourceSha256: sourceSha256() });
   const readiness = assessP158W7A04A06ActionReadiness({ schedule });
+  const loggingRequestExpectations = enumerateP158W7A05LoggingRequests({
+    schedule, campaignRunId: manifest.campaignRunId,
+  });
   return freeze({
     schemaVersion: 'agent-browser.p158-w7-a04-a06-live-bundle.v1',
     freezeEligible: service[BUILTIN_SERVICE] === true,
@@ -525,6 +575,7 @@ export function createP158W7A04A06LiveBundle({
     liveHookManifestSha256: manifest.liveHookManifestSha256,
     environmentSealSha256s: structuredClone(manifest.environmentSealSha256s),
     liveHookIds: [P158_W7_A04_A06_HOOK_ID], driverSource: source,
+    loggingRequestExpectations,
     adapterBindingSha256: sha256({ caseIds: ['A05'], ownershipManifestSha256: manifest.manifestSha256,
       campaignRunId: manifest.campaignRunId, candidateSha256: manifest.candidateSha256,
       liveHookManifestSha256: manifest.liveHookManifestSha256,

@@ -128,7 +128,8 @@ function validateExpectations(expectations, runId, phaseId, environmentId) {
     if (typeof entry?.expectationId !== 'string' || expectationIds.has(entry.expectationId) ||
         typeof entry?.attemptId !== 'string' || requestIds.has(entry.requestId) ||
         entry.phaseId !== phaseId || entry.environmentId !== environmentId ||
-        typeof entry.requestId !== 'string' || !entry.requestId.includes(`:${runId}:`) ||
+        typeof entry.requestId !== 'string' ||
+        !(entry.requestId.startsWith(`${runId}:`) || entry.requestId.includes(`:${runId}:`)) ||
         !['accepted_request', 'rejected_request', 'transition', 'dashboard_action']
           .includes(entry.requestKind) ||
         !Array.isArray(entry.expectedSurfaceRoles) || entry.expectedSurfaceRoles.length === 0 ||
