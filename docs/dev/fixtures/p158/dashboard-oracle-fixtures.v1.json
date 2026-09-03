@@ -1,0 +1,940 @@
+{
+  "schemaVersion": "agent-browser.p158-dashboard-fixtures.v1",
+  "planId": "P158",
+  "syntheticOnly": true,
+  "baseline": {
+    "fixtureId": "dashboard-baseline",
+    "description": "Synthetic healthy dashboard baseline used by the deterministic case generator.",
+    "density": "normal",
+    "generator": {
+      "generatorVersion": "p158-dashboard-dense.v1",
+      "seed": 158,
+      "profiles": 1,
+      "browsers": 1,
+      "tabs": 1,
+      "jobs": 1,
+      "events": 1,
+      "idNamespace": "p158-baseline",
+      "labelCardinality": 1
+    },
+    "truth": {
+      "snapshotRevision": 10,
+      "counts": {
+        "profiles": 1,
+        "browsers": 1,
+        "tabs": 1,
+        "jobs": 1,
+        "events": 1
+      },
+      "resources": [
+        {
+          "resourceId": "browser-001",
+          "resourceType": "browser",
+          "label": "Shared Browser",
+          "state": "ready",
+          "orderKey": 1,
+          "badge": "ready",
+          "count": 1,
+          "rowExpected": true
+        }
+      ]
+    },
+    "railRows": [
+      {
+        "rowId": "row-browser-001",
+        "resourceId": "browser-001",
+        "resourceType": "browser",
+        "label": "Shared Browser",
+        "state": "ready",
+        "orderKey": 1,
+        "badge": "ready",
+        "count": 1,
+        "snapshotRevision": 10
+      }
+    ],
+    "selection": {
+      "selectedResourceId": "browser-001",
+      "inspectorResourceId": "browser-001",
+      "selectedExists": true,
+      "recoveryActionCount": 1,
+      "deepLinkRequestedId": "browser-001",
+      "deepLinkResolvedId": "browser-001"
+    },
+    "actions": [
+      {
+        "actionId": "open-view",
+        "declaredTargetResourceId": "browser-001",
+        "invokedTargetResourceId": "browser-001",
+        "eligible": true,
+        "displayedEligible": true,
+        "rendered": true
+      }
+    ],
+    "warnings": {
+      "runtimeHealth": "healthy",
+      "convergenceHealth": "healthy",
+      "accessHealth": "healthy",
+      "acquisitionHealth": "healthy",
+      "displayedAxes": [],
+      "convergenceActionIds": [
+        "refresh-status"
+      ]
+    },
+    "handoffUrls": [
+      "https://remote.example.test/remote-view/handoff-dashboard"
+    ],
+    "stream": {
+      "snapshotRevision": 10,
+      "streamRevision": 10,
+      "displayedReady": true,
+      "authoritativeReady": true
+    },
+    "uiChecks": [
+      {
+        "checkId": "ui-accessibility",
+        "kind": "accessibility",
+        "state": "passed",
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "detail": null
+      },
+      {
+        "checkId": "ui-focus",
+        "kind": "focus",
+        "state": "passed",
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "detail": null
+      },
+      {
+        "checkId": "ui-keyboard",
+        "kind": "keyboard",
+        "state": "passed",
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "detail": null
+      },
+      {
+        "checkId": "ui-modal",
+        "kind": "modal",
+        "state": "passed",
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "detail": null
+      },
+      {
+        "checkId": "ui-overflow",
+        "kind": "overflow",
+        "state": "passed",
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "detail": null
+      },
+      {
+        "checkId": "ui-reduced_motion",
+        "kind": "reduced_motion",
+        "state": "passed",
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "detail": null
+      },
+      {
+        "checkId": "ui-viewport",
+        "kind": "viewport",
+        "state": "passed",
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "detail": null
+      }
+    ],
+    "timings": [
+      {
+        "interaction": "inventory_interactive",
+        "p50Ms": 500,
+        "p95Ms": 1200,
+        "p99Ms": 1500,
+        "worstMs": 1800,
+        "p95BudgetMs": 3000
+      }
+    ],
+    "resourceSamples": [
+      {
+        "elapsedMs": 0,
+        "heapBytes": 10000000,
+        "domNodeCount": 1000,
+        "listenerCount": 100,
+        "cpuMilliseconds": 0,
+        "networkBytes": 0,
+        "longTaskCount": 0,
+        "browserProcessCount": 1,
+        "xvfbProcessCount": 1,
+        "routeAllocationCount": 1,
+        "profileLeaseCount": 1,
+        "retainedSessionCount": 1,
+        "unresolvedJobCount": 0
+      },
+      {
+        "elapsedMs": 60000,
+        "heapBytes": 10010000,
+        "domNodeCount": 1000,
+        "listenerCount": 100,
+        "cpuMilliseconds": 100,
+        "networkBytes": 1000,
+        "longTaskCount": 0,
+        "browserProcessCount": 1,
+        "xvfbProcessCount": 1,
+        "routeAllocationCount": 1,
+        "profileLeaseCount": 1,
+        "retainedSessionCount": 1,
+        "unresolvedJobCount": 0
+      }
+    ],
+    "captureGaps": [],
+    "expectedFindingCodes": []
+  },
+  "fixtures": [
+    {
+      "fixtureId": "inventory-empty",
+      "description": "Clean empty authoritative inventory.",
+      "density": "empty",
+      "mutation": {
+        "kind": "inventory_density",
+        "parameters": {
+          "profiles": 0,
+          "browsers": 0,
+          "tabs": 0,
+          "jobs": 0,
+          "events": 0
+        }
+      },
+      "expectedFindingCodes": []
+    },
+    {
+      "fixtureId": "inventory-sparse",
+      "description": "Clean sparse authoritative inventory.",
+      "density": "sparse",
+      "mutation": {
+        "kind": "inventory_density",
+        "parameters": {
+          "profiles": 1,
+          "browsers": 1,
+          "tabs": 2,
+          "jobs": 3,
+          "events": 4
+        }
+      },
+      "expectedFindingCodes": []
+    },
+    {
+      "fixtureId": "inventory-normal",
+      "description": "Clean normal authoritative inventory.",
+      "density": "normal",
+      "mutation": {
+        "kind": "inventory_density",
+        "parameters": {
+          "profiles": 10,
+          "browsers": 25,
+          "tabs": 100,
+          "jobs": 500,
+          "events": 500
+        }
+      },
+      "expectedFindingCodes": []
+    },
+    {
+      "fixtureId": "inventory-dense",
+      "description": "Clean deterministic dense inventory at the required scale.",
+      "density": "dense",
+      "mutation": {
+        "kind": "inventory_density",
+        "parameters": {
+          "generatorVersion": "p158-dashboard-dense.v1",
+          "seed": 158,
+          "profiles": 100,
+          "browsers": 500,
+          "tabs": 2000,
+          "jobs": 10000,
+          "events": 10000,
+          "idNamespace": "p158-dense",
+          "labelCardinality": 8
+        }
+      },
+      "expectedFindingCodes": []
+    },
+    {
+      "fixtureId": "defect-missing-rail-row",
+      "description": "Isolated synthetic missing rail row defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "missing_rail_row",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 1
+        }
+      },
+      "expectedFindingCodes": [
+        "missing_rail_row"
+      ]
+    },
+    {
+      "fixtureId": "defect-duplicate-rail-row",
+      "description": "Isolated synthetic duplicate rail row defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "duplicate_rail_row",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 2
+        }
+      },
+      "expectedFindingCodes": [
+        "duplicate_rail_row"
+      ]
+    },
+    {
+      "fixtureId": "defect-stale-rail-row",
+      "description": "Isolated synthetic stale rail row defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "stale_rail_row",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 3
+        }
+      },
+      "expectedFindingCodes": [
+        "stale_rail_row"
+      ]
+    },
+    {
+      "fixtureId": "defect-wrong-rail-row",
+      "description": "Isolated synthetic wrong rail row defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "wrong_rail_row",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 4
+        }
+      },
+      "expectedFindingCodes": [
+        "wrong_rail_row"
+      ]
+    },
+    {
+      "fixtureId": "defect-rail-order-mismatch",
+      "description": "Isolated synthetic rail order mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "rail_order_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 5
+        }
+      },
+      "expectedFindingCodes": [
+        "rail_order_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-rail-label-mismatch",
+      "description": "Isolated synthetic rail label mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "rail_label_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 6
+        }
+      },
+      "expectedFindingCodes": [
+        "rail_label_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-rail-badge-mismatch",
+      "description": "Isolated synthetic rail badge mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "rail_badge_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 7
+        }
+      },
+      "expectedFindingCodes": [
+        "rail_badge_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-rail-count-mismatch",
+      "description": "Isolated synthetic rail count mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "rail_count_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 8
+        }
+      },
+      "expectedFindingCodes": [
+        "rail_count_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-unstable-same-label-identity",
+      "description": "Isolated synthetic unstable same label identity defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "unstable_same_label_identity",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 9
+        }
+      },
+      "expectedFindingCodes": [
+        "unstable_same_label_identity"
+      ]
+    },
+    {
+      "fixtureId": "defect-selected-record-mismatch",
+      "description": "Isolated synthetic selected record mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "selected_record_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 10
+        }
+      },
+      "expectedFindingCodes": [
+        "selected_record_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-inspector-record-mismatch",
+      "description": "Isolated synthetic inspector record mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "inspector_record_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 11
+        }
+      },
+      "expectedFindingCodes": [
+        "inspector_record_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-selection-recovery-invalid",
+      "description": "Isolated synthetic selection recovery invalid defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "selection_recovery_invalid",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 12
+        }
+      },
+      "expectedFindingCodes": [
+        "selection_recovery_invalid"
+      ]
+    },
+    {
+      "fixtureId": "defect-deep-link-recovery-invalid",
+      "description": "Isolated synthetic deep link recovery invalid defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "deep_link_recovery_invalid",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 13
+        }
+      },
+      "expectedFindingCodes": [
+        "deep_link_recovery_invalid"
+      ]
+    },
+    {
+      "fixtureId": "defect-wrong-action-target",
+      "description": "Isolated synthetic wrong action target defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "wrong_action_target",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 14
+        }
+      },
+      "expectedFindingCodes": [
+        "wrong_action_target"
+      ]
+    },
+    {
+      "fixtureId": "defect-action-eligibility-mismatch",
+      "description": "Isolated synthetic action eligibility mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "action_eligibility_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 15
+        }
+      },
+      "expectedFindingCodes": [
+        "action_eligibility_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-ineligible-action-exposed",
+      "description": "Isolated synthetic ineligible action exposed defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "ineligible_action_exposed",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 16
+        }
+      },
+      "expectedFindingCodes": [
+        "ineligible_action_exposed"
+      ]
+    },
+    {
+      "fixtureId": "defect-warning-axis-conflated",
+      "description": "Isolated synthetic warning axis conflated defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "warning_axis_conflated",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 17
+        }
+      },
+      "expectedFindingCodes": [
+        "warning_axis_conflated"
+      ]
+    },
+    {
+      "fixtureId": "defect-warning-axis-mismatch",
+      "description": "Isolated synthetic warning axis mismatch defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "warning_axis_mismatch",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 18
+        }
+      },
+      "expectedFindingCodes": [
+        "warning_axis_mismatch"
+      ]
+    },
+    {
+      "fixtureId": "defect-convergence-action-count-invalid",
+      "description": "Isolated synthetic convergence action count invalid defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "convergence_action_count_invalid",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 19
+        }
+      },
+      "expectedFindingCodes": [
+        "convergence_action_count_invalid"
+      ]
+    },
+    {
+      "fixtureId": "defect-internal-handoff-url",
+      "description": "Isolated synthetic internal handoff url defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "internal_handoff_url",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 20
+        }
+      },
+      "expectedFindingCodes": [
+        "internal_handoff_url"
+      ]
+    },
+    {
+      "fixtureId": "defect-stale-stream-ready",
+      "description": "Isolated synthetic stale stream ready defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "stale_stream_ready",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 21
+        }
+      },
+      "expectedFindingCodes": [
+        "stale_stream_ready"
+      ]
+    },
+    {
+      "fixtureId": "defect-stream-not-converged",
+      "description": "Isolated synthetic stream not converged defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "stream_not_converged",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 22
+        }
+      },
+      "expectedFindingCodes": [
+        "stream_not_converged"
+      ]
+    },
+    {
+      "fixtureId": "defect-console-error",
+      "description": "Isolated synthetic console error defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "console_error",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 23
+        }
+      },
+      "expectedFindingCodes": [
+        "console_error"
+      ]
+    },
+    {
+      "fixtureId": "defect-network-failure",
+      "description": "Isolated synthetic network failure defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "network_failure",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 24
+        }
+      },
+      "expectedFindingCodes": [
+        "network_failure"
+      ]
+    },
+    {
+      "fixtureId": "defect-accessibility-defect",
+      "description": "Isolated synthetic accessibility defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "accessibility_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 25
+        }
+      },
+      "expectedFindingCodes": [
+        "accessibility_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-focus-defect",
+      "description": "Isolated synthetic focus defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "focus_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 26
+        }
+      },
+      "expectedFindingCodes": [
+        "focus_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-keyboard-defect",
+      "description": "Isolated synthetic keyboard defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "keyboard_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 27
+        }
+      },
+      "expectedFindingCodes": [
+        "keyboard_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-native-modal-used",
+      "description": "Isolated synthetic native modal used defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "native_modal_used",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 28
+        }
+      },
+      "expectedFindingCodes": [
+        "native_modal_used"
+      ]
+    },
+    {
+      "fixtureId": "defect-overflow-defect",
+      "description": "Isolated synthetic overflow defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "overflow_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 29
+        }
+      },
+      "expectedFindingCodes": [
+        "overflow_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-reduced-motion-defect",
+      "description": "Isolated synthetic reduced motion defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "reduced_motion_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 30
+        }
+      },
+      "expectedFindingCodes": [
+        "reduced_motion_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-viewport-defect",
+      "description": "Isolated synthetic viewport defect defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "viewport_defect",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 31
+        }
+      },
+      "expectedFindingCodes": [
+        "viewport_defect"
+      ]
+    },
+    {
+      "fixtureId": "defect-latency-budget-exceeded",
+      "description": "Isolated synthetic latency budget exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "latency_budget_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 32
+        }
+      },
+      "expectedFindingCodes": [
+        "latency_budget_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-heap-growth-exceeded",
+      "description": "Isolated synthetic heap growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "heap_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 33
+        }
+      },
+      "expectedFindingCodes": [
+        "heap_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-dom-growth-exceeded",
+      "description": "Isolated synthetic dom growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "dom_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 34
+        }
+      },
+      "expectedFindingCodes": [
+        "dom_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-listener-growth-exceeded",
+      "description": "Isolated synthetic listener growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "listener_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 35
+        }
+      },
+      "expectedFindingCodes": [
+        "listener_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-cpu-growth-exceeded",
+      "description": "Isolated synthetic cpu growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "cpu_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 36
+        }
+      },
+      "expectedFindingCodes": [
+        "cpu_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-network-growth-exceeded",
+      "description": "Isolated synthetic network growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "network_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 37
+        }
+      },
+      "expectedFindingCodes": [
+        "network_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-long-task-growth-exceeded",
+      "description": "Isolated synthetic long task growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "long_task_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 38
+        }
+      },
+      "expectedFindingCodes": [
+        "long_task_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-browser-process-growth-exceeded",
+      "description": "Isolated synthetic browser process growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "browser_process_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 39
+        }
+      },
+      "expectedFindingCodes": [
+        "browser_process_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-xvfb-process-growth-exceeded",
+      "description": "Isolated synthetic xvfb process growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "xvfb_process_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 40
+        }
+      },
+      "expectedFindingCodes": [
+        "xvfb_process_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-route-growth-exceeded",
+      "description": "Isolated synthetic route growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "route_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 41
+        }
+      },
+      "expectedFindingCodes": [
+        "route_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-profile-lease-growth-exceeded",
+      "description": "Isolated synthetic profile lease growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "profile_lease_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 42
+        }
+      },
+      "expectedFindingCodes": [
+        "profile_lease_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-retained-session-growth-exceeded",
+      "description": "Isolated synthetic retained session growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "retained_session_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 43
+        }
+      },
+      "expectedFindingCodes": [
+        "retained_session_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-unresolved-job-growth-exceeded",
+      "description": "Isolated synthetic unresolved job growth exceeded defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "unresolved_job_growth_exceeded",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 44
+        }
+      },
+      "expectedFindingCodes": [
+        "unresolved_job_growth_exceeded"
+      ]
+    },
+    {
+      "fixtureId": "defect-capture-gap",
+      "description": "Isolated synthetic capture gap defect.",
+      "density": "normal",
+      "mutation": {
+        "kind": "capture_gap",
+        "parameters": {
+          "targetId": "browser-001",
+          "ordinal": 45
+        }
+      },
+      "expectedFindingCodes": [
+        "capture_gap"
+      ]
+    }
+  ]
+}
