@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/p158-logging-audit-report.v1.schema.json",
   "title": "Plan 0158 logging completeness audit report",
-  "description": "Machine-readable reconciliation of causal logging envelopes across ingress, response, job, event, trace, incident, and dashboard surfaces. The auditor diagnoses and records defects without attempting repair.",
+  "description": "Machine-readable reconciliation of causal logging envelopes across controller transition, pre-execution blocker, ingress, response, job, event, trace, incident, and dashboard surfaces. The auditor diagnoses and records defects without attempting repair.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -40,6 +40,8 @@
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "surfaceRole": {
       "enum": [
+        "controller_transition",
+        "pre_execution_blocker",
         "ingress_request",
         "immediate_response",
         "durable_job",
@@ -133,7 +135,7 @@
         "incidentExpected": { "type": "boolean" },
         "expectedSurfaceRoles": {
           "type": "array",
-          "minItems": 5,
+          "minItems": 3,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/surfaceRole" }
         },

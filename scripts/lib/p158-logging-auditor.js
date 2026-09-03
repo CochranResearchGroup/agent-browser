@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 
 export const LOGGING_SURFACES = Object.freeze([
+  'controller_transition',
+  'pre_execution_blocker',
   'request',
   'immediate_response',
   'job',
@@ -25,6 +27,8 @@ export const LOGGING_FINDING_CODES = Object.freeze([
 ]);
 
 const INPUT_SURFACES = Object.freeze({
+  controllerTransitions: 'controller_transition',
+  preExecutionBlockers: 'pre_execution_blocker',
   requests: 'request',
   immediateResponses: 'immediate_response',
   jobs: 'job',
@@ -35,6 +39,8 @@ const INPUT_SURFACES = Object.freeze({
 });
 
 const SCHEMA_SURFACE_ROLES = Object.freeze({
+  controller_transition: 'controller_transition',
+  pre_execution_blocker: 'pre_execution_blocker',
   request: 'ingress_request',
   immediate_response: 'immediate_response',
   job: 'durable_job',
@@ -49,6 +55,8 @@ const ROLE_TO_SURFACE = Object.freeze(
 );
 
 const ID_FIELDS = Object.freeze({
+  controller_transition: ['recordId', 'id', 'transitionId'],
+  pre_execution_blocker: ['recordId', 'id', 'blockerId'],
   request: ['recordId', 'id', 'requestId'],
   immediate_response: ['recordId', 'id', 'responseId'],
   job: ['recordId', 'id', 'jobId'],
@@ -242,6 +250,8 @@ function coerceFixtureInput(input) {
     fixtureSetId: input.fixtureSetId ?? input.id ?? input.schemaVersion ?? 'p158-logging-fixtures',
     runId: input.runId ?? 'p158-logging-audit',
     requests: [],
+    controllerTransitions: [],
+    preExecutionBlockers: [],
     immediateResponses: [],
     jobs: [],
     events: [],
@@ -614,9 +624,14 @@ export function auditLoggingCompleteness(input, options = {}) {
     const outcomeTransports = [
       ...new Set(group.records.filter((record) => record.transport).map((record) => record.transport)),
     ].sort();
+    const controllerOnlyBlocked = expected.controller_transition === 1 &&
+      expected.pre_execution_blocker === 1 && expected.event === 1 &&
+      expected.request === 0 && expected.immediate_response === 0 && expected.job === 0 &&
+      expected.trace === 0;
     if (
       (expectedTransports.length > 1 && outcomeTransports.length <= 1) ||
-      (expectedTransports.length === 0 && group.records.filter((record) => record.terminal).length > 1 && outcomeTransports.length === 1)
+      (!controllerOnlyBlocked && expectedTransports.length === 0 &&
+        group.records.filter((record) => record.terminal).length > 1 && outcomeTransports.length === 1)
     ) {
       addFinding(findings, {
         code: 'one_transport_only',

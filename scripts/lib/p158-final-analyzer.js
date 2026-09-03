@@ -458,6 +458,9 @@ function summarizeIndependentAudits(input, analyzedAt, findings, results) {
 const REQUIRED_LOGGING_SURFACE_ROLES = Object.freeze([
   'ingress_request', 'immediate_response', 'durable_job', 'terminal_event', 'trace_outcome',
 ]);
+const REQUIRED_BLOCKED_LOGGING_SURFACE_ROLES = Object.freeze([
+  'controller_transition', 'pre_execution_blocker', 'terminal_event',
+]);
 
 function addLoggingBindingFinding(findings, {
   code, disposition, evidenceIds, consequence, reproducer,
@@ -514,16 +517,25 @@ function verifyCampaignLoggingBindings(input, results, loggingReports, findings)
     for (const expectation of attemptExpectations) {
       const requestId = expectation?.requestId;
       const expectedRoles = [...new Set(expectation?.expectedSurfaceRoles ?? [])].sort();
-      const requiredRoles = [
-        ...REQUIRED_LOGGING_SURFACE_ROLES,
-        ...(expectation?.incidentExpected === true ? ['incident'] : []),
-        ...(expectation?.operatorVisible === true ? ['dashboard_projection'] : []),
-      ].sort();
+      const explicitlyBlocked = result.resultState === 'skipped_blocked' &&
+        typeof result.blockerCode === 'string' && result.blockerCode.length > 0;
+      const requiredRoles = explicitlyBlocked
+        ? [...REQUIRED_BLOCKED_LOGGING_SURFACE_ROLES]
+        : [
+            ...REQUIRED_LOGGING_SURFACE_ROLES,
+            ...(expectation?.incidentExpected === true ? ['incident'] : []),
+            ...(expectation?.operatorVisible === true ? ['dashboard_projection'] : []),
+          ].sort();
+      const exactBlockedRoles = explicitlyBlocked &&
+        stableP158AnalysisHash(expectedRoles) === stableP158AnalysisHash([...requiredRoles].sort()) &&
+        expectation?.incidentExpected === false && expectation?.operatorVisible === false;
       const invalid = typeof requestId !== 'string' || requestId.length === 0 ||
         seenRequestIds.has(requestId) || result.causalIds?.requestId !== requestId ||
         expectation?.incidentExpected !== (expectedRoles.includes('incident')) ||
         expectation?.operatorVisible !== (expectedRoles.includes('dashboard_projection')) ||
-        requiredRoles.some((role) => !expectedRoles.includes(role));
+        (explicitlyBlocked ? !exactBlockedRoles : requiredRoles.some((role) => !expectedRoles.includes(role))) ||
+        (!explicitlyBlocked && expectedRoles.some((role) =>
+          REQUIRED_BLOCKED_LOGGING_SURFACE_ROLES.includes(role) && role !== 'terminal_event'));
       seenRequestIds.add(requestId);
       if (invalid) {
         addLoggingBindingFinding(findings, {

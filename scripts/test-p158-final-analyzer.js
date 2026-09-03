@@ -11,6 +11,7 @@ import {
   analyzeP158SealedCampaign,
   stableP158AnalysisHash,
 } from './lib/p158-final-analyzer.js';
+import { auditCausalEnvelopes } from './lib/p158-logging-auditor.js';
 
 const repoRoot = new URL('..', import.meta.url).pathname;
 const registry = JSON.parse(readFileSync(join(
@@ -197,6 +198,50 @@ function analyze(input) {
   });
 }
 
+function rehashLedger(input) {
+  let previous = null;
+  for (const record of input.ledgerRecords) {
+    record.previousRecordSha256 = previous;
+    if (record.recordType === 'evidence_seal') record.payload.ledgerHeadSha256 = previous;
+    record.sha256 = stableP158AnalysisHash(Object.fromEntries(
+      Object.entries(record).filter(([key]) => !['sha256', 'byteCount', 'type'].includes(key)),
+    ));
+    previous = record.sha256;
+  }
+}
+
+function blockedLoggingFixture() {
+  const base = clone(loggingCorpus.fixtures.find((fixture) => fixture.fixtureId === 'logging-good-complete'));
+  const template = base.records[0];
+  const requestId = 'request-good';
+  const blockerFailure = {
+    schemaVersion: 'agent-browser.service-failure-recourse.v1', code: 'live_case_hook_missing',
+    axis: 'unknown', phase: 'finalize', effectState: 'no_effect',
+    retryDisposition: 'do_not_retry', recommendedAction: 'retain_explicit_blocker',
+  };
+  return {
+    ...base,
+    fixtureId: 'logging-clean-explicit-blocker',
+    description: 'Controller-only evidence for a frozen explicit blocker.',
+    operatorVisible: false,
+    incidentExpected: false,
+    expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
+    records: [
+      { ...template, surfaceRole: 'controller_transition', transport: 'service', recordId: 'blocked-transition',
+        requestId, timestamp: '2026-09-03T00:59:59.000Z', parentId: null, terminal: false,
+        state: 'accepted', phase: 'scheduler_admission', effectState: 'no_effect' },
+      { ...template, surfaceRole: 'pre_execution_blocker', transport: 'service', recordId: 'blocked-declaration',
+        requestId, timestamp: '2026-09-03T00:59:59.100Z', parentId: 'blocked-transition', terminal: true,
+        state: 'rejected', phase: 'scheduler_admission', effectState: 'no_effect',
+        failure: blockerFailure },
+      { ...template, surfaceRole: 'terminal_event', transport: 'service', recordId: 'blocked-terminal',
+        requestId, timestamp: '2026-09-03T00:59:59.200Z', parentId: 'blocked-declaration', terminal: true,
+        state: 'rejected', phase: 'finalize', effectState: 'no_effect',
+        failure: blockerFailure },
+    ],
+  };
+}
+
 function runTest(name, body) {
   body();
   process.stdout.write(`PASS ${name}\n`);
@@ -298,6 +343,44 @@ runTest('retains explicitly missing response job event trace incident and dashbo
   assert(report.findings.some((finding) => finding.code === 'logging:missing_record'));
   assert.equal(report.independentAudits.logging[0].missingRecordCount, 6);
   assert(!report.findings.some((finding) => finding.code === 'logging_attempt_envelope_missing'));
+});
+
+runTest('accepts exact controller-only logging for a frozen skipped blocker', () => {
+  const input = cleanEvidence();
+  input.ledgerRecords[0].payload.resultState = 'skipped_blocked';
+  input.ledgerRecords[0].payload.effectState = 'no_effect';
+  input.ledgerRecords[0].payload.blocker = {
+    code: 'live_case_hook_missing', detail: 'frozen source hook is unavailable',
+    sourcePath: 'scripts/lib/p158-w7-development-adapters.js', sourceSha256: 'c'.repeat(64),
+  };
+  input.loggingExpectations[0] = {
+    attemptId: 'A01-E0-r001', requestId: 'request-good', incidentExpected: false,
+    operatorVisible: false,
+    expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
+  };
+  input.loggingEvidence[0].fixtures = [blockedLoggingFixture()];
+  const directLogging = auditCausalEnvelopes({ fixtureSet: input.loggingEvidence[0] });
+  assert.equal(directLogging.findings.length, 0, JSON.stringify(directLogging));
+  rehashLedger(input);
+  const report = analyze(input);
+  assert.equal(validateReport(report), true, ajv.errorsText(validateReport.errors));
+  assert(!report.findings.some((finding) => finding.code === 'logging_expectation_invalid'));
+  assert(!report.findings.some((finding) => finding.code === 'logging:missing_record'),
+    JSON.stringify(report.findings.filter((finding) => finding.code.startsWith('logging'))));
+  assert.equal(directLogging.summary.expectedRecordCount, 3);
+});
+
+runTest('does not let a concrete attempt claim the weaker blocked logging contract', () => {
+  const input = cleanEvidence();
+  input.loggingExpectations[0] = {
+    attemptId: 'A01-E0-r001', requestId: 'request-good', incidentExpected: false,
+    operatorVisible: false,
+    expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
+  };
+  input.loggingEvidence[0].fixtures = [blockedLoggingFixture()];
+  const report = analyze(input);
+  assert.equal(validateReport(report), true, ajv.errorsText(validateReport.errors));
+  assert(report.findings.some((finding) => finding.code === 'logging_expectation_invalid'));
 });
 
 process.stdout.write('P158 W10 final analyzer provider-free self-test passed\n');

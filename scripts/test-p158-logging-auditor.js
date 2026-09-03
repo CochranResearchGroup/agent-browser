@@ -201,4 +201,47 @@ runTest('keeps complete and reordered causal envelopes clean across every expect
   }
 });
 
+runTest('audits an honest pre-execution blocker on controller-only evidence surfaces', () => {
+  const base = clone(fixtureSet.fixtures.find((fixture) => fixture.fixtureId === 'logging-good-complete'));
+  const template = base.records[0];
+  const requestId = 'blocked-request-001';
+  const blockerFailure = {
+    schemaVersion: 'agent-browser.service-failure-recourse.v1', code: 'live_case_hook_missing',
+    axis: 'unknown', phase: 'finalize', effectState: 'no_effect',
+    retryDisposition: 'do_not_retry', recommendedAction: 'retain_explicit_blocker',
+  };
+  const fixture = {
+    ...base,
+    fixtureId: 'logging-clean-explicit-blocker',
+    description: 'A frozen explicit blocker has controller transition, blocker, and terminal evidence only.',
+    operatorVisible: false,
+    incidentExpected: false,
+    expectedSurfaceRoles: ['controller_transition', 'pre_execution_blocker', 'terminal_event'],
+    expectedFindingCodes: [],
+    records: [
+      { ...template, surfaceRole: 'controller_transition', transport: 'service', recordId: 'blocked-transition',
+        requestId, timestamp: '2026-09-02T22:01:00.000Z', parentId: null, terminal: false,
+        state: 'accepted', phase: 'scheduler_admission', effectState: 'no_effect' },
+      { ...template, surfaceRole: 'pre_execution_blocker', transport: 'service', recordId: 'blocked-declaration',
+        requestId, timestamp: '2026-09-02T22:01:00.010Z', parentId: 'blocked-transition', terminal: true,
+        state: 'rejected', phase: 'scheduler_admission', effectState: 'no_effect',
+        failure: blockerFailure },
+      { ...template, surfaceRole: 'terminal_event', transport: 'service', recordId: 'blocked-terminal',
+        requestId, timestamp: '2026-09-02T22:01:00.020Z', parentId: 'blocked-declaration', terminal: true,
+        state: 'rejected', phase: 'finalize', effectState: 'no_effect',
+        failure: blockerFailure },
+    ],
+  };
+  assertValid(validateFixtureSet, { ...clone(fixtureSet), fixtures: [...clone(fixtureSet.fixtures), fixture] },
+    'blocked logging fixture');
+  const blockedFixtureSet = { ...clone(fixtureSet), fixtures: [fixture] };
+  const blockedReport = audit(blockedFixtureSet);
+  assertValid(validateReport, blockedReport, 'blocked logging report');
+  assert.equal(blockedReport.findings.length, 0, JSON.stringify(blockedReport.findings));
+  assert.equal(blockedReport.summary.expectedRecordCount, 3);
+  assert.equal(blockedReport.summary.observedRecordCount, 3);
+  assert.deepEqual(blockedReport.envelopes[0].expectedSurfaceRoles,
+    ['controller_transition', 'pre_execution_blocker', 'terminal_event']);
+});
+
 process.stdout.write('P158 logging auditor adversarial self-test passed\n');

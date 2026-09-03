@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/p158-logging-causal-fixtures.v1.schema.json",
   "title": "Plan 0158 synthetic causal logging fixtures",
-  "description": "Production-shaped but wholly synthetic normalized logging records and their exact expected audit findings.",
+  "description": "Production-shaped but wholly synthetic normalized controller and product logging records and their exact expected audit findings.",
   "type": "object",
   "required": ["schemaVersion", "planId", "syntheticOnly", "canaries", "fixtures"],
   "properties": {
@@ -25,7 +25,7 @@
     "id": { "type": "string", "minLength": 1, "maxLength": 200 },
     "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
     "surfaceRole": {
-      "enum": ["ingress_request", "immediate_response", "durable_job", "terminal_event", "trace_outcome", "incident", "dashboard_projection"]
+      "enum": ["controller_transition", "pre_execution_blocker", "ingress_request", "immediate_response", "durable_job", "terminal_event", "trace_outcome", "incident", "dashboard_projection"]
     },
     "findingCode": {
       "enum": ["missing_record", "duplicate_terminal", "conflicting_projection", "timestamp_inversion", "null_failure", "null_provenance", "one_transport_only", "broken_parent", "effect_retry_conflict", "sensitive_value_leak", "capture_gap"]
@@ -50,7 +50,7 @@
         "incidentExpected": { "type": "boolean" },
         "expectedSurfaceRoles": {
           "type": "array",
-          "minItems": 5,
+          "minItems": 3,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/surfaceRole" }
         },
