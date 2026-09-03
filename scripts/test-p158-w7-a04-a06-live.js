@@ -197,6 +197,7 @@ function manifest(origin, capabilities) {
     schemaVersion: 'agent-browser.p158-w7-a04-a06-ownership.v1',
     campaignRunId: 'p158-a04-a06-run', candidateSha256: 'a'.repeat(64),
     liveHookManifestSha256: 'b'.repeat(64),
+    environmentSealSha256s: { E0: 'c'.repeat(64), E1: 'd'.repeat(64) },
     environments: Object.fromEntries(['E0', 'E1'].map((environmentId) => [environmentId, {
       serviceOrigin: origin, runtimeLane: 'development', production: false,
       runtimeEnvironmentId: environmentId,

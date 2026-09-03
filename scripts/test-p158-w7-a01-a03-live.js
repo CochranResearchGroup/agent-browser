@@ -237,6 +237,7 @@ function manifest(origin) {
     campaignRunId: 'p158-a01-a03-run',
     candidateSha256: 'a'.repeat(64),
     liveHookManifestSha256: 'b'.repeat(64),
+    environmentSealSha256s: { E0: 'c'.repeat(64), E1: 'd'.repeat(64) },
     environments: { E0: environment('E0'), E1: environment('E1') },
     fixtures,
   });

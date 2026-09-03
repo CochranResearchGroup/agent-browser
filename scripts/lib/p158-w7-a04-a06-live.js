@@ -133,6 +133,9 @@ function validateManifest(manifest, schedule) {
     : null;
   if (manifest?.schemaVersion !== 'agent-browser.p158-w7-a04-a06-ownership.v1' ||
       manifest?.manifestSha256 !== sha256(body) ||
+      !manifest?.environmentSealSha256s ||
+      ['E0', 'E1'].some((environmentId) =>
+        !/^[a-f0-9]{64}$/u.test(manifest.environmentSealSha256s[environmentId] ?? '')) ||
       !/^[a-f0-9]{64}$/u.test(manifest?.candidateSha256 ?? '') ||
       !/^[a-f0-9]{64}$/u.test(manifest?.liveHookManifestSha256 ?? '') ||
       typeof manifest?.campaignRunId !== 'string' || manifest.campaignRunId.length === 0) {
@@ -520,9 +523,13 @@ export function createP158W7A04A06LiveBundle({
     ownershipManifestSha256: manifest.manifestSha256,
     campaignRunId: manifest.campaignRunId, candidateSha256: manifest.candidateSha256,
     liveHookManifestSha256: manifest.liveHookManifestSha256,
+    environmentSealSha256s: structuredClone(manifest.environmentSealSha256s),
     liveHookIds: [P158_W7_A04_A06_HOOK_ID], driverSource: source,
     adapterBindingSha256: sha256({ caseIds: ['A05'], ownershipManifestSha256: manifest.manifestSha256,
-      source, liveHookIds: [P158_W7_A04_A06_HOOK_ID] }),
+      campaignRunId: manifest.campaignRunId, candidateSha256: manifest.candidateSha256,
+      liveHookManifestSha256: manifest.liveHookManifestSha256,
+      environmentSealSha256s: manifest.environmentSealSha256s, source,
+      liveHookIds: [P158_W7_A04_A06_HOOK_ID] }),
   });
 }
 

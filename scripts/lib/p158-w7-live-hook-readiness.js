@@ -45,8 +45,26 @@ const REVIEWED_SOURCES = Object.freeze([
   'cli/src/native/authentication_run.rs',
   'cli/src/native/service_model.rs',
   'scripts/lib/p158-w7-development-adapters.js',
+  'scripts/lib/p158-w7-a01-a03-live.js',
   'scripts/lib/p158-w7-a04-a06-live.js',
 ]);
+
+const BUNDLE_SPECS = Object.freeze({
+  a01A03LiveBundle: Object.freeze({
+    schemaVersion: 'agent-browser.p158-w7-a01-a03-live-bundle.v1',
+    caseIds: Object.freeze(['A01', 'A02', 'A03']),
+    actionCounts: Object.freeze({ A01: 250, A02: 400, A03: 20 }),
+    sourcePath: 'scripts/lib/p158-w7-a01-a03-live.js',
+    liveHookIds: Object.freeze(['w7.a01_a03.service_concurrency']),
+  }),
+  a04A06LiveBundle: Object.freeze({
+    schemaVersion: 'agent-browser.p158-w7-a04-a06-live-bundle.v1',
+    caseIds: Object.freeze(['A05']),
+    actionCounts: Object.freeze({ A05: 12 }),
+    sourcePath: 'scripts/lib/p158-w7-a04-a06-live.js',
+    liveHookIds: Object.freeze(['w7.a04_a06.profile_policy']),
+  }),
+});
 
 function sourceDigest(relativePath) {
   return createHash('sha256').update(readFileSync(new URL(`../../${relativePath}`, import.meta.url))).digest('hex');
@@ -60,11 +78,54 @@ function freeze(value) {
   return value;
 }
 
+function same(value, expected) {
+  return JSON.stringify(value) === JSON.stringify(expected);
+}
+
+function validateLiveBundle(bundle, spec, candidateSha256, environmentSealSha256s) {
+  if (!bundle || bundle.schemaVersion !== spec.schemaVersion || bundle.freezeEligible !== true ||
+      bundle.providerFree !== false || bundle.candidateSha256 !== candidateSha256 ||
+      !/^[a-f0-9]{64}$/u.test(bundle.ownershipManifestSha256 ?? '') ||
+      !/^[a-f0-9]{64}$/u.test(bundle.liveHookManifestSha256 ?? '') ||
+      typeof bundle.campaignRunId !== 'string' || bundle.campaignRunId.length === 0 ||
+      !same(bundle.concreteCaseIds, spec.caseIds) || !same(bundle.liveHookIds, spec.liveHookIds) ||
+      bundle.driverSource?.sourcePath !== spec.sourcePath ||
+      bundle.driverSource?.sourceSha256 !== sourceDigest(spec.sourcePath) ||
+      !same(bundle.environmentSealSha256s,
+        Object.fromEntries(['E0', 'E1'].map((id) => [id, environmentSealSha256s[id]]))) ||
+      !Array.isArray(bundle.adapters) || bundle.adapters.length !== spec.caseIds.length ||
+      !same(bundle.adapters.map((adapter) => adapter.caseId), spec.caseIds) ||
+      bundle.adapters.some((adapter) => adapter.adapterId !== `p158.case.${adapter.caseId}.v1` ||
+        !/^[a-f0-9]{64}$/u.test(adapter.executionContractSha256 ?? ''))) {
+    return false;
+  }
+  const expectedBindingSha256 = sha256({
+    caseIds: spec.caseIds,
+    ownershipManifestSha256: bundle.ownershipManifestSha256,
+    campaignRunId: bundle.campaignRunId,
+    candidateSha256: bundle.candidateSha256,
+    liveHookManifestSha256: bundle.liveHookManifestSha256,
+    environmentSealSha256s: bundle.environmentSealSha256s,
+    source: bundle.driverSource,
+    liveHookIds: spec.liveHookIds,
+  });
+  if (bundle.adapterBindingSha256 !== expectedBindingSha256) return false;
+  if (spec.caseIds.includes('A05')) {
+    return bundle.readiness?.counts?.A04?.executable === 0 &&
+      bundle.readiness?.counts?.A05?.scheduled === 12 &&
+      bundle.readiness?.counts?.A05?.executable === 12 &&
+      bundle.readiness?.counts?.A05?.blocked === 0 &&
+      bundle.readiness?.counts?.A06?.executable === 0;
+  }
+  return true;
+}
+
 export function auditP158W7LiveHookReadiness({ candidateSha256, environmentSealSha256s,
-  a04A06LiveBundle = null }) {
+  a01A03LiveBundle = null, a04A06LiveBundle = null }) {
   if (!/^[a-f0-9]{64}$/u.test(candidateSha256 ?? '') ||
-      !environmentSealSha256s || Object.values(environmentSealSha256s)
-        .some((digest) => !/^[a-f0-9]{64}$/u.test(digest))) {
+      !environmentSealSha256s || ['E0', 'E1'].some((environmentId) =>
+        !/^[a-f0-9]{64}$/u.test(environmentSealSha256s[environmentId] ?? '')) ||
+      Object.values(environmentSealSha256s).some((digest) => !/^[a-f0-9]{64}$/u.test(digest))) {
     throw Object.assign(new Error('W7 readiness requires frozen candidate and environment seals'), {
       code: 'w7_readiness_seal_missing',
     });
@@ -73,17 +134,27 @@ export function auditP158W7LiveHookReadiness({ candidateSha256, environmentSealS
     sourcePath,
     sourceSha256: sourceDigest(sourcePath),
   }));
-  const a05Concrete = a04A06LiveBundle !== null &&
-    a04A06LiveBundle.freezeEligible === true && a04A06LiveBundle.providerFree === false &&
-    a04A06LiveBundle.candidateSha256 === candidateSha256 &&
-    JSON.stringify(a04A06LiveBundle.concreteCaseIds) === JSON.stringify(['A05']) &&
-    a04A06LiveBundle.readiness?.counts?.A05?.executable === 12 &&
-    a04A06LiveBundle.driverSource?.sourcePath === 'scripts/lib/p158-w7-a04-a06-live.js' &&
-    a04A06LiveBundle.driverSource?.sourceSha256 === sourceDigest('scripts/lib/p158-w7-a04-a06-live.js');
+  const concreteActionCounts = new Map();
+  const bundles = { a01A03LiveBundle, a04A06LiveBundle };
+  const validity = Object.fromEntries(Object.entries(bundles).map(([inputName, bundle]) => [inputName,
+    validateLiveBundle(bundle, BUNDLE_SPECS[inputName], candidateSha256, environmentSealSha256s)]));
+  const validBundles = Object.entries(bundles).filter(([inputName]) => validity[inputName])
+    .map(([, bundle]) => bundle);
+  if (new Set(validBundles.map((bundle) => bundle.campaignRunId)).size > 1 ||
+      new Set(validBundles.map((bundle) => bundle.liveHookManifestSha256)).size > 1) {
+    for (const inputName of Object.keys(validity)) validity[inputName] = false;
+  }
+  for (const [inputName] of Object.entries(bundles)) {
+    const spec = BUNDLE_SPECS[inputName];
+    if (validity[inputName]) {
+      for (const caseId of spec.caseIds) concreteActionCounts.set(caseId, spec.actionCounts[caseId]);
+    }
+  }
   const cases = [...new Set([...REQUESTED_CASES, ...PRODUCT_BLOCKERS])].map((caseId) => {
-    if (caseId === 'A05' && a05Concrete) return {
+    if (concreteActionCounts.has(caseId)) return {
       caseId, requestedMode: 'concrete_live', implementationKind: 'concrete_live',
-      blockerKind: null, findingCodes: [], effectsAllowed: true, implementedActionCount: 12,
+      blockerKind: null, findingCodes: [], effectsAllowed: true,
+      implementedActionCount: concreteActionCounts.get(caseId),
       ownershipReceiptState: 'frozen_and_effect_time_revalidated',
     };
     return {

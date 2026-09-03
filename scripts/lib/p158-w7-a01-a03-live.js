@@ -102,6 +102,9 @@ function validateOwnershipManifest(manifest, schedule) {
       !/^[a-f0-9]{64}$/u.test(manifest?.candidateSha256 ?? '') ||
       !/^[a-f0-9]{64}$/u.test(manifest?.liveHookManifestSha256 ?? '') ||
       manifest?.manifestSha256 !== sha256(body) ||
+      !manifest?.environmentSealSha256s ||
+      ['E0', 'E1'].some((environmentId) =>
+        !/^[a-f0-9]{64}$/u.test(manifest.environmentSealSha256s[environmentId] ?? '')) ||
       typeof manifest?.campaignRunId !== 'string' || manifest.campaignRunId.length === 0) {
     fail('frozen_ownership_manifest_invalid', 'A01-A03 require an exact self-hashed ownership manifest');
   }
@@ -587,11 +590,16 @@ export function createP158W7A01A03LiveBundle({
     campaignRunId: manifest.campaignRunId,
     candidateSha256: manifest.candidateSha256,
     liveHookManifestSha256: manifest.liveHookManifestSha256,
+    environmentSealSha256s: structuredClone(manifest.environmentSealSha256s),
     liveHookIds: [P158_W7_A01_A03_HOOK_ID],
     driverSource: source,
     adapterBindingSha256: sha256({
       caseIds: P158_W7_A01_A03_CASE_IDS,
       ownershipManifestSha256: manifest.manifestSha256,
+      campaignRunId: manifest.campaignRunId,
+      candidateSha256: manifest.candidateSha256,
+      liveHookManifestSha256: manifest.liveHookManifestSha256,
+      environmentSealSha256s: manifest.environmentSealSha256s,
       source,
       liveHookIds: [P158_W7_A01_A03_HOOK_ID],
     }),
