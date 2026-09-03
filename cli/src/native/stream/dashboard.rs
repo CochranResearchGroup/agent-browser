@@ -667,6 +667,20 @@ async fn handle_service_api_request(
                                 return;
                             }
                         };
+                        let response = match sanitize_dashboard_handoff_response(body, response) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                write_json_error_with_code(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    &format!("Durable handoff public response was invalid: {err}"),
+                                    Some("durable_handoff_public_response_invalid"),
+                                    None,
+                                )
+                                .await;
+                                return;
+                            }
+                        };
                         if let Some(handoff_id) =
                             authenticated_candidate_handoff_commit_id(body, &response)
                         {
@@ -1765,6 +1779,66 @@ fn authenticated_candidate_handoff_commit_id(body: &str, response: &[u8]) -> Opt
         && payload.pointer("/data/resolved").and_then(Value::as_bool) == Some(true)
         && payload.pointer("/data/status").and_then(Value::as_str) == Some("ready");
     ready.then(|| handoff_id.to_string())
+}
+
+/// Keep infrastructure-only route URLs out of the authenticated public dashboard response.
+fn sanitize_dashboard_handoff_response(
+    request_body: &str,
+    response: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let request = serde_json::from_str::<Value>(request_body)
+        .map_err(|err| format!("invalid service request JSON: {err}"))?;
+    if request.get("action").and_then(Value::as_str) != Some("service_remote_view_handoff_resolve")
+    {
+        return Ok(response);
+    }
+
+    let header_end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| "backend response did not include HTTP headers".to_string())?;
+    let header = std::str::from_utf8(&response[..header_end])
+        .map_err(|err| format!("backend response headers were not UTF-8: {err}"))?;
+    let status = header
+        .lines()
+        .next()
+        .and_then(|line| {
+            line.strip_prefix("HTTP/1.1 ")
+                .or_else(|| line.strip_prefix("HTTP/1.0 "))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "backend response did not include a valid HTTP status line".to_string())?
+        .to_string();
+    let mut payload = serde_json::from_slice::<Value>(&response[header_end + 4..])
+        .map_err(|err| format!("backend response body was not JSON: {err}"))?;
+    strip_dashboard_handoff_provider_urls(&mut payload);
+    Ok(json_http_response(&status, payload))
+}
+
+fn strip_dashboard_handoff_provider_urls(value: &mut Value) {
+    const FORBIDDEN_KEYS: [&str; 5] = [
+        "providerExternalUrl",
+        "routeBinding",
+        "localEmbedUrl",
+        "dashboardEmbedUrl",
+        "healthUrl",
+    ];
+    match value {
+        Value::Object(object) => {
+            for key in FORBIDDEN_KEYS {
+                object.remove(key);
+            }
+            for nested in object.values_mut() {
+                strip_dashboard_handoff_provider_urls(nested);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                strip_dashboard_handoff_provider_urls(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn require_json_backend_response(
@@ -3831,6 +3905,62 @@ mod tests {
             authenticated_candidate_handoff_commit_id(request, &ready),
             Some("handoff-a".to_string())
         );
+    }
+
+    #[test]
+    fn public_dashboard_handoff_response_omits_provider_route_urls() {
+        let request = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+        let response = json_http_response(
+            "200 OK",
+            json!({
+                "success": true,
+                "data": {
+                    "status": "ready",
+                    "resolved": true,
+                    "handoffUrl": "https://dashboard.example.test/remote-view/handoff-a",
+                    "providerExternalUrl": "http://127.0.0.1:8080/guacamole/",
+                    "localEmbedUrl": "http://127.0.0.1:8080/guacamole/",
+                    "dashboardEmbedUrl": "https://dashboard.example.test/guacamole/",
+                    "healthUrl": "http://127.0.0.1:8080/health",
+                    "routeBinding": {
+                        "externalUrl": "http://127.0.0.1:8080/guacamole/",
+                        "frameUrl": "http://127.0.0.1:8080/guacamole/"
+                    },
+                    "open": {
+                        "intent": {"url": "http://127.0.0.1:19058/fixture"},
+                        "providerExternalUrl": "http://127.0.0.1:8080/guacamole/",
+                        "routeBinding": {"healthUrl": "http://127.0.0.1:8080/health"}
+                    }
+                }
+            }),
+        );
+
+        let sanitized = sanitize_dashboard_handoff_response(request, response).unwrap();
+        let payload: Value =
+            serde_json::from_slice(http_response_body(&sanitized).unwrap()).unwrap();
+        let data = payload.get("data").unwrap();
+        assert_eq!(
+            data.get("handoffUrl").and_then(Value::as_str),
+            Some("https://dashboard.example.test/remote-view/handoff-a")
+        );
+        assert_eq!(
+            data.pointer("/open/intent/url").and_then(Value::as_str),
+            Some("http://127.0.0.1:19058/fixture")
+        );
+        for pointer in [
+            "/providerExternalUrl",
+            "/localEmbedUrl",
+            "/dashboardEmbedUrl",
+            "/healthUrl",
+            "/routeBinding",
+            "/open/providerExternalUrl",
+            "/open/routeBinding",
+        ] {
+            assert!(
+                data.pointer(pointer).is_none(),
+                "retained forbidden field {pointer}"
+            );
+        }
     }
 
     #[test]

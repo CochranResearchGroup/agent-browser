@@ -1865,3 +1865,39 @@ Revised next action: validate and commit the bounded runner repair, then run one
 E16 readiness observation. If either page remains without an iframe for the
 full convergence budget, pause on the typed dashboard/product defect and repair
 that defect rather than altering the already-proven marker or route identity.
+
+E16 passed the repaired convergence behavior and produced two new exact
+findings. The human-paced client rendered the expected marker on both initial
+and reconnect captures, but its otherwise public dashboard session received 23
+provider-internal URL observations in durable-handoff resolve responses. Its
+redacted HAR contains 212 requests and every request remained on the public
+dashboard origin, proving the defect is response-data disclosure rather than
+loopback navigation. The slow client rendered the exact marker on its initial
+and concurrent pages, but its reconnect marker showed Chrome's New Tab page.
+
+The slow-client root cause is in the synthetic interaction harness. It clicked
+40 pixels inside the remote frame before capture, which is Chrome tab-strip
+space rather than the attested synthetic page. The repaired interaction derives
+its point from the center of the already-attested synthetic marker region. A
+provider-free regression fixes that point at the page marker and prevents a
+return to the tab-strip coordinate.
+
+The URL disclosure is in the authenticated dashboard proxy. The durable
+handoff resolver legitimately returns infrastructure diagnostics to its local
+owner, but the public dashboard forwarded that response unchanged. The bounded
+public-boundary repair recursively removes provider route, route-binding,
+embed, and health URL fields only from authenticated durable-handoff resolve
+responses. It preserves the opaque handoff URL, status, presentation receipt,
+tab identity, and open intent required by the dashboard. Its focused red test
+contains loopback provider values at both top-level and nested locations and
+proves none survive the public response.
+
+The repairs pass the external-runner provider-free suite, all 52 dashboard
+stream module tests, workspace clippy with warnings denied, the durable-handoff
+dashboard contract check, and the documentation build. The docs, CLI help,
+README, shared skill, and inline contract now state the public response rule.
+
+Revised next action: commit the two E16 blocker repairs, publish one isolated
+development candidate, run the three-launch smoke and provider-required doctor,
+and explicitly restore the retained handoff if installation closes it. Then
+dispatch one external readiness observation from the exact installed commit.

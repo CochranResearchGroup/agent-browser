@@ -3987,6 +3987,9 @@ queues `service_remote_view_handoff_resolve`, prefers the originally retained
 browser tab, then may bind the current tab whose URL matches the durable intent
 if the recorded CDP target ID expired. It also reacquires expired Guacamole
 route state with the original view stream and control-input posture. If the
+request crosses the authenticated dashboard boundary, its response omits
+provider route, embed, and health URLs; those infrastructure values are never
+sent to the operator's browser. If the
 original daemon is gone, the resolver requests adoption of the exact retained
 browser identity. It never substitutes a raw provider URL, launches a
 replacement browser, opens a replacement target, or replays navigation during

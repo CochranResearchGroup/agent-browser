@@ -489,6 +489,9 @@ tab whose URL still matches the recorded intent. It does not navigate, open a
 replacement target, relaunch the browser, change providers, or redirect to a
 raw provider URL. A ready result
 includes `presentationGeneration` and a matching `presentationReceipt`; keep
+provider route, embed, and health URLs out of external clients. The authenticated
+dashboard removes those infrastructure-only values from durable-handoff resolve
+responses. Keep
 retrying the same durable URL while status is `converging`. Resolution fails
 closed when neither the retained target nor a current intent-matching target
 exists. Do not send `allowReopenClosed: true` unless the operator

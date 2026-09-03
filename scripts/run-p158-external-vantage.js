@@ -844,7 +844,7 @@ async function executeExternalVantageProbe({
         if (remainingMs > 0) await new Promise((resolvePromise) => setTimeout(resolvePromise, remainingMs));
         if (event.kind === 'dashboard_action') {
           const actionStartedMs = Date.now();
-          await humanPacedObservation(page, paceProfile);
+          await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
           calibration.actionCount += 1;
           calibration.events.push({
             ...event,
@@ -1060,7 +1060,7 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     30_000,
   );
   const readyAt = new Date().toISOString();
-  if (performHumanAction) await humanPacedObservation(page, paceProfile);
+  if (performHumanAction) await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
   const iframeUrls = await page.locator('iframe').evaluateAll((frames) => frames.map((frame) => frame.src).filter(Boolean));
   const formActions = await page.locator('form').evaluateAll((forms) => forms.map((form) => form.action).filter(Boolean));
   const copiedActions = await page.locator('a,button').evaluateAll((elements) => elements.flatMap((element) => {
@@ -1361,7 +1361,7 @@ export function projectHandoffResolution(data) {
   };
 }
 
-async function humanPacedObservation(page, profile) {
+async function humanPacedObservation(page, profile, pixelMarkerRegion) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
   await page.waitForTimeout(delay);
@@ -1375,13 +1375,24 @@ async function humanPacedObservation(page, profile) {
   if (await remoteFrame.count()) {
     const box = await remoteFrame.boundingBox();
     if (box) {
-      await page.mouse.click(box.x + Math.min(40, box.width / 2), box.y + Math.min(40, box.height / 2));
+      const point = syntheticRemoteInteractionPoint(pixelMarkerRegion, box);
+      await page.mouse.click(point.x, point.y);
       await page.waitForTimeout(delay);
       await page.keyboard.press('Escape');
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowUp');
     }
   }
+}
+
+export function syntheticRemoteInteractionPoint(region, iframeBox) {
+  const marker = region.coordinateSpace === 'remote-view-iframe'
+    ? pixelMarkerClipForIframe(region, iframeBox)
+    : region;
+  return {
+    x: marker.x + marker.width / 2,
+    y: marker.y + marker.height / 2,
+  };
 }
 
 async function waitForAuthoritativeHandoffResolution(resolutions, startIndex, timeoutMs) {

@@ -21,6 +21,7 @@ import {
   projectHandoffResolution,
   pixelMarkerClipForIframe,
   remoteViewIframeClipObservation,
+  syntheticRemoteInteractionPoint,
   redactOperatorUrl,
   runExternalVantageProbe,
   validateExternalCalibrationLeadTime,
@@ -209,6 +210,14 @@ assert.throws(
     { x: 10, y: 20, width: 1000, height: 700 },
   ),
   /exactly one iframe, observed 2/,
+);
+assert.deepEqual(
+  syntheticRemoteInteractionPoint(
+    { coordinateSpace: 'remote-view-iframe', x: 300, y: 300, width: 400, height: 100 },
+    { x: 310, y: 337, width: 1110, height: 641 },
+  ),
+  { x: 810, y: 687 },
+  'synthetic input must land in the attested page marker, not the remote browser tab strip',
 );
 assert.equal(
   validateExternalVantageConfiguration({ env, clientId: 'external-runner-human', paceProfile: 'human_controller' }).handoff.origin,
