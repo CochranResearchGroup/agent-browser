@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/p158-campaign-result.v1.schema.json",
+  "title": "Plan 0158 append-only campaign result record",
+  "description": "One immutable hash-chained campaign ledger record. The validator enforces contiguous sequence numbers, previous-record hashes, legal controller transitions, one terminal outcome per attempt, and complete schedule terminality before evidence sealing.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "planId",
+    "runId",
+    "recordId",
+    "sequence",
+    "previousRecordSha256",
+    "recordType",
+    "controllerState",
+    "wallTime",
+    "monotonicTimeNanoseconds",
+    "clockOffsetMilliseconds",
+    "payload",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.p158-campaign-result.v1" },
+    "planId": { "const": "P158" },
+    "runId": { "$ref": "#/$defs/id" },
+    "recordId": { "$ref": "#/$defs/id" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "previousRecordSha256": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "recordType": {
+      "enum": [
+        "controller_transition",
+        "attempt_started",
+        "attempt_observation",
+        "attempt_terminal",
+        "safety_observation",
+        "external_intervention",
+        "scheduled_teardown_terminal",
+        "evidence_seal",
+        "analysis_terminal"
+      ]
+    },
+    "controllerState": {
+      "enum": ["prepared", "frozen", "executing", "execution_terminal", "evidence_sealed", "analyzed"]
+    },
+    "wallTime": { "type": "string", "format": "date-time" },
+    "monotonicTimeNanoseconds": { "type": "integer", "minimum": 0 },
+    "clockOffsetMilliseconds": { "type": "number" },
+    "hostId": { "$ref": "#/$defs/id" },
+    "payload": {
+      "oneOf": [
+        { "$ref": "#/$defs/controllerTransition" },
+        { "$ref": "#/$defs/attemptStarted" },
+        { "$ref": "#/$defs/attemptObservation" },
+        { "$ref": "#/$defs/attemptTerminal" },
+        { "$ref": "#/$defs/safetyObservation" },
+        { "$ref": "#/$defs/externalIntervention" },
+        { "$ref": "#/$defs/teardownTerminal" },
+        { "$ref": "#/$defs/evidenceSeal" },
+        { "$ref": "#/$defs/analysisTerminal" }
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "sequence": { "const": 0 } }, "required": ["sequence"] },
+      "then": { "properties": { "previousRecordSha256": { "type": "null" } } },
+      "else": { "properties": { "previousRecordSha256": { "$ref": "#/$defs/sha256" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "controller_transition" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/controllerTransition" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "attempt_started" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/attemptStarted" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "attempt_observation" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/attemptObservation" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "attempt_terminal" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/attemptTerminal" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "safety_observation" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/safetyObservation" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "external_intervention" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/externalIntervention" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "scheduled_teardown_terminal" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/teardownTerminal" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "evidence_seal" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/evidenceSeal" } } }
+    },
+    {
+      "if": { "properties": { "recordType": { "const": "analysis_terminal" } }, "required": ["recordType"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/analysisTerminal" } } }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "caseId": { "type": "string", "pattern": "^(A(0[1-9]|1[0-5])|H(0[1-9]|1[0-2])|X(0[1-9]|10)|D(0[1-9]|1[0-2])|C0[1-5])$" },
+    "controllerState": { "enum": ["prepared", "frozen", "executing", "execution_terminal", "evidence_sealed", "analyzed"] },
+    "resultState": {
+      "enum": [
+        "passed",
+        "reproduced_historical_failure",
+        "new_product_failure",
+        "harness_failure",
+        "inconclusive",
+        "skipped_blocked",
+        "safety_stopped"
+      ]
+    },
+    "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
+    "retryDisposition": {
+      "enum": ["not_applicable", "prohibited_opportunistic_retry", "predetermined_distinct_attempt"]
+    },
+    "controllerTransition": {
+      "type": "object",
+      "required": ["kind", "from", "to", "reason", "terminal"],
+      "properties": {
+        "kind": { "const": "controller_transition" },
+        "from": {
+          "oneOf": [
+            { "$ref": "#/$defs/controllerState" },
+            { "type": "null" }
+          ]
+        },
+        "to": { "$ref": "#/$defs/controllerState" },
+        "reason": { "type": "string", "minLength": 1 },
+        "terminal": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "attemptIdentity": {
+      "type": "object",
+      "required": ["scheduleId", "caseId", "attemptId", "repetition", "seed", "environmentIds"],
+      "properties": {
+        "scheduleId": { "$ref": "#/$defs/id" },
+        "caseId": { "$ref": "#/$defs/caseId" },
+        "attemptId": { "$ref": "#/$defs/id" },
+        "repetition": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "environmentIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["E0", "E1", "E2", "E3"] }
+        }
+      },
+      "additionalProperties": false
+    },
+    "attemptStarted": {
+      "type": "object",
+      "required": ["kind", "attempt", "preconditions", "declaredStimulusIds", "terminal"],
+      "properties": {
+        "kind": { "const": "attempt_started" },
+        "attempt": { "$ref": "#/$defs/attemptIdentity" },
+        "preconditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/observation" }
+        },
+        "declaredStimulusIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "terminal": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "attemptObservation": {
+      "type": "object",
+      "required": ["kind", "attemptId", "observation", "terminal"],
+      "properties": {
+        "kind": { "const": "attempt_observation" },
+        "attemptId": { "$ref": "#/$defs/id" },
+        "observation": { "$ref": "#/$defs/observation" },
+        "terminal": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "attemptTerminal": {
+      "type": "object",
+      "required": [
+        "kind",
+        "attempt",
+        "resultState",
+        "effectState",
+        "retryDisposition",
+        "completedAt",
+        "terminal",
+        "firstFailureSignature",
+        "blocker",
+        "safetyStop",
+        "causalIds"
+      ],
+      "properties": {
+        "kind": { "const": "attempt_terminal" },
+        "attempt": { "$ref": "#/$defs/attemptIdentity" },
+        "resultState": { "$ref": "#/$defs/resultState" },
+        "effectState": { "$ref": "#/$defs/effectState" },
+        "retryDisposition": { "$ref": "#/$defs/retryDisposition" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "terminal": { "const": true },
+        "firstFailureSignature": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "blocker": {
+          "oneOf": [
+            { "$ref": "#/$defs/blocker" },
+            { "type": "null" }
+          ]
+        },
+        "safetyStop": {
+          "oneOf": [
+            { "$ref": "#/$defs/safetyStop" },
+            { "type": "null" }
+          ]
+        },
+        "causalIds": { "$ref": "#/$defs/causalIds" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "resultState": { "const": "skipped_blocked" } }, "required": ["resultState"] },
+          "then": { "properties": { "blocker": { "$ref": "#/$defs/blocker" }, "effectState": { "const": "no_effect" } } },
+          "else": { "properties": { "blocker": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "resultState": { "const": "safety_stopped" } }, "required": ["resultState"] },
+          "then": { "properties": { "safetyStop": { "$ref": "#/$defs/safetyStop" } } },
+          "else": { "properties": { "safetyStop": { "type": "null" } } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "required": ["blockedByCaseId", "blockedByAttemptId", "lostPrerequisite", "observationArtifactIds"],
+      "properties": {
+        "blockedByCaseId": { "$ref": "#/$defs/caseId" },
+        "blockedByAttemptId": { "$ref": "#/$defs/id" },
+        "lostPrerequisite": { "type": "string", "minLength": 1 },
+        "observationArtifactIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "safetyStop": {
+      "type": "object",
+      "required": ["ruleId", "metric", "threshold", "observedValue", "consecutiveViolations", "action", "testedRuntimeRepaired"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/id" },
+        "metric": { "type": "string", "minLength": 1 },
+        "threshold": { "type": "number" },
+        "observedValue": { "type": "number" },
+        "consecutiveViolations": { "type": "integer", "minimum": 1 },
+        "action": { "const": "stop_load_generator_only" },
+        "testedRuntimeRepaired": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "safetyObservation": {
+      "type": "object",
+      "required": ["kind", "ruleId", "metric", "threshold", "observedValue", "violation", "consecutiveViolations", "terminal"],
+      "properties": {
+        "kind": { "const": "safety_observation" },
+        "ruleId": { "$ref": "#/$defs/id" },
+        "metric": { "type": "string", "minLength": 1 },
+        "threshold": { "type": "number" },
+        "observedValue": { "type": "number" },
+        "violation": { "type": "boolean" },
+        "consecutiveViolations": { "type": "integer", "minimum": 0 },
+        "terminal": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "externalIntervention": {
+      "type": "object",
+      "required": ["kind", "description", "actorClass", "frozenComparisonInvalidAfterSequence", "terminal"],
+      "properties": {
+        "kind": { "const": "external_intervention" },
+        "description": { "type": "string", "minLength": 1 },
+        "actorClass": { "enum": ["operator", "host_supervisor", "provider", "unknown"] },
+        "frozenComparisonInvalidAfterSequence": { "type": "integer", "minimum": 0 },
+        "terminal": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "teardownTerminal": {
+      "type": "object",
+      "required": ["kind", "scheduleId", "resultState", "effectState", "retryDisposition", "completedAt", "terminal"],
+      "properties": {
+        "kind": { "const": "scheduled_teardown_terminal" },
+        "scheduleId": { "$ref": "#/$defs/id" },
+        "resultState": { "$ref": "#/$defs/resultState" },
+        "effectState": { "$ref": "#/$defs/effectState" },
+        "retryDisposition": { "$ref": "#/$defs/retryDisposition" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "terminal": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "evidenceSeal": {
+      "type": "object",
+      "required": ["kind", "manifestSha256", "ledgerHeadSha256", "artifactCount", "artifactBytes", "allScheduledAttemptsTerminal", "teardownTerminal", "sealedAt", "terminal"],
+      "properties": {
+        "kind": { "const": "evidence_seal" },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "ledgerHeadSha256": { "$ref": "#/$defs/sha256" },
+        "artifactCount": { "type": "integer", "minimum": 0 },
+        "artifactBytes": { "type": "integer", "minimum": 0 },
+        "allScheduledAttemptsTerminal": { "const": true },
+        "teardownTerminal": { "const": true },
+        "sealedAt": { "type": "string", "format": "date-time" },
+        "terminal": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "analysisTerminal": {
+      "type": "object",
+      "required": ["kind", "sealedLedgerHeadSha256", "resultSetSha256", "remediationGraphSha256", "analyzedAt", "terminal"],
+      "properties": {
+        "kind": { "const": "analysis_terminal" },
+        "sealedLedgerHeadSha256": { "$ref": "#/$defs/sha256" },
+        "resultSetSha256": { "$ref": "#/$defs/sha256" },
+        "remediationGraphSha256": { "$ref": "#/$defs/sha256" },
+        "analyzedAt": { "type": "string", "format": "date-time" },
+        "terminal": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": ["observationId", "kind", "state", "artifactIds"],
+      "properties": {
+        "observationId": { "$ref": "#/$defs/id" },
+        "kind": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["satisfied", "not_satisfied", "missing", "conflicting", "not_applicable"] },
+        "artifactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "causalIds": {
+      "type": "object",
+      "properties": {
+        "requestId": { "$ref": "#/$defs/id" },
+        "connectionId": { "$ref": "#/$defs/id" },
+        "subjectId": { "$ref": "#/$defs/id" },
+        "profileId": { "$ref": "#/$defs/id" },
+        "policyRevision": { "$ref": "#/$defs/id" },
+        "leaseId": { "$ref": "#/$defs/id" },
+        "runtimeLaneId": { "$ref": "#/$defs/id" },
+        "browserId": { "$ref": "#/$defs/id" },
+        "processId": { "$ref": "#/$defs/id" },
+        "sessionId": { "$ref": "#/$defs/id" },
+        "tabId": { "$ref": "#/$defs/id" },
+        "targetId": { "$ref": "#/$defs/id" },
+        "viewId": { "$ref": "#/$defs/id" },
+        "handoffId": { "$ref": "#/$defs/id" },
+        "routeId": { "$ref": "#/$defs/id" },
+        "displayId": { "$ref": "#/$defs/id" },
+        "providerId": { "$ref": "#/$defs/id" },
+        "controllerId": { "$ref": "#/$defs/id" },
+        "viewerId": { "$ref": "#/$defs/id" },
+        "jobId": { "$ref": "#/$defs/id" },
+        "eventId": { "$ref": "#/$defs/id" },
+        "traceId": { "$ref": "#/$defs/id" },
+        "incidentId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["artifactId", "relativePath", "mediaType", "sha256", "byteCount", "captureState", "redactions", "parentArtifactSha256s"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$"
+        },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteCount": { "type": "integer", "minimum": 0 },
+        "captureState": { "enum": ["complete", "partial", "missing", "redacted"] },
+        "captureGap": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["fieldClass", "action", "count"],
+            "properties": {
+              "fieldClass": { "type": "string", "minLength": 1 },
+              "action": { "enum": ["excluded_at_capture", "removed", "replaced_with_synthetic", "hashed"] },
+              "count": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "parentArtifactSha256s": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "captureState": { "enum": ["partial", "missing"] } }, "required": ["captureState"] },
+          "then": {
+            "required": ["captureGap"],
+            "properties": { "captureGap": { "type": "string", "minLength": 1 } }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}
