@@ -620,6 +620,7 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
             &route_id,
             &display_allocation_id,
             &browser_id,
+            &session_id,
             existing_display_allocation.as_ref(),
         )?;
         let connection_id = optional_command_string(cmd, "connectionId")

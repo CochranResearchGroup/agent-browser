@@ -12,7 +12,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use super::service_model::{
-    BrowserHost, DisplayAllocation, RoutePoolEntry, ServiceState, ViewStreamProvider,
+    BrowserHost, DisplayAllocation, RemoteViewAcquisitionLease, RoutePoolEntry, ServiceState,
+    ViewStreamProvider,
 };
 
 #[cfg(test)]
@@ -396,6 +397,32 @@ pub fn checked_out_route_matches_owner(
     })
 }
 
+pub(crate) fn pending_remote_view_acquisition_lease_matches_owner(
+    lease: &RemoteViewAcquisitionLease,
+    browser_id: &str,
+    session_id: &str,
+    route_id: &str,
+    display_allocation_id: &str,
+    route_pool_entry_id: Option<&str>,
+) -> bool {
+    lease.state == "pending"
+        && matches!(
+            lease.phase.as_str(),
+            "reserved" | "display_ready" | "browser_attached" | "tab_acquired" | "proof_ready"
+        )
+        && lease.browser_id == browser_id
+        && lease.session_id == session_id
+        && lease.route_id == route_id
+        && lease.display_allocation_id == display_allocation_id
+        && route_pool_entry_id
+            .map(|entry_id| lease.route_pool_entry_id.as_deref() == Some(entry_id))
+            .unwrap_or(true)
+        && crate::process_identity::boot_epoch_status(
+            lease.boot_epoch.as_deref(),
+            crate::process_identity::current_boot_epoch().as_deref(),
+        ) == crate::process_identity::BootEpochStatus::Current
+}
+
 fn pending_route_pool_entry_matches_acquisition_owner(
     state: &ServiceState,
     entry: &RoutePoolEntry,
@@ -424,24 +451,14 @@ fn pending_route_pool_entry_matches_acquisition_owner(
         .get(lease_id)
         .is_some_and(|lease| {
             lease.id == lease_id
-                && lease.state == "pending"
-                && matches!(
-                    lease.phase.as_str(),
-                    "reserved"
-                        | "display_ready"
-                        | "browser_attached"
-                        | "tab_acquired"
-                        | "proof_ready"
+                && pending_remote_view_acquisition_lease_matches_owner(
+                    lease,
+                    browser_id,
+                    session_id,
+                    route_id,
+                    display_allocation_id,
+                    Some(entry.id.as_str()),
                 )
-                && lease.browser_id == browser_id
-                && lease.session_id == session_id
-                && lease.route_id == route_id
-                && lease.display_allocation_id == display_allocation_id
-                && lease.route_pool_entry_id.as_deref() == Some(entry.id.as_str())
-                && crate::process_identity::boot_epoch_status(
-                    lease.boot_epoch.as_deref(),
-                    crate::process_identity::current_boot_epoch().as_deref(),
-                ) == crate::process_identity::BootEpochStatus::Current
         })
 }
 

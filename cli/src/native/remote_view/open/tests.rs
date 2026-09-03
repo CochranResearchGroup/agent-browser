@@ -1656,6 +1656,74 @@ fn completed_route_bound_rollback_survives_compatibility_failure_normalization()
     );
 }
 
+#[test]
+fn exact_pending_acquisition_can_claim_ownerless_warm_provider_route() {
+    let state = ServiceState {
+        remote_view_routes: BTreeMap::from([(
+            "route-a".to_string(),
+            RemoteViewRoute {
+                id: "route-a".to_string(),
+                display_allocation_id: Some("provider-display-a".to_string()),
+                browser_id: None,
+                session_id: None,
+                state: "ready".to_string(),
+                ..RemoteViewRoute::default()
+            },
+        )]),
+        remote_view_acquisition_leases: BTreeMap::from([(
+            "lease-a".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "lease-a".to_string(),
+                boot_epoch: crate::process_identity::current_boot_epoch(),
+                browser_id: "session:current".to_string(),
+                session_id: "current".to_string(),
+                route_id: "route-a".to_string(),
+                display_allocation_id: "remote-view-display:route-a".to_string(),
+                route_pool_entry_id: Some("pool-a".to_string()),
+                state: "pending".to_string(),
+                phase: "reserved".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let allocation = DisplayAllocation {
+        id: "remote-view-display:route-a".to_string(),
+        owner_browser_id: Some("session:current".to_string()),
+        owner_session_id: Some("current".to_string()),
+        display_isolation: "shared_display".to_string(),
+        state: "pending".to_string(),
+        ..DisplayAllocation::default()
+    };
+
+    ensure_remote_view_route_available_for_display(
+        &state,
+        "route-a",
+        "remote-view-display:route-a",
+        "session:current",
+        "current",
+        Some(&allocation),
+    )
+    .unwrap();
+
+    let mut foreign_state = state;
+    foreign_state
+        .remote_view_acquisition_leases
+        .get_mut("lease-a")
+        .unwrap()
+        .session_id = "other".to_string();
+    let error = ensure_remote_view_route_available_for_display(
+        &foreign_state,
+        "route-a",
+        "remote-view-display:route-a",
+        "session:current",
+        "current",
+        Some(&allocation),
+    )
+    .unwrap_err();
+    assert!(error.starts_with("route_pool_contention:"));
+}
+
 struct PendingRepository;
 
 impl RouteBoundOpenRepository for PendingRepository {
