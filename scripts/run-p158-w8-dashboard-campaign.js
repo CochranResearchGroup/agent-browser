@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { mkdir, open, readFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import {
@@ -9,7 +9,9 @@ import {
   buildP158DashboardCampaignPlan,
   executeP158DashboardCampaignAction,
   prepareP158DashboardCampaign,
+  resolveP158DashboardActionResume,
   sha256Bytes,
+  validateP158ExternalPlaywrightRunner,
 } from './lib/p158-w8-dashboard-campaign.js';
 
 const argv = process.argv.slice(2).filter((argument) => argument !== '--');
@@ -104,7 +106,12 @@ async function validateInstalledState(request) {
   }
   const result = await runProcess(request.candidate.executablePath, [
     'service', 'state', 'validate', '--path', request.validationInputPath, '--json',
-  ], { env: { PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' } });
+  ], { env: {
+    PATH: process.env.PATH ?? '/usr/bin:/bin',
+    LANG: process.env.LANG ?? 'C.UTF-8',
+    NO_COLOR: '1',
+    ...request.environment,
+  } });
   return parseJson(result.stdout, 'installed Service State validator');
 }
 
@@ -148,6 +155,10 @@ function createLiveEffects(executionInput) {
     openExternalPage: async ({ publicUrl }) => {
       const endpoint = process.env.AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS;
       if (!endpoint) throw new Error('AGENT_BROWSER_P158_EXTERNAL_PLAYWRIGHT_WS is required for off-host capture');
+      validateP158ExternalPlaywrightRunner({
+        endpoint,
+        attestation: executionInput.externalRunnerAttestation,
+      });
       const { chromium } = await import('playwright');
       const browser = await chromium.connect(endpoint);
       const context = await browser.newContext();
@@ -177,24 +188,48 @@ function createLiveEffects(executionInput) {
         },
       };
     },
-    produceChurn: async ({ page, churnPlan }) => {
-      const result = await page.evaluate(async (plan) => {
-        let completed = 0;
-        for (const operation of plan.operations) {
-          const endpoint = operation.kind === 'authoritative_snapshot'
-            ? '/api/service/status'
-            : '/api/service/events?limit=10000';
-          const response = await fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' });
-          if (!response.ok) throw new Error(`D09 churn failed at ${operation.correlationId}`);
-          await response.json();
-          window.dispatchEvent(new Event(operation.kind === 'authoritative_snapshot' ? 'focus' : 'online'));
-          completed += 1;
+    produceChurn: async ({ page, root, churnPlan }) => {
+      let state = JSON.parse(await readFile(root.target.statePath, 'utf8'));
+      const browserId = Object.keys(state.browsers).sort()[0];
+      if (!browserId) throw new Error('D09 active churn requires at least one exact browser row');
+      const transitions = [];
+      for (const operation of churnPlan.operations) {
+        const health = operation.ordinal % 2 === 0 ? 'not_started' : 'degraded';
+        state = structuredClone(state);
+        state.stateRevision += 1;
+        state.browsers[browserId].health = health;
+        const bytes = `${JSON.stringify(state)}\n`;
+        const validationInputPath = `${root.target.disposableRoot}/churn/state-${String(operation.ordinal).padStart(4, '0')}.json`;
+        const parserReceipt = await validateInstalledState({
+          candidate: root.candidate,
+          environment: root.environment,
+          validationInputPath,
+          stateBytes: bytes,
+        });
+        if (parserReceipt.accepted !== true || parserReceipt.classification !== 'accepted' ||
+            parserReceipt.parserIdentitySha256 !== root.candidate.executableSha256 ||
+            parserReceipt.stateSha256 !== sha256Bytes(bytes)) {
+          throw new Error(`D09 transition parser rejected ${operation.correlationId}`);
         }
-        return completed;
-      }, churnPlan);
+        const nextPath = `${root.target.statePath}.p158-${String(operation.ordinal).padStart(4, '0')}`;
+        await writeFile(nextPath, bytes, { flag: 'wx', mode: 0o600 });
+        await rename(nextPath, root.target.statePath);
+        const observed = await page.evaluate(async ({ id, expectedHealth }) => {
+          const response = await fetch('/api/service/browsers?limit=500', {
+            credentials: 'same-origin', cache: 'no-store',
+          });
+          const body = await response.json();
+          const browsers = body?.data?.browsers ?? body?.data ?? [];
+          return response.ok && body.success === true &&
+            browsers.find((browser) => browser.id === id)?.health === expectedHealth;
+        }, { id: browserId, expectedHealth: health });
+        if (!observed) throw new Error(`D09 live Service state did not reach ${operation.correlationId}`);
+        transitions.push({ correlationId: operation.correlationId, health, stateSha256: parserReceipt.stateSha256 });
+      }
       return {
         churnPlanSha256: churnPlan.churnPlanSha256,
-        completedOperationCount: result,
+        completedOperationCount: transitions.length,
+        transitionsSha256: sha256Bytes(`${JSON.stringify(transitions)}\n`),
         retryAttempted: false,
       };
     },
@@ -230,6 +265,36 @@ async function main() {
     const effects = createLiveEffects(input);
     const receipts = [];
     for (const root of input.campaignPlan.roots) {
+      const receiptPath = join(dirname(resolve(outputPath)), 'action-receipts', `${sha256Bytes(root.actionId).slice(0, 24)}.json`);
+      const claimPath = join(dirname(resolve(outputPath)), 'action-claims', `${sha256Bytes(root.actionId).slice(0, 24)}.json`);
+      let existingReceipt = null;
+      let existingClaim = null;
+      try {
+        existingReceipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      try {
+        existingClaim = JSON.parse(await readFile(claimPath, 'utf8'));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      const resume = resolveP158DashboardActionResume({
+        campaignPlan: input.campaignPlan,
+        actionId: root.actionId,
+        claim: existingClaim,
+        receipt: existingReceipt,
+      });
+      if (resume.disposition === 'reuse_terminal') {
+        receipts.push(resume.receipt);
+        continue;
+      }
+      await writeNewJson(claimPath, {
+        schemaVersion: 'agent-browser.p158-dashboard-action-claim.v1',
+        actionId: root.actionId,
+        campaignPlanSha256: input.campaignPlan.campaignPlanSha256,
+        effectState: 'claimed_uncertain_until_terminal_receipt',
+      });
       const receipt = await executeP158DashboardCampaignAction({
         campaignPlan: input.campaignPlan,
         preparation: input.preparation,
@@ -238,10 +303,7 @@ async function main() {
         effects,
       });
       receipts.push(receipt);
-      await writeNewJson(
-        join(dirname(resolve(outputPath)), 'action-receipts', `${sha256Bytes(root.actionId).slice(0, 24)}.json`),
-        receipt,
-      );
+      await writeNewJson(receiptPath, receipt);
     }
     output = {
       receipts,

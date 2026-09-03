@@ -12,6 +12,8 @@ import {
   buildP158DashboardCampaignPlan,
   executeP158DashboardCampaignAction,
   prepareP158DashboardCampaign,
+  resolveP158DashboardActionResume,
+  validateP158ExternalPlaywrightRunner,
 } from './lib/p158-w8-dashboard-campaign.js';
 import { buildP158DashboardPreseedPlan } from './lib/p158-w8-dashboard-live.js';
 
@@ -69,6 +71,25 @@ try {
       basePort: 53200,
     }),
     (error) => error instanceof P158W8DashboardCampaignError && error.code === 'external_ingress_invalid',
+  );
+  const runnerBody = {
+    schemaVersion: 'agent-browser.p158-external-playwright-runner-attestation.v1',
+    endpointSha256: sha256('wss://playwright-runner.example.test/connect'),
+    offHost: true,
+    outsideServiceHost: true,
+    outsideServiceNetworkNamespace: true,
+    reviewedRevision: 'external-runner-test-001',
+  };
+  assert.equal(validateP158ExternalPlaywrightRunner({
+    endpoint: 'wss://playwright-runner.example.test/connect',
+    attestation: { ...runnerBody, attestationSha256: sha256(runnerBody) },
+  }).endpoint, 'wss://playwright-runner.example.test/connect');
+  assert.throws(
+    () => validateP158ExternalPlaywrightRunner({
+      endpoint: 'ws://127.0.0.1:9222/connect',
+      attestation: { ...runnerBody, endpointSha256: sha256('ws://127.0.0.1:9222/connect') },
+    }),
+    (error) => error instanceof P158W8DashboardCampaignError && error.code === 'external_runner_invalid',
   );
 
   const validatorCalls = [];
@@ -255,6 +276,8 @@ try {
   assert.deepEqual(d09.projection.counts, { profiles: 100, browsers: 500, tabs: 2000, jobs: 10000, events: 10000 });
   assert.equal(d09.projection.capture.railRows.length, 600);
   assert.equal(d09.churnReceipt.completedOperationCount, 32);
+  assert.equal(d01.oracleBinding.passed, true);
+  assert.equal(d09.oracleBinding.passed, true);
   assert(lifecycle.indexOf(`churn:${actions[1].actionId}`) < lifecycle.indexOf(`stop:${actions[1].actionId}`));
 
   const aggregate = aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts });
@@ -262,6 +285,20 @@ try {
   assert.equal(aggregate.actionCount, 2);
   assert.equal(aggregate.retryCount, 0);
   assert.match(aggregate.aggregateSha256, /^[a-f0-9]{64}$/);
+  assert.equal(resolveP158DashboardActionResume({
+    campaignPlan,
+    actionId: receipts[0].actionId,
+    claim: { actionId: receipts[0].actionId, campaignPlanSha256: campaignPlan.campaignPlanSha256 },
+    receipt: receipts[0],
+  }).disposition, 'reuse_terminal');
+  assert.throws(
+    () => resolveP158DashboardActionResume({
+      campaignPlan,
+      actionId: receipts[0].actionId,
+      claim: { actionId: receipts[0].actionId, campaignPlanSha256: campaignPlan.campaignPlanSha256 },
+    }),
+    (error) => error instanceof P158W8DashboardCampaignError && error.code === 'action_effect_uncertain',
+  );
 
   const badRouteReceipt = await executeP158DashboardCampaignAction({
     campaignPlan,

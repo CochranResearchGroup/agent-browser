@@ -3,7 +3,9 @@ import { isAbsolute, join, normalize } from 'node:path';
 
 import { developmentExternalIngressBinding } from './development-presentation-provider.js';
 import { sha256 } from './p158-campaign-controller.js';
+import { generateDenseDashboardFixture } from './p158-dashboard-oracle.js';
 import {
+  auditP158DashboardLiveProjection,
   captureP158DashboardLiveProjection,
   materializeP158DashboardPreseedPlan,
 } from './p158-w8-dashboard-live.js';
@@ -63,6 +65,30 @@ function validateExternalIngress(externalIngress) {
     fail('external_ingress_invalid', 'W8 dashboard execution requires the exact reviewed public HTTPS ingress');
   }
   return binding;
+}
+
+/** Bind capture to a frozen public WSS Playwright runner outside the Service host. */
+export function validateP158ExternalPlaywrightRunner({ endpoint, attestation }) {
+  let parsed;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    fail('external_runner_invalid', 'External Playwright endpoint is invalid');
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const { attestationSha256, ...body } = attestation ?? {};
+  if (parsed.protocol !== 'wss:' || !hostname.includes('.') || hostname === 'localhost' ||
+      hostname.endsWith('.localhost') || hostname.endsWith('.local') ||
+      /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(hostname) ||
+      /^172\.(?:1[6-9]|2\d|3[01])\./.test(hostname) || hostname === '::1' ||
+      attestation?.schemaVersion !== 'agent-browser.p158-external-playwright-runner-attestation.v1' ||
+      attestation.endpointSha256 !== sha256(endpoint) || attestation.offHost !== true ||
+      attestation.outsideServiceHost !== true || attestation.outsideServiceNetworkNamespace !== true ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(attestation.reviewedRevision ?? '') ||
+      attestationSha256 !== sha256(body)) {
+    fail('external_runner_invalid', 'Frozen public off-host Playwright runner attestation is missing or changed');
+  }
+  return { endpoint: parsed.href, attestation: structuredClone(attestation) };
 }
 
 /**
@@ -231,6 +257,85 @@ export function buildP158D09ChurnPlan({ root, cycleCount = 32 }) {
   return { ...body, churnPlanSha256: sha256(canonical(body)) };
 }
 
+/** Convert the single live correlation barrier into the immutable W5 oracle shape. */
+export function buildP158DashboardFixtureFromProjection({ projection, actionId }) {
+  if (projection?.schemaVersion !== 'agent-browser.p158-dashboard-live-projection.v1' ||
+      typeof actionId !== 'string' || !actionId) {
+    fail('dashboard_projection_invalid', 'Dashboard fixture requires one live projection and action identity');
+  }
+  const fixture = generateDenseDashboardFixture({
+    ...projection.counts,
+    idNamespace: `p158-live-${sha256(actionId).slice(0, 12)}`,
+  });
+  const snapshotRevision = projection.authoritativeSnapshotSha256;
+  fixture.fixtureId = `p158-live-${sha256(actionId).slice(0, 20)}`;
+  fixture.description = 'Plan 0158 externally captured dashboard correlation barrier.';
+  fixture.density = projection.density;
+  fixture.truth = {
+    snapshotRevision,
+    counts: structuredClone(projection.counts),
+    resources: projection.capture.railRows.map((row) => ({
+      resourceId: row.resourceId,
+      resourceType: row.resourceType,
+      label: row.label,
+      state: row.state,
+      rowExpected: true,
+      orderKey: row.orderKey,
+      rowId: row.rowId,
+      badge: null,
+      count: 0,
+    })),
+  };
+  fixture.railRows = projection.capture.railRows.map((row) => ({
+    ...structuredClone(row), snapshotRevision, badge: null, count: 0,
+  }));
+  const selectedResourceId = fixture.railRows[0]?.resourceId ?? null;
+  fixture.selection = {
+    selectedResourceId,
+    inspectorResourceId: selectedResourceId,
+    selectedExists: selectedResourceId !== null,
+    recoveryActionCount: 1,
+    deepLinkRequestedId: selectedResourceId,
+    deepLinkResolvedId: selectedResourceId,
+  };
+  fixture.actions = projection.capture.actionButtons
+    .filter((button) => button.actionId && button.targetResourceId)
+    .map((button) => ({
+      actionId: button.actionId,
+      declaredTargetResourceId: button.targetResourceId,
+      invokedTargetResourceId: button.targetResourceId,
+      eligible: !button.disabled,
+      displayedEligible: !button.disabled,
+      rendered: true,
+    }));
+  fixture.warnings.displayedAxes = projection.capture.warnings.map((warning) => warning.axis).filter(Boolean).sort();
+  fixture.stream = {
+    streamId: `${actionId}:stream`, snapshotRevision, streamRevision: snapshotRevision,
+    displayedReady: true, authoritativeReady: true,
+  };
+  const durations = projection.capture.performance.map((entry) => entry.durationMs).filter(Number.isFinite);
+  fixture.timings = [{ interaction: 'initial_load', samplesMs: durations, p95BudgetMs: 3000 }];
+  const resourceSample = {
+    heapBytes: 0,
+    domNodeCount: projection.capture.domNodeCount,
+    listenerCount: 0,
+    cpuMilliseconds: 0,
+    networkBytes: 0,
+    longTaskCount: 0,
+    browserProcessCount: projection.counts.browsers,
+    xvfbProcessCount: 0,
+    routeAllocationCount: 0,
+    profileLeaseCount: projection.counts.profiles,
+    retainedSessionCount: 0,
+    unresolvedJobCount: 0,
+  };
+  fixture.resourceSamples = [
+    { elapsedMs: 0, ...resourceSample },
+    { elapsedMs: 60_000, ...resourceSample },
+  ];
+  return fixture;
+}
+
 function matchingPreseedReceipt(campaignPlan, preparation, root) {
   if (preparation?.schemaVersion !== 'agent-browser.p158-dashboard-campaign-preparation.v1' ||
       preparation.campaignPlanSha256 !== campaignPlan.campaignPlanSha256 ||
@@ -270,6 +375,8 @@ export async function executeP158DashboardCampaignAction({
   let pageHandle = null;
   let churnReceipt = null;
   let projection = null;
+  let dashboardFixture = null;
+  let oracleBinding = null;
   let firstFailure = null;
   let teardown = { attempted: false, state: 'not_started', pid: null, failure: null };
   try {
@@ -313,6 +420,9 @@ export async function executeP158DashboardCampaignAction({
       externalProof: selected.externalProof,
       screenshotPath: root.screenshotPath,
     });
+    dashboardFixture = buildP158DashboardFixtureFromProjection({ projection, actionId: root.actionId });
+    oracleBinding = auditP158DashboardLiveProjection({ projection, dashboardFixture });
+    if (!oracleBinding.passed) fail('dashboard_oracle_failed', 'Externally captured dashboard oracle did not pass');
   } catch (error) {
     firstFailure = errorRecord(error);
   } finally {
@@ -355,6 +465,8 @@ export async function executeP158DashboardCampaignAction({
     materializationReceiptSha256: preseed.materializationReceipt.receiptSha256,
     externalIngressBindingSha256: root.externalIngress.bindingSha256,
     projection,
+    dashboardFixture,
+    oracleBinding,
     churnReceipt,
     firstFailure,
     teardown,
@@ -393,6 +505,27 @@ export function aggregateP158DashboardCampaignReceipts({ campaignPlan, receipts 
     retryCount: 0,
   };
   return { ...body, aggregateSha256: sha256(canonical(body)) };
+}
+
+/** Decide whether an action is new, terminally reusable, or effect-uncertain after process loss. */
+export function resolveP158DashboardActionResume({ campaignPlan, actionId, claim = null, receipt = null }) {
+  validateCampaignPlan(campaignPlan);
+  const root = campaignPlan.roots.find((entry) => entry.actionId === actionId);
+  if (!root) fail('action_not_planned', 'Resume action is not present in the immutable campaign plan');
+  if (receipt) {
+    if (receipt.actionId !== actionId || receipt.candidateSha256 !== campaignPlan.candidate.executableSha256 ||
+        receipt.terminalState !== 'completed' || receipt.receiptSha256 !== receiptDigest(receipt)) {
+      fail('action_receipt_set_invalid', 'Existing action receipt is changed, foreign, or nonterminal');
+    }
+    return { disposition: 'reuse_terminal', receipt: structuredClone(receipt) };
+  }
+  if (claim) {
+    if (claim.actionId !== actionId || claim.campaignPlanSha256 !== campaignPlan.campaignPlanSha256) {
+      fail('action_claim_invalid', 'Existing action claim is foreign or changed');
+    }
+    fail('action_effect_uncertain', 'Action was claimed without a terminal receipt and must not be replayed');
+  }
+  return { disposition: 'execute_once', receipt: null };
 }
 
 export function sha256Bytes(bytes) {
