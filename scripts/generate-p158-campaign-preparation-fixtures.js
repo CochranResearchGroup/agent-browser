@@ -17,6 +17,14 @@ const artifactKinds = [
 const ingressClasses = [
   'dns', 'tls', 'redirect', 'cookie', 'websocket', 'iframe', 'form_action', 'reconnect',
 ];
+const w4FindingCodes = [
+  'external_vantage_unproven', 'invalid_handoff_url', 'non_https_url', 'loopback_url_leak',
+  'private_network_url_leak', 'link_local_url_leak', 'local_domain_url_leak',
+  'raw_guacamole_url_leak', 'forbidden_role_url_leak', 'dns_failure', 'tls_failure',
+  'redirect_failure', 'cookie_failure', 'iframe_failure', 'form_action_failure',
+  'websocket_failure', 'reconnect_failure', 'operator_not_ready', 'pixels_before_ready',
+  'visible_identity_mismatch', 'handoff_changed', 'duplicate_cold_launch', 'capture_gap',
+];
 
 function canonicalize(value) {
   if (value === null || typeof value !== 'object') return value;
@@ -81,7 +89,13 @@ function makeBaseline() {
     auditedAt: '2026-09-02T20:00:00.000Z',
     repairAttempted: false,
     passed: true,
-    summary: { findingCount: 0 },
+    summary: {
+      urlObservationCount: 0,
+      ingressCheckCount: 0,
+      reconnectCount: 0,
+      findingCount: 0,
+      findingCounts: Object.fromEntries(w4FindingCodes.map((code) => [code, 0])),
+    },
     urlClassifications: [],
     findings: [],
   };
@@ -313,7 +327,21 @@ add('referenced-artifact-missing', ['referenced_artifact_missing'], (input) => {
 });
 add('w4-oracle-not-clean', ['w4_oracle_not_clean'], (input) => {
   input.w4Report.passed = false;
-  input.w4Report.findings = [{ code: 'capture_gap' }];
+  input.w4Report.summary.findingCount = 1;
+  input.w4Report.summary.findingCounts.capture_gap = 1;
+  input.w4Report.findings = [{
+    findingId: 'finding-w4-capture-gap',
+    code: 'capture_gap',
+    severity: 'needs_evidence',
+    message: 'Synthetic external capture gap',
+    observationIds: [],
+    checkIds: [],
+    reconnectIds: [],
+    field: 'captureGaps',
+    expected: 0,
+    observed: 1,
+    repairAttempted: false,
+  }];
 });
 
 writeFileSync(outputPath, `${JSON.stringify({
