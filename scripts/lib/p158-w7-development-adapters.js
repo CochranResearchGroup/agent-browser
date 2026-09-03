@@ -39,6 +39,61 @@ export const P158_W7_LIVE_HOOK_GAPS = Object.freeze({
   X10: 'disposable_host_epoch_driver',
 });
 
+export const P158_W7_REQUIRED_SEAMS = Object.freeze({
+  A01: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Drive existing labeled Service requests from 100 sequential and 25 concurrent distinct client IDs.',
+  },
+  A02: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Coordinate ten existing shared-browser clients at each of twenty frozen barriers.',
+  },
+  A03: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Open ten existing Service clients with one shared label and distinct immutable connection IDs.',
+  },
+  A04: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Materialize existing profile access policies for every frozen role, mode, operation, and decision cell.',
+  },
+  A05: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Apply existing revisioned profile-policy updates at six frozen workload barriers.',
+  },
+  A06: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Sequence existing administrative revocation and exact tab-eviction APIs at the four frozen matrix cells.',
+  },
+  A08: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Install the frozen unproven and inconsistent identity fixtures, then invoke the four existing actions.',
+  },
+  A09: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Orchestrate target creation and closure for seven remaining pathologies; about:blank is already bound.',
+  },
+  A10: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Pre-stage exact owned and foreign CDP processes and run existing inventory observations under churn.',
+  },
+  A11: {
+    kind: 'product_source',
+    minimalSeam: 'Add a development-only, barrier-controlled scheduler executor outcome injector for every terminal boundary.',
+  },
+  A12: {
+    kind: 'product_source',
+    minimalSeam: 'Add a development-only Service State lock-holder barrier that can release before effect, after effect, or after disconnect.',
+  },
+  A14: {
+    kind: 'product_source',
+    minimalSeam: 'Add a development-runtime-scoped full-shutdown plan and apply command that cannot address production resources.',
+  },
+  A15: {
+    kind: 'campaign_harness',
+    minimalSeam: 'Coordinate one frozen marker through HTTP, MCP, dashboard, and remote control; CLI marker navigation is already bound.',
+  },
+});
+
 const CASE_SPECS = Object.freeze({
   A01: { hook: 'cli', stimuli: [] },
   A02: { hook: 'browser', stimuli: [] },
@@ -497,6 +552,7 @@ export function assessP158W7ReviewedLiveDispatcher({ schedule, target }) {
     caseId,
     code: 'live_case_hook_missing',
     missingHook,
+    requiredSeam: P158_W7_REQUIRED_SEAMS[caseId] ?? null,
     affectedActionCount: expected.filter((action) => action.caseId === caseId).length -
       bindings.filter((binding) => binding.caseId === caseId).length,
   }));
