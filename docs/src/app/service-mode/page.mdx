@@ -1037,7 +1037,10 @@ requests are reuse route hints copied from access plans. Action-specific
 to actions such as <code>view_takeover</code>. Agent Browser validates a
 complete pair against the current access plan, rejects contradictions before
 browser effects, and attaches the exact compatible retained browser instead of
-launching another profile process. Direct launches that select a
+launching another profile process. A cold shared-local plan supplies a stable
+<code>shared-profile-*</code> session derived from the admitted subject and
+profile so execution cannot inherit unrelated identity from the runtime host's
+ambient lane. Direct launches that select a
 profile already backed by a live retained browser are rejected unless the
 request uses those route hints or sets
 <code>allowDuplicateProfileLane: true</code> for reviewed isolation or throwaway

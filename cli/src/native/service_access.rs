@@ -4722,6 +4722,49 @@ mod tests {
     }
 
     #[test]
+    fn shared_local_cold_profile_session_round_trips_without_owner_proof() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "p158-shared".to_string(),
+                BrowserProfile {
+                    id: "p158-shared".to_string(),
+                    access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(
+                        "p158-shared",
+                    )),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let request = ServiceAccessPlanRequest {
+            runtime_profile: Some("p158-shared".to_string()),
+            service_name: Some("Last30Days".to_string()),
+            agent_name: Some("x-scraper".to_string()),
+            task_name: Some("x-feed".to_string()),
+            ..ServiceAccessPlanRequest::default()
+        };
+        let first_plan = service_access_plan_for_state(&state, request.clone());
+        let second_plan = service_access_plan_for_state(&state, request);
+        let mut command = first_plan["decision"]["serviceRequest"]["request"].clone();
+        let expected_session = command["sessionName"]
+            .as_str()
+            .expect("shared-local cold acquisition should carry a session route")
+            .to_string();
+
+        assert_ne!(expected_session, "default");
+        assert!(expected_session.starts_with("shared-profile-"));
+        assert_eq!(
+            second_plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            expected_session
+        );
+        apply_shared_profile_route_hints_for_service_request(&state, &mut command).unwrap();
+
+        assert_eq!(command["sessionName"], expected_session);
+        assert!(command.get("browserId").is_none());
+        assert!(command.get("serviceProfileRouteAuthorization").is_none());
+    }
+
+    #[test]
     fn authenticated_same_principal_reuses_its_coherent_retained_browser() {
         use crate::native::service_principal::{
             AuthenticatedServicePrincipal, ServicePrincipalProvenance,

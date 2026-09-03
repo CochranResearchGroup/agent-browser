@@ -75,6 +75,8 @@ pub(crate) fn decide_profile_acquisition(
         lifecycle_replacement: &lifecycle_replacement,
         authenticated_principal: input.authenticated_principal,
         strict_identity_required,
+        access_policy: &access_policy,
+        access_decision: &access_decision,
         managed_profile_recommendation: input.one_time_profile_recommendation,
     });
     let reuse_action = profile_reuse
@@ -231,6 +233,36 @@ pub(crate) fn authenticated_cold_session_name(
     Some(format!("principal-profile-{suffix}"))
 }
 
+/// Return a stable cold daemon route for an allowed shared-local subject.
+///
+/// The route prevents a first request from inheriting the runtime host's
+/// ambient session and any unrelated retained Profile identity on that lane.
+/// Its inputs are non-secret, policy-admitted identity and Profile fields.
+fn shared_local_cold_session_name(
+    access_policy: &ServiceProfileAccessPolicy,
+    access_decision: &ServiceProfileAccessDecision,
+    selected_profile: &BrowserProfile,
+) -> Option<String> {
+    if access_policy.mode != ProfileAccessMode::SharedLocal
+        || !access_decision.allowed
+        || access_decision.resource.profile_id.as_deref() != Some(selected_profile.id.as_str())
+    {
+        return None;
+    }
+    let subject_id = access_decision.subject.subject_id.as_deref()?;
+    let mut hasher = Sha256::new();
+    hasher.update(subject_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(selected_profile.id.as_bytes());
+    let suffix = hasher
+        .finalize()
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Some(format!("shared-profile-{suffix}"))
+}
+
 /// Return a fresh daemon route for replacing one exact terminal owner.
 ///
 /// The retained daemon route remains lifecycle evidence for the owner being
@@ -363,6 +395,18 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
             .and_then(|(authority, profile)| authenticated_cold_session_name(authority, profile))
     })
     .flatten();
+    let shared_local_cold_session_name = (available
+        && input.authenticated_principal.is_none()
+        && profile_reuse
+            .get("recommendedAction")
+            .and_then(Value::as_str)
+            == Some("launch_new_browser"))
+    .then(|| {
+        selected_profile.and_then(|profile| {
+            shared_local_cold_session_name(input.access_policy, input.access_decision, profile)
+        })
+    })
+    .flatten();
     let terminal_replacement_launch_session_name = (available
         && profile_reuse
             .get("recommendedAction")
@@ -379,6 +423,7 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
         .as_deref()
         .or(terminal_replacement_launch_session_name.as_deref())
         .or(authenticated_cold_session_name.as_deref())
+        .or(shared_local_cold_session_name.as_deref())
         .or(replacement_session_name)
     {
         service_request.insert("sessionName".to_string(), json!(session_name));
@@ -590,6 +635,8 @@ struct ProfileReuseInput<'a> {
     lifecycle_replacement: &'a Value,
     authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
     strict_identity_required: bool,
+    access_policy: &'a ServiceProfileAccessPolicy,
+    access_decision: &'a ServiceProfileAccessDecision,
     managed_profile_recommendation: &'a Value,
 }
 
@@ -793,6 +840,7 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
     let mut explicit_terminal_replacement_route = false;
     let mut explicit_terminal_launch_route = false;
     let mut explicit_authenticated_cold_route = false;
+    let mut explicit_shared_local_cold_route = false;
     if let Some(session_name) = request.session_name.as_deref() {
         match service_state.sessions.get(session_name) {
             None if terminal_replacement_session_name == Some(session_name) => {
@@ -807,6 +855,17 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
                 == Some(session_name) =>
             {
                 explicit_authenticated_cold_route = true;
+            }
+            None if authenticated_principal.is_none()
+                && shared_local_cold_session_name(
+                    input.access_policy,
+                    input.access_decision,
+                    profile,
+                )
+                .as_deref()
+                    == Some(session_name) =>
+            {
+                explicit_shared_local_cold_route = true;
             }
             None => explicit_session_route_error = Some("explicit_session_not_found"),
             Some(session) if session.browser_ids.len() != 1 => {
@@ -920,6 +979,8 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
         reasons.push("explicit_session_terminal_launch_selected");
     } else if explicit_authenticated_cold_route {
         reasons.push("explicit_authenticated_cold_route_selected");
+    } else if explicit_shared_local_cold_route {
+        reasons.push("explicit_shared_local_cold_route_selected");
     }
     reasons.sort();
     reasons.dedup();
@@ -1481,6 +1542,13 @@ impl ProfileAcquisitionDecision {
                         .iter()
                         .any(|reason| reason == "explicit_authenticated_cold_route_selected")
                     && requested_session == self.session_name();
+                let exact_shared_local_cold_route = !service_request_has_browser_hint(command)
+                    && self.profile_reuse_action == "launch_new_browser"
+                    && self
+                        .profile_reuse_reasons
+                        .iter()
+                        .any(|reason| reason == "explicit_shared_local_cold_route_selected")
+                    && requested_session == self.session_name();
                 let exact_terminal_launch_route = !service_request_has_browser_hint(command)
                     && self.replacement_eligible
                     && self
@@ -1491,6 +1559,7 @@ impl ProfileAcquisitionDecision {
                     && requested_session != self.replacement_session_name.as_deref();
                 if !exact_terminal_replacement
                     && !exact_authenticated_cold_route
+                    && !exact_shared_local_cold_route
                     && !exact_terminal_launch_route
                 {
                     return Err("service_access_plan_incomplete_route_hints".to_string());
