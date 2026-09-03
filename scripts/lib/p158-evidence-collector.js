@@ -34,6 +34,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'docs/dev/contracts/p158-dashboard-oracle-report.v1.schema.json',
   'docs/dev/contracts/p158-external-handoff-fixtures.v1.schema.json',
   'docs/dev/contracts/p158-external-handoff-oracle-report.v1.schema.json',
+  'docs/dev/contracts/p158-final-analysis.v1.schema.json',
   'docs/dev/contracts/p158-evidence-collector-config.v1.schema.json',
   'docs/dev/contracts/p158-historical-failure-registry.v1.json',
   'docs/dev/contracts/p158-logging-audit-report.v1.schema.json',
@@ -49,6 +50,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-campaign-preparation.js',
   'scripts/lib/p158-dashboard-oracle.js',
   'scripts/lib/p158-external-handoff-oracle.js',
+  'scripts/lib/p158-final-analyzer.js',
   'scripts/lib/p158-execution-schedule.js',
   'scripts/lib/p158-logging-auditor.js',
   'scripts/lib/p158-calibration-runner.js',
@@ -56,6 +58,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-w7-development-adapters.js',
   'scripts/lib/p158-w8-hd-adapters.js',
   'scripts/lib/p158-w9-campaign-orchestrator.js',
+  'scripts/lib/p158-w9-concrete-drivers.js',
   'scripts/generate-p158-campaign-preparation-fixtures.js',
   'scripts/p158-evidence-collector.js',
   'scripts/p158-synthetic-visual-fixture.js',
@@ -71,12 +74,14 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-execution-schedule.js',
   'scripts/test-p158-external-handoff-oracle.js',
   'scripts/test-p158-external-vantage-runner.js',
+  'scripts/test-p158-final-analyzer.js',
   'scripts/test-p158-historical-failure-registry.js',
   'scripts/test-p158-logging-auditor.js',
   'scripts/test-p158-synthetic-visual-fixture.js',
   'scripts/test-p158-w7-development-adapters.js',
   'scripts/test-p158-w8-hd-adapters.js',
   'scripts/test-p158-w9-campaign-orchestrator.js',
+  'scripts/test-p158-w9-concrete-drivers.js',
 ]);
 
 export const P158_REQUIRED_LIVE_HOOK_IDS = Object.freeze([
