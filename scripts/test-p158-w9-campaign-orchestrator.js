@@ -10,6 +10,7 @@ import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
 import { createMemoryArtifactStore, sha256 } from './lib/p158-campaign-controller.js';
 import {
   buildP158W9ActionPlan,
+  canonicalP158W9TargetBindingDigest,
   canonicalW9ReceiptDigest,
   P158W9OrchestrationError,
   runP158W9Phase,
@@ -23,7 +24,7 @@ const schedule = compileP158ExecutionSchedule({ registry, seed: 'p158-w9-provide
 const BASE = Date.parse('2026-09-03T00:00:00.000Z');
 
 function target() {
-  return {
+  const value = {
     targetId: 'p158-development-campaign', runtimeLane: 'development', production: false,
     environmentIds: ['E1', 'E2'], repairAllowed: false, retryAllowed: false,
     garbageCollectionAllowed: false,
@@ -31,7 +32,15 @@ function target() {
     workflowRunAttempt: 1, handoffUrlSha256: '22'.repeat(32),
     retainedIdentitySha256: '33'.repeat(32), externalVantageAggregateSha256: '44'.repeat(32),
     externalHandoffOracleSha256: '55'.repeat(32),
+    serviceOrigins: { E1: 'http://127.0.0.1:19101', E2: 'https://service.p158.example' },
+    serviceResolvedAddresses: { E2: ['203.0.113.42'] },
+    reviewedLocalDevelopmentOrigin: 'http://127.0.0.1:19101',
+    allowedExternalServiceOrigins: ['https://service.p158.example'],
+    syntheticTarget: true,
+    productionHostnames: ['service.agent-browser.example'],
   };
+  value.reviewedOriginBindingSha256 = canonicalP158W9TargetBindingDigest(value);
+  return value;
 }
 
 function windows() {

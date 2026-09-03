@@ -2,6 +2,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { canonicalJson, createFileArtifactStore, sha256 } from './p158-campaign-controller.js';
+import { classifyOperatorUrl } from './p158-external-handoff-oracle.js';
 import {
   finalizeLiveDistributedCalibration,
   prepareLiveDistributedCalibration,
@@ -59,7 +60,35 @@ function clone(value) {
   return value === undefined ? undefined : structuredClone(value);
 }
 
-function assertDevelopmentTarget(target) {
+export function canonicalP158W9TargetBindingDigest(target) {
+  return sha256({
+    candidateSha256: target?.candidateSha256,
+    serviceOrigins: target?.serviceOrigins,
+    serviceResolvedAddresses: target?.serviceResolvedAddresses,
+    reviewedLocalDevelopmentOrigin: target?.reviewedLocalDevelopmentOrigin,
+    allowedExternalServiceOrigins: target?.allowedExternalServiceOrigins,
+    syntheticTarget: target?.syntheticTarget,
+    productionHostnames: target?.productionHostnames,
+  });
+}
+
+export function assertP158W9DevelopmentTarget(target) {
+  let e1;
+  let e2;
+  try {
+    e1 = new URL(target?.serviceOrigins?.E1);
+    e2 = new URL(target?.serviceOrigins?.E2);
+  } catch {
+    fail('development_target_unproven', 'W9 requires parseable exact E1/E2 origins');
+  }
+  const e1Local = ['localhost', '127.0.0.1', '[::1]'].includes(e1.hostname) &&
+    ['http:', 'https:'].includes(e1.protocol) && e1.port.length > 0 && e1.origin === target.reviewedLocalDevelopmentOrigin;
+  const resolved = target?.serviceResolvedAddresses?.E2;
+  const e2Classification = classifyOperatorUrl(e2.origin, {
+    role: 'location_header', resolvedAddresses: Array.isArray(resolved) ? resolved : [],
+  });
+  const productionHostnames = target?.productionHostnames;
+  const externalAllowlist = target?.allowedExternalServiceOrigins;
   if (target?.runtimeLane !== 'development' || target.production !== false ||
       target.repairAllowed !== false || target.retryAllowed !== false ||
       target.garbageCollectionAllowed !== false ||
@@ -72,9 +101,17 @@ function assertDevelopmentTarget(target) {
       !/^[a-f0-9]{64}$/u.test(target.externalVantageAggregateSha256 ?? '') ||
       !/^[a-f0-9]{64}$/u.test(target.externalHandoffOracleSha256 ?? '') ||
       !Array.isArray(target.environmentIds) ||
-      target.environmentIds.some((id) => !['E1', 'E2'].includes(id))) {
+      target.environmentIds.length !== 2 || target.environmentIds.join(',') !== 'E1,E2' ||
+      !e1Local || e2.protocol !== 'https:' || e2.origin !== target.serviceOrigins.E2 ||
+      !Array.isArray(resolved) || resolved.length === 0 || e2Classification.findingCodes.length > 0 ||
+      !Array.isArray(externalAllowlist) || !externalAllowlist.includes(e2.origin) ||
+      externalAllowlist.some((origin) => { try { return new URL(origin).protocol !== 'https:'; } catch { return true; } }) ||
+      target.syntheticTarget !== true || !Array.isArray(productionHostnames) || productionHostnames.length === 0 ||
+      productionHostnames.map((value) => value.toLowerCase()).includes(e2.hostname.toLowerCase()) ||
+      target.reviewedOriginBindingSha256 !== canonicalP158W9TargetBindingDigest(target)) {
     fail('development_target_unproven', 'W9 requires an explicit development-only target with repair, retry, and GC disabled');
   }
+  return target;
 }
 
 function assertDriverBindings(drivers) {
@@ -341,7 +378,7 @@ export async function runP158W9Phase({
   schedule, target, caseWindows, drivers, controller, runRoot, artifactStore, clock, scheduler, safetyStop,
 }) {
   assertSchedule(schedule);
-  assertDevelopmentTarget(target);
+  assertP158W9DevelopmentTarget(target);
   assertDriverBindings(drivers);
   validateWindowOrder(caseWindows);
   if (!isAbsolute(runRoot ?? '')) fail('run_root_invalid', 'W9 requires an absolute runtime root');

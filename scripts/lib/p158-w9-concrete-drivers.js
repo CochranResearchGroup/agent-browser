@@ -16,6 +16,7 @@ import { createP158CaseAdapter } from './p158-execution-schedule.js';
 import { canonicalJson, sha256 } from './p158-campaign-controller.js';
 import {
   buildP158W9ActionPlan,
+  assertP158W9DevelopmentTarget,
   canonicalW9ReceiptDigest,
   createDistributedC01LiveHook,
   P158_W9_CASE_IDS,
@@ -52,21 +53,6 @@ export class P158W9ConcreteDriverError extends Error {
 
 function fail(code, message, details) {
   throw new P158W9ConcreteDriverError(code, message, details);
-}
-
-function assertLiveDevelopmentTarget(target) {
-  if (target?.runtimeLane !== 'development' || target.production !== false ||
-      target.repairAllowed !== false || target.retryAllowed !== false ||
-      target.garbageCollectionAllowed !== false ||
-      !/^[a-f0-9]{64}$/u.test(target.candidateSha256 ?? '') ||
-      !/^\d+$/u.test(target.workflowRunId ?? '') ||
-      !Number.isInteger(target.workflowRunAttempt) ||
-      !['E1', 'E2'].every((id) => {
-        try { return ['http:', 'https:'].includes(new URL(target.serviceOrigins?.[id]).protocol); }
-        catch { return false; }
-      })) {
-    fail('development_target_unproven', 'Concrete W9 drivers require exact E1/E2 development bindings');
-  }
 }
 
 function clone(value) {
@@ -191,7 +177,7 @@ export function createP158W9ConcreteDriverBundle({
   c01, fetch: suppliedFetch, clock = { wallNow: () => new Date().toISOString(), monotonicNow: () => Number(process.hrtime.bigint()) },
   transitionPrimitives: suppliedTransitionPrimitives, testing = false,
 }) {
-  assertLiveDevelopmentTarget(target);
+  assertP158W9DevelopmentTarget(target);
   const fetch = suppliedFetch ?? globalThis.fetch;
   const transitionPrimitives = suppliedTransitionPrimitives ?? concreteTransitionPrimitives();
   const plan = buildP158W9ActionPlan(schedule);
@@ -219,7 +205,7 @@ export function createP158W9ConcreteDriverBundle({
     c01.externalReceiptPaths.every((path) => typeof path === 'string' && path.startsWith('/')) &&
     typeof c01.clock?.wallNow === 'function' && typeof c01.scheduler?.waitUntil === 'function';
   const c01Hook = c01Complete ? createDistributedC01LiveHook({
-    config: c01.config, runRoot: c01.runRoot, fetch: globalThis.fetch,
+    config: c01.config, runRoot: c01.runRoot, fetch,
     clock: c01.clock, scheduler: c01.scheduler,
     loadExternalEvidence: async () => ({
       aggregate: JSON.parse(await readFile(c01.externalAggregatePath, 'utf8')),
@@ -387,6 +373,7 @@ export function createP158W9ConcreteDriverBundle({
   return {
     drivers, classification, actions, actionCountByCase,
     freezeEligible: testing === false && suppliedFetch === undefined && suppliedTransitionPrimitives === undefined,
+    c01FetchSource: suppliedFetch === undefined ? 'global' : 'supplied',
     sourcePath: SOURCE_PATH, sourceSha256: SOURCE_SHA256,
   };
 }

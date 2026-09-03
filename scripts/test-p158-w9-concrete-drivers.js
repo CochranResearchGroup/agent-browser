@@ -5,7 +5,10 @@ import { readFile } from 'node:fs/promises';
 
 import { createMemoryArtifactStore, sha256 } from './lib/p158-campaign-controller.js';
 import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
-import { buildP158W9ActionPlan } from './lib/p158-w9-campaign-orchestrator.js';
+import {
+  buildP158W9ActionPlan,
+  canonicalP158W9TargetBindingDigest,
+} from './lib/p158-w9-campaign-orchestrator.js';
 import {
   canonicalW9PlanDigest,
   createP158W9ConcreteDriverBundle,
@@ -21,15 +24,23 @@ const schedule = compileP158ExecutionSchedule({ registry, seed: 'p158-w9-concret
 const actions = buildP158W9ActionPlan(schedule).flatMap((entry) => entry.actions);
 
 function target() {
-  return {
+  const value = {
     runId: 'p158-w9-concrete', candidateSha256: '11'.repeat(32),
     runtimeLane: 'development', production: false, repairAllowed: false,
     retryAllowed: false, garbageCollectionAllowed: false,
+    environmentIds: ['E1', 'E2'],
     workflowRunId: '123456789', workflowRunAttempt: 1,
     handoffUrlSha256: '22'.repeat(32), retainedIdentitySha256: '33'.repeat(32),
     externalVantageAggregateSha256: '44'.repeat(32), externalHandoffOracleSha256: '55'.repeat(32),
     serviceOrigins: { E1: 'http://127.0.0.1:19101', E2: 'https://service.p158.example' },
+    serviceResolvedAddresses: { E2: ['203.0.113.42'] },
+    reviewedLocalDevelopmentOrigin: 'http://127.0.0.1:19101',
+    allowedExternalServiceOrigins: ['https://service.p158.example'],
+    syntheticTarget: true,
+    productionHostnames: ['service.agent-browser.example'],
   };
+  value.reviewedOriginBindingSha256 = canonicalP158W9TargetBindingDigest(value);
+  return value;
 }
 
 function externalReceipt(action, workflowPlanSha256) {
@@ -102,16 +113,16 @@ function transitionPrimitives() {
   };
 }
 
-function makeBundle({ testing, omitActionId = null } = {}) {
+function makeBundle({ testing, omitActionId = null, targetOverride = null, fetchOverride = null } = {}) {
   const prepared = plans({ omitActionId });
   const options = {
-    schedule, target: target(), artifactStore: createMemoryArtifactStore(),
+    schedule, target: targetOverride ?? target(), artifactStore: createMemoryArtifactStore(),
     externalWorkflowPlan: prepared.external, declaredTransitionPlan: prepared.transition,
     c01: c01(), testing,
     clock: { wallNow: () => '2026-09-03T12:00:00.000Z', monotonicNow: () => 1_000_000 },
   };
   if (testing) {
-    options.fetch = async (url) => ({ ok: true, status: 200, url, json: async () => ({ success: true, data: {} }) });
+    options.fetch = fetchOverride ?? (async (url) => ({ ok: true, status: 200, url, json: async () => ({ success: true, data: {} }) }));
     options.transitionPrimitives = transitionPrimitives();
   }
   return createP158W9ConcreteDriverBundle(options);
@@ -146,8 +157,10 @@ await runTest('classifies complete reviewed C01 through C05 plans as concrete li
 });
 
 await runTest('never promotes injected provider-free drivers into live adapter readiness', async () => {
-  const bundle = makeBundle({ testing: true });
+  const selectedFetch = async (url) => ({ ok: true, status: 200, url, json: async () => ({ success: true, data: {} }) });
+  const bundle = makeBundle({ testing: true, fetchOverride: selectedFetch });
   assert.equal(bundle.freezeEligible, false);
+  assert.equal(bundle.c01FetchSource, 'supplied');
   const entries = createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookManifestSha256: '66'.repeat(32) });
   assert.ok(entries.adapterBindings.every((entry) => entry.mode === 'explicit_blocked' &&
     entry.effectsAllowed === false && entry.implementedActionCount === 0 &&
@@ -159,6 +172,33 @@ await runTest('never promotes injected provider-free drivers into live adapter r
   });
   assert.equal(outcome.resultState, 'skipped_blocked');
   assert.equal(effects, 0);
+});
+
+await runTest('rejects every unreviewed or non-development E1/E2 target variant', async () => {
+  const variants = [
+    (value) => { value.serviceOrigins.E1 = 'https://service.p158.example'; },
+    (value) => { value.reviewedLocalDevelopmentOrigin = 'http://127.0.0.1:19102'; },
+    (value) => { value.serviceOrigins.E2 = 'http://service.p158.example'; },
+    (value) => { value.serviceOrigins.E2 = 'https://127.0.0.1:19101'; },
+    (value) => { value.serviceResolvedAddresses.E2 = ['10.0.0.7']; },
+    (value) => { value.allowedExternalServiceOrigins = ['https://other.p158.example']; },
+    (value) => { value.productionHostnames = ['service.p158.example']; },
+    (value) => { value.syntheticTarget = false; },
+    (value) => { value.reviewedOriginBindingSha256 = 'ff'.repeat(32); },
+  ];
+  for (const mutate of variants) {
+    const invalid = target();
+    mutate(invalid);
+    // Rebind all but the explicit stale-digest case. Structural checks must
+    // still reject a self-consistent caller assertion.
+    if (invalid.reviewedOriginBindingSha256 !== 'ff'.repeat(32)) {
+      invalid.reviewedOriginBindingSha256 = canonicalP158W9TargetBindingDigest(invalid);
+    }
+    assert.throws(
+      () => makeBundle({ testing: true, targetOverride: invalid }),
+      (error) => error.code === 'development_target_unproven',
+    );
+  }
 });
 
 await runTest('classifies a missing external action as exact zero-effect blocked case', async () => {
