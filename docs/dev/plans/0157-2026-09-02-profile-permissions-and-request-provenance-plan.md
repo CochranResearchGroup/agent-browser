@@ -2,9 +2,9 @@
 
 Date: 2026-09-02
 
-State: OPEN
+State: SOURCE COMPLETE; INSTALLED ACCEPTANCE REOPENED
 
-Execution state: `w10_public_contract_alignment_in_progress`
+Execution state: `acceptance_successor_plan_0158_planned`
 
 Lane: P157
 
@@ -744,6 +744,21 @@ Validation evidence:
 - supervisor no-launch and stale-owner takeover fixtures, seven full-shutdown
   tests, five exact lifecycle eviction tests, and revisioned policy persistence
   pass.
+
+## Post-Acceptance Correction
+
+The W11 completion claim above is preserved as historical execution evidence
+but is superseded for installed acceptance by Plan 0158. W11 proved focused
+installed behavior; it did not execute the complete adversarial matrix required
+by this plan's original W11 exit condition and Required Regression Scenarios.
+
+Plan 0158 reopens only the installed-acceptance claim. P157's source work
+remains complete. The successor freezes one installed candidate, reproduces
+historical identity, Xvfb, supervisor, route, handoff, dashboard, concurrency,
+and logging failures under agent-only and externally ingressed human-simulated
+browsing, and prohibits repair or rebuild during execution. Research.gov
+fieldwork should not treat W11 as comprehensive reliability proof until that
+campaign's final analysis adjudicates the evidence.
 
 ## Execution Checkpoint W2
 

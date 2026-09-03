@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P157 | Profile Permissions And Request Provenance
 
-State: COMPLETE
+State: SOURCE COMPLETE; INSTALLED ACCEPTANCE REOPENED
 Current state: Research.gov fieldwork exposed that profile access, coordination
 leases, and runtime ownership proof are conflated, while scheduler rejection
 can bypass structured failure decoration and lose runtime-lane correlation.
@@ -88,24 +88,28 @@ ambiguous identity becomes nonblocking shared-local access and appears only on
 the access-health axis. HTTP, MCP, generated clients, dashboard, doctor, help,
 README, agent skill, contracts, and docs now expose human presets,
 revision-fenced policy edits, and exact authorized tab eviction.
-W11 is accepted at source checkpoint `cc8510ba` and installed generation
+W11 recorded a focused acceptance checkpoint at source `cc8510ba` and installed generation
 `0.28.0-ef3cd3921169`. The isolated development runtime has one coherent
 selected executable across its host, backend, dashboard, and supervisor
 manifest. Doctor, three-cycle browser launch, self-declared disposable-profile
 continuity, HTTP and MCP crash recovery, causal recovery logging, supervisor
 takeover, revisioned policy mutation, exact eviction, and digest-bound full
-shutdown gates pass without production effects.
+shutdown gates pass without production effects. That closeout did not execute
+the full historically adversarial matrix in W11's original exit contract.
+Plan 0158 therefore reopens installed acceptance while preserving P157's
+source-complete result. It freezes one candidate and runs diagnostic-only
+agent, external remote-view, handoff, Xvfb, supervisor, dashboard, concurrency,
+performance, soak, and causal-logging stress without repair between failures.
 
 ### Plan
 
 - `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
+- `docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md`
 
 ### Next Recommendation
 
-Resume Research.gov fieldwork through the installed development runtime. Use a
-human-visible remote-view handoff for first login, stored-credential selection,
-or passkey interaction, then turn observed page behavior into deterministic
-automation and bounded evidence collection.
+Execute Plan 0158 W1. Freeze the historical failure registry and evidence map
+before implementing the campaign harness or touching an installed runtime.
 
 ## P156 | Full Runtime Shutdown Replacement
 

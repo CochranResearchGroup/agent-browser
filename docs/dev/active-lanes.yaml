@@ -1,14 +1,14 @@
 schema_version: 1
 lanes:
   - id: P157
-    objective: Deepen profile acquisition and install convergence while separating mutable permissions, coordination, runtime proof, and request provenance
-    plan: docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md
+    objective: Complete frozen-candidate adversarial acceptance for profile permissions, runtime convergence, remote handoffs, dashboard truth, and causal logging
+    plan: docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md
     plan_ref: refs/heads/plan/profile-permissions-and-request-provenance
     branch: plan/profile-permissions-and-request-provenance
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d806c74cdda63fd5a4e999a3c344f222d8a81183
+    checkpoint: e26a6b05c315cfed06a833a5c4d7406803bcc0fb
     remote_ref: refs/remotes/origin/plan/profile-permissions-and-request-provenance
     integration_receipt: null
     integration: merge
