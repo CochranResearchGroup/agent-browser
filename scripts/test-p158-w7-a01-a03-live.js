@@ -38,9 +38,15 @@ async function requestBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-async function startFakeService({ wrongStateRequestId = null, resetRequestId = null, malformedRequestId = null } = {}) {
+async function startFakeService({
+  wrongStateRequestId = null,
+  resetRequestId = null,
+  malformedRequestId = null,
+  wrongRetainedBrowserId = null,
+} = {}) {
   const tabs = new Map();
   const browsers = new Map();
+  const openedBrowsers = new Set();
   for (const caseId of ['a02', 'a03']) {
     for (const environmentId of ['e0', 'e1']) {
       const id = `p158-${caseId}-${environmentId}-browser`;
@@ -60,11 +66,16 @@ async function startFakeService({ wrongStateRequestId = null, resetRequestId = n
     const connectionInstanceId = sockets.get(request.socket);
     const url = new URL(request.url, 'http://127.0.0.1');
     if (request.method === 'GET' && url.pathname === '/api/service/status') {
+      const projectedBrowsers = Object.fromEntries([...browsers].map(([id, browser]) => {
+        const hasOpenTab = [...tabs.values()].some((tab) => tab.browserId === id && tab.lifecycle !== 'closed');
+        const lostAfterRelease = id === wrongRetainedBrowserId && openedBrowsers.has(id) && !hasOpenTab;
+        return [id, lostAfterRelease ? { ...browser, lifecycle: 'closed', retained: false } : browser];
+      }));
       return json(response, 200, { success: true, data: {
         runtimeLifecycle: { environment: 'development', runId: 'p158-a01-a03-run' },
         service_state: {
           candidateSha256: 'a'.repeat(64),
-          browsers: Object.fromEntries(browsers),
+          browsers: projectedBrowsers,
         },
       } });
     }
@@ -122,6 +133,7 @@ async function startFakeService({ wrongStateRequestId = null, resetRequestId = n
     if (command.action === 'tab_new') {
       const tabId = `tab-${++tabOrdinal}`;
       const browserId = command.browserId ?? `browser-${tabOrdinal}`;
+      openedBrowsers.add(browserId);
       browsers.set(browserId, { id: browserId, lifecycle: 'ready', retained: true });
       const handle = {
         browserId,
@@ -434,6 +446,31 @@ for (const [fault, expectedState, expectedCode] of [
     faultTransports.close();
     await faultService.close();
   }
+}
+
+const a02Attempt = schedule.attempts.find((entry) => entry.caseId === 'A02');
+const a02Environment = a02Attempt.environmentIds[0];
+const a02BrowserId = manifest('http://127.0.0.1:43158').fixtures.A02[a02Environment].browserId;
+const retainedService = await startFakeService({ wrongRetainedBrowserId: a02BrowserId });
+const retainedStore = memoryReceiptStore();
+const retainedTransports = createP158W7PinnedDevelopmentTransports();
+try {
+  const bundle = createP158W7A01A03LiveBundle({
+    schedule,
+    ownershipManifest: manifest(retainedService.origin),
+    receiptStore: retainedStore,
+    transportFor: retainedTransports,
+    clock: () => '2026-09-03T12:00:00.000Z',
+  });
+  const result = await bundle.adapters.find((entry) => entry.caseId === 'A02').execute({ attempt: a02Attempt });
+  assert.equal(result.resultState, 'reproduced_historical_failure');
+  assert.equal(result.effectState, 'verified_effect');
+  assert.equal(result.receipts.length, 10, 'retained-browser loss discarded action terminals');
+  assert(result.receipts.every((receipt) => receipt.state === 'passed'));
+  assert.equal(result.attemptFailures[0].code, 'retained_browser_postcondition_failed');
+} finally {
+  retainedTransports.close();
+  await retainedService.close();
 }
 
 console.log('P158 W7 A01-A03 live runner tests passed: 670 exact client terminals plus classified fault rejection');

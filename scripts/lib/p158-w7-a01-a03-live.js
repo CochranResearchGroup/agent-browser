@@ -327,6 +327,7 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
   const actions = clientActions(schedule, caseId, attempt.attemptId);
   const context = { schedule, manifest, attempt, caseId, environmentId, environment, fixture, transportFor };
   const rows = [];
+  const attemptFailures = [];
   const record = async (client) => {
     let terminal;
     try {
@@ -437,14 +438,29 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
   }
   await Promise.all(concurrentClients.map(record));
   if (caseId === 'A02' && concurrentClients.some((row) => row.opened)) {
-    const status = await revalidateOwnership(context, concurrentClients.find((row) => row.opened).fetch);
-    const browser = status.service_state?.browsers?.[fixture.browserId];
-    if (!browser || !['ready', 'retained'].includes(browser.lifecycle)) {
-      fail('retained_browser_postcondition_failed', `${fixture.browserId} was not retained after the barrier`);
+    try {
+      const status = await getServiceStatus({
+        baseUrl: environment.serviceOrigin,
+        fetch: concurrentClients.find((row) => row.opened).fetch,
+      });
+      const expectedOwnership = structuredClone(environment.ownershipStatus);
+      if (expectedOwnership.service_state) delete expectedOwnership.service_state.browsers;
+      exactSubset(status, expectedOwnership);
+      const browser = status.service_state?.browsers?.[fixture.browserId];
+      if (!browser || !['ready', 'retained'].includes(browser.lifecycle)) {
+        throw classifiedError('retained_browser_postcondition_failed',
+          `${fixture.browserId} was not retained after the barrier`,
+          'reproduced_historical_failure', 'verified_effect');
+      }
+    } catch (error) {
+      attemptFailures.push(normalizeFailure(error, 'effect_uncertain'));
     }
   }
-  const passed = rows.every((row) => row.state === 'passed');
-  const failureClasses = new Set(rows.filter((row) => row.failure).map((row) => row.failure.classification));
+  const passed = rows.every((row) => row.state === 'passed') && attemptFailures.length === 0;
+  const failureClasses = new Set([
+    ...rows.filter((row) => row.failure).map((row) => row.failure.classification),
+    ...attemptFailures.map((failure) => failure.classification),
+  ]);
   const resultState = passed
     ? 'passed'
     : failureClasses.has('harness_failure')
@@ -454,7 +470,8 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
         : failureClasses.has('new_product_failure')
           ? 'new_product_failure'
           : 'reproduced_historical_failure';
-  const effectState = rows.some((row) => row.effectState === 'effect_uncertain')
+  const effectState = rows.some((row) => row.effectState === 'effect_uncertain') ||
+      attemptFailures.some((failure) => failure.effectState === 'effect_uncertain')
     ? 'effect_uncertain'
     : (rows.some((row) => row.state === 'passed') ? 'verified_effect' : 'no_effect');
   return freeze({
@@ -463,6 +480,7 @@ async function runAttempt({ schedule, manifest, attempt, receiptStore, transport
     actionIds: rows.map((row) => row.actionId).sort(),
     artifactIds: rows.map((row) => `p158-w7-action:${row.receiptSha256}`),
     receipts: rows.sort((left, right) => left.actionId.localeCompare(right.actionId)),
+    attemptFailures,
     effectState,
     retryDisposition: 'prohibited_opportunistic_retry',
     repairAttempted: false,
