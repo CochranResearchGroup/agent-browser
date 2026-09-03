@@ -1219,6 +1219,17 @@ upstream duplicate-row selection and migration defect. W10 must therefore
 review whether that second repair remains safe and useful after canonical
 route-pool migration, rather than assuming it is independently sufficient.
 
+A separate high-severity validation-boundary finding occurred before the first
+red regression completed. Under the already observed host process pressure,
+`sccache` failed to spawn a compiler and its error diagnostic rendered the
+compiler command with inherited environment names and values. Sensitive values
+were visible in the interactive command output. No values are copied into this
+plan or any campaign artifact. Subsequent Cargo validation used the documented
+cache opt-out and bounded two-job execution. W10 must classify this as a secret
+exposure through build-failure logging, identify the exact upstream and wrapper
+redaction owners, and require operator credential-rotation review. A passing
+rebuild does not erase the exposure.
+
 The two-traversal repair budget is exhausted. Do not repair
 `presentation_bound_slot_missing` inside Plan 0158. Stop isolated browser
 execution, mark every remaining scheduled case `skipped_blocked` against job
