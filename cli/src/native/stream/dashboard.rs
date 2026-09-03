@@ -13,8 +13,9 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::connection::get_socket_dir;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
 use crate::native::service_failure_journal::{
-    append_service_failure_best_effort, read_service_failures, record_client_failure_observation,
-    ServiceFailureCategory, ServiceFailureRecord,
+    append_service_failure_best_effort, opaque_identifier_hash, read_service_failures,
+    record_client_failure_observation, ServiceFailureCategory, ServiceFailureRecord,
+    ServiceFailureReferences,
 };
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -738,6 +739,86 @@ async fn handle_service_api_request(
             };
             let session_name =
                 service_request_relay_session(DASHBOARD_SERVICE_BACKEND_SESSION, body, &command);
+            if service_request_requires_daemon_relay(&command) {
+                if let Err(err) = ensure_service_daemon_session(&session_name, Some(&command)).await
+                {
+                    record_durable_handoff_gateway_failure(
+                        &command,
+                        &session_name,
+                        "durable_handoff_owner_prepare_failed",
+                        &err,
+                    );
+                    write_json_error_with_code(
+                        stream,
+                        "502 Bad Gateway",
+                        &format!("Durable handoff owner preparation failed: {err}"),
+                        Some("durable_handoff_owner_prepare_failed"),
+                        None,
+                    )
+                    .await;
+                    return;
+                }
+                let command_body = command.to_string();
+                match timeout(
+                    DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT,
+                    relay_command_to_daemon(&session_name, &command_body),
+                )
+                .await
+                {
+                    Ok(Ok(response)) => match serde_json::from_str::<Value>(&response) {
+                        Ok(response) => write_json_value(stream, "200 OK", response).await,
+                        Err(err) => {
+                            record_durable_handoff_gateway_failure(
+                                &command,
+                                &session_name,
+                                "durable_handoff_owner_response_invalid",
+                                &err.to_string(),
+                            );
+                            write_json_error_with_code(
+                                stream,
+                                "502 Bad Gateway",
+                                &format!("Durable handoff owner returned invalid JSON: {err}"),
+                                Some("durable_handoff_owner_response_invalid"),
+                                None,
+                            )
+                            .await;
+                        }
+                    },
+                    Ok(Err(err)) => {
+                        record_durable_handoff_gateway_failure(
+                            &command,
+                            &session_name,
+                            "durable_handoff_owner_relay_failed",
+                            &err,
+                        );
+                        write_json_error_with_code(
+                            stream,
+                            "502 Bad Gateway",
+                            &format!("Durable handoff owner relay failed: {err}"),
+                            Some("durable_handoff_owner_relay_failed"),
+                            None,
+                        )
+                        .await;
+                    }
+                    Err(_) => {
+                        record_durable_handoff_gateway_failure(
+                            &command,
+                            &session_name,
+                            "durable_handoff_owner_relay_timeout",
+                            "Durable handoff owner relay timed out",
+                        );
+                        write_json_error_with_code(
+                            stream,
+                            "504 Gateway Timeout",
+                            "Durable handoff owner relay timed out",
+                            Some("durable_handoff_owner_relay_timeout"),
+                            None,
+                        )
+                        .await;
+                    }
+                }
+                return;
+            }
             let port = if session_name == DASHBOARD_SERVICE_BACKEND_SESSION {
                 dashboard_service_backend_port()
             } else {
@@ -877,6 +958,38 @@ async fn handle_service_api_request(
         "No agent-browser session is available to handle service API requests",
     )
     .await;
+}
+
+fn service_request_requires_daemon_relay(command: &Value) -> bool {
+    command.get("action").and_then(Value::as_str) == Some("service_remote_view_handoff_resolve")
+}
+
+fn record_durable_handoff_gateway_failure(
+    command: &Value,
+    session_name: &str,
+    code: &str,
+    summary: &str,
+) {
+    let handoff_id_hash = command
+        .get("handoffId")
+        .and_then(Value::as_str)
+        .map(opaque_identifier_hash);
+    append_service_failure_best_effort(
+        &ServiceFailureRecord::new(
+            ServiceFailureCategory::HandoffLink,
+            "dashboard_service_gateway",
+            "resolve",
+            code,
+            summary,
+        )
+        .with_action("service_remote_view_handoff_resolve")
+        .with_references(ServiceFailureReferences {
+            runtime_lane_id: Some(DASHBOARD_SERVICE_BACKEND_SESSION.to_string()),
+            session_id: Some(session_name.to_string()),
+            handoff_id_hash,
+            ..ServiceFailureReferences::default()
+        }),
+    );
 }
 
 pub(crate) async fn dashboard_service_status_with_transports<
@@ -4185,6 +4298,18 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+    }
+
+    #[test]
+    fn durable_handoff_resolution_uses_daemon_relay_without_an_http_lane() {
+        assert!(service_request_requires_daemon_relay(&json!({
+            "action": "service_remote_view_handoff_resolve",
+            "sessionName": "retained-owner-without-http-route",
+        })));
+        assert!(!service_request_requires_daemon_relay(&json!({
+            "action": "tab_new",
+            "sessionName": "ordinary-http-routed-lane",
+        })));
     }
 
     #[test]

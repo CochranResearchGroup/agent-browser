@@ -1484,3 +1484,36 @@ development runtime lifecycle ready, and only then rebuild the external
 handoff. Preserve the absence of development unattended maintenance as an
 explicit W10 architecture input rather than representing the live observation
 as retention or cleanup work.
+
+Installed development generation `0.28.0-fee4d526b8c8` passes the full
+provider-required doctor, three disposable launches, and direct status
+readback with `runtimeLifecycle.ready=true`, multiplicity `steady_current`,
+and reconciliation `development_live_observation`. The dashboard warning is
+therefore resolved on the current isolated runtime without stopping the
+coherent production services or conflating their identities.
+
+The read-only resolution probe for durable handoff `r743478` then exposed the
+next sequence blocker. Its retained record and ready presentation receipt are
+real, but its original owner lane has no legacy per-session HTTP port after the
+single-host runtime transition. The dashboard gateway correctly prepared that
+lane through the current host, then incorrectly required
+`session_port_for_name()` and returned HTTP 503 before the durable resolver
+could decide whether to reconnect or reopen. No failure-journal record was
+written for that server-side unusable-handoff result.
+
+The bounded repair sends only
+`service_remote_view_handoff_resolve` through the authenticated daemon command
+relay after owner-lane preparation; ordinary Service requests retain their
+current HTTP routing. Preparation, relay, invalid-response, and timeout
+failures now return typed gateway codes and append a redacted handoff-link
+journal record with stage, action, runtime lane, owning session, and hashed
+handoff ID. The raw ID and URL are not journaled. The provider-free regression
+and all 51 dashboard gateway tests pass, as do formatting and workspace clippy.
+That regression is the fourteenth exact Rust test in the named P158 Last30Days
+battery.
+
+Revised next action: install the daemon-relay repair under a new candidate
+identity, resolve the same durable handoff without an HTTP lane, and inspect
+the structured resolver outcome. Reopen only through the durable handoff's
+explicit `allowReopenClosed` path if its no-effect readback requests it. Then
+require `operatorVisible.state=ready` before external workflow dispatch.

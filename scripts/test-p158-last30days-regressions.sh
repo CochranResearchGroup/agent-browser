@@ -14,6 +14,7 @@ rust_tests=(
   "native::service_request::tests::route_conflict_failure_record_preserves_the_exact_actionable_code"
   "native::stream::http::tests::service_request_rejection_response_exposes_route_conflict_recourse"
   "native::control_plane::tests::shared_profile_identity_rejection_keeps_provenance_recourse_and_terminal_event"
+  "native::stream::dashboard::tests::durable_handoff_resolution_uses_daemon_relay_without_an_http_lane"
   "native::remote_view::tests::acquisition_plan_avoids_released_display_number_identity_collision"
   "native::remote_view_handoff::tests::complete_open_finalizes_lease_and_returns_opened_response"
   "native::actions::remote_view_route_tests_one::test_remote_view_open_dry_run_plans_route_bound_launch_without_existing_display"
