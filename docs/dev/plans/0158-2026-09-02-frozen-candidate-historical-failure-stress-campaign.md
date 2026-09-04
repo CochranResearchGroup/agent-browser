@@ -3586,3 +3586,33 @@ prove the sibling document is embeddable, while a fresh no-key browser still
 shows only login and no operator identity or connection list. Then rerun the
 same two-client external oracle against the already-installed exact candidate;
 no Agent Browser rebuild is required for this ingress-only correction.
+
+Cooper commit `ffbe065` removed the frame-denial middleware only from the
+capability origin. A fresh browser embedded that public origin successfully,
+while its no-key view still exposed only login and no operator identity or
+connection list. E54 ran as external workflow `33911906623`. Both distinct
+off-host clients passed initial marker capture, concurrent viewing, exact
+identity comparison, and durable-handoff reconnect. The aggregate sealed both
+receipts with `success=true`, zero retries, and no repair inside the run. This
+clears the E51 through E53 simultaneous-view blocker.
+
+The first C01 calibration dispatch, workflow `33912440452`, then exposed a
+harness-only timing defect before browser access. The shared start was three
+minutes after dispatch, but the slow runner entered the probe with 104 seconds
+remaining and failed a redundant requirement that two full minutes must still
+remain after runner setup. The companion job was canceled immediately because
+a valid two-client aggregate had become impossible; no 20-minute failed run was
+allowed to continue.
+
+The dispatch contract already requires the shared start to be at least two
+minutes in the future. The calibration loop separately records readiness,
+waits at the shared start, and rejects arrivals more than 30 seconds late. The
+bounded repair removes only the duplicate post-setup two-minute check and keeps
+the actual shared-barrier late-arrival rejection. A red source regression
+reproduced the false rejection and now passes.
+
+Revised next action: commit the timing-harness repair and redispatch C01 against
+the unchanged ready handoff and installed candidate. Preserve both 20-minute
+client action streams and their aggregate without retry or repair inside the
+run; if either client reaches the shared barrier more than 30 seconds late, stop
+and diagnose that distinct failure.

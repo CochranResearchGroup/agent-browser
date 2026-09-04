@@ -27,7 +27,6 @@ export const PINNED_PLAYWRIGHT_VERSION = '1.62.1';
 export const EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS = 95_000;
 export const CALIBRATION_DURATION_MS = 20 * 60 * 1000;
 export const CALIBRATION_LATE_TOLERANCE_MS = 30 * 1000;
-export const CALIBRATION_MINIMUM_LEAD_MS = 2 * 60 * 1000;
 const REQUIRED_INGRESS_KINDS = [
   'dns',
   'tls',
@@ -226,18 +225,6 @@ export function buildExternalCalibrationDescriptor({
     scheduleSha256: canonicalHash(schedule),
   };
   return { ...descriptor, descriptorSha256: canonicalHash(descriptor) };
-}
-
-export function validateExternalCalibrationLeadTime(
-  descriptor,
-  nowMs = Date.now(),
-  minimumLeadMs = CALIBRATION_MINIMUM_LEAD_MS,
-) {
-  const startMs = Date.parse(descriptor?.calibrationStartAt);
-  if (!Number.isFinite(startMs) || startMs - nowMs < minimumLeadMs) {
-    throw new Error(`Calibration start must remain at least ${minimumLeadMs}ms in the future when the probe begins`);
-  }
-  return { observedAt: new Date(nowMs).toISOString(), leadTimeMs: startMs - nowMs };
 }
 
 export function redactOperatorUrl(value) {
@@ -735,7 +722,6 @@ async function executeExternalVantageProbe({
     calibrationDescriptor,
   } =
     validateExternalVantageConfiguration({ env, clientId, paceProfile, mode });
-  if (mode === 'calibration') validateExternalCalibrationLeadTime(calibrationDescriptor);
   const reviewedW8Manifest = validateW8ProbeManifest(w8ActionManifest, env, mode);
   const startedAt = new Date().toISOString();
   const urlEvidence = [];

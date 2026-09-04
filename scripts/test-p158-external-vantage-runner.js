@@ -31,7 +31,6 @@ import {
   runExternalVantageProbe,
   sanitizeReceiptSecrets,
   sanitizeSerializedReceipt,
-  validateExternalCalibrationLeadTime,
   validateExternalVantageConfiguration,
   waitForGuacamoleIframe,
 } from './run-p158-external-vantage.js';
@@ -115,13 +114,15 @@ assert.equal(calibrationDescriptor.calibrationStartAt, '2026-09-02T12:00:00.000Z
 assert.equal(calibrationDescriptor.calibrationEndAt, '2026-09-02T12:20:00.000Z');
 assert.match(calibrationDescriptor.descriptorSha256, /^[a-f0-9]{64}$/);
 assert.equal(calibrationDescriptor.descriptorSha256, canonicalExternalDispatchDigest(calibrationDescriptor));
-assert.equal(
-  validateExternalCalibrationLeadTime(calibrationDescriptor, Date.parse('2026-09-02T11:57:00Z')).leadTimeMs,
-  3 * 60 * 1000,
+assert.doesNotMatch(
+  runnerSource,
+  /Calibration start must remain at least .* in the future when the probe begins/,
+  'runner setup duration must not reapply the dispatch-time lead requirement',
 );
-assert.throws(
-  () => validateExternalCalibrationLeadTime(calibrationDescriptor, Date.parse('2026-09-02T11:59:00Z')),
-  /at least 120000ms/,
+assert.match(
+  runnerSource,
+  /runnerStartDelayMs > CALIBRATION_LATE_TOLERANCE_MS/,
+  'the shared barrier must still reject a runner that arrives too late',
 );
 
 const env = {
