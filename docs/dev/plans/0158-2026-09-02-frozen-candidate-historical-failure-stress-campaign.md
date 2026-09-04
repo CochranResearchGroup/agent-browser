@@ -2447,3 +2447,21 @@ Revised next action: publish the click-to-focus repair and run one readiness
 epoch first. If readiness proves inherited-state recovery, immediately proceed
 to a fresh C01 calibration; otherwise retain its receipt and continue diagnosis
 without restarting the retained browser.
+
+E30 ran from exact head `34e57927` as workflow run `33836102804`. The human
+client still rendered the inherited scrolled fixture and failed initial marker
+validation; the slow companion was canceled. Guacamole recorded only
+successful HTTP responses, so the pointer event acquired the remote surface
+without a route or capacity failure, but `Control+Home` did not move the remote
+document. The keyboard shortcut is therefore not a reliable reset primitive
+through this Guacamole and RDP translation path.
+
+The reset retains the shortcut as a secondary route and now follows it with
+three bounded, large upward wheel events over the focused remote synthetic
+surface. Earlier campaign evidence proves wheel delivery through this route,
+including the scroll drift that exposed this harness defect. The regression
+test requires the three bounded wheel events in the final reset sequence.
+
+Revised next action: publish the wheel-normalization repair and repeat the
+bounded readiness epoch against the unchanged retained browser. Do not dispatch
+another full calibration until initial and reconnect marker continuity pass.

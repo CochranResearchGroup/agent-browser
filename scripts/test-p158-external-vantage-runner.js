@@ -219,9 +219,16 @@ await humanPacedObservation({
   coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
 });
 assert.deepEqual(
-  pacedInputEvents.slice(-3),
-  ['iframe:focus', 'mouse:click', 'keyboard:Control+Home'],
-  'each simulated human action must focus the remote canvas and leave the synthetic document at its attested origin',
+  pacedInputEvents.slice(-6),
+  [
+    'iframe:focus',
+    'mouse:click',
+    'keyboard:Control+Home',
+    'mouse:wheel:-2000',
+    'mouse:wheel:-2000',
+    'mouse:wheel:-2000',
+  ],
+  'each simulated human action must focus the remote canvas and force the synthetic document to its attested origin',
 );
 assert.equal(
   remoteViewIframeClipObservation(

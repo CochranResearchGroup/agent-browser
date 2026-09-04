@@ -1549,6 +1549,10 @@ export async function resetSyntheticRemoteDocument(page, settleMs) {
   const focusPoint = syntheticRemoteResetFocusPoint(iframeBox);
   await page.mouse.click(focusPoint.x, focusPoint.y);
   await page.keyboard.press('Control+Home');
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.mouse.wheel(0, -2_000);
+    await page.waitForTimeout(100);
+  }
   await page.waitForTimeout(settleMs);
   return true;
 }
