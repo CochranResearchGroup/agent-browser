@@ -2242,3 +2242,44 @@ external-runner contract suites, install the exact candidate, and dispatch one
 fresh external readiness epoch. If the underlying transport starvation recurs,
 the bounded gate must either recover or produce a finite signed-out state, and
 the new pending-request record must identify the stalled endpoint class.
+
+E27 ran from exact clean remote head `4c25a6eb` as workflow run `33827335722`.
+Both external clients passed initial, concurrent, and reconnect observations.
+The aggregate recorded two distinct runner identities, zero retries, zero
+repairs, zero internal URL disclosures, zero physical browser relaunches, and
+the exact shared pixel SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+The aggregate SHA-256 is
+`4d165fa2481a2e52dade33e098affa924ead5ba998316674b522fe9e51188a6f`.
+This closes the E26 infinite authentication-gate blocker without erasing E25
+or E26 from the defect record.
+
+The first concurrent C01 calibration attempt, workflow run `33827681309`,
+failed before the shared measurement window. The slow client received
+`service_state_lock_timeout` after 1,001 milliseconds while resolving the
+durable handoff. Service State proved that the job retained the requested
+`serviceStateLockTimeoutMs` value of 30,000 and `jobTimeoutMs` value of 90,000.
+The failure bundle contained 19 completed network entries with no failed or
+pending browser request, no pending authentication-status request, no pending
+service request, and no Guacamole or WebSocket attempt. This localizes the
+failure inside the route-bound repository operation rather than external
+ingress or dashboard transport.
+
+Source diagnosis found that the route-bound supervisor replaced every caller
+repository-lock budget with a private one-second cap. The run was canceled
+once one of its two required clients had failed, because that individual epoch
+could no longer produce a valid two-client calibration. Canceling the epoch did
+not stop Plan 0158. The plan remains active through blocker repair and a fresh
+calibration attempt.
+
+The repair makes the route-bound command supervisor preserve the caller's
+bounded repository-lock budget for both direct opens and durable handoff
+resolution. The budget remains capped at five minutes and is further shortened
+by the forward or compensation deadline. Provider-free regression tests cover
+the exact 90-second job and 30-second repository-lock command values plus
+deadline contraction. The complete route-bound open module passes serially.
+
+Revised next action: publish and install the repaired development candidate,
+revalidate the exact provider and handoff identity, then run a fresh concurrent
+C01 calibration. Preserve the canceled calibration and its diagnostics as a
+historical failure receipt.

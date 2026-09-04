@@ -387,10 +387,8 @@ pub(crate) async fn handle_remote_view_open(
                 .or_else(|| optional_command_string(cmd, "serviceJobId")),
             attribution,
         )?);
-    let supervisor = RouteBoundOpenSupervisor::system(
-        cmd.get("jobTimeoutMs").and_then(Value::as_u64),
-        state.current_cancellation.clone(),
-    );
+    let supervisor =
+        RouteBoundOpenSupervisor::system_for_command(cmd, state.current_cancellation.clone());
     let repository = DaemonRouteBoundOpenRepository::new()?;
     let mut runtime = DaemonRouteBoundOpenRuntime::new(state);
     RouteBoundOpenCoordinator::open(invocation, &mut runtime, &repository, &supervisor)
@@ -600,10 +598,8 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
     }
     let invocation =
         RouteBoundOpenInvocation::durable_resolution(handoff_id, allow_reopen_closed, attribution)?;
-    let supervisor = RouteBoundOpenSupervisor::system(
-        cmd.get("jobTimeoutMs").and_then(Value::as_u64),
-        state.current_cancellation.clone(),
-    );
+    let supervisor =
+        RouteBoundOpenSupervisor::system_for_command(cmd, state.current_cancellation.clone());
     let repository = DaemonRouteBoundOpenRepository::new()?;
     let mut runtime = DaemonRouteBoundOpenRuntime::new(state);
     RouteBoundOpenCoordinator::open(invocation, &mut runtime, &repository, &supervisor)

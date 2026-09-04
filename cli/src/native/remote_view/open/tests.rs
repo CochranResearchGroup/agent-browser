@@ -348,6 +348,52 @@ fn deadline_reserves_one_fifth_with_floor_and_cap() {
     );
 }
 
+#[test]
+fn explicit_repository_lock_budget_survives_the_default_cap_and_respects_deadlines() {
+    let clock = Arc::new(FakeClock::default());
+    let supervisor = RouteBoundOpenSupervisor::with_clock(Some(90_000), None, clock.clone())
+        .with_repository_lock_timeout(Some(30_000));
+
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+
+    clock.set(65_000);
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(10_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(25_000)
+    );
+}
+
+#[test]
+fn command_supervisor_preserves_the_service_repository_lock_budget() {
+    let supervisor = RouteBoundOpenSupervisor::system_for_command(
+        &json!({
+            "jobTimeoutMs": 90_000,
+            "serviceStateLockTimeoutMs": 30_000
+        }),
+        None,
+    );
+
+    assert_eq!(
+        supervisor.forward_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+    assert_eq!(
+        supervisor.compensation_repository_lock_timeout(),
+        Duration::from_millis(30_000)
+    );
+}
+
 #[tokio::test]
 async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation() {
     for phase in 0..9 {
