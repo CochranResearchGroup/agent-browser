@@ -2579,3 +2579,43 @@ Revised next action: validate and publish the E34 harness and logging repair,
 then run one new readiness epoch against the unchanged coherent E5 browser. If
 both external clients pass, dispatch C01 immediately with its declared shared
 barrier and preserve E34 as a distinct failed epoch.
+
+E35 ran from exact head `47a1c0ab` as workflow run `33858705179`. It proved the
+E34 timeout and count repairs were active: each client received one current
+authoritative resolver observation and each failure receipt separately
+reported one total observation. Both clients then stopped without retry at
+`Pixel marker region does not fit the rendered remote-view iframe`. The human
+receipt retained 146 completed requests, three failed requests, five pending
+reads, 53 Guacamole entries, and six WebSocket observations. The slow receipt
+retained 94 completed requests, zero failed requests, 11 pending requests, 20
+Guacamole entries, and four WebSocket observations. The aggregate sealed both
+failures.
+
+The retained videos disprove a changed marker or route. They show the intended
+browser and synthetic fixture through the public Guacamole iframe, but the
+global `Runtime healthy` notice expands into the complete set of migrated
+legacy-profile access messages. It consumes most of the viewport, leaves the
+otherwise usable remote workspace only a short clipped iframe, and labels an
+access-attention state as healthy because the summary predicate ignored the
+access axis. This is a dashboard layout and truth defect exposed by the marker
+oracle.
+
+The dashboard repair moves access summarization behind one bounded pure
+module. Runtime readiness now requires the access axis to be `allowed`; an
+attention, denied, or unknown axis cannot render `Runtime healthy`. The global
+notice reports only access state, finding count, blocking count, and a pointer
+to Service diagnostics. It never concatenates individual finding messages.
+The full structured findings remain available on the diagnostic surface. The
+marker loop also treats a temporarily undersized iframe like a temporarily
+missing iframe and continues its bounded convergence window instead of
+throwing an untyped immediate failure; final pixel and hash requirements are
+unchanged.
+
+Provider-free tests were observed red for both the unbounded health summary
+module and the undersized-iframe path, then green after their focused repairs.
+The complete dashboard production build also passed.
+
+Revised next action: publish and install this dashboard repair only in the
+isolated development runtime, re-establish a coherent ready E5 successor if
+the install closes the disposable browser, and dispatch one new external
+readiness epoch from the exact installed commit. Production remains read-only.

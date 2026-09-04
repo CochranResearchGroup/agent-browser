@@ -34,6 +34,7 @@ import {
   reportDashboardFailure,
 } from "@/lib/failure-observation";
 import { fetchDashboardAuthStatus } from "@/lib/dashboard-auth-status";
+import { summarizeRuntimeAccess } from "@/lib/runtime-health-summary";
 import {
   ServiceDetailInspector,
   ServicePanel,
@@ -829,9 +830,11 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
     ?? monitor?.receipt?.effects?.generations;
   const convergenceWindow = multiplicity?.convergenceWindow;
   const access = state.health?.dashboardHealth?.access;
+  const accessSummary = summarizeRuntimeAccess(access);
   const healthy = multiplicity?.steadyState === true
     && monitor?.ready === true
-    && (cleanup?.missingCount ?? 0) === 0;
+    && (cleanup?.missingCount ?? 0) === 0
+    && accessSummary.ready;
   return (
     <div
       className="dashboard-runtime-notice"
@@ -851,7 +854,7 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
           {generations ? ` Last retention pass removed ${generations.removed?.length ?? 0} and retained ${generations.retained?.length ?? 0}.` : ""}
           {monitor?.state ? ` Monitor ${monitor.state}${monitor.ageSeconds == null ? "" : ` (${monitor.ageSeconds}s old)`}.` : ""}
           {(lifecycle?.incident ?? monitor?.receipt?.incident)?.type ? ` Blocking incident ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.type} after ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.failureCount ?? "?"} failures.` : ""}
-          {access ? ` Access ${access.state}${access.findings.length > 0 ? `: ${access.findings.map((finding) => finding.message).join(" ")}` : "."}` : ""}
+          {accessSummary.text ? ` ${accessSummary.text}` : ""}
         </span>
       </div>
     </div>

@@ -303,6 +303,15 @@ assert.deepEqual(
   ),
   { x: 110, y: 220, width: 80, height: 40 },
 );
+assert.equal(
+  remoteViewIframeClipObservation(
+    { coordinateSpace: 'remote-view-iframe', x: 300, y: 300, width: 400, height: 100 },
+    1,
+    { x: 10, y: 20, width: 320, height: 180 },
+  ),
+  null,
+  'a transiently undersized iframe must remain eligible to converge',
+);
 assert.throws(
   () => remoteViewIframeClipObservation(
     { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },

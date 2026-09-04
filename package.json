@@ -71,6 +71,7 @@
     "test:remote-view-handoff-docs": "node scripts/test-remote-view-handoff-docs.js",
     "test:workspace-viewport-controller": "node --no-warnings --experimental-strip-types scripts/test-workspace-viewport-controller.js",
     "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
+    "test:dashboard-runtime-health-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-runtime-health-summary.ts",
     "test:dashboard-inspector-actions": "node scripts/test-dashboard-inspector-actions.js",
     "test:dashboard-browser-table": "node scripts/test-dashboard-browser-table.js",
     "test:dashboard-selected-workspace-context": "node --no-warnings --experimental-strip-types scripts/test-dashboard-selected-workspace-context.js",

@@ -1255,6 +1255,12 @@ export function remoteViewIframeClipObservation(region, iframeCount, iframeBox) 
     throw new Error(`Remote pixel marker requires exactly one iframe, observed ${iframeCount}`);
   }
   if (!iframeBox) return null;
+  if (
+    region.x + region.width > iframeBox.width ||
+    region.y + region.height > iframeBox.height
+  ) {
+    return null;
+  }
   return pixelMarkerClipForIframe(region, iframeBox);
 }
 
