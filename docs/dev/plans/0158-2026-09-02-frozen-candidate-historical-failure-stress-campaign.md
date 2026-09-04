@@ -3494,3 +3494,47 @@ Revised next action: complete Rust format and clippy validation, publish and
 install the exact terminal-relaunch repair in development, explicitly reopen
 the same durable handoff, then rerun the two-client external oracle so the
 primary Guacamole share-owner repair is finally exercised.
+
+The terminal-relaunch repair was committed and published as `9047dd8d`, then
+installed as development generation `0.28.0-9682c30f056f`. The three-launch
+smoke passed and production remained unchanged. Explicit reopen still found 34
+inert browser projections and 42 closed tabs from older attempts on the shared
+profile. The first-class guarded prune escape hatch removed exactly those 34
+browsers and 42 tabs plus 27 stale session browser references; it removed no
+profiles, displays, or sessions. The same durable handoff then reopened with a
+verified terminal effect and `operatorVisible.state=ready`. This unblocked the
+sequence while retaining the broader accumulation defect for final campaign
+analysis rather than hiding it with ad hoc cleanup.
+
+External run `33908153792` then exercised the intended sharing path. The
+human-paced client passed. The slow client initially rendered the prepared
+marker, but its concurrent second context rendered Guacamole's connection-list
+home instead. Its preserved network evidence shows successful active
+connection, sharing-profile, sharing-credential, and token responses before
+the wrong page appeared. The earlier primary-owner selection repair therefore
+worked as designed but was not sufficient.
+
+The remaining cause is identity aggregation at the ingress boundary. The
+transient sharing key authenticates the second viewer as intended, while the
+normal `/guacamole/` route also injects the stable full-operator `Remote-User`
+header. Guacamole accepts both identities and resolves the full operator home
+instead of entering only the shared connection. This is not a timing wait or
+an epoch problem.
+
+The bounded repair gives transient shared-view traffic a separate
+`/guacamole-share/` capability path. Cooper ingress rewrites that prefix to the
+existing Guacamole servlet path but deliberately omits the dashboard
+forward-auth middleware on that one route. The one-time sharing key remains
+required. The ordinary `/guacamole/` path retains stable operator
+authentication. Renderer validation and a regression prove the rewrite is
+attached to both local and external Cooper routers. Local and external no-key
+probes return only the Guacamole shell and expose no connection names, while
+the ordinary route continues to require authentication. The focused dashboard
+sharing test and production dashboard build pass.
+
+Revised next action: commit the isolated Cooper route and dashboard URL repair,
+install the exact development candidate, preserve the current handoff identity,
+and rerun the unchanged two-client external oracle. Treat a no-key route that
+can enumerate or open any connection as a security failure. A green concurrent
+marker and reconnect sequence advances to the frozen campaign; any new failure
+is preserved, diagnosed, and repaired under this still-active goal.

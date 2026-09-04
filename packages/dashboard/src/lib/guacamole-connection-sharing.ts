@@ -127,6 +127,7 @@ export async function resolveGuacamoleViewerFrame({
   if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
 
   const shared = new URL(root);
+  shared.pathname = shared.pathname.replace(/\/guacamole\/$/i, "/guacamole-share/");
   shared.hash = `/?key=${encodeURIComponent(key)}`;
   return { mode: "shared", url: shared.toString() };
 }
