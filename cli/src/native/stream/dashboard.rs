@@ -48,6 +48,29 @@ const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
 const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
+const GUACAMOLE_PRIMARY_CLAIM_TTL: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GuacamolePrimaryClaimKey {
+    route_id: String,
+    connection_id: String,
+}
+
+#[derive(Default)]
+struct GuacamolePrimaryClaimRegistry {
+    claims: HashMap<GuacamolePrimaryClaimKey, Instant>,
+}
+
+impl GuacamolePrimaryClaimRegistry {
+    fn claim(&mut self, key: GuacamolePrimaryClaimKey, now: Instant) -> (bool, Duration) {
+        self.claims.retain(|_, expires_at| *expires_at > now);
+        if let Some(expires_at) = self.claims.get(&key) {
+            return (false, expires_at.saturating_duration_since(now));
+        }
+        self.claims.insert(key, now + GUACAMOLE_PRIMARY_CLAIM_TTL);
+        (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+    }
+}
 
 #[derive(Default)]
 struct DashboardServiceStatusCache {
@@ -295,6 +318,13 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
 
     if method == "GET" && path == "/api/runtime/health" {
         write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/guacamole-primary-claim" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let (status, value) = guacamole_primary_claim_response(&body_str).await;
+        write_json_value(&mut stream, status, value).await;
         return;
     }
 
@@ -1483,6 +1513,48 @@ fn service_api_handler_backend_response(
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
     static CACHE: OnceLock<Mutex<DashboardServiceStatusCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(DashboardServiceStatusCache::default()))
+}
+
+fn guacamole_primary_claim_registry() -> &'static Mutex<GuacamolePrimaryClaimRegistry> {
+    static REGISTRY: OnceLock<Mutex<GuacamolePrimaryClaimRegistry>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(GuacamolePrimaryClaimRegistry::default()))
+}
+
+async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
+    let Ok(value) = serde_json::from_str::<Value>(body) else {
+        return (
+            "400 Bad Request",
+            json!({ "success": false, "code": "invalid_guacamole_primary_claim" }),
+        );
+    };
+    let route_id = value["routeId"].as_str().map(str::trim).unwrap_or("");
+    let connection_id = value["connectionId"].as_str().map(str::trim).unwrap_or("");
+    if route_id.is_empty()
+        || route_id.len() > 256
+        || connection_id.is_empty()
+        || connection_id.len() > 256
+    {
+        return (
+            "400 Bad Request",
+            json!({ "success": false, "code": "invalid_guacamole_primary_claim" }),
+        );
+    }
+
+    let (granted, remaining) = guacamole_primary_claim_registry().lock().await.claim(
+        GuacamolePrimaryClaimKey {
+            route_id: route_id.to_string(),
+            connection_id: connection_id.to_string(),
+        },
+        Instant::now(),
+    );
+    (
+        "200 OK",
+        json!({
+            "success": true,
+            "granted": granted,
+            "retryAfterMs": remaining.as_millis().min(u128::from(u32::MAX)) as u32,
+        }),
+    )
 }
 
 async fn proxy_dashboard_service_api_request(
@@ -3138,6 +3210,28 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    #[test]
+    fn guacamole_primary_claim_allows_one_owner_until_expiry() {
+        let mut registry = GuacamolePrimaryClaimRegistry::default();
+        let key = GuacamolePrimaryClaimKey {
+            route_id: "route-1".to_string(),
+            connection_id: "17".to_string(),
+        };
+        let start = Instant::now();
+
+        assert_eq!(
+            registry.claim(key.clone(), start),
+            (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+        );
+        let (granted, remaining) = registry.claim(key.clone(), start + Duration::from_secs(1));
+        assert!(!granted);
+        assert_eq!(remaining, Duration::from_secs(9));
+        assert_eq!(
+            registry.claim(key, start + GUACAMOLE_PRIMARY_CLAIM_TTL),
+            (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+        );
+    }
 
     async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
         static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();

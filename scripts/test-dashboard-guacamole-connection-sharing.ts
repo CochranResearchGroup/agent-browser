@@ -98,11 +98,15 @@ const sharedOnly = await resolveGuacamoleViewerFrame({
           },
         });
       }
+      if (url.endsWith("/api/guacamole-primary-claim")) {
+        return response({ success: true, granted: true, retryAfterMs: 10_000 });
+      }
       throw new Error(`Unexpected request: ${url}`);
     }) as typeof globalThis.fetch,
   });
 assert.deepEqual(sharedOnly, { mode: "direct", url: direct });
 
+let vanishedDiscoveryCount = 0;
 const vanishedPrimary = await resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/",
   frameUrl: direct,
@@ -111,6 +115,8 @@ const vanishedPrimary = await resolveGuacamoleViewerFrame({
     const url = String(input);
     if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
     if (url.endsWith("/activeConnections")) {
+      vanishedDiscoveryCount += 1;
+      if (vanishedDiscoveryCount > 1) return response({});
       return response({
         "active-uuid": {
           connectionIdentifier: "17",
@@ -130,8 +136,12 @@ const vanishedPrimary = await resolveGuacamoleViewerFrame({
     if (url.endsWith("/activeConnections/active-uuid/sharingCredentials/29")) {
       return new Response("not found", { status: 404 });
     }
+    if (url.endsWith("/api/guacamole-primary-claim")) {
+      return response({ success: true, granted: true, retryAfterMs: 10_000 });
+    }
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof globalThis.fetch,
+  waitImpl: async () => {},
 });
 assert.deepEqual(vanishedPrimary, { mode: "direct", url: direct });
 
@@ -143,10 +153,70 @@ const noActive = await resolveGuacamoleViewerFrame({
     const url = String(input);
     if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
     if (url.endsWith("/activeConnections")) return response({});
+    if (url.endsWith("/api/guacamole-primary-claim")) {
+      return response({ success: true, granted: true, retryAfterMs: 10_000 });
+    }
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof globalThis.fetch,
 });
 assert.deepEqual(noActive, { mode: "direct", url: direct });
+
+let discoveryCount = 0;
+let claimHeld = false;
+const concurrentFetch = async (input: string | URL | Request) => {
+  const url = String(input);
+  if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+  if (url.endsWith("/activeConnections")) {
+    discoveryCount += 1;
+    if (discoveryCount <= 2 || !claimHeld) return response({});
+    return response({
+      "elected-primary": {
+        connectionIdentifier: "17",
+        sharingProfileIdentifier: null,
+      },
+    });
+  }
+  if (url.endsWith("/api/guacamole-primary-claim")) {
+    if (!claimHeld) {
+      claimHeld = true;
+      return response({ success: true, granted: true, retryAfterMs: 10_000 });
+    }
+    return response({ success: true, granted: false, retryAfterMs: 10_000 });
+  }
+  if (url.endsWith("/connections/17/sharingProfiles")) {
+    return response({
+      "29": {
+        identifier: "29",
+        name: "Agent Browser Shared Session route-1",
+        primaryConnectionIdentifier: "17",
+      },
+    });
+  }
+  if (url.endsWith("/activeConnections/elected-primary/sharingCredentials/29")) {
+    return response({
+      expected: [{ name: "key", type: "QUERY_PARAMETER" }],
+      values: { key: "share-secret" },
+    });
+  }
+  throw new Error(`Unexpected request: ${url}`);
+};
+const concurrent = await Promise.all([
+  resolveGuacamoleViewerFrame({
+    dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+    frameUrl: direct,
+    stream,
+    fetchImpl: concurrentFetch as typeof globalThis.fetch,
+    waitImpl: async () => {},
+  }),
+  resolveGuacamoleViewerFrame({
+    dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+    frameUrl: direct,
+    stream,
+    fetchImpl: concurrentFetch as typeof globalThis.fetch,
+    waitImpl: async () => {},
+  }),
+]);
+assert.deepEqual(concurrent.map((entry) => entry.mode).sort(), ["direct", "shared"]);
 
 const localCrossOrigin = await resolveGuacamoleViewerFrame({
   dashboardHref: "http://127.0.0.1:4949/",

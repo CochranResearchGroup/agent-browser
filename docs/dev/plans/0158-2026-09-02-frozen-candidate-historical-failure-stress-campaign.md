@@ -3692,3 +3692,29 @@ can legitimately own multiple historical handoffs.
 
 Revised next action: redispatch C01 at the current exact commit and unchanged
 installed candidate. The external URL hash remains the E54-sealed identity.
+
+Workflow `33916458742` reached the exact sealed handoff but exposed a product
+race before the shared barrier. With no active Guacamole primary, both external
+clients independently selected the direct route. The second direct RDP
+connection displaced the first, whose preserved screenshot showed the correct
+fixture beneath Guacamole's disconnected overlay and the dashboard's viewer
+ownership warning. Provider logs independently recorded the first RDP client
+disconnect, a new direct client, the prior session's manual logoff, and a later
+sharing join. The run was canceled because a valid paired calibration was no
+longer possible.
+
+Stale-primary recovery alone cannot arbitrate simultaneous primary creation.
+The bounded repair adds an authenticated dashboard-local, ten-second primary
+claim keyed by the provider route and connection. Claim mutation is atomic in
+the dashboard server. When no primary exists, exactly one client receives the
+direct route; contenders poll for its active Guacamole connection and then
+request sharing credentials. An abandoned claim expires so a later contender
+can recover. A disappearing primary during credential creation returns to the
+same election loop instead of allowing two direct reconnects. Focused tests
+cover claim exclusion and expiry, plus a simultaneous two-client resolution
+that must yield exactly one direct and one shared result.
+
+Revised next action: finish the Rust and dashboard validation gates, publish
+and install the repaired development candidate, reconcile provider ingress if
+the generation changes, resolve the exact sealed handoff, and redispatch C01
+without staggering or weakening its shared-start schedule.
