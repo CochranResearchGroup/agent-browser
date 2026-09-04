@@ -1245,6 +1245,47 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         Some(profile_id)
     );
 
+    let historical_tab_id = "target:closed-historical-provider-route";
+    state.tabs.insert(
+        historical_tab_id.to_string(),
+        BrowserTab {
+            id: historical_tab_id.to_string(),
+            browser_id: "session:older-terminal-owner".to_string(),
+            lifecycle: TabLifecycle::Closed,
+            owner_session_id: Some("older-terminal-owner".to_string()),
+            service_tab_handle: Some(ServiceTabHandle {
+                browser_id: "session:older-terminal-owner".to_string(),
+                session_name: Some("older-terminal-owner".to_string()),
+                tab_id: historical_tab_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                lease_state: Some(LeaseState::Released),
+                owner_session_id: Some("older-terminal-owner".to_string()),
+                valid: false,
+                stale_reason: Some("tab_closed".to_string()),
+                ..ServiceTabHandle::default()
+            }),
+            ..BrowserTab::default()
+        },
+    );
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut historical_projection_options = LaunchOptions {
+        runtime_profile: Some("development-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let historical_projection_selection = apply_service_profile_selection(
+        &mut historical_projection_options,
+        &command,
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(historical_projection_selection, None);
+    assert_eq!(
+        historical_projection_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+
     let display_allocation_id = "development-display-1";
     let route_id = "development-route-1";
     state

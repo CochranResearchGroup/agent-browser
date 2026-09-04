@@ -3455,3 +3455,42 @@ repair, install it only in the development runtime, recreate the canonical
 synthetic handoff, and rerun the exact two-client external oracle. A green
 result advances directly to the frozen campaign sequence; another failure is
 diagnosed and recorded under the same still-active Plan 0158 goal.
+
+The primary-owner selection repair was committed and published as `c59405b3`,
+installed as development generation `0.28.0-9f7c26412225`, and passed the
+three-launch smoke. The six-route provider was reconciled to that exact
+generation, all required provider checks passed, public HTTPS returned 200,
+and production remained unchanged.
+
+External run `33906793894` did not exercise the sharing repair because the
+durable handoff's browser had been deliberately closed during candidate
+replacement. Both clients returned
+`handoff_target_closed_operator_action_required`; each recorded 18 successful
+HTTP requests with no failed or pending transport. The campaign then used the
+explicit operator-confirmed reopen path. Route preparation rolled back cleanly
+when launch failed with `existing_session_profile_identity_inconsistent`.
+
+The retained owner, lifecycle, profile, session, browser, and tab evidence
+identified an overbroad terminal-relaunch guard. The exact owner lifecycle was
+terminal with satisfied cleanup, process absence and profile-lock release were
+proven, the session lease was released, and its two tab handles were closed and
+inert. However, the tab projection also classified every historical closed tab
+that happened to reference the same profile as related to the current browser.
+Those older tabs correctly named different terminal browser and session IDs,
+so they could never satisfy the current browser's inert-handle predicate. The
+result was a false profile-identity inconsistency despite the access plan
+correctly reporting `replacementEligible=true` and
+`requiredAction=supersede_terminal_owner`.
+
+The bounded repair defines terminal-relaunch tab ownership by the exact browser
+or session identity only. A closed tab from another terminal owner no longer
+blocks the current exact replacement merely because both used the same shared
+profile. The existing profile-wide browser occupancy guard remains intact, so
+a live or retained browser projection for the same profile still prevents an
+unsafe relaunch. The focused regression recreates the historical closed-tab
+shape and passes.
+
+Revised next action: complete Rust format and clippy validation, publish and
+install the exact terminal-relaunch repair in development, explicitly reopen
+the same durable handoff, then rerun the two-client external oracle so the
+primary Guacamole share-owner repair is finally exercised.

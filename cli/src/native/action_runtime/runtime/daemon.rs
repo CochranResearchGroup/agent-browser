@@ -1245,7 +1245,6 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
             || tab.service_tab_handle.as_ref().is_some_and(|handle| {
                 handle.browser_id == logical_browser_id
                     || handle.session_name.as_deref() == Some(session_id)
-                    || handle.profile_id.as_deref() == Some(profile_id)
             });
         !related
             || (tab.lifecycle == crate::native::service_model::TabLifecycle::Closed
