@@ -33,6 +33,7 @@ import {
   installDashboardFetchFailureInstrumentation,
   reportDashboardFailure,
 } from "@/lib/failure-observation";
+import { fetchDashboardAuthStatus } from "@/lib/dashboard-auth-status";
 import {
   ServiceDetailInspector,
   ServicePanel,
@@ -439,10 +440,7 @@ function DashboardAuthGate({ initialSection }: { initialSection: DashboardSectio
     let cancelled = false;
     async function checkAuth() {
       try {
-        const response = await fetch("/api/dashboard-auth/status", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
+        const response = await fetchDashboardAuthStatus();
         const payload = (await response.json()) as DashboardAuthStatus;
         if (cancelled) return;
         setUser(payload.authenticated ? payload.user ?? null : null);

@@ -2207,3 +2207,38 @@ fresh readiness epoch. If the blank Guacamole load recurs, use the retained HAR
 and counts to diagnose the exact ingress transition. If it does not recur,
 retain E25 as an intermittent first-load failure and continue the broader
 campaign without pretending it did not occur.
+
+E26 ran from exact clean remote head `5ca8dee5` as workflow run `33826284459`.
+The human-paced client passed its full initial and reconnect sequence. The slow
+client passed its initial view, then its concurrent page remained on the
+dashboard login screen in the busy `Checking` state until the resolver
+observation timeout. Its failure bundle retained 182 completed network entries,
+37 successful Guacamole responses, eight WebSocket observations, and 40 console
+observations. The aggregate SHA-256 is
+`126611302f2498f3612132ff650a46d3dbd22493ee9928c8bcb6076c6bd81168`.
+
+Service State recorded the human initial and reconnect resolver jobs and the
+slow initial resolver job, but no concurrent resolver job. The failed page's
+video independently shows that it never left the authentication gate. The
+completed-response HAR contains an earlier 503 and recovery for the slow
+initial resolver, but no completed authentication-status response for the
+concurrent page. This localizes the campaign blocker before handoff resolution:
+the dashboard authentication gate issued one fetch with no timeout or retry,
+so a transport-starved request could suspend the page indefinitely. The
+underlying source of request starvation remains unproven.
+
+The repair gives authentication status three bounded five-second attempts and
+then releases the UI to its existing signed-out recourse instead of retaining
+an infinite busy state. A provider-free behavioral check proves recovery after
+an aborted first request and bounded failure after exhaustion. Failure capture
+now records request starts, request failures, safe endpoint classes, and safe
+service action names. It writes a separate redacted transport diagnostic with
+requests that were still pending when the probe failed, so the next epoch can
+distinguish authentication-status starvation from resolver starvation without
+retaining request bodies, credentials, or opaque URLs.
+
+Revised next action: validate the dashboard build and affected dashboard and
+external-runner contract suites, install the exact candidate, and dispatch one
+fresh external readiness epoch. If the underlying transport starvation recurs,
+the bounded gate must either recover or produce a finite signed-out state, and
+the new pending-request record must identify the stalled endpoint class.

@@ -80,6 +80,10 @@ assert.equal((runnerSource.match(/response\.json\(\)/g) || []).length, 1);
 assert.match(runnerSource, /responsePath === '\/api\/service\/request'/);
 assert.match(runnerSource, /requestPayload\?\.action !== 'service_remote_view_handoff_resolve'/);
 assert.match(runnerSource, /application\/x-content-excluded-at-capture/);
+assert.match(runnerSource, /transport-diagnostics\.redacted\.json/);
+assert.match(runnerSource, /pendingAuthStatusRequestCount/);
+assert.match(runnerSource, /page\.on\('request'/);
+assert.match(runnerSource, /page\.on\('requestfailed'/);
 const calibrationSchedule = buildExternalCalibrationSchedule();
 assert.equal(calibrationSchedule.filter((event) => event.kind === 'dashboard_action').length, 25);
 assert.equal(calibrationSchedule.filter((event) => event.kind === 'handoff_reconnect').length, 5);
@@ -292,6 +296,10 @@ const guacamoleLoadFailure = new Error('The external dashboard did not render th
 guacamoleLoadFailure.code = 'external_stream_identity_marker_missing';
 guacamoleLoadFailure.details = {
   networkEntryCount: 17,
+  requestFailureCount: 2,
+  pendingNetworkRequestCount: 3,
+  pendingAuthStatusRequestCount: 1,
+  pendingServiceRequestCount: 0,
   guacamoleNetworkEntryCount: 4,
   guacamoleHttpStatusCounts: { 200: 3, 101: 1, invalid: 99 },
   websocketObservationCount: 1,
@@ -304,6 +312,10 @@ assert.deepEqual(externalVantageFailureRecord(guacamoleLoadFailure, env), {
   details: {
     resolutionObservationCount: 1,
     networkEntryCount: 17,
+    requestFailureCount: 2,
+    pendingNetworkRequestCount: 3,
+    pendingAuthStatusRequestCount: 1,
+    pendingServiceRequestCount: 0,
     guacamoleNetworkEntryCount: 4,
     websocketObservationCount: 1,
     consoleEntryCount: 2,

@@ -737,6 +737,16 @@ async function executeExternalVantageProbe({
   const networkEntries = [];
   const consoleEntries = [];
   const handoffResolutions = [];
+  const pendingNetworkRequests = new Map();
+  const requestFailureCounter = { count: 0 };
+  const captureState = {
+    urlEvidence,
+    networkEntries,
+    consoleEntries,
+    handoffResolutions,
+    pendingNetworkRequests,
+    requestFailureCounter,
+  };
   const resolvedAddresses = await resolvePublicAddresses(handoff.hostname);
   const tls = await observeTls(handoff);
   const initialClassification = classifyOperatorUrl(handoff.href, {
@@ -785,7 +795,7 @@ async function executeExternalVantageProbe({
       throw new Error('Authenticated session cookie lacks secure and HttpOnly metadata');
     }
     let page = await context.newPage();
-    attachCapture(page, { urlEvidence, networkEntries, consoleEntries, handoffResolutions });
+    attachCapture(page, captureState);
     const initial = await captureVisit({
       page,
       handoff,
@@ -802,7 +812,7 @@ async function executeExternalVantageProbe({
     let concurrentPage = null;
     if (paceProfile === 'slow_concurrency') {
       concurrentPage = await context.newPage();
-      attachCapture(concurrentPage, { urlEvidence, networkEntries, consoleEntries, handoffResolutions });
+      attachCapture(concurrentPage, captureState);
       concurrency = await captureVisit({
         page: concurrentPage,
         handoff,
@@ -857,7 +867,7 @@ async function executeExternalVantageProbe({
         }
         await page.close();
         page = await context.newPage();
-        attachCapture(page, { urlEvidence, networkEntries, consoleEntries, handoffResolutions });
+        attachCapture(page, captureState);
         reconnect = await captureVisit({
           page,
           handoff,
@@ -891,7 +901,7 @@ async function executeExternalVantageProbe({
       await page.close();
       disconnectObservedAt = new Date().toISOString();
       page = await context.newPage();
-      attachCapture(page, { urlEvidence, networkEntries, consoleEntries, handoffResolutions });
+      attachCapture(page, captureState);
       reconnect = await captureVisit({
         page,
         handoff,
@@ -1068,6 +1078,20 @@ async function executeExternalVantageProbe({
     return receipt;
   } catch (error) {
     writeSanitizedHar(networkEntries, join(outputDir, 'network.redacted.har'));
+    const pendingRequests = [...pendingNetworkRequests.values()]
+      .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+    writeFileSync(
+      join(outputDir, 'transport-diagnostics.redacted.json'),
+      `${JSON.stringify({
+        schemaVersion: 'agent-browser.p158-transport-diagnostics.v1',
+        capturedAt: new Date().toISOString(),
+        completedNetworkRequestCount: networkEntries.length,
+        failedNetworkRequestCount: requestFailureCounter.count,
+        pendingNetworkRequests: pendingRequests,
+        consoleEntries,
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
     const guacamoleEntries = networkEntries.filter((entry) => {
       try {
         return new URL(entry.url).pathname.startsWith('/guacamole');
@@ -1078,6 +1102,14 @@ async function executeExternalVantageProbe({
     error.details = {
       ...(error?.details && typeof error.details === 'object' ? error.details : {}),
       networkEntryCount: networkEntries.length,
+      requestFailureCount: requestFailureCounter.count,
+      pendingNetworkRequestCount: pendingRequests.length,
+      pendingAuthStatusRequestCount: pendingRequests.filter(
+        (entry) => entry.pathClass === 'dashboard_auth_status',
+      ).length,
+      pendingServiceRequestCount: pendingRequests.filter(
+        (entry) => entry.pathClass === 'service_request',
+      ).length,
       guacamoleNetworkEntryCount: guacamoleEntries.length,
       guacamoleHttpStatusCounts: Object.fromEntries(
         [...new Set(guacamoleEntries.map((entry) => entry.status))]
@@ -1293,14 +1325,43 @@ function attachCapture(page, capture) {
       url: socket.url(),
     });
   });
+  page.on('request', (request) => {
+    capture.pendingNetworkRequests.set(request, {
+      startedAt: new Date().toISOString(),
+      method: request.method(),
+      resourceType: request.resourceType(),
+      pathClass: safeNetworkPathClass(request.url()),
+      requestAction: safeRequestAction(request),
+      urlSha256: hashText(request.url()),
+    });
+  });
+  page.on('requestfailed', (request) => {
+    const pending = capture.pendingNetworkRequests.get(request);
+    capture.pendingNetworkRequests.delete(request);
+    capture.requestFailureCounter.count += 1;
+    capture.networkEntries.push({
+      entryId: `network-${capture.networkEntries.length + 1}`,
+      url: redactOperatorUrl(request.url()),
+      urlSha256: hashText(request.url()),
+      method: request.method(),
+      resourceType: request.resourceType(),
+      requestAction: pending?.requestAction ?? safeRequestAction(request),
+      status: 0,
+      timestamp: new Date().toISOString(),
+      failureTextSha256: hashText(request.failure()?.errorText ?? 'unknown'),
+    });
+  });
   page.on('response', async (response) => {
     const request = response.request();
+    const pending = capture.pendingNetworkRequests.get(request);
+    capture.pendingNetworkRequests.delete(request);
     const entry = {
       entryId: `network-${capture.networkEntries.length + 1}`,
       url: redactOperatorUrl(response.url()),
       urlSha256: hashText(response.url()),
       method: request.method(),
       resourceType: request.resourceType(),
+      requestAction: pending?.requestAction ?? safeRequestAction(request),
       status: response.status(),
       timestamp: new Date().toISOString(),
     };
@@ -1358,6 +1419,31 @@ function attachCapture(page, capture) {
       }
     }
   });
+}
+
+function safeNetworkPathClass(rawUrl) {
+  try {
+    const path = new URL(rawUrl).pathname;
+    if (path === '/api/dashboard-auth/status') return 'dashboard_auth_status';
+    if (path === '/api/dashboard-auth/login') return 'dashboard_auth_login';
+    if (path === '/api/service/request') return 'service_request';
+    if (path.startsWith('/guacamole')) return 'guacamole_transport';
+    if (path.startsWith('/api/')) return 'dashboard_api';
+    return 'document_or_asset';
+  } catch {
+    return 'unparseable';
+  }
+}
+
+function safeRequestAction(request) {
+  if (safeNetworkPathClass(request.url()) !== 'service_request' || request.method() !== 'POST') {
+    return null;
+  }
+  try {
+    return safeFailureToken(request.postDataJSON()?.action);
+  } catch {
+    return null;
+  }
 }
 
 export function projectHandoffResolution(data) {
@@ -1893,7 +1979,7 @@ function writeSanitizedHar(networkEntries, path) {
         },
         cache: {},
         timings: { send: 0, wait: 0, receive: 0 },
-        comment: `resourceType=${entry.resourceType}; urlSha256=${entry.urlSha256}`,
+        comment: `resourceType=${entry.resourceType}; requestAction=${entry.requestAction ?? 'none'}; urlSha256=${entry.urlSha256}`,
       })),
     },
   };
@@ -1972,6 +2058,10 @@ function safeExternalFailureDetails(value) {
   }
   for (const key of [
     'networkEntryCount',
+    'requestFailureCount',
+    'pendingNetworkRequestCount',
+    'pendingAuthStatusRequestCount',
+    'pendingServiceRequestCount',
     'guacamoleNetworkEntryCount',
     'websocketObservationCount',
     'consoleEntryCount',
