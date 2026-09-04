@@ -2821,3 +2821,27 @@ clippy with warnings denied pass.
 Revised next action: publish and install the bounded dashboard-bootstrap retry,
 repeat the provider reconciliation, and require a fresh unattended startup to
 materialize `dashboard-service-backend.stream` before preparing E7.
+
+The bounded-retry candidate installed as development generation
+`0.28.0-58dc65a4a42c`, but the unattended proof still failed all three attempts.
+The new ordinal logging made the failure deterministic: every recovery child
+exited zero and no named lane appeared. Comparing only non-secret process-mode
+environment names exposed the final cause. Stable dashboard ingress sets
+`AGENT_BROWSER_DASHBOARD_INGRESS`; the recovery child removed the ordinary
+dashboard selector but inherited the ingress selector. It therefore entered
+stable-ingress mode before parsing `stream enable`, failed to bind the already
+occupied dashboard port, and returned without creating the lane. The same
+command from an ordinary shell had no ingress selector and created the lane.
+
+A third focused red test now freezes the child-environment contract. Recovery
+must scrub ordinary dashboard, stable dashboard ingress, and backend-only
+process selectors. The implementation centralizes all recovery-child removals,
+adds the two missing dashboard modes and the backend port, and preserves the
+runtime-host ingress state required to reach the selected host. The new
+process-mode regression, format, and workspace clippy with warnings denied
+pass.
+
+Revised next action: publish and install the process-mode scrub repair, then
+repeat the unattended named-lane proof. Do not proceed to E7 unless the lane is
+created without a manual recovery command and the startup journal contains no
+terminal dashboard-backend initialization failure.

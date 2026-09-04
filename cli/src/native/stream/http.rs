@@ -2217,6 +2217,28 @@ fn service_daemon_session_requires_lane_refresh(service_command: Option<&Value>)
     })
 }
 
+const SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS: &[&str] = &[
+    "AGENT_BROWSER_DAEMON",
+    crate::runtime_host::RUNTIME_HOST_PROCESS_ENV,
+    "AGENT_BROWSER_DAEMON_AUTH_TOKEN",
+    "AGENT_BROWSER_SESSION",
+    "AGENT_BROWSER_RUNTIME_PROFILE",
+    "AGENT_BROWSER_PROFILE",
+    "AGENT_BROWSER_CDP_URL",
+    "AGENT_BROWSER_STREAM_PORT",
+    "AGENT_BROWSER_DASHBOARD",
+    "AGENT_BROWSER_DASHBOARD_INGRESS",
+    "AGENT_BROWSER_DASHBOARD_BACKEND_ONLY",
+    "AGENT_BROWSER_DASHBOARD_PORT",
+    "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+    "AGENT_BROWSER_HEADED",
+    "AGENT_BROWSER_LEAVE_OPEN",
+    "AGENT_BROWSER_EXECUTABLE_PATH",
+    "AGENT_BROWSER_ARGS",
+    "AGENT_BROWSER_EXTENSIONS",
+    "AGENT_BROWSER_USER_AGENT",
+];
+
 fn service_daemon_session_ready_for_request(
     named_lane_ready: bool,
     requires_lane_refresh: bool,
@@ -2251,27 +2273,14 @@ pub(super) async fn ensure_service_daemon_session(
     let exe = std::env::current_exe()
         .map_err(|err| format!("Cannot resolve executable for remote-view recovery: {err}"))?;
     let mut command = tokio::process::Command::new(exe);
+    command.args(service_daemon_session_recovery_args(
+        session_name,
+        service_command,
+    ));
+    for variable in SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS {
+        command.env_remove(variable);
+    }
     command
-        .args(service_daemon_session_recovery_args(
-            session_name,
-            service_command,
-        ))
-        .env_remove("AGENT_BROWSER_DAEMON")
-        .env_remove(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
-        .env_remove("AGENT_BROWSER_DAEMON_AUTH_TOKEN")
-        .env_remove("AGENT_BROWSER_SESSION")
-        .env_remove("AGENT_BROWSER_RUNTIME_PROFILE")
-        .env_remove("AGENT_BROWSER_PROFILE")
-        .env_remove("AGENT_BROWSER_CDP_URL")
-        .env_remove("AGENT_BROWSER_STREAM_PORT")
-        .env_remove("AGENT_BROWSER_DASHBOARD")
-        .env_remove("AGENT_BROWSER_DASHBOARD_PORT")
-        .env_remove("AGENT_BROWSER_HEADED")
-        .env_remove("AGENT_BROWSER_LEAVE_OPEN")
-        .env_remove("AGENT_BROWSER_EXECUTABLE_PATH")
-        .env_remove("AGENT_BROWSER_ARGS")
-        .env_remove("AGENT_BROWSER_EXTENSIONS")
-        .env_remove("AGENT_BROWSER_USER_AGENT")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
@@ -4222,6 +4231,20 @@ mod tests {
         assert!(!service_daemon_session_ready_for_request(false, false));
         assert!(!service_daemon_session_ready_for_request(true, true));
         assert!(service_daemon_session_ready_for_request(true, false));
+    }
+
+    #[test]
+    fn service_daemon_recovery_scrubs_dashboard_process_modes() {
+        for variable in [
+            "AGENT_BROWSER_DASHBOARD",
+            "AGENT_BROWSER_DASHBOARD_INGRESS",
+            "AGENT_BROWSER_DASHBOARD_BACKEND_ONLY",
+        ] {
+            assert!(
+                SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS.contains(&variable),
+                "recovery child must not inherit {variable}"
+            );
+        }
     }
 
     #[test]
