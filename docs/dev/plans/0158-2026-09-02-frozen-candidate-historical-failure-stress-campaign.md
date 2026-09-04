@@ -3257,3 +3257,41 @@ install the exact timeout-alignment candidate in development, then recreate the
 handoff and rerun the corrected external five-round load gate from its anchor.
 Only dispatch E47 if that gate has no 502, 503, or 504 response, no unusable
 handoff or stream, no resource backlog, and no new identity rejection.
+
+The timeout-alignment candidate was committed and published as `85a8be6c`,
+installed as development generation `0.28.0-eccfb7c03455`, and passed the
+three-launch smoke plus the required six-route provider doctor. Local and
+bastion ingress were republished from the reviewed Cooper inventory while its
+pre-existing unrelated worktree changes remained untouched. A new access plan
+selected the intended managed profile, and a fresh remote-view request reached
+`operatorVisible.state=ready` with a verified terminal effect.
+
+The next corrected five-round public run kept one anchor and created ten fresh
+clients, closing each round's two fresh contexts. The anchor and two clients
+passed, while eight clients failed. Crucially, no resource endpoint returned
+503, confirming the first timeout repair. The next pressure surface was broader:
+browser-capability-registry reads and same-session tab reads remained
+uncoalesced and retained two-second response budgets. The public clients saw
+503 responses for those reads while the new structured ingress records proved
+`first_response_timeout`, `retrySafe=true`, and `firstResponseTimeoutMs=2000`.
+Several `view_focus` calls returned client-visible HTTP 502, but authoritative
+job readback showed every completed focus job succeeded with
+`verified_effect`; the special focus proxy had abandoned those results after
+two seconds. One focus job remained queued at readback and is retained for the
+campaign analysis.
+
+Three red regressions reproduced the cache-membership, focus-budget, and outer
+ingress-budget gaps. The bounded repair adds service contracts,
+browser-capability registry, and per-session `/api/tabs` reads to the existing
+five-second path-keyed single-flight cache; the tab key remains isolated by
+browser port. These pressure-sensitive reads receive matching ten-second inner
+and outer budgets. The special dashboard focus route now receives the existing
+fifteen-second remote-view action budget, so a successful queued effect is not
+reported as a client failure. The ingress journal now recognizes the new exact
+read routes while continuing to redact queries and dynamic handoff or
+Guacamole paths. All three regressions pass green.
+
+Revised next action: run the complete dashboard and ingress module tests,
+format, clippy, and patch checks; commit and publish the bounded read and focus
+repair; install its exact development candidate; then repeat the same external
+anchor plus ten-fresh-client gate without changing the harness.

@@ -1268,7 +1268,13 @@ fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String
     let (path, action) = match raw_path {
         "/api/service/resources" => (raw_path.to_string(), "service_resources".to_string()),
         "/api/service/status" => (raw_path.to_string(), "service_status".to_string()),
+        "/api/service/contracts" => (raw_path.to_string(), "service_contracts".to_string()),
+        "/api/service/browser-capability-registry" => (
+            raw_path.to_string(),
+            "service_browser_capability_registry".to_string(),
+        ),
         "/api/service/request" => (raw_path.to_string(), "service_request".to_string()),
+        "/api/session-tabs" => (raw_path.to_string(), "session_tabs".to_string()),
         "/api/runtime/manifest" => (raw_path.to_string(), "runtime_manifest".to_string()),
         path if path.starts_with("/remote-view/") => (
             "/remote-view/<redacted>".to_string(),
@@ -1295,6 +1301,12 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
         || request.starts_with(b"GET /api/service/status?")
         || request.starts_with(b"GET /api/service/resources ")
         || request.starts_with(b"GET /api/service/resources?")
+        || request.starts_with(b"GET /api/service/contracts ")
+        || request.starts_with(b"GET /api/service/contracts?")
+        || request.starts_with(b"GET /api/service/browser-capability-registry ")
+        || request.starts_with(b"GET /api/service/browser-capability-registry?")
+        || request.starts_with(b"GET /api/session-tabs ")
+        || request.starts_with(b"GET /api/session-tabs?")
     {
         // A live service projection can take longer than an ordinary dashboard
         // read while the host is under admitted pressure. Keep this allowance
@@ -2682,7 +2694,7 @@ mod tests {
     }
 
     #[test]
-    fn service_status_and_resources_reads_get_a_pressure_tolerant_first_response_timeout() {
+    fn pressure_sensitive_dashboard_reads_get_a_tolerant_first_response_timeout() {
         assert_eq!(
             dashboard_ingress_first_response_timeout(
                 b"GET /api/service/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
@@ -2692,6 +2704,18 @@ mod tests {
         assert_eq!(
             dashboard_ingress_first_response_timeout(
                 b"GET /api/service/resources HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/service/browser-capability-registry HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/session-tabs?port=9222 HTTP/1.1\r\nHost: localhost\r\n\r\n"
             ),
             Duration::from_secs(10)
         );

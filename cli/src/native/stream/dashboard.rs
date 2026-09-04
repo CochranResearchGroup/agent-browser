@@ -623,8 +623,14 @@ async fn handle_service_api_request(
     if method == "POST" {
         if let Some((session_name, command_body)) = service_request_focus_command_body(path, body) {
             if let Some(port) = session_port_for_name(&session_name) {
-                match proxy_local_http_api_request(port, "POST", "/api/command", &command_body)
-                    .await
+                match proxy_local_http_api_request_with_timeout(
+                    port,
+                    "POST",
+                    "/api/command",
+                    &command_body,
+                    DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT,
+                )
+                .await
                 {
                     Ok(response) => {
                         let response =
@@ -1293,6 +1299,7 @@ fn is_remote_view_service_action(action: &str) -> bool {
             | "service_viewer_lease_heartbeat"
             | "service_viewer_lease_release"
             | "service_controller_lease_takeover"
+            | "view_focus"
             | "view_takeover"
     )
 }
@@ -1453,7 +1460,11 @@ fn dashboard_service_status_cacheable(method: &str, path: &str) -> bool {
     method == "GET"
         && matches!(
             split_path_query(path).0,
-            "/api/service/status" | "/api/service/resources"
+            "/api/service/status"
+                | "/api/service/resources"
+                | "/api/service/contracts"
+                | "/api/service/browser-capability-registry"
+                | "/api/tabs"
         )
 }
 
@@ -2577,7 +2588,15 @@ async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, que
         return;
     };
 
-    match proxy_local_http_api_request(port, "GET", "/api/tabs", "").await {
+    match proxy_dashboard_service_api_request(
+        port,
+        "GET",
+        "/api/tabs",
+        "",
+        DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT,
+    )
+    .await
+    {
         Ok(response) if http_response_status(&response) == Some(200) => {
             let _ = stream.write_all(&response).await;
         }
@@ -3184,7 +3203,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_service_read_cache_coalesces_status_and_resources() {
+    fn dashboard_service_read_cache_coalesces_pressure_sensitive_reads() {
         assert!(dashboard_service_status_cacheable(
             "GET",
             "/api/service/status"
@@ -3197,6 +3216,15 @@ mod tests {
             "GET",
             "/api/service/resources"
         ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/browser-capability-registry"
+        ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/contracts"
+        ));
+        assert!(dashboard_service_status_cacheable("GET", "/api/tabs"));
         assert!(!dashboard_service_status_cacheable(
             "POST",
             "/api/service/status"
@@ -3951,6 +3979,14 @@ mod tests {
         assert_eq!(
             service_api_proxy_timeout("GET", "/api/service/resources", ""),
             DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
+        );
+        assert_eq!(
+            service_api_proxy_timeout(
+                "POST",
+                "/api/service/request",
+                r##"{"action":"view_focus"}"##
+            ),
+            DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT
         );
         assert!(dashboard_service_status_cacheable(
             "GET",
