@@ -82,6 +82,13 @@ pub(crate) fn service_profile_lease_admission(
     session_id: &str,
     waited_ms: Option<u64>,
 ) -> Result<ServiceProfileLeaseGate, String> {
+    // Retained-browser focus and bounded desktop control do not acquire a
+    // profile. Applying the acquisition gate here can rewrite an already
+    // resolved owner route to an unrelated fail-open profile after the runtime
+    // host deliberately removed inherited lane defaults.
+    if !crate::runtime_host::command_accepts_lane_profile_defaults(command) {
+        return Ok(ServiceProfileLeaseGate::Ready);
+    }
     // Canonical lease-bearing commands are admitted past this legacy scheduler
     // gate unchanged. The daemon verifies the authenticated authorization
     // against the current claim, capability, profile, and owner generation

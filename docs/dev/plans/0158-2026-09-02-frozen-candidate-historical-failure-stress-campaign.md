@@ -3185,3 +3185,41 @@ synthetic handoff, and rerun one retained authenticated anchor plus two fresh
 clients for five bounded rounds, closing the fresh clients after each round.
 Require focus success, usable Guacamole pixels, no resource backlog, no ingress
 503 or 504, and no new stale-profile mismatch before dispatching E47.
+
+The installed focus-proxy proof then isolated a later mutation boundary. The
+dashboard proxy and shared runtime host both removed the inherited profile as
+designed, but the control-plane scheduler subsequently applied the legacy
+profile-acquisition gate to `view_focus`. Under the configured
+`fail_open_ephemeral` escape hatch, a lease conflict caused that gate to write a
+new `lease-fail-open-*` runtime profile into the already routed focus command.
+The final active-browser guard correctly rejected that rewritten profile
+against the retained managed browser. A uniquely tagged diagnostic response
+proved that `runtimeProfile`, `profileId`, and `profile` were all absent after
+runtime-host reconciliation; all temporary diagnostic response fields were
+then removed.
+
+A focused scheduler regression reproduced the historical control-path failure
+and failed with `existing_session_profile_identity_unproven` before the repair.
+The bounded correction exempts only commands already classified as retained
+browser focus or bounded desktop control from profile-acquisition admission.
+Those commands do not acquire or launch a profile. Explicit profile fields are
+still preserved for the final active-browser mismatch guard, and ordinary
+browser acquisition commands retain the enforced, fail-open, and unsafe-claim
+lease behavior. The new regression, both neighboring lease-admission tests,
+and the inherited-profile runtime-host regression pass.
+
+The same installed investigation found a separate development display residue:
+an Xvfb process on display `:90` had survived since September 2 without any
+client carrying `DISPLAY=:90`. It caused three logged remote-headed launch
+attempts to fail before the display became ready. The exact process was closed,
+the display socket disappeared, and the same access-plan launch then succeeded
+without a profile, identity, or Xvfb failure. This residue and the discarded
+runtime-host stderr channel remain campaign findings for the final holistic
+analysis; the browser-launch failure itself was present in the durable failure
+journal.
+
+Revised next action: complete format, clippy, and focused validation; commit and
+publish the scheduler repair; install its exact development candidate; recreate
+one coherent managed browser and prove the dashboard-routed `view_focus` no
+longer receives a fail-open profile. Then rerun the corrected five-round public
+load gate and dispatch E47 only if its failure-journal delta remains clean.

@@ -3279,6 +3279,55 @@ fn service_profile_lease_fail_open_leaves_conflict_free_request_unchanged() {
 }
 
 #[test]
+fn view_focus_bypasses_profile_acquisition_fail_open_rewrite() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
+    let home = unique_socket_dir("profile-lease-view-focus-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    guard.set("AGENT_BROWSER_PROFILE_LEASE_MODE", "fail_open_ephemeral");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([
+                (
+                    "exclusive-holder".to_string(),
+                    BrowserSession {
+                        id: "exclusive-holder".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "focus-session".to_string(),
+                    BrowserSession {
+                        id: "focus-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let mut command = json!({
+        "action": "view_focus",
+        "serviceName": "agent-browser-dashboard",
+        "sessionName": "focus-session",
+        "targetId": "target-1"
+    });
+    let original = command.clone();
+
+    let decision = service_profile_lease_admission(&mut command, "focus-session", Some(0))
+        .expect("view focus admission should bypass profile acquisition");
+
+    assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+    assert_eq!(command, original);
+    assert!(command.get("profileLeaseFailOpen").is_none());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn service_profile_lease_admission_never_rewrites_canonical_authorization() {
     let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_PROFILE_LEASE_MODE"]);
     let home = unique_socket_dir("profile-lease-canonical-admission-home");
