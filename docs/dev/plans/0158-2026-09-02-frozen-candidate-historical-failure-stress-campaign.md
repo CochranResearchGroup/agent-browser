@@ -4006,9 +4006,12 @@ but reconnect found a Guacamole active-primary row whose sharing credentials
 already returned 404. The resolver treated any active row as proof of a live
 primary and never asked the server-side primary lease whether the stale owner
 could be replaced. It remained without an iframe until the pixel deadline.
-The resolver now asks the bounded primary-claim endpoint after a sharing
-credential 404. A live owner remains protected because its unexpired claim is
-denied; an expired stale owner can be replaced immediately. A provider-free
-regression holds the stale active row in place and proves exactly one granted
-claim selects the direct primary URL. Connection-sharing, view-stream, dashboard
-production-build, and whitespace checks pass.
+An initial repair asked the bounded primary-claim endpoint after a sharing
+credential 404, but adversarial review rejected it before acceptance. The claim
+registry is only a ten-second in-memory mutex and is not fenced to a provider
+connection or live owner. At expiry it could authorize a second direct viewer
+while the original primary still existed. The external run against that build
+was canceled, the development runtime was restored to the preceding safe
+generation, and the unsafe 404 claim path was removed. Reclaiming this case now
+requires owner and provider evidence strong enough to prevent split-brain; a
+credential 404 alone is explicitly insufficient.

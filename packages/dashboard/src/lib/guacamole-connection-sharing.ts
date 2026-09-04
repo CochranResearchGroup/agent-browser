@@ -175,11 +175,6 @@ export async function resolveGuacamoleViewerFrame({
       signal,
     });
     if (credentialsResponse.status === 404) {
-      // Guacamole can retain an active-connection row briefly after its
-      // primary iframe closes. Let the server-side lease decide whether this
-      // client may replace that stale primary instead of waiting on the row.
-      const claim = await claimPrimary();
-      if (claim.granted) return { mode: "direct", url: frameUrl };
       await waitImpl(100, signal);
       continue;
     }

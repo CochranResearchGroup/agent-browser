@@ -155,42 +155,6 @@ const vanishedPrimary = await resolveGuacamoleViewerFrame({
 });
 assert.deepEqual(vanishedPrimary, { mode: "direct", url: direct });
 
-let stalePrimaryClaimCount = 0;
-const stalePrimary = await resolveGuacamoleViewerFrame({
-  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
-  frameUrl: direct,
-  stream,
-  fetchImpl: (async (input: string | URL | Request) => {
-    const url = String(input);
-    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
-    if (url.endsWith("/activeConnections")) {
-      return response({
-        "stale-primary": { connectionIdentifier: "17", sharingProfileIdentifier: null },
-      });
-    }
-    if (url.endsWith("/connections/17/sharingProfiles")) {
-      return response({
-        "29": {
-          identifier: "29",
-          name: "Agent Browser Shared Session route-1",
-          primaryConnectionIdentifier: "17",
-        },
-      });
-    }
-    if (url.endsWith("/activeConnections/stale-primary/sharingCredentials/29")) {
-      return new Response("not found", { status: 404 });
-    }
-    if (url.endsWith("/api/guacamole-primary-claim")) {
-      stalePrimaryClaimCount += 1;
-      return response({ success: true, granted: true, retryAfterMs: 10_000 });
-    }
-    throw new Error(`Unexpected request: ${url}`);
-  }) as typeof globalThis.fetch,
-  waitImpl: async () => {},
-});
-assert.deepEqual(stalePrimary, { mode: "direct", url: direct });
-assert.equal(stalePrimaryClaimCount, 1);
-
 const noActive = await resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/",
   frameUrl: direct,
