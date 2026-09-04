@@ -1183,6 +1183,7 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
     assert!(!adoption_events.contains(&"navigate_target"));
     let adopted_value = adopted.clone().into_compatibility_result().unwrap();
     assert_eq!(adopted_value["presentationGeneration"], 5);
+    assert_eq!(adopted_value["tabId"], "target:tab-a");
     assert_eq!(adopted_value["targetId"], "tab-a");
     assert_eq!(
         adopted_value["presentationReceipt"]["dashboardDeploymentGeneration"],
@@ -1216,6 +1217,38 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
     );
 
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn durable_resolution_response_uses_the_fresh_opened_tab_identity() {
+    let stale_handoff = RemoteViewHandoff {
+        tab_id: Some("target:closed-target".to_string()),
+        target_id: Some("closed-target".to_string()),
+        ..RemoteViewHandoff::default()
+    };
+    let opened = json!({
+        "tab": {
+            "targetId": "replacement-target",
+            "serviceTabHandle": {
+                "tabId": "target:replacement-target",
+                "targetId": "replacement-target"
+            }
+        }
+    });
+
+    let identity = durable_resolution_response_identity(
+        &opened,
+        Some(&stale_handoff),
+        Some("replacement-target"),
+    );
+
+    assert_eq!(
+        identity,
+        (
+            Some("target:replacement-target".to_string()),
+            Some("replacement-target".to_string())
+        )
+    );
 }
 
 #[tokio::test]

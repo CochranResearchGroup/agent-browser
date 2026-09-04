@@ -1497,10 +1497,8 @@ pub(crate) async fn execute_durable_resolution<
             repository.snapshot(supervisor.forward_repository_lock_timeout()),
         )
         .await?;
-    let presentation = presentation_state
-        .remote_view_handoffs
-        .get(&handoff.id)
-        .and_then(|handoff| handoff.presentation_receipt.clone());
+    let resolved_handoff = presentation_state.remote_view_handoffs.get(&handoff.id);
+    let presentation = resolved_handoff.and_then(|handoff| handoff.presentation_receipt.clone());
     let presentation_owner_matches = presentation.as_ref().is_some_and(|receipt| {
         presentation_state
             .runtime_owner_registry
@@ -1555,13 +1553,18 @@ pub(crate) async fn execute_durable_resolution<
         .as_ref()
         .map(|receipt| receipt.target_id.clone())
         .or_else(|| handoff.target_id.clone());
+    let (resolved_tab_id, resolved_target_id) = durable_resolution_response_identity(
+        &opened,
+        resolved_handoff,
+        presentation_target_id.as_deref(),
+    );
     let opened = RouteBoundOpenDocument::from_compatibility(json!(
         { "status" : "ready", "resolved" : true, "reopenedClosedTab" :
         allow_reopen_closed, "handoffId" : handoff.id, "handoffUrl" : opened
         .get("handoffUrl"), "externalUrl" : opened.get("externalUrl"),
         "providerExternalUrl" : opened.get("providerExternalUrl"), "browserId" :
         opened.get("browserId"), "sessionName" : opened.get("sessionName"), "tabId":
-        handoff.tab_id, "targetId": presentation_target_id, "tab" : opened.get("tab"),
+        resolved_tab_id, "targetId": resolved_target_id, "tab" : opened.get("tab"),
         "viewStreamProvider" : handoff.view_stream_provider,
         "requiredViewStreamProvider" : handoff.view_stream_provider,
         "controlInput" : handoff.control_input, "presentationGeneration":
@@ -1572,6 +1575,38 @@ pub(crate) async fn execute_durable_resolution<
     } else {
         Ok(RouteBoundOpenOutcome::Opened { opened })
     }
+}
+
+pub(crate) fn durable_resolution_response_identity(
+    opened: &Value,
+    resolved_handoff: Option<&RemoteViewHandoff>,
+    presentation_target_id: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let opened_tab = opened.get("tab");
+    let target_id = opened_tab
+        .and_then(|tab| tab.get("targetId"))
+        .and_then(Value::as_str)
+        .or(presentation_target_id)
+        .or_else(|| resolved_handoff.and_then(|handoff| handoff.target_id.as_deref()))
+        .map(str::to_string);
+    let tab_id = opened_tab
+        .and_then(|tab| tab.get("tabId"))
+        .or_else(|| opened_tab.and_then(|tab| tab.get("id")))
+        .or_else(|| opened_tab.and_then(|tab| tab.pointer("/serviceTabHandle/tabId")))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| resolved_handoff.and_then(|handoff| handoff.tab_id.clone()))
+        .filter(|tab_id| {
+            target_id.as_deref().is_none_or(|target_id| {
+                tab_id.strip_prefix("target:").unwrap_or(tab_id) == target_id
+            })
+        })
+        .or_else(|| {
+            target_id
+                .as_ref()
+                .map(|target_id| format!("target:{target_id}"))
+        });
+    (tab_id, target_id)
 }
 
 pub(crate) fn durable_handoff_observation_matches(

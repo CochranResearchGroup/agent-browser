@@ -2114,3 +2114,27 @@ canonical-equivalence flags. Do not expose either opaque identifier. Run the
 provider-free runner test, then use one fresh external epoch to distinguish
 prefix normalization from a genuinely different identity before changing the
 identity acceptance rule.
+
+E23 ran from exact clean remote head `0c3bbc61` as workflow run `33824001712`.
+Both external clients captured the exact synthetic pixel marker and then
+reported the same typed `visible_identity_mismatch` for `tabId`. Their safe
+details were identical: expected SHA-256
+`04045e3fa7a5ccfee71f7d3a2fe37aa7e20920750d8fe8b6c502ca12c50583f6`,
+observed SHA-256
+`7ce87de04bdf21d5e846640ee91099584311928d64c2d9351cf5a31c694d28fa`,
+`expectedTabMatchesTarget=false`, and `observedTabMatchesTarget=true`. The
+aggregate retained both failure receipts, both client identities, zero
+retries, and zero repairs. Its SHA-256 is
+`4ed6f58169004b8847afa6f7bfff2fa34f78aa7156ebe210d1ba15a321b573f0`.
+
+This proves that the externally observed identity was internally coherent and
+that the freshly prepared ready response was not. The durable resolver built
+that response from two generations: it copied `tabId` from the pre-reopen
+handoff snapshot while taking `targetId` from the replacement presentation
+receipt. The browser and external clients were not at fault.
+
+Revised next action: build the response identity atomically from the fresh open
+result, with the newly persisted handoff and presentation target as coherent
+fallbacks. Add a provider-free regression for a closed target replaced during
+explicit reopen, validate the focused resolver path, then install and dispatch
+one fresh external readiness epoch without weakening identity validation.
