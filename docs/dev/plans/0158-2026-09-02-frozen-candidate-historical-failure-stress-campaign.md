@@ -2845,3 +2845,32 @@ Revised next action: publish and install the process-mode scrub repair, then
 repeat the unattended named-lane proof. Do not proceed to E7 unless the lane is
 created without a manual recovery command and the startup journal contains no
 terminal dashboard-backend initialization failure.
+
+The process-mode scrub candidate installed as development generation
+`0.28.0-25fb1e283f6d`. Its first dashboard-backend attempt lost the simultaneous
+runtime-host startup race and recorded child exit 1; the second attempt created
+`dashboard-service-backend.stream` without manual intervention. No terminal
+initialization failure was recorded. Provider reconciliation, all six route
+checks, the three-launch smoke, and production-unchanged proof then passed.
+
+Fresh E7 access planning reproduced the Last30Days identity defect against the
+accidentally retained terminal profile. The revisioned shared-local ACL allowed
+the stable self-declared subject and required no missing permission, but the
+separate terminal-replacement branch unconditionally returned
+`profile_capability_required`. This was an internal policy contradiction, not
+a client omission: the exact same plan simultaneously said `allowed: true` and
+withheld its executable request.
+
+A focused red regression extends the existing terminal-replacement fixture
+across both policy modes. A restricted profile still fails closed for an
+unproven subject, while changing that same profile to shared-local makes the
+terminal replacement request available without a cryptographic capability.
+The repair gates the legacy terminal-replacement capability requirement on
+strict identity mode. The terminal lifecycle regression and all five
+shared-local focused tests pass, as do format and workspace clippy with
+warnings denied.
+
+Revised next action: publish and install the shared-local terminal-replacement
+repair, refresh the E7 access plan, and execute its service-owned remote-view
+request through the deterministic replacement lane. Preserve restricted and
+exclusive capability enforcement unchanged.

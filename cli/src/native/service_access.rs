@@ -5595,7 +5595,7 @@ mod tests {
             pending_transfer: None,
             last_transition: None,
         };
-        let state = ServiceState {
+        let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 "bill-soylei".to_string(),
                 BrowserProfile {
@@ -5604,6 +5604,10 @@ mod tests {
                     user_data_dir: Some(profile_path.to_string()),
                     target_service_ids: vec!["bill".to_string()],
                     authenticated_service_ids: vec!["bill".to_string()],
+                    access_policy: Some(ServiceProfileAccessPolicy {
+                        mode: ProfileAccessMode::Restricted,
+                        ..ServiceProfileAccessPolicy::shared_local_default("bill-soylei")
+                    }),
                     ..BrowserProfile::default()
                 },
             )]),
@@ -5690,7 +5694,7 @@ mod tests {
         );
         assert_eq!(
             explicit_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
-            "profile_capability_required"
+            "profile_access_denied"
         );
         assert!(explicit_plan["decision"]["serviceRequest"]["request"].is_null());
 
@@ -5724,7 +5728,7 @@ mod tests {
         );
         assert_eq!(
             unattributed_plan["decision"]["serviceRequest"]["acquisitionBlocker"],
-            "profile_capability_required"
+            "profile_access_denied"
         );
         assert!(unattributed_plan["decision"]["serviceRequest"]["request"].is_null());
 
@@ -5741,7 +5745,7 @@ mod tests {
         .expect_err("the unauthenticated terminal launch must fail before daemon relay");
         assert_eq!(
             error,
-            "service_access_plan_request_unavailable:profile_capability_required"
+            "service_access_plan_request_unavailable:profile_access_denied"
         );
 
         let mut exact_explicit_request = json!({
@@ -5757,9 +5761,33 @@ mod tests {
         .expect_err("the historical terminal route cannot bypass principal authentication");
         assert_eq!(
             error,
-            "service_access_plan_request_unavailable:profile_capability_required"
+            "service_access_plan_request_unavailable:profile_access_denied"
         );
         assert!(exact_explicit_request.get("browserId").is_none());
+
+        state.profiles.get_mut("bill-soylei").unwrap().access_policy = Some(
+            ServiceProfileAccessPolicy::shared_local_default("bill-soylei"),
+        );
+        let shared_local_plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("Last30Days".to_string()),
+                agent_name: Some("x-scraper".to_string()),
+                task_name: Some("x-feed".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        assert_eq!(
+            shared_local_plan["decision"]["profileAccess"]["decision"]["allowed"],
+            true
+        );
+        assert_eq!(
+            shared_local_plan["decision"]["serviceRequest"]["available"],
+            true
+        );
+        assert!(shared_local_plan["decision"]["serviceRequest"]["acquisitionBlocker"].is_null());
+        assert!(shared_local_plan["decision"]["serviceRequest"]["request"].is_object());
     }
 
     #[test]

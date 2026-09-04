@@ -82,7 +82,8 @@ pub(crate) fn decide_profile_acquisition(
     let reuse_action = profile_reuse
         .get("recommendedAction")
         .and_then(Value::as_str);
-    let terminal_replacement_requires_capability = input.authenticated_principal.is_none()
+    let terminal_replacement_requires_capability = strict_identity_required
+        && input.authenticated_principal.is_none()
         && reuse_action == Some("launch_new_browser")
         && lifecycle_replacement["replacementEligible"].as_bool() == Some(true)
         && lifecycle_replacement["reason"].as_str() == Some("terminal_cleanup_satisfied");
