@@ -45,7 +45,7 @@ const DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT: Duration = Duration::from_sec
 const DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT: Duration = Duration::from_secs(60);
 const DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT: Duration = Duration::from_secs(7);
 const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
-const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
+const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
 
@@ -3629,6 +3629,7 @@ mod tests {
 
     #[test]
     fn dashboard_service_status_cache_prunes_ready_entries_only_after_ttl() {
+        assert_eq!(DASHBOARD_SERVICE_STATUS_CACHE_TTL, Duration::from_secs(10));
         let mut cache = DashboardServiceStatusCache::default();
         let fresh_key = DashboardServiceStatusCacheKey {
             backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,

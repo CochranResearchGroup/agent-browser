@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
 import { reportDashboardFailure } from "@/lib/failure-observation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7193,7 +7193,7 @@ export function ServicePanel({
       }
       const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
       const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp, profileLeasesResp] = await Promise.all([
-        fetch(`${serviceBase(activePort)}/status`),
+        fetchSharedServiceStatus(),
         fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),

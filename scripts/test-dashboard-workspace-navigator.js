@@ -110,6 +110,24 @@ assert.match(
 );
 
 assert.match(
+  dashboardApi,
+  /SHARED_SERVICE_STATUS_TTL_MS = 10_000[\s\S]*sharedServiceStatusFlight[\s\S]*fetchSharedServiceStatus/,
+  'Dashboard components must share one bounded Service Status projection instead of downloading independent multi-megabyte copies',
+);
+
+for (const [label, source] of [
+  ['workspace navigator', navigator],
+  ['service panel', servicePanel],
+  ['selected workspace context', selectedWorkspaceContextHook],
+]) {
+  assert.match(
+    source,
+    /fetchSharedServiceStatus\(\)/,
+    `${label} must use the shared Service Status flight and freshness window`,
+  );
+}
+
+assert.match(
   navigator,
   /const deferredQuery = useDeferredValue\(query\)[\s\S]*const text = deferredQuery\.trim\(\)\.toLowerCase\(\)/,
   'Workspace navigator must defer query filtering so large workspace lists do not block input',
@@ -117,7 +135,7 @@ assert.match(
 
 assert.match(
   navigator,
-  /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/,
+  /fetchSharedServiceStatus\(\)/,
   'Workspace navigator must read service-owned state from the service status endpoint',
 );
 

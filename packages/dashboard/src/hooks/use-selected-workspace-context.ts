@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { sessionsAtom } from "@/store/sessions";
 import { engineForPortAtom, tabsForPortAtom } from "@/store/tabs";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
 import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
   readDashboardWorkspaceUrlSelection,
@@ -95,7 +95,7 @@ export function useSelectedWorkspaceContext(
     setLoading(true);
     try {
       const [statusResponse, resourcesResponse] = await Promise.all([
-        fetch(`${SERVICE_API_BASE}/status`, { cache: "no-store" }),
+        fetchSharedServiceStatus(),
         fetch(`${SERVICE_API_BASE}/resources`, { cache: "no-store" }).catch(() => null),
       ]);
       if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);

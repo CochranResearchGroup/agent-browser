@@ -65,7 +65,7 @@ import {
   writeDashboardWorkspaceUrlSelection,
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
 import { browserRowCloseRoute } from "@/lib/service-browser-row-actions";
 import { execCommand } from "@/lib/exec";
 import { fetchForeignCdpScreenshot } from "@/lib/foreign-cdp-control";
@@ -1396,7 +1396,7 @@ export function WorkspaceNavigator() {
     serviceStatusInFlightRef.current = true;
     try {
       const base = serviceBase(activePort);
-      const statusPromise = fetch(`${serviceBase(activePort)}/status`);
+      const statusPromise = fetchSharedServiceStatus();
       const [statusResp, contractsResp, registryResp] = await Promise.all([
         statusPromise,
         fetch(`${base}/contracts`).catch(() => null),

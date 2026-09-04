@@ -3361,3 +3361,27 @@ per-command lock-timeout escape hatch. It now supplies a bounded ten-second
 budget to each open, read, and close operation, retaining a finite failure for
 a wedged holder. The unchanged three-iteration launch and residue sequence
 passes with that contract.
+
+After provider reconciliation, reviewed Cooper ingress publication, and all
+59 required provider checks, the fresh external handoff reached
+`operatorVisible.state=ready` with a verified effect. The corrected load gate
+again passed nine of ten fresh clients, but its new final anchor assertion
+found two session-tabs 504s, one Service Status 504, and one runtime-health
+504 accumulated after startup. The retained iframe still pointed to the
+Guacamole route and showed no disconnect text. One fresh client also failed to
+render its iframe after a session-tabs 504 and a Guacamole token failure. No
+matching application-ingress 5xx record existed, locating the 504 boundary
+outside the Agent Browser journal.
+
+The first non-overlap repair was necessary but insufficient. The retained
+client still recorded 51 successful Service Status reads and 188 successful
+session-tabs reads during the five-round run. Three independent dashboard
+components each downloaded the same 4.36 MB status projection, and the
+five-second backend cache expired before their seven-second poll cycles. The
+next bounded repair provides one module-level ten-second Service Status flight
+and ready response shared by all dashboard components. The backend cache now
+uses the same ten-second freshness bound for status, resources, contracts,
+browser-capability registry, and per-session tab reads. This keeps the left
+rail bounded to ten-second freshness while coalescing both component-local and
+cross-client load. The dashboard build, source contracts, all 53 dashboard
+backend tests, format, and workspace clippy pass.
