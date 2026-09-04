@@ -52,10 +52,12 @@ esac
 
 cargo_cache="none"
 cargo_cache_path=""
+cargo_cache_wrapper=""
 if [[ "$cargo_cache_mode" != "off" ]]; then
   cargo_cache_path="$(command -v sccache 2>/dev/null || true)"
   if [[ -n "$cargo_cache_path" ]]; then
     cargo_cache="sccache"
+    cargo_cache_wrapper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sccache-sanitized.sh"
   elif [[ "$cargo_cache_mode" == "required" ]]; then
     echo "Cargo acceleration unavailable: sccache is required but was not found" >&2
     exit 78
@@ -99,7 +101,10 @@ fi
 
 cargo_environment=(env "CARGO_BUILD_JOBS=$build_jobs")
 if [[ "$cargo_cache" == "sccache" ]]; then
-  cargo_environment+=("RUSTC_WRAPPER=$cargo_cache_path")
+  cargo_environment+=(
+    "AGENT_BROWSER_SCCACHE_EXECUTABLE=$cargo_cache_path"
+    "RUSTC_WRAPPER=$cargo_cache_wrapper"
+  )
 fi
 if [[ "$fast_linker" != "none" ]]; then
   linker_flags="-C link-arg=-fuse-ld=$fast_linker"

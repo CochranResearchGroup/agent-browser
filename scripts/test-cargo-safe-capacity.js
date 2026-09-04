@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const wrapper = join(repoRoot, 'scripts', 'ci', 'cargo-safe.sh');
+const sanitizedCacheWrapper = join(repoRoot, 'scripts', 'ci', 'sccache-sanitized.sh');
 const fixtureRoot = mkdtempSync(join(tmpdir(), 'agent-browser-cargo-capacity-'));
 const admissionDir = join(fixtureRoot, 'admission');
 const meminfo = join(fixtureRoot, 'meminfo');
@@ -152,8 +153,27 @@ try {
     overrides: { PATH: `${accelerationBin}:${process.env.PATH}` },
   });
   assert.equal(executed.status, 0, executed.stderr);
-  assert.equal(executed.stdout.trim(), `8|${join(accelerationBin, 'sccache')}|-C link-arg=-fuse-ld=mold`);
+  assert.equal(executed.stdout.trim(), `8|${sanitizedCacheWrapper}|-C link-arg=-fuse-ld=mold`);
   assert.match(executed.stderr, /cache=sccache linker=mold/);
+
+  const observingCache = join(accelerationBin, 'observing-sccache');
+  writeFileSync(
+    observingCache,
+    '#!/bin/sh\nprintf \'%s|%s|%s\\n\' "${P158_TEST_API_KEY:-}" "${P158_TEST_REFRESH:-}" "${CARGO_BUILD_JOBS:-}"\n',
+  );
+  chmodSync(observingCache, 0o755);
+  const sanitized = spawnSync(sanitizedCacheWrapper, ['rustc'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      AGENT_BROWSER_SCCACHE_EXECUTABLE: observingCache,
+      P158_TEST_API_KEY: 'must-not-reach-sccache',
+      P158_TEST_REFRESH: 'must-also-be-removed',
+      CARGO_BUILD_JOBS: '8',
+    },
+  });
+  assert.equal(sanitized.status, 0, sanitized.stderr);
+  assert.equal(sanitized.stdout.trim(), '||8');
 
   const optedOut = await executeCargo({
     overrides: {

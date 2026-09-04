@@ -2705,3 +2705,49 @@ Revised next action: publish the short-value hardening, then dispatch E38 from
 the corrected environment against the unchanged E6 browser. Make no local
 source edit until both client and aggregate jobs finish and their artifacts
 are sealed.
+
+E38 ran from exact head `732cad35` as workflow run `33862331219`. The slow
+client completed the entire readiness sequence with one reconnect, two exact
+service-browser observations, no internal URL leak, no retry, and no physical
+browser relaunch. The human client loaded and operated the same prepared
+browser successfully on its initial visit, then its reconnect failed before
+application execution. Four hashed dashboard JavaScript or font requests
+returned HTTP 504 and two related requests ended without a response. The
+failure receipt retained 181 network observations, six failed requests, two
+pending requests, 72 Guacamole observations, seven WebSocket observations,
+32 console observations, both videos, the HAR, and transport diagnostics. The
+aggregate sealed the passing slow receipt and failed human receipt without a
+retry or repair inside the epoch.
+
+The external reverse proxy evidence localized the failed asset requests to
+the development stable dashboard ingress. Five parallel static asset reads
+waited approximately 27.6 seconds for `127.0.0.1:4948` before the proxy
+returned 504, while other assets immediately before and a complete slow-client
+load immediately afterward returned 200. Neither development dashboard unit
+restarted. Code tracing then exposed an ingress scheduling defect: every
+connection synchronously acquired the same exclusive filesystem lock to read
+the atomically published backend registry, and that bounded polling loop ran
+inside an asynchronous worker. A request burst could therefore occupy the
+workers needed to accept, proxy, and time out the same burst.
+
+A provider-free current-thread regression held the registry writer lock while
+the ingress request read path ran. It reproduced the defect by blocking for
+the complete two-second lock timeout. The repair keeps exclusive locking on
+compare-and-swap writers, reads the last atomically committed registry without
+the writer lock, and moves request-path filesystem parsing to Tokio's blocking
+pool. The same regression then passed in approximately 20 milliseconds.
+
+The first attempted red-test build also exposed a separate post-mortem logging
+hazard. When sccache could not spawn a compiler under host process pressure,
+its debug error rendered the compiler's complete inherited environment,
+including unrelated credential-shaped variables. The Cargo wrapper now uses a
+dedicated sccache boundary that removes credential-shaped variables only from
+the compiler-cache process while leaving the Cargo and test environments
+unchanged. Provider-free wrapper tests prove API keys and refresh credentials
+do not reach the cache process and ordinary Cargo settings do.
+
+Revised next action: validate and publish both blocking repairs, install the
+exact candidate in the isolated development runtime, re-establish a coherent
+managed browser and durable handoff if installation closes E6, and dispatch a
+new two-client readiness epoch. If both clients pass, dispatch C01 immediately
+from the exact installed commit with the declared shared barrier.

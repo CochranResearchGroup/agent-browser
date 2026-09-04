@@ -334,7 +334,9 @@ impl DashboardIngressRepository {
     }
 
     pub(crate) fn load(&self) -> Result<DashboardIngressRegistry, String> {
-        let _lock = acquire_ingress_lock(&self.path)?;
+        // Writers publish a complete registry with an atomic rename. Readers
+        // therefore consume either the prior committed file or the new one and
+        // must not contend on the exclusive compare-and-swap writer lock.
         load_registry(&self.path)
     }
 
@@ -1108,7 +1110,7 @@ pub(crate) async fn run_dashboard_ingress_server(public_port: u16, fallback_back
         };
         let repository = repository.clone();
         tokio::spawn(async move {
-            let registry = match repository.load() {
+            let registry = match load_ingress_registry_for_request(repository).await {
                 Ok(registry) => registry,
                 Err(error) => {
                     write_ingress_unavailable(&mut client, "registry_unavailable", &error).await;
@@ -1118,6 +1120,14 @@ pub(crate) async fn run_dashboard_ingress_server(public_port: u16, fallback_back
             proxy_ingress_request(&mut client, &registry).await;
         });
     }
+}
+
+async fn load_ingress_registry_for_request(
+    repository: DashboardIngressRepository,
+) -> Result<DashboardIngressRegistry, String> {
+    tokio::task::spawn_blocking(move || repository.load())
+        .await
+        .map_err(|error| format!("dashboard ingress registry reader failed: {error}"))?
 }
 
 async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngressRegistry) {
@@ -2300,6 +2310,30 @@ mod tests {
         let preserved = repository.load().unwrap();
         assert_eq!(preserved.selected_backend(), &old);
         assert!(preserved.fallback_backend().is_none());
+        let _ = fs::remove_file(path.with_extension("json.lock"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ingress_request_registry_load_does_not_block_on_writer_lock() {
+        let path = temp_registry_path("request-load-writer-lock");
+        let repository = DashboardIngressRepository::new(&path);
+        repository
+            .initialize(DashboardBackend::new("generation-1", 4850, "manifest-1"))
+            .unwrap();
+        let writer_lock = acquire_ingress_lock(&path).unwrap();
+
+        let loaded = tokio::time::timeout(
+            Duration::from_millis(100),
+            load_ingress_registry_for_request(repository.clone()),
+        )
+        .await;
+
+        drop(writer_lock);
+        assert!(
+            matches!(loaded, Ok(Ok(registry)) if registry.selected_backend().generation_id == "generation-1"),
+            "ingress request reads must use the last atomically committed registry without blocking the async runtime"
+        );
         let _ = fs::remove_file(path.with_extension("json.lock"));
         let _ = fs::remove_file(path);
     }
