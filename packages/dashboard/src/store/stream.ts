@@ -14,6 +14,24 @@ import { tabCacheAtom, engineCacheAtom } from "@/store/tabs";
 
 const MAX_EVENTS = 500;
 
+type DashboardStreamLocation = Pick<Location, "protocol" | "host" | "hostname">;
+
+/**
+ * Keep local development sockets direct, but never tell a remote dashboard
+ * client to connect to its own loopback interface. External clients use the
+ * authenticated dashboard ingress WebSocket proxy instead.
+ */
+export function dashboardStreamWebSocketUrl(
+  port: number,
+  location: DashboardStreamLocation = window.location,
+): string {
+  const localHost = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(location.hostname);
+  if (location.protocol === "http:" && localHost) return `ws://localhost:${port}`;
+  const proxied = new URL(`/api/stream/${encodeURIComponent(port)}`, `${location.protocol}//${location.host}`);
+  proxied.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return proxied.toString();
+}
+
 // ---------------------------------------------------------------------------
 // Primitive atoms
 // ---------------------------------------------------------------------------
@@ -141,7 +159,7 @@ export function useStreamSync(port: number) {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(`ws://localhost:${port}`);
+    const ws = new WebSocket(dashboardStreamWebSocketUrl(port));
     wsRef.current = ws;
     setWsRef(ws);
 

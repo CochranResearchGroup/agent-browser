@@ -161,6 +161,12 @@ dashboard retries on the same durable URL. A missing retained target fails
 closed unless the exact retained browser has a current tab that still matches
 the recorded URL intent.
 
+When the dashboard is opened through a non-local origin, CDP screen sockets
+use the authenticated same-origin <code>/api/stream/&lt;port&gt;</code> WebSocket
+proxy. The external browser is never told to connect to its own loopback
+interface. Durable resolution reserves up to 30 seconds for serialized Service
+State contention within the existing 90-second job budget.
+
 The durable handoff sidecar preserves the highest recorded presentation
 generation when an older service writer saves stale state. Concurrent runtime
 updates therefore cannot erase newer ready presentation evidence.

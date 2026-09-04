@@ -1289,9 +1289,27 @@ function attachCapture(page, capture) {
       }
       if (requestPayload?.action !== 'service_remote_view_handoff_resolve') return;
       const resolverEnvelope = await response.json().catch(() => null);
-      if (resolverEnvelope?.success !== true || !resolverEnvelope.data || typeof resolverEnvelope.data !== 'object') {
+      if (!resolverEnvelope || typeof resolverEnvelope !== 'object') {
         return;
       }
+      if (resolverEnvelope?.success !== true) {
+        const failure = resolverEnvelope.failure && typeof resolverEnvelope.failure === 'object'
+          ? resolverEnvelope.failure
+          : {};
+        const recourse = failure.recourse && typeof failure.recourse === 'object'
+          ? failure.recourse
+          : failure;
+        capture.handoffResolutions.push({
+          status: 'failed',
+          resolved: false,
+          failureCode: safeFailureToken(failure.code ?? recourse.code),
+          effectState: safeFailureToken(recourse.effectState),
+          retryDisposition: safeFailureToken(recourse.retryDisposition),
+          waitMs: Number.isSafeInteger(recourse.waitMs) ? recourse.waitMs : null,
+        });
+        return;
+      }
+      if (!resolverEnvelope.data || typeof resolverEnvelope.data !== 'object') return;
       const projected = projectHandoffResolution(resolverEnvelope.data);
       capture.handoffResolutions.push(projected);
       for (const discovered of projected.urlObservations) {
@@ -1424,6 +1442,22 @@ async function waitForAuthoritativeHandoffResolution(resolutions, startIndex, ti
 }
 
 export function classifyHandoffResolutionFailure(resolution) {
+  if (resolution?.status === 'failed' && resolution.failureCode) {
+    const serviceStateLockTimeout = resolution.failureCode === 'service_state_lock_timeout';
+    return {
+      code: serviceStateLockTimeout ? 'service_state_lock_timeout' : 'handoff_resolution_failed',
+      message: serviceStateLockTimeout
+        ? 'Durable handoff resolution failed while waiting for Service State'
+        : 'The durable handoff resolver returned a typed failure',
+      details: {
+        resolutionStatus: 'failed',
+        failureCode: resolution.failureCode,
+        ...(resolution.effectState ? { effectState: resolution.effectState } : {}),
+        ...(resolution.retryDisposition ? { retryDisposition: resolution.retryDisposition } : {}),
+        ...(Number.isSafeInteger(resolution.waitMs) ? { waitMs: resolution.waitMs } : {}),
+      },
+    };
+  }
   if (resolution?.status === 'closed' && resolution.reopenRequired === true) {
     return {
       code: 'handoff_target_closed_operator_action_required',
@@ -1845,6 +1879,14 @@ function safeExternalFailureDetails(value) {
     details.resolutionStatus = value.resolutionStatus;
   }
   if (typeof value.reopenRequired === 'boolean') details.reopenRequired = value.reopenRequired;
+  for (const key of ['failureCode', 'effectState', 'retryDisposition']) {
+    if (typeof value[key] === 'string' && /^[a-z0-9_]{1,64}$/.test(value[key])) {
+      details[key] = value[key];
+    }
+  }
+  if (Number.isSafeInteger(value.waitMs) && value.waitMs >= 0 && value.waitMs <= 300_000) {
+    details.waitMs = value.waitMs;
+  }
   if (Number.isSafeInteger(value.urlFindingCount) && value.urlFindingCount >= 0) {
     details.urlFindingCount = value.urlFindingCount;
   }
@@ -1859,6 +1901,10 @@ function safeExternalFailureDetails(value) {
       .slice(0, EXTERNAL_HANDOFF_FINDING_CODES.length);
   }
   return Object.keys(details).length > 0 ? details : null;
+}
+
+function safeFailureToken(value) {
+  return typeof value === 'string' && /^[a-z0-9_]{1,64}$/.test(value) ? value : null;
 }
 
 function failureCalibrationTiming(env) {

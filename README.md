@@ -3989,7 +3989,11 @@ if the recorded CDP target ID expired. It also reacquires expired Guacamole
 route state with the original view stream and control-input posture. If the
 request crosses the authenticated dashboard boundary, its response omits
 provider route, embed, and health URLs; those infrastructure values are never
-sent to the operator's browser. If the
+sent to the operator's browser. When the dashboard is reached through a
+non-local origin, its CDP screen sockets use the authenticated same-origin
+`/api/stream/<port>` WebSocket proxy instead of presenting loopback URLs to the
+operator's browser. Durable resolution reserves up to 30 seconds for serialized
+Service State contention within its existing 90-second job budget. If the
 original daemon is gone, the resolver requests adoption of the exact retained
 browser identity. It never substitutes a raw provider URL, launches a
 replacement browser, opens a replacement target, or replays navigation during

@@ -310,6 +310,28 @@ assert.deepEqual(classifyHandoffResolutionFailure(closedResolution), {
   details: { resolutionStatus: 'closed', reopenRequired: true },
 });
 assert.equal(classifyHandoffResolutionFailure({ status: 'converging' }), null);
+assert.deepEqual(classifyHandoffResolutionFailure({
+  status: 'failed',
+  failureCode: 'service_state_lock_timeout',
+  effectState: 'effect_uncertain',
+  retryDisposition: 'inspect_before_retry',
+  waitMs: 1001,
+}), {
+  code: 'service_state_lock_timeout',
+  message: 'Durable handoff resolution failed while waiting for Service State',
+  details: {
+    resolutionStatus: 'failed',
+    failureCode: 'service_state_lock_timeout',
+    effectState: 'effect_uncertain',
+    retryDisposition: 'inspect_before_retry',
+    waitMs: 1001,
+  },
+});
+assert.match(
+  runnerSource,
+  /resolverEnvelope\?\.success !== true[\s\S]*failureCode[\s\S]*handoffResolutions\.push/,
+  'unsuccessful resolver envelopes must remain available to the typed failure classifier',
+);
 
 const receipts = [
   receipt('external-runner-human', 'runner-human'),

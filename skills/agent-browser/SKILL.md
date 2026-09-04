@@ -364,6 +364,10 @@ browser:
    The durable handoff sidecar preserves the highest recorded presentation
    generation when an older service writer saves stale state.
    Treat `status=converging` as retryable on the same durable URL.
+   A non-local dashboard routes CDP screen sockets through its authenticated
+   same-origin `/api/stream/<port>` WebSocket proxy. Durable resolution also
+   reserves a bounded 30-second Service State contention wait inside its
+   90-second job budget.
 8. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
 

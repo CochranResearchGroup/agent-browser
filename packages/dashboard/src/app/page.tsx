@@ -532,6 +532,7 @@ function RemoteViewHandoffGate({
           agentName: user.username || "operator",
           taskName: "durable-remote-view-handoff",
           params: { handoffId, allowReopenClosed },
+          serviceStateLockTimeoutMs: 30_000,
           jobTimeoutMs: 90_000,
         }),
       });

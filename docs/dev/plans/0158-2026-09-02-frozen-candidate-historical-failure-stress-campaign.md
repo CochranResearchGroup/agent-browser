@@ -1967,3 +1967,46 @@ development state without printing it, update
 environment, and dispatch a fresh readiness epoch from the exact pushed
 commit. Treat environment scope as a required pre-dispatch invariant for every
 future external-vantage run.
+
+E19 ran from commit `7aeb9dc321caaa4ac086397b4f89f2b544ed0990` as
+workflow run `33818989216` after the environment-scoped identity was rebuilt
+from a current ready resolution. The identity gate cleared. The human client
+captured the exact marker before and after reconnect, and the slow client
+captured the same marker on both its initial and concurrent pages. Every
+captured marker has SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+The repaired aggregate retained both failure receipts.
+
+The human client then correctly rejected eight loopback, non-TLS WebSocket
+observations. A bounded external reproduction showed that the authenticated
+public handoff page opened four `ws://localhost:<dynamic-port>/` sockets and
+one `ws://localhost:9223/` socket alongside its valid public
+`wss://<public-origin>/guacamole/websocket-tunnel`. The usable Guacamole image
+therefore coexisted with unusable legacy CDP socket attempts in the external
+operator browser. This is a product defect, not an oracle false positive: the
+global dashboard stream hook always constructs `ws://localhost:<port>`, even
+when the dashboard itself is loaded through external HTTPS ingress.
+
+The slow client's scheduled reconnect exposed an independent contention
+failure. The authoritative Service job started at
+`2026-09-03T23:48:52.744198242Z` and failed with
+`service_state_lock_timeout` after a 1001 ms file-lock wait during route
+checkout. Its route and display rollback completed, and no replacement browser
+was launched. The external failure receipt retained only the later generic
+resolution timeout because the runner discards unsuccessful resolver response
+envelopes. This is both a remote-view robustness defect and a post-mortem
+logging gap.
+
+The full screenshots also preserve two separate dashboard findings for later
+analysis: the selected owned workspace displays
+`explicit_profile_conflicts_with_current_owner`, and the top banner says the
+dashboard generation lacks a current operator-journey receipt even while the
+remote view is ready.
+
+Revised next action: route legacy dashboard CDP sockets through the authenticated
+same-origin `/api/stream/<port>` WebSocket proxy whenever the dashboard origin
+is not local, give durable handoff resolution a bounded Service State lock wait
+within its existing 90-second job budget, and retain typed unsuccessful
+resolver response evidence in external failure receipts. Develop all three
+repairs red-green. Do not weaken the public URL oracle or retry the campaign
+until the provider-free regressions pass.
