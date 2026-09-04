@@ -2546,3 +2546,36 @@ Revised next action: validate and publish the corrected role behavior, then run
 readiness against the coherent E5 browser. Track the silent Take control action
 as a dashboard defect in final analysis rather than allowing it to block the
 external stream calibration it was not required to authorize.
+
+E34 ran from exact head `d1d6de0c` as workflow run `33837874198`. Both clients
+proved the initial external handoff path before failing during a later visit:
+the human client retained one completed resolver observation and the slow
+client retained two. Each timed out waiting for the next visit's resolver
+observation while the external dashboard continued to carry authenticated
+Guacamole traffic. The human receipt retained 253 completed requests, six
+failed requests, five pending reads, 53 Guacamole entries, and seven WebSocket
+observations. The slow receipt retained 436 completed requests, 16 failed
+requests, 12 pending requests, 103 Guacamole entries, and 14 WebSocket
+observations. Both structured failure receipts and the aggregate failure
+receipt were sealed without retry or repair inside the epoch.
+
+The runner had a shorter observation contract than the product it was testing.
+It allowed only 30 seconds for the dashboard to emit and project a durable
+handoff resolution even though that dashboard request explicitly permits a
+90-second service job. Under the loaded external path, a new page could finish
+navigation and stream setup without producing the next resolver projection
+inside the runner's shorter window. The failure receipt then obscured the
+distinction by replacing the visit-local observation count with the total
+count accumulated across earlier successful visits.
+
+The repaired runner gives handoff resolution 95 seconds, covering the public
+90-second service job plus bounded response-projection grace. Failure evidence
+now preserves `resolutionObservationCount` for the exact visit and records the
+separate `totalResolutionObservationCount` accumulated by the client. The
+provider-free runner check was observed red for the missing timeout contract
+and for the dropped total-count field, then green after each focused repair.
+
+Revised next action: validate and publish the E34 harness and logging repair,
+then run one new readiness epoch against the unchanged coherent E5 browser. If
+both external clients pass, dispatch C01 immediately with its declared shared
+barrier and preserve E34 as a distinct failed epoch.

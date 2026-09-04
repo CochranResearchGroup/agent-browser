@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   EXTERNAL_CALIBRATION_RECEIPT_SCHEMA,
+  EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS,
   EXTERNAL_VANTAGE_AGGREGATE_SCHEMA,
   EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
   PINNED_PLAYWRIGHT_VERSION,
@@ -74,6 +75,11 @@ assert.doesNotMatch(workflow, /nick-fields\/retry|retry-count|max-attempts/);
 assert.match(workflow, /aggregate:[\s\S]*needs: \[human-controller, slow-concurrency-client\][\s\S]*if: always\(\)/);
 assert.match(workflow, /P158_EXTERNAL_JOB_RESULTS_JSON/);
 assert.equal(packageJson.devDependencies.playwright, PINNED_PLAYWRIGHT_VERSION);
+assert.equal(
+  EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS,
+  95_000,
+  'external reconnect observation must cover the dashboard 90-second service job plus response projection grace',
+);
 assert.match(runnerSource, /recordVideo:/);
 assert.match(runnerSource, /failure-receipt\.json/);
 assert.match(runnerSource, /artifactReceipts\(outputDir\)/);
@@ -394,6 +400,7 @@ guacamoleLoadFailure.details = {
   websocketObservationCount: 1,
   consoleEntryCount: 2,
   resolutionObservationCount: 1,
+  totalResolutionObservationCount: 3,
 };
 assert.deepEqual(externalVantageFailureRecord(guacamoleLoadFailure, env), {
   code: 'external_stream_identity_marker_missing',
@@ -409,6 +416,7 @@ assert.deepEqual(externalVantageFailureRecord(guacamoleLoadFailure, env), {
     websocketObservationCount: 1,
     consoleEntryCount: 2,
     guacamoleHttpStatusCounts: { 200: 3, 101: 1 },
+    totalResolutionObservationCount: 3,
   },
 });
 

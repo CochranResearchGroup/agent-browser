@@ -24,6 +24,7 @@ export const EXTERNAL_VANTAGE_AGGREGATE_SCHEMA =
 export const W8_EXTERNAL_ACTION_RESULT_SCHEMA =
   'agent-browser.p158-w8-external-action-result.v1';
 export const PINNED_PLAYWRIGHT_VERSION = '1.62.1';
+export const EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS = 95_000;
 export const CALIBRATION_DURATION_MS = 20 * 60 * 1000;
 export const CALIBRATION_LATE_TOLERANCE_MS = 30 * 1000;
 export const CALIBRATION_MINIMUM_LEAD_MS = 2 * 60 * 1000;
@@ -1122,7 +1123,7 @@ async function executeExternalVantageProbe({
       ),
       websocketObservationCount: urlEvidence.filter((entry) => entry.role === 'websocket_endpoint').length,
       consoleEntryCount: consoleEntries.length,
-      resolutionObservationCount: handoffResolutions.length,
+      totalResolutionObservationCount: handoffResolutions.length,
     };
     throw error;
   } finally {
@@ -1139,7 +1140,7 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   const resolution = await waitForAuthoritativeHandoffResolution(
     handoffResolutions,
     resolutionStartIndex,
-    30_000,
+    EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS,
   );
   const readyAt = new Date().toISOString();
   if (paceProfile === 'human_controller') {
@@ -2146,6 +2147,12 @@ function safeExternalFailureDetails(value) {
   }
   if (Number.isSafeInteger(value.resolutionObservationCount) && value.resolutionObservationCount >= 0) {
     details.resolutionObservationCount = value.resolutionObservationCount;
+  }
+  if (
+    Number.isSafeInteger(value.totalResolutionObservationCount) &&
+    value.totalResolutionObservationCount >= 0
+  ) {
+    details.totalResolutionObservationCount = value.totalResolutionObservationCount;
   }
   for (const key of [
     'networkEntryCount',
