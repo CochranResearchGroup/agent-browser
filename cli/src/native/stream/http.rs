@@ -2080,7 +2080,14 @@ pub(super) fn service_request_relay_session(
 
     if !matches!(
         command.get("action").and_then(Value::as_str),
-        Some("view_focus" | "view_takeover")
+        Some(
+            "view_focus"
+                | "view_takeover"
+                | "service_viewer_lease_request"
+                | "service_viewer_lease_heartbeat"
+                | "service_viewer_lease_release"
+                | "service_controller_lease_takeover"
+        )
     ) {
         for value in SERVICE_REQUEST_HTTP_RELAY_CANONICAL_POINTERS
             .iter()
@@ -5622,6 +5629,27 @@ mod tests {
         assert_eq!(command["streamId"], "rdp-guac");
         assert_eq!(command["provider"], "rdp_gateway");
         assert_eq!(command["openMode"], "iframe");
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_viewer_lease_actions_to_requested_daemon_session() {
+        for action in [
+            "service_viewer_lease_request",
+            "service_viewer_lease_heartbeat",
+            "service_viewer_lease_release",
+            "service_controller_lease_takeover",
+        ] {
+            let body = format!(
+                r##"{{"action":"{action}","params":{{"sessionName":"p158-external-vantage-e4","browserId":"session:p158-external-vantage-e4","routeId":"development-route-1"}},"serviceName":"agent-browser-dashboard"}}"##
+            );
+            let command = service_request_command(&body).unwrap();
+
+            assert_eq!(
+                service_request_relay_session("AgentBrowserDashboard", &body, &command),
+                "p158-external-vantage-e4",
+                "action {action}"
+            );
+        }
     }
 
     #[test]

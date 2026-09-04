@@ -317,6 +317,10 @@ assert.match(viewport, /projection\.selected[\s\S]*projection\.tiles/);
 assert.doesNotMatch(viewport, /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/);
 assert.match(viewport, /selectWorkspaceViewerRoute\(streamChoices, stream\)/);
 assert.match(viewport, /workspaceViewerRoute\?\.routeId/);
+assert.match(
+  viewport,
+  /reconnectWorkspaceViewer[\s\S]*daemonSessionNameForBrowser\(browser, viewportSelection\?\.selection\)[\s\S]*service_viewer_lease_request[\s\S]*sessionName/,
+);
 assert.match(viewport, /WorkspaceSourceMenu/);
 assert.match(viewport, /Advanced connection controls/);
 assert.match(viewport, /Retry connection/);

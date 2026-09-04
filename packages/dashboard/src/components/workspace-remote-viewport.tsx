@@ -2043,12 +2043,14 @@ export function WorkspaceRemoteViewport({
 
   const reconnectWorkspaceViewer = useCallback(async () => {
     if (!browser || !workspaceRouteId) return;
+    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
     setRecoveryPending("viewer-reconnect");
     setFocusMessage("Requesting a fresh observer lease for this workspace route.");
     try {
       await postWorkspaceRecoveryRequest("service_viewer_lease_request", "workspace-viewport-viewer-reconnect", {
         routeId: workspaceRouteId,
         browserId: browser.id,
+        ...(sessionName ? { sessionName } : {}),
         viewerId: workspaceViewerId,
         viewerName: workspaceViewerId,
         viewerRole: "observer",
@@ -2064,10 +2066,11 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, workspaceRouteId, workspaceViewerId]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
 
   const takeoverWorkspaceController = useCallback(async () => {
     if (!browser || !workspaceRouteId) return;
+    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
     setRecoveryPending("controller-takeover");
     setFrameIssue(null);
     setFocusMessage("Requesting explicit controller takeover for this workspace route.");
@@ -2075,6 +2078,7 @@ export function WorkspaceRemoteViewport({
       await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
         routeId: workspaceRouteId,
         browserId: browser.id,
+        ...(sessionName ? { sessionName } : {}),
         viewerId: workspaceViewerId,
         viewerName: workspaceViewerId,
         viewerRole: "controller",
@@ -2089,7 +2093,7 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, workspaceRouteId, workspaceViewerId]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
 
   const releaseWorkspaceViewers = useCallback(async () => {
     if (workspaceViewerLeaseIds.length === 0) {
@@ -2098,10 +2102,12 @@ export function WorkspaceRemoteViewport({
     }
     setRecoveryPending("viewer-release");
     setFocusMessage(`Releasing ${workspaceViewerLeaseIds.length} retained viewer lease${workspaceViewerLeaseIds.length === 1 ? "" : "s"}.`);
+    const sessionName = browser ? daemonSessionNameForBrowser(browser, viewportSelection?.selection) : null;
     try {
       for (const viewerLeaseId of workspaceViewerLeaseIds) {
         await postWorkspaceRecoveryRequest("service_viewer_lease_release", "workspace-viewport-viewer-release", {
           viewerLeaseId,
+          ...(sessionName ? { sessionName } : {}),
         });
       }
       setFrameIssue(null);
@@ -2113,7 +2119,7 @@ export function WorkspaceRemoteViewport({
     } finally {
       setRecoveryPending(null);
     }
-  }, [postWorkspaceRecoveryRequest, refreshProjection, workspaceViewerLeaseIds]);
+  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceViewerLeaseIds]);
 
   const retryWorkspaceConnection = useCallback(() => {
     automaticAttemptKeyRef.current.clear();

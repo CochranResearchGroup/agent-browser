@@ -2283,3 +2283,35 @@ Revised next action: publish and install the repaired development candidate,
 revalidate the exact provider and handoff identity, then run a fresh concurrent
 C01 calibration. Preserve the canceled calibration and its diagnostics as a
 historical failure receipt.
+
+The replacement C01 attempt ran from exact remote head `6d314705` as workflow
+run `33830733709`. Both clients reached the shared window, proving that the
+one-second repository-lock truncation no longer blocked handoff resolution.
+The slow client passed initial, concurrent, and first reconnect pixel checks
+with the exact expected hash, then failed its second reconnect at
+`2026-09-04T02:59:24Z`. The companion job was canceled immediately because the
+required two-client calibration could no longer succeed. Plan 0158 remained
+active.
+
+The failure receipt classified `external_stream_identity_marker_missing` and
+retained 5,705 completed network entries, zero failed network requests, 41
+pending requests, 132 successful Guacamole responses, 101 WebSocket
+observations, and 787 console observations. The failed frame rendered the
+dashboard's explicit message that viewer reconnect had targeted service session
+`dashboard-service-backend`, which had no HTTP route. The failure journal also
+recorded the Guacamole disconnect sequence and failed viewer-lease action.
+
+Source diagnosis found that viewer and controller lease requests omitted the
+selected browser's daemon session. Even when a caller supplied that session in
+`params`, the HTTP gateway reserved parameter-based relay for focus and
+takeover actions, so viewer-lease operations fell back to the dashboard backend
+session. The repair adds the exact browser session to dashboard viewer lease
+request, controller takeover, and release requests, and routes viewer lease
+request, heartbeat, release, and controller takeover actions through the same
+explicit-session relay rule. Provider-free tests cover all four gateway actions
+and the dashboard request shape.
+
+Revised next action: complete Rust and dashboard validation, publish and install
+the repaired development candidate, revalidate the durable handoff identity,
+and repeat C01. Preserve this failed attempt and its captured frame, transport
+diagnostics, journal records, and failure receipt for final analysis.
