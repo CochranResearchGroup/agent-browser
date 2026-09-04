@@ -219,7 +219,10 @@ and `MemorySwapMax=4G`; all admitted scopes share an aggregate
 unavailable. Do not invoke `cargo check`,
 `cargo build`, `cargo clippy`, or `cargo test` directly from WSL agent sessions.
 Set `AGENT_BROWSER_CARGO_BUILD_JOBS` only when a particular build needs a
-different bounded parallelism level. Capacity admission holds an exclusive
+different bounded parallelism level. Do not set it to `2` merely because the
+wrapper admits at most two concurrent Cargo invocations: invocation concurrency
+and the number of build jobs inside each invocation are independent controls.
+Capacity admission holds an exclusive
 lock only while reconciling claims; Cargo does not hold that lock. A third
 invocation waits with a typed pressure reason, and admission automatically
 drops below two when current resources cannot preserve the reserve.
