@@ -2751,3 +2751,47 @@ exact candidate in the isolated development runtime, re-establish a coherent
 managed browser and durable handoff if installation closes E6, and dispatch a
 new two-client readiness epoch. If both clients pass, dispatch C01 immediately
 from the exact installed commit with the declared shared barrier.
+
+The ingress and cache-boundary repairs passed their focused regressions,
+dashboard-ingress tests, Cargo wrapper tests, format, workspace clippy, and
+patch-hygiene checks. Commit `11631ec9` was pushed and installed as development
+generation `0.28.0-f7018bd8815a`; the three-launch development smoke passed and
+production identity remained unchanged. The development presentation provider
+was then staged, preflighted, applied, and republished through Cooper. Local and
+public dashboard probes returned 200, provider doctor passed with six routes,
+and the prior E6 browser was confirmed closed by installation.
+
+Fresh E7 preparation exposed two operator mistakes and one product defect. The
+first dashboard request carried an HTTP-only `id` field and was rejected before
+effects. The corrected request initially found no
+`dashboard-service-backend` route. A later direct `tab_new` request selected an
+occupied display owned outside the development runtime and failed three times;
+that action was also the wrong acquisition path for a route-bound RDP browser.
+No foreign process was terminated. A subsequent `remote_view_open` without an
+explicit relay session created a browser in the internal dashboard lane. That
+development-only browser was closed exactly, and service reconciliation
+repaired its orphaned display allocations.
+
+The startup defect was a readiness-boundary error. Under runtime-host
+admission, `daemon_ready(session)` proves only that the shared runtime-host
+socket accepts connections. It does not prove that the named
+`<session>.stream` route exists. Dashboard bootstrap and recovery used that
+weaker check both before launch and immediately after a successful child exit,
+so they could report readiness too early or report a false failure while route
+publication was still converging.
+
+A focused red test first established that a named lane is required and that an
+explicit lane-refresh request cannot reuse the old route. The repair now uses
+the same named-lane readiness predicate as ordinary daemon startup, and after
+the recovery child exits it polls for up to five seconds for the route to
+become visible. The regression, the existing cold runtime-host lane test,
+format, workspace clippy with warnings denied, service API and MCP parity,
+generated client contract and type checks, and the service collection
+no-launch smoke all pass.
+
+Revised next action: publish and install the named-lane readiness repair,
+reconcile the development provider after the generation change, then prepare
+E7 through an explicit service-owned remote-view lane. Seal its opaque handoff
+and identity values into the external-vantage environment without printing
+them, and dispatch a fresh two-client readiness epoch from the exact installed
+commit.

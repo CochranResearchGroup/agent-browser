@@ -12,7 +12,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(unix)]
 use crate::connection::get_socket_path;
-use crate::connection::{attach_daemon_auth_token, daemon_ready};
+use crate::connection::{attach_daemon_auth_token, daemon_startup_ready};
 #[cfg(windows)]
 use crate::connection::{get_socket_dir, resolve_port};
 use crate::flags::{launch_config_status, parse_flags};
@@ -2217,12 +2217,34 @@ fn service_daemon_session_requires_lane_refresh(service_command: Option<&Value>)
     })
 }
 
+fn service_daemon_session_ready_for_request(
+    named_lane_ready: bool,
+    requires_lane_refresh: bool,
+) -> bool {
+    named_lane_ready && !requires_lane_refresh
+}
+
+async fn wait_for_service_daemon_session(session_name: &str) -> bool {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if daemon_startup_ready(session_name) {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 pub(super) async fn ensure_service_daemon_session(
     session_name: &str,
     service_command: Option<&Value>,
 ) -> Result<(), String> {
-    if daemon_ready(session_name) && !service_daemon_session_requires_lane_refresh(service_command)
-    {
+    if service_daemon_session_ready_for_request(
+        daemon_startup_ready(session_name),
+        service_daemon_session_requires_lane_refresh(service_command),
+    ) {
         return Ok(());
     }
 
@@ -2269,7 +2291,7 @@ pub(super) async fn ensure_service_daemon_session(
             )
         })?;
 
-    if daemon_ready(session_name) {
+    if wait_for_service_daemon_session(session_name).await {
         return Ok(());
     }
     Err(format!(
@@ -4194,6 +4216,13 @@ mod tests {
         MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
         ProfileTargetReadiness, ProviderKind, ServiceProvider, SiteMonitor, SitePolicy,
     };
+
+    #[test]
+    fn service_daemon_recovery_requires_the_named_runtime_host_lane() {
+        assert!(!service_daemon_session_ready_for_request(false, false));
+        assert!(!service_daemon_session_ready_for_request(true, true));
+        assert!(service_daemon_session_ready_for_request(true, false));
+    }
 
     #[test]
     fn split_path_query_returns_path_and_query() {

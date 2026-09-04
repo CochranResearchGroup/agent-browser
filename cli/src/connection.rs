@@ -421,7 +421,7 @@ pub(crate) fn daemon_ready_through_selected_ingress(session: &str) -> bool {
     }
 }
 
-fn daemon_startup_ready(session: &str) -> bool {
+pub(crate) fn daemon_startup_ready(session: &str) -> bool {
     daemon_ready(session)
         && (!crate::runtime_host::admission_enabled()
             || get_socket_dir().join(format!("{session}.stream")).is_file())
