@@ -1144,8 +1144,6 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   const readyAt = new Date().toISOString();
   if (paceProfile === 'human_controller') {
     await waitForGuacamoleIframe(page);
-    await acquireSyntheticRemoteController(page);
-    await waitForGuacamoleIframe(page);
     await resetSyntheticRemoteDocument(page, 300);
   }
   if (performHumanAction) {

@@ -2522,3 +2522,27 @@ bounded readiness epoch against the new coherent E5 runtime. If it passes,
 resume C01 immediately. Preserve E32 as evidence that contradictory owner and
 browser projections can outlive the daemon route and that abandoned waiters
 can defeat post-mortem logging.
+
+E33 ran from exact head `103fbefc` as workflow run `33837558315`. The new E5
+runtime repeatedly converged from temporary no-stream and reconnect notices to
+one ready Guacamole iframe rendering the fixture at its attested origin. The
+human client then timed out waiting for the controller-takeover response. Its
+complete structured failure receipt retained 185 network entries, zero request
+failures, two pending reads, 50 Guacamole entries, seven WebSocket
+observations, and 11 console observations. No controller service request was
+present, proving that the public Advanced, Take control dashboard item silently
+completed without invoking its service action. The repaired promise handling
+therefore closes E32's logging gap.
+
+Explicit controller takeover is not part of the frozen C01 precondition. The
+durable handoff is already opened in dashboard Control mode with
+`manual_attached_desktop` input, and prior campaign evidence proves remote
+input delivery. The speculative takeover prerequisite is removed from ordinary
+capture while its tested helper and E33 receipt remain available for the later
+dashboard-action defect repair. The human client still waits for a real
+Guacamole iframe before input; the slow client remains non-mutating.
+
+Revised next action: validate and publish the corrected role behavior, then run
+readiness against the coherent E5 browser. Track the silent Take control action
+as a dashboard defect in final analysis rather than allowing it to block the
+external stream calibration it was not required to authorize.
