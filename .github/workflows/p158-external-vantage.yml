@@ -12,7 +12,7 @@ on:
         type: string
         required: true
       calibration_start_at:
-        description: Shared RFC3339 UTC start, set at least 30 minutes in the future
+        description: Shared RFC3339 UTC start, set at least 2 minutes in the future
         type: string
         required: true
       artifact_retention_days:

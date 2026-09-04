@@ -51,6 +51,7 @@ assert.match(workflow, /--pace-profile slow_concurrency/);
 assert.match(workflow, /Delay single-viewer readiness client[\s\S]*sleep 45/);
 assert.match(workflow, /probe_mode:[\s\S]*default: calibration/);
 assert.match(workflow, /calibration_start_at:[\s\S]*RFC3339 UTC start/);
+assert.match(workflow, /calibration_start_at:[\s\S]*at least 2 minutes in the future/);
 assert.equal((workflow.match(/P158_CALIBRATION_START_AT:/g) || []).length, 2);
 assert.equal((workflow.match(/timeout-minutes: 75/g) || []).length, 2);
 assert.match(workflow, /aggregate:[\s\S]*timeout-minutes: 10/);
