@@ -303,7 +303,7 @@ function classifyExternalNetworkEntry(entry, entries) {
   }
   if (status === 0 &&
       (/\/guacamole\/tunnel$/i.test(url) || pathClass === 'dashboard_auth_status' ||
-        (/\/guacamole\/api\/tokens$/i.test(url) && recoveredBy.length > 0))) {
+        (pathClass === 'guacamole_transport' && recoveredBy.length > 0))) {
     return {
       disposition: 'expected_lifecycle_noise',
       code: 'page_or_reconnect_request_cancelled',
@@ -318,21 +318,6 @@ function classifyExternalNetworkEntry(entry, entries) {
 }
 
 export function normalizeExternalDashboardEvidence({ consoleEntries = [], networkEntries = [] }) {
-  const normalizedConsoleEntries = consoleEntries.map((entry, index) => {
-    const level = normalizedConsoleLevel(entry);
-    const normalizedMessageDigest = /^sha256:([a-f0-9]{64})$/.exec(entry.message ?? '')?.[1];
-    const textSha256 = entry.textSha256 ?? normalizedMessageDigest ??
-      hashText(entry.message ?? entry.text ?? '');
-    return {
-      entryId: entry.entryId ?? `console-${index + 1}`,
-      level,
-      message: `sha256:${textSha256}`,
-      timestamp: entry.timestamp ?? null,
-      classification: level === 'error'
-        ? { disposition: 'actionable_failure', code: 'unexplained_console_error', recoveryEvidenceEntryIds: [] }
-        : { disposition: 'success', code: 'non_error_console_entry', recoveryEvidenceEntryIds: [] },
-    };
-  });
   const normalizedNetworkEntries = networkEntries.map((entry, index) => {
     const numericStatus = Number(entry.status);
     const status = Number.isInteger(numericStatus) && numericStatus >= 100 && numericStatus <= 599
@@ -356,6 +341,35 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
       redirectCount: Number.isSafeInteger(entry.redirectCount) ? entry.redirectCount : null,
       urlSha256: entry.urlSha256 ?? hashText(entry.url ?? ''),
       classification,
+    };
+  });
+  const normalizedConsoleEntries = consoleEntries.map((entry, index) => {
+    const level = normalizedConsoleLevel(entry);
+    const normalizedMessageDigest = /^sha256:([a-f0-9]{64})$/.exec(entry.message ?? '')?.[1];
+    const textSha256 = entry.textSha256 ?? normalizedMessageDigest ??
+      hashText(entry.message ?? entry.text ?? '');
+    const lifecycleNetworkEntry = entry.messageClass === 'resource_load_failed' && entry.locationUrlSha256
+      ? normalizedNetworkEntries.find((candidate) =>
+          candidate.urlSha256 === entry.locationUrlSha256 &&
+          candidate.classification.disposition === 'expected_lifecycle_noise')
+      : null;
+    return {
+      entryId: entry.entryId ?? `console-${index + 1}`,
+      level,
+      message: `sha256:${textSha256}`,
+      timestamp: entry.timestamp ?? null,
+      messageClass: entry.messageClass ?? null,
+      locationPathClass: entry.locationPathClass ?? null,
+      locationUrlSha256: entry.locationUrlSha256 ?? null,
+      classification: lifecycleNetworkEntry
+        ? {
+            disposition: 'expected_lifecycle_noise',
+            code: 'console_resource_failure_matches_expected_network_lifecycle',
+            recoveryEvidenceEntryIds: [lifecycleNetworkEntry.entryId],
+          }
+        : level === 'error'
+        ? { disposition: 'actionable_failure', code: 'unexplained_console_error', recoveryEvidenceEntryIds: [] }
+        : { disposition: 'success', code: 'non_error_console_entry', recoveryEvidenceEntryIds: [] },
     };
   });
   return { consoleEntries: normalizedConsoleEntries, networkEntries: normalizedNetworkEntries };
@@ -1507,10 +1521,19 @@ function redirectChainLength(request) {
 
 function attachCapture(page, capture) {
   page.on('console', (message) => {
+    const messageText = message.text();
+    const locationUrl = message.location()?.url ?? '';
     capture.consoleEntries.push({
       entryId: `console-${capture.consoleEntries.length + 1}`,
       type: message.type(),
-      textSha256: hashText(message.text()),
+      textSha256: hashText(messageText),
+      messageClass: /Failed to load resource/i.test(messageText)
+        ? 'resource_load_failed'
+        : /WebSocket connection.*\/api\/stream\//i.test(messageText)
+          ? 'cdp_stream_websocket_handshake_failed'
+          : 'unclassified',
+      locationPathClass: locationUrl ? safeNetworkPathClass(locationUrl) : null,
+      locationUrlSha256: locationUrl ? hashText(locationUrl) : null,
       timestamp: new Date().toISOString(),
     });
   });

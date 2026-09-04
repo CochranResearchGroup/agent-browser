@@ -879,6 +879,51 @@ const cancelledLifecycleRequest = normalizeExternalDashboardEvidence({
 assert.equal(cancelledLifecycleRequest.classification.disposition, 'expected_lifecycle_noise');
 assert.equal(cancelledLifecycleRequest.classification.code, 'page_or_reconnect_request_cancelled');
 
+const recoveredGuacamoleAsset = normalizeExternalDashboardEvidence({
+  consoleEntries: [{
+    entryId: 'console-recovered-guac',
+    type: 'error',
+    textSha256: '3'.repeat(64),
+    messageClass: 'resource_load_failed',
+    locationPathClass: 'guacamole_transport',
+    locationUrlSha256: '4'.repeat(64),
+    timestamp: '2026-09-04T00:00:05.010Z',
+  }],
+  networkEntries: [
+    {
+      entryId: 'network-guac-asset-cancelled', url: 'https://external.example.test/guacamole/client.js',
+      urlSha256: '4'.repeat(64), method: 'GET', resourceType: 'script', requestAction: null,
+      pathClass: 'guacamole_transport', status: 0, failureTextSha256: '5'.repeat(64),
+      startedAt: '2026-09-04T00:00:05.000Z', completedAt: '2026-09-04T00:00:05.010Z', durationMs: 10,
+    },
+    {
+      entryId: 'network-guac-asset-recovered', url: 'https://external.example.test/guacamole/client.js',
+      urlSha256: '4'.repeat(64), method: 'GET', resourceType: 'script', requestAction: null,
+      pathClass: 'guacamole_transport', status: 200,
+      startedAt: '2026-09-04T00:00:05.020Z', completedAt: '2026-09-04T00:00:05.040Z', durationMs: 20,
+    },
+  ],
+});
+assert.equal(recoveredGuacamoleAsset.networkEntries[0].classification.disposition, 'expected_lifecycle_noise');
+assert.deepEqual(
+  recoveredGuacamoleAsset.networkEntries[0].classification.recoveryEvidenceEntryIds,
+  ['network-guac-asset-recovered'],
+);
+assert.equal(recoveredGuacamoleAsset.consoleEntries[0].classification.disposition, 'expected_lifecycle_noise');
+assert.deepEqual(
+  recoveredGuacamoleAsset.consoleEntries[0].classification.recoveryEvidenceEntryIds,
+  ['network-guac-asset-cancelled'],
+);
+
+const unrecoveredCdpHandshake = normalizeExternalDashboardEvidence({
+  consoleEntries: [{
+    entryId: 'console-cdp-stream', type: 'error', textSha256: '6'.repeat(64),
+    messageClass: 'cdp_stream_websocket_handshake_failed', timestamp: '2026-09-04T00:00:06.000Z',
+  }],
+});
+assert.equal(unrecoveredCdpHandshake.consoleEntries[0].classification.disposition, 'actionable_failure');
+assert.equal(unrecoveredCdpHandshake.consoleEntries[0].classification.code, 'unexplained_console_error');
+
 const dashboardEvidenceAudit = auditExternalDashboardEvidence({
   clientId: 'external-runner-human',
   consoleEntries: dashboardEvidence.consoleEntries,

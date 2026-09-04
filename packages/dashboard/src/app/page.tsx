@@ -909,7 +909,9 @@ function DashboardExperience({
     issue: null,
   });
   const activePort = useAtomValue(activePortAtom);
-  useStreamSync(activePort);
+  // A durable workspace route owns its selected view stream. Connecting the
+  // legacy active-session CDP socket as well creates an unrelated retry loop.
+  useStreamSync(activePort, !hasWorkspaceViewportRoute);
   useSessionsSync();
   useActivitySync();
   useChatStatusSync();

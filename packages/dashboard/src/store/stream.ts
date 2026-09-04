@@ -113,7 +113,7 @@ function consoleEntryKey(entry: ConsoleEntry): string {
 // Sync hook
 // ---------------------------------------------------------------------------
 
-export function useStreamSync(port: number) {
+export function useStreamSync(port: number, enabled = true) {
   const setConnected = useSetAtom(streamConnectedAtom);
   const setBrowserConnected = useSetAtom(browserConnectedAtom);
   const setScreencasting = useSetAtom(screencastingAtom);
@@ -157,6 +157,7 @@ export function useStreamSync(port: number) {
   }, [port, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine]);
 
   const connect = useCallback(() => {
+    if (!enabled) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const ws = new WebSocket(dashboardStreamWebSocketUrl(port));
@@ -259,14 +260,21 @@ export function useStreamSync(port: number) {
           break;
       }
     };
-  }, [port, setWsRef, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine, setTabCache, setEngineCache]);
+  }, [enabled, port, setWsRef, setConnected, setBrowserConnected, setScreencasting, setRecording, setVpWidth, setVpHeight, setFrame, setEvents, setConsoleLogs, setTabs, setEngine, setTabCache, setEngineCache]);
 
   useEffect(() => {
+    if (!enabled) {
+      setConnected(false);
+      setBrowserConnected(false);
+      setScreencasting(false);
+      setWsRef(null);
+      return;
+    }
     connect();
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
       setWsRef(null);
     };
-  }, [connect, setWsRef]);
+  }, [connect, enabled, setBrowserConnected, setConnected, setScreencasting, setWsRef]);
 }

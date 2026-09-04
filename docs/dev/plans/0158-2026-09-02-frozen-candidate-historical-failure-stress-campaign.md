@@ -3949,3 +3949,39 @@ explicitly reopen the one handoff selected by its sealed URL digest. Dispatch a
 new exact-commit workflow with a fresh shared start, prepare E1 on the runtime
 lane and E2 on external ingress, and start all 500 local reads at the same
 barrier as both external viewers.
+
+### C01 External Readiness Stream Defect
+
+State transition: `c01_predispatch_repair_active ->
+c01_external_readiness_repair_validated`.
+
+The next readiness workflow reached the exact retained browser through both
+external clients and rendered the expected browser pixels. Its strict oracle
+correctly rejected the run because the dashboard also made repeated CDP stream
+WebSocket requests that returned HTTP 200 and 502 instead of upgrading. The
+visible RDP route itself was healthy. This was a dashboard defect, not
+Guacamole unavailability and not harmless oracle noise.
+
+The root cause was the global legacy stream synchronizer. It connected the
+active daemon session's CDP stream on every dashboard page even when a durable
+workspace route had selected and rendered an RDP or snapshot stream. The hook
+now accepts an explicit enablement decision, tears down when disabled, and is
+disabled whenever the durable workspace route owns the viewport. Native
+fallback pages retain the existing CDP behavior. A source-level dashboard
+regression binds the handoff route to this exclusion.
+
+The same external receipts contained status-zero Guacamole asset requests
+cancelled during page replacement and then successfully fetched milliseconds
+later. The oracle now classifies such a request as expected lifecycle noise
+only when the request is in the Guacamole transport class and a later 2xx or
+3xx response for the exact URL digest and method proves recovery. Console
+capture also records a safe message class and location digest. A matching
+resource-load console error inherits lifecycle classification only from that
+exact recovered network record. Unrecovered Guacamole transport failures and
+all CDP WebSocket handshake failures remain actionable.
+
+Focused durable-handoff, external-vantage, dashboard production-build, and
+whitespace checks pass. Revised next action: commit and publish these dashboard
+assets into the development candidate, rerun exact candidate doctor and the
+external readiness workflow, then proceed directly into synchronized C01 only
+if both external oracles are clean.

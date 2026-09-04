@@ -57,6 +57,14 @@ assert.match(
   'external dashboard CDP streams must use the authenticated same-origin WebSocket proxy',
 );
 
+assert.match(streamStore, /export function useStreamSync\(port: number, enabled = true\)/);
+assert.match(streamStore, /if \(!enabled\) return;[\s\S]*new WebSocket\(dashboardStreamWebSocketUrl\(port\)\)/);
+assert.match(
+  dashboardPage,
+  /useStreamSync\(activePort, !hasWorkspaceViewportRoute\)/,
+  'durable RDP and snapshot handoffs must not also start the legacy CDP stream socket',
+);
+
 assert.doesNotMatch(
   streamStore,
   /new WebSocket\(`ws:\/\/localhost:\$\{port\}`\)/,
