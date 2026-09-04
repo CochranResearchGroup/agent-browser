@@ -257,33 +257,19 @@ await humanPacedObservation({
   coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
 });
 assert.deepEqual(
-  pacedInputEvents.slice(0, 7),
+  pacedInputEvents,
   [
     'mouse:move',
-    'iframe:focus',
     'keyboard:Tab',
     'keyboard:Shift+Tab',
-    'keyboard:Escape',
-    'keyboard:ArrowDown',
-    'keyboard:ArrowUp',
+    'mouse:move',
   ],
-  'generic human pacing must use focused keyboard input without an unverified Guacamole coordinate click',
+  'generic human pacing must exercise the dashboard and hover the remote view without mutating the shared browser',
 );
 assert.equal(
   pacedInputEvents.includes('mouse:click'),
   false,
   'generic human pacing must leave coordinate clicks to target-located action cases',
-);
-assert.deepEqual(
-  pacedInputEvents.slice(-5),
-  [
-    'iframe:focus',
-    'keyboard:Control+Home',
-    'mouse:wheel:-2000',
-    'mouse:wheel:-2000',
-    'mouse:wheel:-2000',
-  ],
-  'each simulated human action must focus the remote canvas and force the synthetic document to its attested origin',
 );
 const controllerEvents = [];
 const takeoverResponse = {

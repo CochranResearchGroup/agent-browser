@@ -1148,10 +1148,6 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS,
   );
   const readyAt = new Date().toISOString();
-  if (paceProfile === 'human_controller') {
-    await waitForGuacamoleIframe(page);
-    await resetSyntheticRemoteDocument(page, 300);
-  }
   if (performHumanAction) {
     if (paceProfile === 'human_controller') {
       await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
@@ -1543,37 +1539,22 @@ export function projectHandoffResolution(data) {
 export async function humanPacedObservation(page, profile, _pixelMarkerRegion) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
+  await page.waitForTimeout(delay);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(delay);
+  await page.keyboard.press('Shift+Tab');
   const remoteFrame = page.locator('iframe').first();
   if (await remoteFrame.count()) {
     const box = await remoteFrame.boundingBox();
     if (box) {
-      await remoteFrame.focus();
+      await page.mouse.move(
+        box.x + Math.min(80, box.width / 4),
+        box.y + Math.min(80, box.height / 4),
+        { steps: 8 },
+      );
       await page.waitForTimeout(delay);
-      await page.keyboard.press('Tab');
-      await page.waitForTimeout(delay);
-      await page.keyboard.press('Shift+Tab');
-      await page.waitForTimeout(delay);
-      await page.keyboard.press('Escape');
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('ArrowUp');
-      await resetSyntheticRemoteDocument(page, delay);
     }
   }
-}
-
-export async function resetSyntheticRemoteDocument(page, settleMs) {
-  const remoteFrame = page.locator('iframe').first();
-  if (!(await remoteFrame.count())) return false;
-  const iframeBox = await remoteFrame.boundingBox();
-  if (!iframeBox) return false;
-  await remoteFrame.focus();
-  await page.keyboard.press('Control+Home');
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.mouse.wheel(0, -2_000);
-    await page.waitForTimeout(100);
-  }
-  await page.waitForTimeout(settleMs);
-  return true;
 }
 
 export async function acquireSyntheticRemoteController(page) {

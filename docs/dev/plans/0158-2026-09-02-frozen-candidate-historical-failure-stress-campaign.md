@@ -2941,3 +2941,25 @@ Revised next action: publish this stricter runner correction, restore the same
 E7 tab once more, and dispatch a fresh exact-commit readiness epoch. A further
 self-induced navigation is a blocking test-harness defect and must be diagnosed
 before C01; a clean two-client aggregate permits immediate C01 dispatch.
+
+E42 ran from exact head `3e2adf17` as workflow run `33869785636`. Eliminating
+blind clicks fixed the destructive symptom: both clients resolved the durable
+handoff, both reached Guacamole, both observed the same non-marker pixel hash,
+and live CDP readback after the epoch proved the shared target remained on
+`/fixture`. The human crop showed fixture controls where the solid marker
+should have been, while the slow crop showed the same displaced viewport state
+later in the sequence. This proves the focused arrow and reset keystrokes still
+mutated shared scroll state and that iframe focus did not provide a reliable
+remote `Control+Home` reset boundary.
+
+Generic readiness observation does not need to mutate the remote document.
+Human pacing is now limited to dashboard keyboard traversal and a mouse move
+over a blank part of the remote view. It performs no click, wheel, focused
+remote key, or other shared-browser mutation. Explicit locator-proven action
+cases remain responsible for state-changing remote input and its postcondition
+proof. The provider-free regression freezes this passive event sequence and
+rejects coordinate clicks.
+
+Revised next action: publish the passive-readiness correction and dispatch a
+fresh exact-commit readiness epoch against the still-correct E7 target. If its
+two clients and aggregate pass, begin C01 immediately from that same commit.
