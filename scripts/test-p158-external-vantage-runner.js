@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   EXTERNAL_CALIBRATION_RECEIPT_SCHEMA,
+  EXTERNAL_CHROMIUM_LAUNCH_ARGS,
   EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS,
   EXTERNAL_VANTAGE_AGGREGATE_SCHEMA,
   EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
@@ -81,6 +82,11 @@ assert.equal(
   95_000,
   'external reconnect observation must cover the dashboard 90-second service job plus response projection grace',
 );
+assert.deepEqual(EXTERNAL_CHROMIUM_LAUNCH_ARGS, [
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+]);
 assert.match(runnerSource, /recordVideo:/);
 assert.match(runnerSource, /failure-receipt\.json/);
 assert.match(runnerSource, /artifactReceipts\(outputDir\)/);

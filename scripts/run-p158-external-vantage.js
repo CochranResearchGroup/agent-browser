@@ -27,6 +27,11 @@ export const PINNED_PLAYWRIGHT_VERSION = '1.62.1';
 export const EXTERNAL_HANDOFF_RESOLUTION_TIMEOUT_MS = 95_000;
 export const CALIBRATION_DURATION_MS = 20 * 60 * 1000;
 export const CALIBRATION_LATE_TOLERANCE_MS = 30 * 1000;
+export const EXTERNAL_CHROMIUM_LAUNCH_ARGS = Object.freeze([
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+]);
 const REQUIRED_INGRESS_KINDS = [
   'dns',
   'tls',
@@ -747,7 +752,13 @@ async function executeExternalVantageProbe({
   if (!initialClassification.valid || initialClassification.findingCodes.length) {
     throw new Error('External DNS resolution or HTTPS classification is not public');
   }
-  const browser = await chromium.launch({ headless: true });
+  // Each page represents an independently active external viewer. Chromium's
+  // background-page throttling can otherwise stop Guacamole protocol acks and
+  // make one tab evict another during the concurrent calibration.
+  const browser = await chromium.launch({
+    headless: true,
+    args: [...EXTERNAL_CHROMIUM_LAUNCH_ARGS],
+  });
   const browserVersion = browser.version();
   let context;
   try {

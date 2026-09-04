@@ -3616,3 +3616,29 @@ the unchanged ready handoff and installed candidate. Preserve both 20-minute
 client action streams and their aggregate without retry or repair inside the
 run; if either client reaches the shared barrier more than 30 seconds late, stop
 and diagnose that distinct failure.
+
+The corrected C01 dispatch, workflow `33913357430`, passed checkout, dependency
+setup, external ingress, dashboard authentication, durable-handoff resolution,
+and the first visible pixel capture on both clients. The slow client then opened
+its second simultaneous viewer and received Guacamole's disconnected overlay
+instead of the prepared marker. The human client's preserved initial screenshot
+remained correct. Guacamole and guacd logs show that all four viewers were
+admitted to the same underlying RDP connection, ruling out the configured
+eight-viewer route limit. They then record a background viewer as not responding
+and close its WebSocket session. This is a distinct long-lived concurrency
+failure that E54's short readiness probe did not expose.
+
+The slow runner models independent clients with two pages in one headless
+Chromium process. Chromium can throttle timers and rendering in the page that
+becomes backgrounded, which prevents that page from acknowledging Guacamole
+protocol updates. The bounded harness repair disables background timer,
+occluded-window, and renderer throttling for this external runner. It preserves
+the product failure oracle and the true simultaneous viewer load; it does not
+add retries or weaken marker comparison. The provider-free external-runner
+regression now fixes the exact launch contract.
+
+Revised next action: commit and push the external-client scheduling repair,
+then redispatch C01 with the same durable handoff and unchanged installed
+candidate. A further disconnect remains a campaign blocker and must be
+diagnosed from the preserved screenshots, HAR, transport receipt, and provider
+logs before another attempt.
