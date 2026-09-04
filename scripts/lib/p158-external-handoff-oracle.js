@@ -296,6 +296,16 @@ function normalizeUrlObservations(session) {
   return observations;
 }
 
+function ingressCheckUrlRole(kind) {
+  switch (kind) {
+    case 'websocket': return 'websocket_endpoint';
+    case 'iframe': return 'iframe_src';
+    case 'form_action': return 'form_action';
+    case 'reconnect': return 'reconnect_target';
+    default: return 'location_header';
+  }
+}
+
 function identityDifferences(expected, observed) {
   const differences = [];
   for (const field of RETAINED_IDENTITY_FIELDS) {
@@ -377,7 +387,7 @@ export function auditExternalHandoffSession({ session, options = {} }) {
     const code = CHECK_FINDINGS[kind];
     const checkId = check.checkId ?? check.observationId ?? check.id;
     const targetClassification = classifyOperatorUrl(check.targetUrl, {
-      role: kind === 'websocket' ? 'websocket_endpoint' : 'location_header',
+      role: ingressCheckUrlRole(kind),
       baseUrl: evidence.initialHandoffUrl,
       resolvedAddresses: check.resolvedAddresses ?? [],
     });
@@ -391,6 +401,7 @@ export function auditExternalHandoffSession({ session, options = {} }) {
         message: findingMessage(leakCode),
         expected: { hostClass: 'public' },
         observed: {
+          role: targetClassification.role,
           hostClass: targetClassification.hostClass,
           resolvedHostClasses: targetClassification.resolvedHostClasses,
         },

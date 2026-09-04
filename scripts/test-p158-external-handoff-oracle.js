@@ -219,6 +219,29 @@ runTest('requires public HTTPS ingress, ready gating, and exact retained identit
   assert.equal(audit(clean).passed, true);
 });
 
+runTest('classifies public Guacamole iframe ingress as iframe transport', () => {
+  const clean = clone(
+    fixtureSet.sessions.find((session) => session.expectedFindingCodes.length === 0),
+  );
+  assert.ok(clean, 'fixture corpus has no clean external session');
+  const publicGuacamoleFrame =
+    'https://handoff.public.example/guacamole/websocket-tunnel?route=synthetic';
+  clean.fixtureId = 'handoff-clean-public-guacamole-iframe';
+  clean.urlObservations.push({
+    observationId: 'public-guacamole-frame',
+    role: 'iframe_src',
+    url: publicGuacamoleFrame,
+  });
+  const iframeCheck = clean.ingressChecks.find((check) => check.kind === 'iframe');
+  assert.ok(iframeCheck, 'clean fixture has no iframe ingress check');
+  iframeCheck.targetUrl = publicGuacamoleFrame;
+
+  const report = audit(clean);
+
+  assert.equal(report.passed, true);
+  assert.ok(!report.findings.some((finding) => finding.code === 'raw_guacamole_url_leak'));
+});
+
 runTest('fails closed when a required external ingress observation is absent', () => {
   const clean = fixtureSet.sessions.find((session) => session.fixtureId === 'handoff-clean-public-https');
   const missingTls = clone(clean);

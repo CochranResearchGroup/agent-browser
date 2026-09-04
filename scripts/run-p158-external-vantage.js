@@ -954,6 +954,9 @@ async function executeExternalVantageProbe({
       error.code = 'external_handoff_oracle_rejected';
       error.details = {
         urlFindingCount: oracle.findings.length,
+        urlFindingRoles: [...new Set(oracle.findings
+          .map((item) => item.observed?.role)
+          .filter((role) => EXTERNAL_URL_ROLES.includes(role)))].sort(),
         urlFindingCodes: findingCodes,
         iframeCount: oracleSession.surfaceScans?.iframeUrlCount
           ?? oracleSession.urlObservations.filter((item) => item.role === 'iframe_src').length,

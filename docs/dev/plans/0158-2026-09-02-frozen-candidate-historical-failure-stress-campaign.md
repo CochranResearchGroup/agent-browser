@@ -2138,3 +2138,37 @@ result, with the newly persisted handoff and presentation target as coherent
 fallbacks. Add a provider-free regression for a closed target replaced during
 explicit reopen, validate the focused resolver path, then install and dispatch
 one fresh external readiness epoch without weakening identity validation.
+
+The resolver repair landed at `391c8315`. Its focused 25-test route-bound-open
+module and full workspace clippy gate passed with the normal eight Cargo jobs.
+The development candidate installed as generation `0.28.0-95bbbbc9063e`; the
+provider-required doctor passed. Installation exposed a retained handoff with
+no exact PID, reported as `runtime_handoff_orphan_pid_missing`. The explicitly
+authorized reopen path recovered it in one attempt. Preparation then proved
+that the top-level tab and target were canonically coherent and exactly matched
+the fresh service tab handle before the external identity secret was updated.
+
+E24 ran from exact clean remote head `391c8315` as workflow run `33825298209`.
+Both external clients captured the exact initial pixel marker and the exact
+reconnect pixel marker without any identity mismatch. This accepts the resolver
+repair against external ingress and proves that E22 and E23 were caused by the
+mixed-generation preparation response.
+
+Both clients then failed only in the final oracle with
+`external_handoff_oracle_rejected: raw_guacamole_url_leak`. The human client
+recorded two iframe observations and the slow client recorded three. The
+aggregate retained both failure receipts, zero retries, and zero repairs. Its
+SHA-256 is
+`fee05d05ad4ac5fb0a3afe7301ea3609d07c1784afd96f1f35fb5b98e258785d`.
+
+Diagnosis found a false positive in the oracle's second URL-classification
+pass. The captured public Guacamole path was correctly classified as an
+allowed `iframe_src` observation, but the matching successful iframe ingress
+check was reclassified as a generic `location_header`, where raw Guacamole
+paths are intentionally forbidden. A provider-free regression now reproduces
+that exact mismatch. The repair maps every ingress-check kind to its actual URL
+role and includes the affected safe URL roles in future oracle failure details.
+
+Revised next action: validate and commit the oracle repair, then dispatch one
+fresh external readiness epoch from that exact head. Do not rebuild or reinstall
+the unchanged runtime binary for this runner-only correction.
