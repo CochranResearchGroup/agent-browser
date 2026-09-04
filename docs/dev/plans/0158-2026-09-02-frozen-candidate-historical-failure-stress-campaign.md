@@ -3758,3 +3758,38 @@ iframe load.
 Revised next action: validate, commit, rebuild, and install the bounded
 disconnect recovery. Re-run the two-client readiness probe before redispatching
 C01 so a departing first viewer and delayed second viewer are both proven.
+
+The disconnect recovery was committed as `928b38bb`, built into development
+generation `0.28.0-cb0e442bd453`, and installed without changing production.
+The reviewed provider binding was restaged and applied, both external ingress
+routes were republished, provider doctor passed, and the three-launch browser
+smoke passed. Readiness workflow `33920592707` then passed both clients and its
+aggregate: the first client could leave, the delayed shared viewer recovered,
+and the same durable handoff remained usable.
+
+C01 workflow `33920919559` completed the full synchronized 20-minute external
+calibration window at the exact frozen commit `928b38bb`. Both distinct
+off-host clients passed all 30 actions, including five durable-handoff
+reconnects each. The aggregate receipt is `success=true`; both clients used
+zero retries and attempted no repair inside the run. The evidence records zero
+internal URL leaks, zero duplicate server browser launches, correct retained
+identity, successful DNS, TLS, cookie, WebSocket, iframe, and reconnect checks,
+and a passing visual oracle with no finding codes.
+
+The passing oracle did not suppress diagnostic noise. The human-paced client
+recorded 2,286 network entries, 159 console entries, four HTTP 404 responses,
+one HTTP 403 response, and 21 HTTP 504 responses. The slow client recorded
+4,269 network entries, 230 console entries, five HTTP 404 responses, two HTTP
+403 responses, four status-zero requests, and 36 HTTP 504 responses. All 60
+scripted actions still passed. Preserve these redacted records for W10 causal
+classification; do not infer that the response codes are harmless merely
+because C01 passed, and do not repair them during the frozen campaign unless a
+later sequence cannot complete.
+
+Revised next action: bind the C01 receipts into the W6 calibration artifacts,
+finish the five-surface live journal calibration, seal the exact E1 and E2
+environment identities, and write the zero-start campaign freeze. Only after
+that checkpoint may W7 execution begin. Continue recording failures without
+repair by default. If a defect prevents sequence completion, pause only that
+sequence, diagnose and repair the blocker, re-freeze the candidate as required,
+and resume the active Plan 0158 goal.
