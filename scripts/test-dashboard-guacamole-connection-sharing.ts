@@ -42,7 +42,16 @@ const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
   requests.push({ url, init });
   if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
   if (url.endsWith("/activeConnections")) {
-    return response({ "active-uuid": { connectionIdentifier: "17" } });
+    return response({
+      "shared-child-uuid": {
+        connectionIdentifier: "17",
+        sharingProfileIdentifier: "29",
+      },
+      "active-uuid": {
+        connectionIdentifier: "17",
+        sharingProfileIdentifier: null,
+      },
+    });
   }
   if (url.endsWith("/connections/17/sharingProfiles")) {
     return response({
@@ -73,6 +82,28 @@ assert.equal(shared.url, "https://dashboard.example.test/guacamole/#/?key=share-
 assert.equal(requests.length, 4);
 assert.equal(requests[0].init?.method, "POST");
 assert.equal(new Headers(requests[1].init?.headers).get("Guacamole-Token"), "auth-secret");
+
+await assert.rejects(
+  resolveGuacamoleViewerFrame({
+    dashboardHref: "https://dashboard.example.test/",
+    frameUrl: direct,
+    stream,
+    fetchImpl: (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+      if (url.endsWith("/activeConnections")) {
+        return response({
+          "shared-child-uuid": {
+            connectionIdentifier: "17",
+            sharingProfileIdentifier: "29",
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof globalThis.fetch,
+  }),
+  /primary active connection is unavailable/,
+);
 
 const noActive = await resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/",

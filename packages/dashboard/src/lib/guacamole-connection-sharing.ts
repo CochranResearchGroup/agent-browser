@@ -6,6 +6,7 @@ type GuacamoleAuthToken = {
 
 type GuacamoleActiveConnection = {
   connectionIdentifier?: string;
+  sharingProfileIdentifier?: string | null;
 };
 
 type GuacamoleSharingProfile = {
@@ -92,10 +93,16 @@ export async function resolveGuacamoleViewerFrame({
     "api/session/data/postgresql/activeConnections",
     "Guacamole active-connection discovery",
   );
-  const activeConnectionId = Object.entries(activeConnections).find(
+  const matchingActiveConnections = Object.entries(activeConnections).filter(
     ([, active]) => active.connectionIdentifier === connectionId,
+  );
+  const activeConnectionId = matchingActiveConnections.find(
+    ([, active]) => !active.sharingProfileIdentifier,
   )?.[0];
-  if (!activeConnectionId) return { mode: "direct", url: frameUrl };
+  if (!activeConnectionId) {
+    if (matchingActiveConnections.length === 0) return { mode: "direct", url: frameUrl };
+    throw new Error("Guacamole primary active connection is unavailable");
+  }
 
   const sharingProfiles = await authenticatedFetch<Record<string, GuacamoleSharingProfile>>(
     `api/session/data/postgresql/connections/${encodeURIComponent(connectionId)}/sharingProfiles`,

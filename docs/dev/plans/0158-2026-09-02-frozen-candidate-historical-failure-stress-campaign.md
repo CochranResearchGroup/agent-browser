@@ -3407,3 +3407,51 @@ all-session tab walk overlaps full dashboard startup. Session and tab polling
 now uses the same ten-second freshness bound as Service Status, cutting that
 background volume approximately in half without sacrificing the left rail's
 bounded accuracy.
+
+The polling-cadence candidate was committed and published as `e3ab4677`,
+installed as development generation `0.28.0-aa2dccdc3a41`, and left production
+unchanged. The stricter local public-ingress harness now requires the exact
+synthetic fixture marker from every client and rechecks the retained anchor at
+the end of the run. That harness exposed periodic whole-environment stalls:
+realtime and monotonic observations moved backwards by approximately 2.4 to
+2.7 seconds every 27 to 30 seconds while the WSL journal independently recorded
+backwards time jumps. Stopping timesyncd, testing each available Hyper-V clock
+source, disabling implicit Hyper-V time synchronization, unbinding the exact
+Hyper-V time device, and relieving memory fragmentation did not remove the
+jumps. Each diagnostic change was restored. No userspace clock adjustment was
+observed. This is retained as a host-runtime defect and does not stop the
+campaign or authorize a production restart.
+
+External run `33903748862` exercised both clients and uploaded the restricted
+artifacts, but both rendered `about:blank`. The preparation request itself had
+asked for a blank page. Top-level URL normalization was not defective: the
+service normalizer supports that form, and the generated client deliberately
+moves it into request parameters. The campaign corrected the fixture request
+to the canonical synthetic target instead of changing valid product behavior.
+
+External run `33905363192` then proved the human-simulated client, the initial
+slow client view, the browser target, the RDP route, and the first shared view.
+The second concurrent slow-client join received successful active-connection,
+sharing-profile, credential, and token responses but rendered the Guacamole
+connection-list home instead of the shared browser. Guacamole may report the
+primary connection and one or more shared child connections with the same
+connection identifier. The dashboard selected the first matching row without
+distinguishing its role, so ordering could make it create a share from an
+already shared child.
+
+The bounded repair selects only a matching active connection whose sharing
+profile identifier is absent, which identifies the primary owner. If no rows
+match, the existing direct connection fallback remains available. If matching
+shared children exist but the primary is unavailable, the resolver now returns
+an explicit diagnostic error instead of initiating a direct connection that
+could displace the existing viewer. A regression supplies the shared child
+first and proves that credentials are created from the later primary row. A
+second regression proves the shared-child-only state fails diagnostically.
+The focused connection-sharing test, dashboard inspector-action contract, and
+production dashboard build pass.
+
+Revised next action: commit and publish this exact primary-owner selection
+repair, install it only in the development runtime, recreate the canonical
+synthetic handoff, and rerun the exact two-client external oracle. A green
+result advances directly to the frozen campaign sequence; another failure is
+diagnosed and recorded under the same still-active Plan 0158 goal.
