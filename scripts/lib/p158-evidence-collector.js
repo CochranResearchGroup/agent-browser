@@ -70,6 +70,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/lib/p158-w7-a04-a06-live.js',
   'scripts/lib/p158-w7-a07-a13-live.js',
   'scripts/lib/p158-w7-live-hook-readiness.js',
+  'scripts/lib/p158-w6-evidence-assembler.js',
   'scripts/lib/p158-w8-hd-adapters.js',
   'scripts/lib/p158-w8-h03-external.js',
   'scripts/lib/p158-w8-dashboard-live.js',
@@ -111,6 +112,7 @@ export const P158_AGGREGATE_ENTRY_PATHS = Object.freeze([
   'scripts/test-p158-w7-a04-a06-live.js',
   'scripts/test-p158-w7-a07-a13-live.js',
   'scripts/test-p158-w7-live-hook-readiness.js',
+  'scripts/test-p158-w6-evidence-assembler.js',
   'scripts/test-p158-w8-hd-adapters.js',
   'scripts/test-p158-w8-h03-external.js',
   'scripts/test-p158-w8-dashboard-live.js',
@@ -283,8 +285,10 @@ export function validateP158LiveHookManifest({
   const aggregateEntries = new Map(aggregate.manifest.entries.map((entry) => [entry.path, entry]));
   const hookIds = manifest.hookBindings.map((entry) => entry.hookId);
   const allowedHookIds = new Set(P158_REQUIRED_LIVE_HOOK_IDS);
-  if (new Set(hookIds).size !== hookIds.length || hookIds.some((hookId) => !allowedHookIds.has(hookId))) {
-    fail('live_hook_manifest_invalid', 'Live-hook manifest contains duplicate or unknown hook IDs');
+  if (hookIds.length !== allowedHookIds.size || new Set(hookIds).size !== hookIds.length ||
+      hookIds.some((hookId) => !allowedHookIds.has(hookId)) ||
+      P158_REQUIRED_LIVE_HOOK_IDS.some((hookId) => !hookIds.includes(hookId))) {
+    fail('live_hook_manifest_invalid', 'Live-hook manifest must contain the exact 24 required hook IDs');
   }
   for (const binding of manifest.hookBindings) {
     if (binding.implementationKind !== 'concrete_live' || binding.sourcePath.includes('/test-') ||

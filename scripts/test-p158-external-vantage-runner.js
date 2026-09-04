@@ -24,6 +24,8 @@ import {
   handoffResolutionReadinessGaps,
   humanPacedObservation,
   observerPacedObservation,
+  auditExternalDashboardEvidence,
+  normalizeExternalDashboardEvidence,
   projectHandoffResolution,
   pixelMarkerClipForIframe,
   remoteViewIframeClipObservation,
@@ -767,6 +769,108 @@ try {
 const captureVisitSource = runnerSource.slice(
   runnerSource.indexOf('async function captureVisit'),
   runnerSource.indexOf('async function waitForExpectedPixelMarker'),
+);
+
+const dashboardEvidence = normalizeExternalDashboardEvidence({
+  consoleEntries: [
+    { entryId: 'console-error', type: 'error', textSha256: 'a'.repeat(64), timestamp: '2026-09-04T00:00:01.000Z' },
+    { entryId: 'console-warning', type: 'warning', textSha256: 'b'.repeat(64), timestamp: '2026-09-04T00:00:02.000Z' },
+  ],
+  networkEntries: [
+    {
+      entryId: 'network-504', url: 'https://external.example.test/api/session-tabs',
+      urlSha256: 'c'.repeat(64), method: 'GET', resourceType: 'fetch', requestAction: null,
+      pathClass: 'dashboard_api', status: 504, startedAt: '2026-09-04T00:00:00.000Z',
+      completedAt: '2026-09-04T00:00:30.000Z', durationMs: 30_000,
+    },
+    {
+      entryId: 'network-guac-404',
+      url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/activeConnection/connection/sharingProfiles',
+      urlSha256: 'd'.repeat(64), method: 'GET', resourceType: 'xhr', requestAction: null,
+      pathClass: 'guacamole_transport', status: 404, startedAt: '2026-09-04T00:00:01.000Z',
+      completedAt: '2026-09-04T00:00:01.010Z', durationMs: 10,
+    },
+    {
+      entryId: 'network-token-403', url: 'https://external.example.test/guacamole/api/tokens',
+      urlSha256: 'e'.repeat(64), method: 'POST', resourceType: 'xhr', requestAction: null,
+      pathClass: 'guacamole_transport', status: 403, startedAt: '2026-09-04T00:00:02.000Z',
+      completedAt: '2026-09-04T00:00:02.010Z', durationMs: 10,
+    },
+    {
+      entryId: 'network-token-200', url: 'https://external.example.test/guacamole/api/tokens',
+      urlSha256: 'e'.repeat(64), method: 'POST', resourceType: 'xhr', requestAction: null,
+      pathClass: 'guacamole_transport', status: 200, startedAt: '2026-09-04T00:00:02.020Z',
+      completedAt: '2026-09-04T00:00:02.040Z', durationMs: 20,
+    },
+  ],
+});
+assert.deepEqual(
+  normalizeExternalDashboardEvidence(dashboardEvidence),
+  dashboardEvidence,
+  'external dashboard evidence normalization must be idempotent',
+);
+assert.equal(dashboardEvidence.consoleEntries[0].level, 'error');
+assert.equal(dashboardEvidence.consoleEntries[0].message, `sha256:${'a'.repeat(64)}`);
+assert.equal(dashboardEvidence.consoleEntries[0].classification.disposition, 'actionable_failure');
+assert.equal(dashboardEvidence.networkEntries[0].durationMs, 30_000);
+assert.equal(dashboardEvidence.networkEntries[0].classification.code, 'unexplained_http_failure');
+assert.equal(dashboardEvidence.networkEntries[1].classification.code, 'guacamole_active_connection_observation_absent');
+assert.equal(dashboardEvidence.networkEntries[1].classification.disposition, 'expected_lifecycle_noise');
+assert.deepEqual(
+  dashboardEvidence.networkEntries[2].classification.recoveryEvidenceEntryIds,
+  ['network-token-200'],
+);
+const unrecoveredFailure = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-token-403-unrecovered',
+    url: 'https://external.example.test/guacamole/api/tokens',
+    urlSha256: 'f'.repeat(64),
+    method: 'POST',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 403,
+    startedAt: '2026-09-04T00:00:03.000Z',
+    completedAt: '2026-09-04T00:00:03.010Z',
+    durationMs: 10,
+  }],
+}).networkEntries[0];
+assert.equal(unrecoveredFailure.classification.disposition, 'actionable_failure');
+assert.equal(unrecoveredFailure.classification.code, 'unexplained_http_failure');
+const cancelledLifecycleRequest = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-guac-cancelled',
+    url: 'https://external.example.test/guacamole/tunnel',
+    urlSha256: '1'.repeat(64),
+    method: 'POST',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 0,
+    failureTextSha256: '2'.repeat(64),
+    startedAt: '2026-09-04T00:00:04.000Z',
+    completedAt: '2026-09-04T00:00:04.010Z',
+    durationMs: 10,
+  }],
+}).networkEntries[0];
+assert.equal(cancelledLifecycleRequest.classification.disposition, 'expected_lifecycle_noise');
+assert.equal(cancelledLifecycleRequest.classification.code, 'page_or_reconnect_request_cancelled');
+
+const dashboardEvidenceAudit = auditExternalDashboardEvidence({
+  clientId: 'external-runner-human',
+  consoleEntries: dashboardEvidence.consoleEntries,
+  networkEntries: dashboardEvidence.networkEntries,
+  auditedAt: '2026-09-04T00:01:00.000Z',
+});
+assert.equal(dashboardEvidenceAudit.passed, false);
+assert.deepEqual(
+  [...new Set(dashboardEvidenceAudit.findings.map((finding) => finding.code))].sort(),
+  ['console_error', 'network_failure'],
+);
+assert.equal(
+  dashboardEvidenceAudit.findings.some((finding) => finding.recordIds.includes('network-guac-404')),
+  false,
+  'explicitly classified expected lifecycle noise must remain evidence without becoming a defect',
 );
 assert.ok(
   captureVisitSource.indexOf('const pixelHash = await waitForExpectedPixelMarker')

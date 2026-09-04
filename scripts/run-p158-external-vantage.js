@@ -13,6 +13,10 @@ import {
   auditExternalHandoffSession,
   classifyOperatorUrl,
 } from './lib/p158-external-handoff-oracle.js';
+import {
+  auditDashboardFixture,
+  generateDenseDashboardFixture,
+} from './lib/p158-dashboard-oracle.js';
 import { sha256 as campaignSha256 } from './lib/p158-campaign-controller.js';
 
 export const EXTERNAL_VANTAGE_RECEIPT_SCHEMA =
@@ -239,6 +243,10 @@ export function redactOperatorUrl(value) {
     if (segments[0] === 'remote-view' && segments[1]) {
       url.pathname = '/remote-view/<redacted>';
     }
+    if (segments[0] === 'guacamole' && segments[2] === 'session' && segments[3] === 'tunnels' && segments[4]) {
+      segments[4] = '<redacted>';
+      url.pathname = `/${segments.join('/')}`;
+    }
     url.username = '';
     url.password = '';
     url.search = '';
@@ -247,6 +255,124 @@ export function redactOperatorUrl(value) {
   } catch {
     return '<invalid-or-redacted-url>';
   }
+}
+
+function normalizedConsoleLevel(entry) {
+  const level = String(entry.level ?? entry.type ?? 'info').toLowerCase();
+  if (level === 'error' || level === 'exception') return 'error';
+  if (level === 'warning' || level === 'warn') return 'warning';
+  if (level === 'debug') return 'debug';
+  return 'info';
+}
+
+function networkRecoveryEvidence(entry, entries) {
+  if (!entry.urlSha256) return [];
+  return entries
+    .filter((candidate) => candidate.entryId !== entry.entryId &&
+      candidate.urlSha256 === entry.urlSha256 &&
+      candidate.method === entry.method &&
+      Number(candidate.status) >= 200 && Number(candidate.status) < 400 &&
+      Date.parse(candidate.completedAt ?? candidate.timestamp ?? '') >=
+        Date.parse(entry.completedAt ?? entry.timestamp ?? ''))
+    .map((candidate) => candidate.entryId)
+    .filter(Boolean)
+    .sort();
+}
+
+function classifyExternalNetworkEntry(entry, entries) {
+  const status = Number(entry.status);
+  const url = String(entry.url ?? '');
+  const pathClass = entry.pathClass ?? safeNetworkPathClass(url);
+  const recoveredBy = networkRecoveryEvidence(entry, entries);
+  if (status >= 200 && status < 400) {
+    return { disposition: 'success', code: 'successful_response', recoveryEvidenceEntryIds: [] };
+  }
+  if (status === 404 && /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i.test(url)) {
+    return {
+      disposition: 'expected_lifecycle_noise',
+      code: 'guacamole_active_connection_observation_absent',
+      recoveryEvidenceEntryIds: [],
+    };
+  }
+  if (status === 403 && /\/guacamole\/api\/tokens$/i.test(url) && recoveredBy.length > 0) {
+    return {
+      disposition: 'expected_lifecycle_noise',
+      code: 'guacamole_token_refresh_recovered',
+      recoveryEvidenceEntryIds: recoveredBy,
+    };
+  }
+  if (status === 0 &&
+      (/\/guacamole\/tunnel$/i.test(url) || pathClass === 'dashboard_auth_status' ||
+        (/\/guacamole\/api\/tokens$/i.test(url) && recoveredBy.length > 0))) {
+    return {
+      disposition: 'expected_lifecycle_noise',
+      code: 'page_or_reconnect_request_cancelled',
+      recoveryEvidenceEntryIds: recoveredBy,
+    };
+  }
+  return {
+    disposition: 'actionable_failure',
+    code: status === 0 ? 'unexplained_transport_failure' : 'unexplained_http_failure',
+    recoveryEvidenceEntryIds: recoveredBy,
+  };
+}
+
+export function normalizeExternalDashboardEvidence({ consoleEntries = [], networkEntries = [] }) {
+  const normalizedConsoleEntries = consoleEntries.map((entry, index) => {
+    const level = normalizedConsoleLevel(entry);
+    const normalizedMessageDigest = /^sha256:([a-f0-9]{64})$/.exec(entry.message ?? '')?.[1];
+    const textSha256 = entry.textSha256 ?? normalizedMessageDigest ??
+      hashText(entry.message ?? entry.text ?? '');
+    return {
+      entryId: entry.entryId ?? `console-${index + 1}`,
+      level,
+      message: `sha256:${textSha256}`,
+      timestamp: entry.timestamp ?? null,
+      classification: level === 'error'
+        ? { disposition: 'actionable_failure', code: 'unexplained_console_error', recoveryEvidenceEntryIds: [] }
+        : { disposition: 'success', code: 'non_error_console_entry', recoveryEvidenceEntryIds: [] },
+    };
+  });
+  const normalizedNetworkEntries = networkEntries.map((entry, index) => {
+    const numericStatus = Number(entry.status);
+    const status = Number.isInteger(numericStatus) && numericStatus >= 100 && numericStatus <= 599
+      ? numericStatus
+      : null;
+    const classification = classifyExternalNetworkEntry(entry, networkEntries);
+    return {
+      entryId: entry.entryId ?? `network-${index + 1}`,
+      url: redactOperatorUrl(entry.url),
+      status,
+      error: numericStatus === 0
+        ? entry.error ?? `request-failure-sha256:${entry.failureTextSha256 ?? hashText('unknown')}`
+        : null,
+      method: entry.method ?? null,
+      resourceType: entry.resourceType ?? null,
+      requestAction: entry.requestAction ?? null,
+      pathClass: entry.pathClass ?? safeNetworkPathClass(entry.url),
+      startedAt: entry.startedAt ?? entry.timestamp ?? null,
+      completedAt: entry.completedAt ?? entry.timestamp ?? null,
+      durationMs: Number.isFinite(Number(entry.durationMs)) ? Math.max(0, Number(entry.durationMs)) : null,
+      redirectCount: Number.isSafeInteger(entry.redirectCount) ? entry.redirectCount : null,
+      urlSha256: entry.urlSha256 ?? hashText(entry.url ?? ''),
+      classification,
+    };
+  });
+  return { consoleEntries: normalizedConsoleEntries, networkEntries: normalizedNetworkEntries };
+}
+
+export function auditExternalDashboardEvidence({ clientId, consoleEntries, networkEntries, auditedAt }) {
+  const normalized = normalizeExternalDashboardEvidence({ consoleEntries, networkEntries });
+  const fixture = generateDenseDashboardFixture({
+    profiles: 0, browsers: 0, tabs: 0, jobs: 0, events: 0,
+    idNamespace: `p158-${clientId}`,
+  });
+  fixture.fixtureId = `p158-external-dashboard-${clientId}`;
+  fixture.description = 'Normalized external-vantage dashboard console and network evidence.';
+  fixture.density = 'empty';
+  fixture.consoleEntries = normalized.consoleEntries;
+  fixture.networkEntries = normalized.networkEntries;
+  return auditDashboardFixture({ fixture, options: { auditedAt } });
 }
 
 export function findInternalUrlLeaks(urlEvidence) {
@@ -934,7 +1060,8 @@ async function executeExternalVantageProbe({
       initialServiceBrowser.processIdentitySha256 === reconnectServiceBrowser.processIdentitySha256 ? 0 : 1;
     await context.close();
     context = null;
-    writeSanitizedHar(networkEntries, join(outputDir, 'network.redacted.har'));
+    const dashboardEvidence = normalizeExternalDashboardEvidence({ consoleEntries, networkEntries });
+    writeSanitizedHar(dashboardEvidence.networkEntries, join(outputDir, 'network.redacted.har'));
     const leaks = findInternalUrlLeaks(urlEvidence);
     if (leaks.length) {
       const error = new Error(`Internal URL evidence detected in ${leaks.length} observations`);
@@ -976,6 +1103,41 @@ async function executeExternalVantageProbe({
         urlFindingCodes: findingCodes,
         iframeCount: oracleSession.surfaceScans?.iframeUrlCount
           ?? oracleSession.urlObservations.filter((item) => item.role === 'iframe_src').length,
+      };
+      throw error;
+    }
+    const dashboardOracle = auditExternalDashboardEvidence({
+      clientId,
+      ...dashboardEvidence,
+      auditedAt: new Date().toISOString(),
+    });
+    const serializedDashboardOracle = sanitizeSerializedReceipt(
+      `${JSON.stringify(dashboardOracle, null, 2)}\n`,
+      env,
+    );
+    assertSecretsAbsent(serializedDashboardOracle, env);
+    writeFileSync(
+      join(outputDir, 'dashboard-oracle.redacted.json'),
+      serializedDashboardOracle,
+      { mode: 0o600 },
+    );
+    if (!dashboardOracle.passed) {
+      const findingCodes = [...new Set(dashboardOracle.findings.map((item) => item.code))].sort();
+      const error = new Error(`External dashboard oracle rejected evidence: ${findingCodes.join(',')}`);
+      error.code = 'external_dashboard_oracle_rejected';
+      error.details = {
+        findingCodes,
+        findingCount: dashboardOracle.findings.length,
+        consoleEntryCount: dashboardEvidence.consoleEntries.length,
+        networkEntryCount: dashboardEvidence.networkEntries.length,
+        actionableConsoleErrorCount: dashboardEvidence.consoleEntries.filter(
+          (entry) => entry.classification.disposition === 'actionable_failure',
+        ).length,
+        actionableNetworkFailureCount: dashboardEvidence.networkEntries.filter(
+          (entry) => entry.classification.disposition === 'actionable_failure',
+        ).length,
+        expectedLifecycleNoiseCount: [...dashboardEvidence.consoleEntries, ...dashboardEvidence.networkEntries]
+          .filter((entry) => entry.classification.disposition === 'expected_lifecycle_noise').length,
       };
       throw error;
     }
@@ -1041,8 +1203,8 @@ async function executeExternalVantageProbe({
       concurrencyIdentity: concurrency?.identity ?? null,
       serverPhysicalBrowserLaunchDelta,
       serviceBrowserObservations: [initialServiceBrowser, reconnectServiceBrowser],
-      consoleEntries,
-      networkEntries,
+      consoleEntries: dashboardEvidence.consoleEntries,
+      networkEntries: dashboardEvidence.networkEntries,
       performance,
       calibration,
       actions: mode === 'calibration'
@@ -1070,9 +1232,11 @@ async function executeExternalVantageProbe({
       },
       artifacts: requireCaptureArtifacts(artifactReceipts(outputDir)),
       oracle: {
-        passed: oracle.passed,
+        passed: oracle.passed && dashboardOracle.passed,
         reportSha256: canonicalHash(oracle),
         findingCodes: oracle.findings.map((item) => item.code),
+        dashboardReportSha256: canonicalHash(dashboardOracle),
+        dashboardFindingCodes: dashboardOracle.findings.map((item) => item.code),
       },
     };
     const safeReceiptBody = sanitizeReceiptSecrets(receiptBody, env);
@@ -1084,7 +1248,8 @@ async function executeExternalVantageProbe({
     writeFileSync(join(outputDir, 'receipt.json'), serialized, { mode: 0o600 });
     return receipt;
   } catch (error) {
-    writeSanitizedHar(networkEntries, join(outputDir, 'network.redacted.har'));
+    const dashboardEvidence = normalizeExternalDashboardEvidence({ consoleEntries, networkEntries });
+    writeSanitizedHar(dashboardEvidence.networkEntries, join(outputDir, 'network.redacted.har'));
     const pendingRequests = [...pendingNetworkRequests.values()]
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
     writeFileSync(
@@ -1095,7 +1260,10 @@ async function executeExternalVantageProbe({
         completedNetworkRequestCount: networkEntries.length,
         failedNetworkRequestCount: requestFailureCounter.count,
         pendingNetworkRequests: pendingRequests,
-        consoleEntries,
+        consoleEntries: dashboardEvidence.consoleEntries,
+        networkFailures: dashboardEvidence.networkEntries.filter(
+          (entry) => entry.classification.disposition !== 'success',
+        ),
       }, null, 2)}\n`,
       { mode: 0o600 },
     );
@@ -1125,6 +1293,14 @@ async function executeExternalVantageProbe({
       ),
       websocketObservationCount: urlEvidence.filter((entry) => entry.role === 'websocket_endpoint').length,
       consoleEntryCount: consoleEntries.length,
+      actionableConsoleErrorCount: dashboardEvidence.consoleEntries.filter(
+        (entry) => entry.classification.disposition === 'actionable_failure',
+      ).length,
+      actionableNetworkFailureCount: dashboardEvidence.networkEntries.filter(
+        (entry) => entry.classification.disposition === 'actionable_failure',
+      ).length,
+      expectedLifecycleNoiseCount: [...dashboardEvidence.consoleEntries, ...dashboardEvidence.networkEntries]
+        .filter((entry) => entry.classification.disposition === 'expected_lifecycle_noise').length,
       totalResolutionObservationCount: handoffResolutions.length,
     };
     throw error;
@@ -1332,6 +1508,7 @@ function redirectChainLength(request) {
 function attachCapture(page, capture) {
   page.on('console', (message) => {
     capture.consoleEntries.push({
+      entryId: `console-${capture.consoleEntries.length + 1}`,
       type: message.type(),
       textSha256: hashText(message.text()),
       timestamp: new Date().toISOString(),
@@ -1356,6 +1533,7 @@ function attachCapture(page, capture) {
   });
   page.on('requestfailed', (request) => {
     const pending = capture.pendingNetworkRequests.get(request);
+    const completedAt = new Date().toISOString();
     capture.pendingNetworkRequests.delete(request);
     capture.requestFailureCounter.count += 1;
     capture.networkEntries.push({
@@ -1365,8 +1543,13 @@ function attachCapture(page, capture) {
       method: request.method(),
       resourceType: request.resourceType(),
       requestAction: pending?.requestAction ?? safeRequestAction(request),
+      pathClass: pending?.pathClass ?? safeNetworkPathClass(request.url()),
       status: 0,
-      timestamp: new Date().toISOString(),
+      timestamp: completedAt,
+      startedAt: pending?.startedAt ?? completedAt,
+      completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(pending?.startedAt ?? completedAt)),
+      redirectCount: redirectChainLength(request),
       failureTextSha256: hashText(request.failure()?.errorText ?? 'unknown'),
     });
   });
@@ -1374,6 +1557,7 @@ function attachCapture(page, capture) {
     const request = response.request();
     const pending = capture.pendingNetworkRequests.get(request);
     capture.pendingNetworkRequests.delete(request);
+    const completedAt = new Date().toISOString();
     const entry = {
       entryId: `network-${capture.networkEntries.length + 1}`,
       url: redactOperatorUrl(response.url()),
@@ -1381,8 +1565,13 @@ function attachCapture(page, capture) {
       method: request.method(),
       resourceType: request.resourceType(),
       requestAction: pending?.requestAction ?? safeRequestAction(request),
+      pathClass: pending?.pathClass ?? safeNetworkPathClass(response.url()),
       status: response.status(),
-      timestamp: new Date().toISOString(),
+      timestamp: completedAt,
+      startedAt: pending?.startedAt ?? completedAt,
+      completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(pending?.startedAt ?? completedAt)),
+      redirectCount: redirectChainLength(request),
     };
     capture.networkEntries.push(entry);
     const location = response.headers().location;
@@ -2057,8 +2246,8 @@ function writeSanitizedHar(networkEntries, path) {
       version: '1.2',
       creator: { name: 'agent-browser-p158-external-vantage', version: '1' },
       entries: networkEntries.map((entry) => ({
-        startedDateTime: entry.timestamp,
-        time: 0,
+        startedDateTime: entry.startedAt ?? entry.timestamp,
+        time: entry.durationMs ?? 0,
         request: {
           method: entry.method,
           url: entry.url,
@@ -2081,8 +2270,16 @@ function writeSanitizedHar(networkEntries, path) {
           bodySize: -1,
         },
         cache: {},
-        timings: { send: 0, wait: 0, receive: 0 },
-        comment: `resourceType=${entry.resourceType}; requestAction=${entry.requestAction ?? 'none'}; urlSha256=${entry.urlSha256}`,
+        timings: { send: 0, wait: entry.durationMs ?? 0, receive: 0 },
+        comment: [
+          `resourceType=${entry.resourceType}`,
+          `pathClass=${entry.pathClass ?? 'unknown'}`,
+          `requestAction=${entry.requestAction ?? 'none'}`,
+          `urlSha256=${entry.urlSha256}`,
+          `classification=${entry.classification?.disposition ?? 'unclassified'}`,
+          `classificationCode=${entry.classification?.code ?? 'unclassified'}`,
+          `completedAt=${entry.completedAt ?? entry.timestamp}`,
+        ].join('; '),
       })),
     },
   };

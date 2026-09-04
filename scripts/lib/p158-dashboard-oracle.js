@@ -464,6 +464,29 @@ function auditHandoffUrls(fixture, findings) {
   }
 }
 
+function isExpectedLifecycleNoise(entry, evidenceType) {
+  if (entry.classification?.disposition !== 'expected_lifecycle_noise') return false;
+  if (evidenceType !== 'network') return false;
+  if (entry.classification.code === 'guacamole_active_connection_observation_absent') {
+    return entry.status === 404 &&
+      /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i
+        .test(String(entry.url ?? ''));
+  }
+  if (entry.classification.code === 'guacamole_token_refresh_recovered') {
+    return entry.status === 403 &&
+      /\/guacamole\/api\/tokens$/i.test(String(entry.url ?? '')) &&
+      entry.classification.recoveryEvidenceEntryIds?.length > 0;
+  }
+  if (entry.classification.code === 'page_or_reconnect_request_cancelled') {
+    return entry.status === null && typeof entry.error === 'string' &&
+      (/\/guacamole\/tunnel$/i.test(String(entry.url ?? '')) ||
+        entry.pathClass === 'dashboard_auth_status' ||
+        (/\/guacamole\/api\/tokens$/i.test(String(entry.url ?? '')) &&
+          entry.classification.recoveryEvidenceEntryIds?.length > 0));
+  }
+  return false;
+}
+
 function auditStreamAndUi(fixture, findings) {
   const stream = fixture.stream ?? {};
   const stale = stream.streamRevision < stream.snapshotRevision || stream.authoritativeReady !== true;
@@ -489,7 +512,8 @@ function auditStreamAndUi(fixture, findings) {
     }
   }
   for (const entry of fixture.consoleEntries ?? []) {
-    if (['error', 'exception'].includes(String(entry.level).toLowerCase())) {
+    const expectedLifecycleNoise = isExpectedLifecycleNoise(entry, 'console');
+    if (!expectedLifecycleNoise && ['error', 'exception'].includes(String(entry.level).toLowerCase())) {
       addFinding(findings, {
         code: 'console_error', field: 'consoleEntries', recordIds: [entry.entryId],
         message: 'Dashboard console capture contains an error.', expected: 'no errors', observed: entry.message ?? entry.level,
@@ -497,7 +521,9 @@ function auditStreamAndUi(fixture, findings) {
     }
   }
   for (const entry of fixture.networkEntries ?? []) {
-    if (entry.success === false || finite(entry.status, 200) >= 400) {
+    const expectedLifecycleNoise = isExpectedLifecycleNoise(entry, 'network');
+    if (!expectedLifecycleNoise &&
+        (entry.success === false || entry.status === null || finite(entry.status, 200) >= 400)) {
       addFinding(findings, {
         code: 'network_failure', field: 'networkEntries', recordIds: [entry.entryId],
         message: 'Dashboard network capture contains a failed request.', expected: 'successful request', observed: entry.status ?? entry.error ?? false,

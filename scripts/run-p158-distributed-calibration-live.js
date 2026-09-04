@@ -11,6 +11,7 @@ import {
   startDistributedC01Calibration,
 } from './lib/p158-distributed-calibration.js';
 import { canonicalHash } from './run-p158-external-vantage.js';
+import { createP158E2AuthenticatedFetch } from './lib/p158-w6-evidence-assembler.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PREPARATION_PATH = 'distributed-c01/preparation.json';
@@ -372,6 +373,16 @@ function takeOption(args, name, { multiple = false } = {}) {
   return values[0];
 }
 
+function takeOptionalOption(args, name) {
+  const index = args.indexOf(name);
+  if (index < 0) return null;
+  if (index + 1 >= args.length) fail('missing_cli_option', `${name} requires a value`);
+  const value = args[index + 1];
+  args.splice(index, 2);
+  if (args.includes(name)) fail('duplicate_cli_option', `${name} may be supplied only once`);
+  return value;
+}
+
 function realClock() {
   return { wallNow: () => new Date().toISOString(), monotonicNow: () => Number(process.hrtime.bigint()) };
 }
@@ -397,17 +408,40 @@ export async function runCli(argv, dependencies = {}) {
   const args = [...argv];
   const command = args.shift();
   const runRoot = takeOption(args, '--run-root');
+  const e2AuthEnvPath = takeOptionalOption(args, '--e2-auth-env');
   const clock = dependencies.clock ?? realClock();
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const baseFetch = dependencies.fetch ?? globalThis.fetch;
+  const authEnvironment = dependencies.env ?? process.env;
+  const environmentAuthRequested = [
+    'P158_DEV_DASHBOARD_USERNAME', 'P158_DEV_DASHBOARD_PASSWORD',
+    'AGENT_BROWSER_DASHBOARD_CODEX_USERNAME', 'AGENT_BROWSER_DASHBOARD_CODEX_PASSWORD',
+    'AGENT_BROWSER_DASHBOARD_ADMIN_USERNAME', 'AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD',
+  ].some((name) => typeof authEnvironment[name] === 'string' && authEnvironment[name].length > 0);
+  const authenticatedFetch = (targets) => {
+    if (!e2AuthEnvPath && !environmentAuthRequested) return baseFetch;
+    const e2 = targets.find((target) => target.environmentId === 'E2');
+    if (!e2) fail('development_environment_mismatch', 'E2 target is required for authenticated calibration');
+    return createP158E2AuthenticatedFetch({
+      fetch: baseFetch,
+      authEnvPath: e2AuthEnvPath,
+      env: authEnvironment,
+      dashboardOrigin: e2.dashboardUrl,
+      protectedOrigins: [e2.dashboardUrl, e2.serviceUrl],
+    });
+  };
   let result;
   if (command === 'prepare') {
     const config = await readJsonFile(takeOption(args, '--config'), 'config');
     if (args.length) fail('unknown_cli_option', `Unknown arguments: ${args.join(' ')}`);
-    result = await prepareLiveDistributedCalibration({ config, runRoot, fetch: fetchImpl, clock });
+    result = await prepareLiveDistributedCalibration({
+      config, runRoot, fetch: authenticatedFetch(config.developmentTargets), clock,
+    });
   } else if (command === 'start') {
     if (args.length) fail('unknown_cli_option', `Unknown arguments: ${args.join(' ')}`);
+    const preparation = await readJson(createFileArtifactStore(assertRunRoot(runRoot)), PREPARATION_PATH);
     result = await startLiveDistributedCalibration({
-      runRoot, fetch: fetchImpl, clock, scheduler: dependencies.scheduler ?? realScheduler(),
+      runRoot, fetch: authenticatedFetch(preparation.developmentTargets), clock,
+      scheduler: dependencies.scheduler ?? realScheduler(),
     });
   } else if (command === 'finalize') {
     const aggregate = await readJsonFile(takeOption(args, '--external-aggregate'), 'external aggregate');

@@ -8,6 +8,10 @@ import {
   P158EvidenceCollectorError,
   runP158EvidenceCollector,
 } from './lib/p158-evidence-collector.js';
+import { canonicalCandidateDigest } from './lib/p158-campaign-preparation.js';
+import { sha256 } from './lib/p158-campaign-controller.js';
+import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
+import { assembleP158W6LiveBindings } from './lib/p158-w6-evidence-assembler.js';
 
 const args = process.argv.slice(2);
 const repoRoot = new URL('..', import.meta.url).pathname;
@@ -32,12 +36,14 @@ function printHelp() {
   process.stdout.write(`Usage:
   node scripts/p158-evidence-collector.js --aggregate-only
   node scripts/p158-evidence-collector.js --config <path>
+  node scripts/p158-evidence-collector.js --config <path> --assemble-live-bindings
   node scripts/p158-evidence-collector.js --config <path> --freeze --run-root <absolute-path> \\
     --live-hook-manifest <path>
 
 The default config mode is a provider-free, filesystem-read-only dry run. The
 --freeze flag is required before campaign evidence is persisted. This command
-never starts campaign execution.
+never starts campaign execution. --assemble-live-bindings constructs the exact
+54 zero-effect case adapters and 24 source-sealed hook bindings.
 `);
 }
 
@@ -51,9 +57,12 @@ try {
   const configPath = takeOption('--config');
   const runRoot = takeOption('--run-root');
   const liveHookManifestPath = takeOption('--live-hook-manifest');
+  const assembleLiveBindings = takeFlag('--assemble-live-bindings');
   if (args.length > 0) throw new Error(`Unexpected arguments: ${args.join(' ')}`);
   if (aggregateOnly) {
-    if (freeze || configPath || runRoot || liveHookManifestPath) throw new Error('--aggregate-only cannot be combined with config or freeze options');
+    if (freeze || configPath || runRoot || liveHookManifestPath || assembleLiveBindings) {
+      throw new Error('--aggregate-only cannot be combined with config, assembly, or freeze options');
+    }
     const aggregate = buildP158AggregateFixtureManifest({ repoRoot });
     process.stdout.write(`${JSON.stringify({
       schemaVersion: 'agent-browser.p158-fixture-aggregate-report.v1',
@@ -66,14 +75,56 @@ try {
   }
   if (!configPath) throw new Error('--config is required unless --aggregate-only is used');
   if (freeze && !runRoot) throw new Error('--freeze requires --run-root');
-  if (freeze && !liveHookManifestPath) throw new Error('--freeze requires --live-hook-manifest');
+  if (freeze && !liveHookManifestPath && !assembleLiveBindings) {
+    throw new Error('--freeze requires --live-hook-manifest or --assemble-live-bindings');
+  }
   if (!freeze && runRoot) throw new Error('--run-root is accepted only with --freeze');
   if (!freeze && liveHookManifestPath) throw new Error('--live-hook-manifest is accepted only with --freeze');
+  if (liveHookManifestPath && assembleLiveBindings) {
+    throw new Error('--live-hook-manifest and --assemble-live-bindings are mutually exclusive');
+  }
   const absoluteConfigPath = resolve(configPath);
   const config = JSON.parse(readFileSync(absoluteConfigPath, 'utf8'));
-  const liveHookManifest = liveHookManifestPath
+  let liveHookManifest = liveHookManifestPath
     ? JSON.parse(readFileSync(resolve(liveHookManifestPath), 'utf8'))
     : undefined;
+  let adapters;
+  let liveBindingSummary = null;
+  let liveAssembly = null;
+  if (assembleLiveBindings) {
+    const aggregate = buildP158AggregateFixtureManifest({ repoRoot });
+    const registry = JSON.parse(readFileSync(resolve(
+      repoRoot, 'docs/dev/contracts/p158-historical-failure-registry.v1.json',
+    ), 'utf8'));
+    const schedule = compileP158ExecutionSchedule({ registry, seed: config.seed });
+    const candidate = {
+      ...structuredClone(config.candidate), runId: config.runId,
+      aggregateFixtureManifestSha256: aggregate.sha256,
+    };
+    candidate.candidateSha256 = canonicalCandidateDigest(candidate);
+    const assembled = assembleP158W6LiveBindings({
+      schedule, candidate, aggregate, runId: config.runId,
+      capturedAt: config.aggregateCapturedAt,
+    });
+    liveHookManifest = assembled.liveHookManifest;
+    adapters = assembled.adapters;
+    liveBindingSummary = {
+      adapterCount: adapters.length,
+      hookCount: liveHookManifest.hookBindings.length,
+      concreteAdapterCount: liveHookManifest.adapterBindings.filter((entry) =>
+        entry.mode === 'concrete_live').length,
+      blockedAdapterCount: liveHookManifest.adapterBindings.filter((entry) =>
+        entry.mode === 'explicit_blocked').length,
+    };
+    liveAssembly = {
+      schemaVersion: 'agent-browser.p158-w6-live-assembly.v1',
+      collectorConfig: structuredClone(config),
+      collectorConfigSha256: sha256(config),
+      liveHookManifest: structuredClone(liveHookManifest),
+      aggregateManifest: structuredClone(aggregate.manifest),
+      aggregateSha256: aggregate.sha256,
+    };
+  }
   const report = await runP158EvidenceCollector({
     config,
     repoRoot,
@@ -81,6 +132,7 @@ try {
     freeze,
     runRoot,
     liveHookManifest,
+    adapters,
     clock: config.dryRunFrozenAt && !freeze
       ? {
           wallNow: () => config.dryRunFrozenAt,
@@ -88,7 +140,7 @@ try {
         }
       : undefined,
   });
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ...report, liveBindingSummary, liveAssembly }, null, 2)}\n`);
 } catch (error) {
   const payload = {
     success: false,

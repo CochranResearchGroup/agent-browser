@@ -613,4 +613,27 @@ await runTest('CLI fails closed before freeze when no adapter module is installe
   }
 });
 
+await runTest('CLI assembles the exact source-owned W6 adapter and hook set', async () => {
+  const context = makeContext('cli-assembled');
+  try {
+    writeFileSync(context.configPath, `${JSON.stringify(context.config, null, 2)}\n`);
+    const result = spawnSync(process.execPath, [
+      join(repoRoot, 'scripts/p158-evidence-collector.js'), '--config', context.configPath,
+      '--assemble-live-bindings',
+    ], { cwd: repoRoot, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.mode, 'dry_run');
+    assert.equal(report.liveBindingSummary.adapterCount, 54);
+    assert.equal(report.liveBindingSummary.hookCount, 24);
+    assert.match(report.liveHookManifestSha256, /^[a-f0-9]{64}$/u);
+    assert.equal(report.liveAssembly.liveHookManifest.adapterBindings.length, 54);
+    assert.equal(report.liveAssembly.liveHookManifest.hookBindings.length, 24);
+    assert.equal(report.liveAssembly.aggregateSha256, context.config.expectedAggregateSha256);
+    assert.doesNotMatch(JSON.stringify(report.liveAssembly), /password|credential|cookie|secret/iu);
+  } finally {
+    context.cleanup();
+  }
+});
+
 process.stdout.write('P158 evidence collector provider-free self-test passed\n');

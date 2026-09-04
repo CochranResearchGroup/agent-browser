@@ -67,12 +67,17 @@ function controllerHarness() {
   let scheduledTeardown = {};
   let startCount = 0;
   let sealCount = 0;
+  let snapshotCount = 0;
   const artifacts = [];
   return {
     get startCount() { return startCount; },
     get sealCount() { return sealCount; },
-    snapshot: () => ({ state, results: structuredClone(results), scheduledTeardown: structuredClone(scheduledTeardown),
-      evidence: { artifacts: structuredClone(artifacts) } }),
+    get snapshotCount() { return snapshotCount; },
+    snapshot: () => {
+      snapshotCount += 1;
+      return { state, results: structuredClone(results), scheduledTeardown: structuredClone(scheduledTeardown),
+        evidence: { artifacts: structuredClone(artifacts) } };
+    },
     startExecution: async () => { assert.equal(state, 'frozen'); state = 'executing'; startCount += 1; },
     recordAttempt: async (result) => {
       assert.equal(results.some((entry) => entry.attemptId === result.attemptId), false);
@@ -311,6 +316,8 @@ await runTest('executes once, crosses future 20m 8h and 24h barriers, tears down
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(controller.startCount, 1);
   assert.equal(controller.sealCount, 1);
+  assert.equal(controller.snapshotCount, 4,
+    'W9 orchestration must take a constant four controller snapshots on the clean path');
   assert.equal(controller.snapshot().results.length, 835);
   assert.equal(drivers.calls.length, 15395);
   assert.equal(new Set(drivers.calls.map((call) => call.actionId)).size, drivers.calls.length);

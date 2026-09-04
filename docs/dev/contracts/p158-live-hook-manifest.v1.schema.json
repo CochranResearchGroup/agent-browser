@@ -22,7 +22,7 @@
     "candidateSha256": { "$ref": "#/$defs/sha256" },
     "hookBindings": {
       "type": "array",
-      "minItems": 0,
+      "minItems": 24,
       "maxItems": 24,
       "items": { "$ref": "#/$defs/hookBinding" }
     },

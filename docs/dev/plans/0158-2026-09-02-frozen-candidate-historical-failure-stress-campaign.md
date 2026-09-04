@@ -3768,13 +3768,18 @@ aggregate: the first client could leave, the delayed shared viewer recovered,
 and the same durable handoff remained usable.
 
 C01 workflow `33920919559` completed the full synchronized 20-minute external
-calibration window at the exact frozen commit `928b38bb`. Both distinct
+component of the calibration window at the exact frozen commit `928b38bb`.
+Both distinct
 off-host clients passed all 30 actions, including five durable-handoff
 reconnects each. The aggregate receipt is `success=true`; both clients used
 zero retries and attempted no repair inside the run. The evidence records zero
 internal URL leaks, zero duplicate server browser launches, correct retained
 identity, successful DNS, TLS, cookie, WebSocket, iframe, and reconnect checks,
-and a passing visual oracle with no finding codes.
+and a passing visual oracle with no finding codes. This is retained as
+successful external many-to-many and identity-continuity evidence, not a
+complete C01 result: the simultaneous local half of 500 one-shot Service reads
+across 25 agent identities did not run and cannot be reconstructed after the
+shared window.
 
 The passing oracle did not suppress diagnostic noise. The human-paced client
 recorded 2,286 network entries, 159 console entries, four HTTP 404 responses,
@@ -3786,10 +3791,86 @@ classification; do not infer that the response codes are harmless merely
 because C01 passed, and do not repair them during the frozen campaign unless a
 later sequence cannot complete.
 
-Revised next action: bind the C01 receipts into the W6 calibration artifacts,
-finish the five-surface live journal calibration, seal the exact E1 and E2
-environment identities, and write the zero-start campaign freeze. Only after
-that checkpoint may W7 execution begin. Continue recording failures without
-repair by default. If a defect prevents sequence completion, pause only that
-sequence, diagnose and repair the blocker, re-freeze the candidate as required,
-and resume the active Plan 0158 goal.
+Artifact correlation classifies the four status-zero requests as canceled
+page and reconnect work and all nine HTTP 404 responses as stale Guacamole
+active-connection observations around setup, reconnect, or teardown. Three
+Guacamole token HTTP 403 responses recovered without losing identity. The 57
+HTTP 504 responses are different: they span session-tab, runtime-health,
+legacy-session, Service status and resource, Service contract, and browser
+capability-registry reads throughout the 20-minute window. All but one URL
+identity later returned success, but this remains actionable dashboard
+reliability degradation.
+
+The receipt also contains 316 console errors. Four otherwise unexplained
+message hashes account for 247 of them, but the redacted evidence cannot
+classify their causes. Captured console and network arrays were not passed into
+the external handoff oracle, and the captured console shape differs from the
+dashboard oracle's input contract. The oracle therefore returned clean despite
+the error traffic. Classify this workflow `complete_degraded` and repair the
+oracle and evidence shape before repeating the synchronized full C01.
+
+Revised next action: add the missing source-owned five-surface live journal
+calibrator, W6 evidence projection and live-adapter assembler, and authenticated
+E2 calibration preparation seam. Repair the external oracle's console and
+network evidence wiring. After provider-free validation and development-only
+installation, run one fresh synchronized C01 with both the external clients and
+the 500-command local half, finalize its calibration artifacts, seal exact E1
+and E2 identities, and write the zero-start campaign freeze. Only after that
+checkpoint may W7 execution begin.
+
+### W6 Calibration Evidence And Harness Repair
+
+State transition: `w6_external_component_complete_degraded ->
+w6_repaired_candidate_ready_for_publication`.
+
+Acceptance state: W6 remains open. No replacement development candidate has
+yet been installed from this source state, no fresh synchronized C01 has run,
+and no zero-start campaign freeze exists.
+
+The external runner now normalizes its console and network captures into the
+dashboard oracle contract and writes a redacted oracle artifact. Unexplained
+console errors, HTTP failures, and transport failures fail the oracle. Narrow
+Guacamole setup, reconnect, and teardown noise remains recorded under explicit
+classifications. Replaying workflow `33920919559` now rejects both client
+receipts and preserves the exact 316 console errors and 57 HTTP 504 responses
+that the earlier oracle omitted.
+
+The new five-surface journal calibrator no longer treats a request-parser
+rejection as a browser launch failure. Its live inducer invokes the exact
+installed development generation with a deliberately unsupported engine. This
+reaches `BrowserManager::launch` and fails before any browser process spawn.
+The calibrator then requires two stable readbacks of exactly one matching
+`browser_manager` failure followed by exactly one authenticated observation
+for each of the other four named surfaces. The malformed-line check remains
+isolated from the live journal and is candidate-bound.
+
+The W6 evidence assembler now supplies exactly 54 source-bound case adapters
+and 24 hook bindings. Cases without a separately frozen phase-specific live
+bundle remain honest `explicit_blocked` zero-effect adapters. It also projects
+two downloaded external receipts and their complete oracle reports into the
+W6 external-vantage contract. The distributed C01 driver can authenticate E2
+from ephemeral environment material or a private nonsymlink file without
+serializing credentials or its session cookie.
+
+The W9 provider-free harness delay was an implementation defect, not an epoch
+wait. The 835-attempt run cloned its growing controller graph 842 times and
+rescanned 15,955 logging expectations for every attempt. Indexed lookups and
+four bounded snapshots reduce the focused run from about 200 seconds to about
+20 seconds while preserving interruption, safety-stop, blocker propagation,
+receipt, harvest, and evidence-sealing behavior.
+
+Validation at this checkpoint is green:
+
+- the full `pnpm test:p158-harness` suite passes under a directly observed
+  process;
+- the W9 focused test passes with exactly four controller snapshots;
+- release fixture, Service API and MCP parity, generated client contract, and
+  client type gates pass; and
+- `git diff --check` passes.
+
+Next action: commit this repaired source state, build and install a fresh
+development candidate, run development doctor and launch smoke, and execute the
+candidate-bound five-surface live journal calibration. Then schedule a fresh
+synchronized C01 far enough ahead to start the 500-command local half and both
+external viewers inside the same 20-minute window. Finalize those artifacts,
+seal E1 and E2, and write the zero-start campaign freeze before W7.

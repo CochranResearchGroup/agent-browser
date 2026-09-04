@@ -536,9 +536,12 @@ export async function runP158W9Phase({
   assertP158W9DevelopmentTarget(target);
   const bindings = assertAdapterBindings(adapterBindings);
   assertLoggingHarvest(loggingHarvest);
+  const expectationAttemptIds = new Set(
+    Array.isArray(loggingExpectations) ? loggingExpectations.map((entry) => entry.attemptId) : [],
+  );
   if (!Array.isArray(loggingExpectations) || loggingExpectations.some((entry) => entry.phaseId !== 'W9') ||
       schedule.attempts.filter((entry) => P158_W9_CASE_IDS.includes(entry.caseId))
-        .some((attempt) => !loggingExpectations.some((entry) => entry.attemptId === attempt.attemptId))) {
+        .some((attempt) => !expectationAttemptIds.has(attempt.attemptId))) {
     fail('logging_request_expectations_incomplete', 'W9 requires its exact pre-freeze request envelopes');
   }
   validateWindowOrder(caseWindows);
@@ -560,11 +563,16 @@ export async function runP158W9Phase({
     hookBindings: drivers.hookBindings, loggingHarvestBinding });
   const store = artifactStore ?? createFileArtifactStore(runRoot);
   const plan = buildP158W9ActionPlan(schedule);
-  const expectationByAction = new Map(loggingExpectations
-    .filter((entry) => entry.actionId !== null).map((entry) => [entry.actionId, entry]));
+  const expectationByAction = new Map();
+  const expectationsByAttempt = new Map();
+  for (const expectation of loggingExpectations) {
+    if (!expectationsByAttempt.has(expectation.attemptId)) expectationsByAttempt.set(expectation.attemptId, []);
+    expectationsByAttempt.get(expectation.attemptId).push(expectation);
+    if (expectation.actionId !== null) expectationByAction.set(expectation.actionId, expectation);
+  }
   for (const entry of plan) {
     const binding = bindings.get(entry.attempt.caseId);
-    const attemptExpectations = loggingExpectations.filter((item) => item.attemptId === entry.attempt.attemptId);
+    const attemptExpectations = expectationsByAttempt.get(entry.attempt.attemptId) ?? [];
     if (binding.mode === 'concrete_live') {
       const actionIds = entry.actions.map((action) => action.actionId).sort();
       const observedIds = attemptExpectations.map((item) => item.actionId).sort();
@@ -594,7 +602,17 @@ export async function runP158W9Phase({
     verifyCheckpoint(phaseStart);
     if (phaseStart.sourceDigest !== sourceDigest) fail('source_config_mutated', 'W9 inputs changed across process restart');
   }
-  if (controller.snapshot().state === 'frozen') await controller.startExecution();
+  const initialControllerSnapshot = controller.snapshot();
+  const recordedAttemptIds = new Set(initialControllerSnapshot.results.map((result) => result.attemptId));
+  if (initialControllerSnapshot.state === 'frozen') await controller.startExecution();
+  const recordAttemptOnce = async (terminal) => {
+    if (recordedAttemptIds.has(terminal.attemptId)) return;
+    await controller.recordAttempt(terminal);
+    recordedAttemptIds.add(terminal.attemptId);
+    if (terminal.blocksDependents === true) {
+      for (const result of controller.snapshot().results) recordedAttemptIds.add(result.attemptId);
+    }
+  };
 
   const c01Concrete = bindings.get('C01').mode === 'concrete_live';
   const c01Actions = plan.filter((entry) => entry.attempt.caseId === 'C01').flatMap((entry) => entry.actions);
@@ -635,6 +653,9 @@ export async function runP158W9Phase({
       }
     } else verifyCheckpoint(c01Aggregate);
   }
+  const c01ReceiptByActionId = new Map(
+    (c01Aggregate?.actionReceipts ?? []).map((receipt) => [receipt.actionId, receipt]),
+  );
 
   for (const entry of plan) {
     const adapterBinding = bindings.get(entry.attempt.caseId);
@@ -658,10 +679,8 @@ export async function runP158W9Phase({
           repairAttempted: false, retryAttempted: false, garbageCollectionAttempted: false,
         });
       } else verifyCheckpoint(terminal);
-      if (!controller.snapshot().results.some((item) => item.attemptId === entry.attempt.attemptId)) {
-        await controller.recordAttempt(Object.fromEntries(Object.entries(terminal)
-          .filter(([key]) => key !== 'checkpointSha256')));
-      }
+      await recordAttemptOnce(Object.fromEntries(Object.entries(terminal)
+        .filter(([key]) => key !== 'checkpointSha256')));
       continue;
     }
     const barrier = plannedTime(caseWindows, entry);
@@ -711,7 +730,7 @@ export async function runP158W9Phase({
             causalRecords: actionCausalRecords(action, expectationByAction.get(action.actionId), uncertain, clock),
           }));
         } else {
-          const receipt = c01Aggregate.actionReceipts.find((item) => item.actionId === action.actionId);
+          const receipt = c01ReceiptByActionId.get(action.actionId);
           const validated = validateReceipt(action, receipt, target, schedule);
           terminalReceipts.push(await writeCheckpoint(store, terminalPath, {
             actionId: action.actionId, state: 'terminal', receipt: validated,
@@ -747,8 +766,7 @@ export async function runP158W9Phase({
         causalRecords: terminalReceipts.flatMap((receipt) => receipt.causalRecords ?? []),
       });
     } else verifyCheckpoint(terminal);
-    const recorded = controller.snapshot().results.some((item) => item.attemptId === entry.attempt.attemptId);
-    if (!recorded) await controller.recordAttempt(terminal);
+    await recordAttemptOnce(terminal);
   }
 
   for (const caseId of ['C01', 'C04', 'C05']) {
@@ -770,7 +788,7 @@ export async function runP158W9Phase({
     );
     teardown = await writeCheckpoint(store, teardownPath, { state: 'terminal', receipt });
   } else verifyCheckpoint(teardown);
-  if (!controller.snapshot().scheduledTeardown?.resultState) {
+  if (!initialControllerSnapshot.scheduledTeardown?.resultState) {
     await controller.recordScheduledTeardown({
       resultState: teardown.receipt.state === 'passed' ? 'passed' : 'new_product_failure',
       effectState: teardown.receipt.state === 'passed' ? 'verified_effect' : 'effect_uncertain',
@@ -827,10 +845,11 @@ export async function runP158W9Phase({
       sourceSha256: loggingHarvest.sourceSha256, observedAt: clock.wallNow(),
     });
     try {
-      const terminalResults = clone(controller.snapshot().results);
+      const controllerSnapshot = controller.snapshot();
+      const terminalResults = clone(controllerSnapshot.results);
       const receipt = validateLoggingHarvestReceipt(await loggingHarvest.execute({
         schedule: clone(schedule), target: clone(target), adapterBindings: clone(adapterBindings),
-        controllerSnapshot: clone(controller.snapshot()), sourceDigest, terminalResults,
+        controllerSnapshot: clone(controllerSnapshot), sourceDigest, terminalResults,
         causalEnvelopes: terminalResults.flatMap((result) => result.causalEnvelopes ?? []),
         checkpointRecords: terminalResults.flatMap((result) => result.causalRecords ?? []),
         registerArtifact: (artifact) => controller.writeArtifact(artifact),
@@ -849,8 +868,12 @@ export async function runP158W9Phase({
   validateLoggingHarvestReceipt(harvestTerminal.receipt, target, schedule, loggingHarvest);
   // A valid capture-gap receipt is terminal evidence, not a harness failure.
   // W10 owns classification of explicitly missing product surfaces.
-  if (controller.snapshot().state === 'executing') await controller.finishExecution();
-  if (controller.snapshot().state === 'execution_terminal') await controller.sealEvidence();
+  let controllerState = controller.snapshot().state;
+  if (controllerState === 'executing') {
+    await controller.finishExecution();
+    controllerState = 'execution_terminal';
+  }
+  if (controllerState === 'execution_terminal') await controller.sealEvidence();
   return {
     state: controller.snapshot().state, sourceDigest, safetyStop: stopped,
     planAttemptCount: plan.length, evidenceAuditSha256: audit.checkpointSha256,

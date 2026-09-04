@@ -411,4 +411,41 @@ await runTest('supports provider-free prepare, start, and finalize CLI phases', 
   assert.deepEqual(output.lines.map((line) => JSON.parse(line).command), ['prepare', 'start', 'finalize']);
 }));
 
+await runTest('prepares E2 through an ephemeral auth file without serializing credentials', () => withRunRoot(async (runRoot) => {
+  const config = makeConfig();
+  const time = clockHarness();
+  const output = { write() {} };
+  const configPath = join(runRoot, 'authenticated-input.json');
+  const authPath = join(runRoot, 'dashboard-auth.env');
+  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(authPath,
+    'P158_DEV_DASHBOARD_USERNAME=p158-user\nP158_DEV_DASHBOARD_PASSWORD=p158-secret\n',
+    { mode: 0o600 });
+  const calls = [];
+  const fetch = async (url, init = {}) => {
+    calls.push({ url, init: structuredClone(init) });
+    const parsed = new URL(url);
+    if (parsed.pathname === '/api/dashboard-auth/login') {
+      return { ok: true, status: 200, redirected: false, url,
+        headers: { get: (name) => name.toLowerCase() === 'set-cookie'
+          ? 'p158_session=opaque; Path=/; HttpOnly; Secure' : null },
+        json: async () => ({ authenticated: true }) };
+    }
+    return { ok: true, status: 200, redirected: false, url,
+      headers: { get: () => null },
+      json: async () => parsed.pathname === '/api/runtime/manifest'
+        ? manifest(config.candidate) : { success: true } };
+  };
+  await runCli([
+    'prepare', '--run-root', runRoot, '--config', configPath, '--e2-auth-env', authPath,
+  ], { fetch, clock: time.clock, stdout: output });
+  const loginCalls = calls.filter((call) => new URL(call.url).pathname === '/api/dashboard-auth/login');
+  assert.equal(loginCalls.length, 1);
+  const e2Calls = calls.filter((call) => ['https://service.p158.test', 'https://dashboard.p158.test']
+    .includes(new URL(call.url).origin) && new URL(call.url).pathname !== '/api/dashboard-auth/login');
+  assert(e2Calls.every((call) => call.init.headers.cookie === 'p158_session=opaque'));
+  const persisted = await readFile(join(runRoot, 'distributed-c01/preparation.json'), 'utf8');
+  assert.doesNotMatch(persisted, /p158-user|p158-secret|p158_session/u);
+}));
+
 process.stdout.write('P158 distributed live calibration driver test passed\n');

@@ -322,4 +322,97 @@ runTest('materializes the exact deterministic dense inventory and audits it clea
   assert.equal(auditDashboardFixture({ fixture: dense }).passed, true);
 });
 
+runTest('preserves explicit lifecycle noise while failing closed on unexplained transport evidence', () => {
+  const fixture = clone(fixtureSet.baseline);
+  fixture.fixtureId = 'external-evidence-classification';
+  fixture.consoleEntries = [{
+    entryId: 'console-warning',
+    level: 'warning',
+    message: `sha256:${'a'.repeat(64)}`,
+    timestamp: '2026-09-04T00:00:00.000Z',
+    classification: {
+      disposition: 'success',
+      code: 'non_error_console_entry',
+      recoveryEvidenceEntryIds: [],
+    },
+  }];
+  fixture.networkEntries = [{
+    entryId: 'network-lifecycle-404',
+    url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/activeConnection/connection/sharingProfiles',
+    status: 404,
+    error: null,
+    method: 'GET',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    startedAt: '2026-09-04T00:00:00.000Z',
+    completedAt: '2026-09-04T00:00:00.010Z',
+    durationMs: 10,
+    redirectCount: 0,
+    urlSha256: 'b'.repeat(64),
+    classification: {
+      disposition: 'expected_lifecycle_noise',
+      code: 'guacamole_active_connection_observation_absent',
+      recoveryEvidenceEntryIds: [],
+    },
+  }];
+  assertValid(validateMaterializedFixture, fixture, 'classified external dashboard evidence');
+  assert.equal(auditDashboardFixture({ fixture }).passed, true);
+
+  const unsupportedSuppression = clone(fixture);
+  unsupportedSuppression.consoleEntries = [{
+    entryId: 'console-error-with-unsupported-classification',
+    level: 'error',
+    message: `sha256:${'f'.repeat(64)}`,
+    timestamp: '2026-09-04T00:00:00.500Z',
+    classification: {
+      disposition: 'expected_lifecycle_noise',
+      code: 'unreviewed_console_suppression',
+      recoveryEvidenceEntryIds: [],
+    },
+  }];
+  assert.ok(auditDashboardFixture({ fixture: unsupportedSuppression }).findings.some(
+    (finding) => finding.code === 'console_error',
+  ));
+
+  fixture.consoleEntries.push({
+    entryId: 'console-unexplained-error',
+    level: 'error',
+    message: `sha256:${'c'.repeat(64)}`,
+    timestamp: '2026-09-04T00:00:01.000Z',
+    classification: {
+      disposition: 'actionable_failure',
+      code: 'unexplained_console_error',
+      recoveryEvidenceEntryIds: [],
+    },
+  });
+  fixture.networkEntries.push({
+    entryId: 'network-unexplained-transport',
+    url: 'https://external.example.test/api/session-tabs',
+    status: null,
+    error: `request-failure-sha256:${'d'.repeat(64)}`,
+    method: 'GET',
+    resourceType: 'fetch',
+    requestAction: null,
+    pathClass: 'dashboard_api',
+    startedAt: '2026-09-04T00:00:01.000Z',
+    completedAt: '2026-09-04T00:00:31.000Z',
+    durationMs: 30_000,
+    redirectCount: 0,
+    urlSha256: 'e'.repeat(64),
+    classification: {
+      disposition: 'actionable_failure',
+      code: 'unexplained_transport_failure',
+      recoveryEvidenceEntryIds: [],
+    },
+  });
+  assertValid(validateMaterializedFixture, fixture, 'actionable external dashboard evidence');
+  const report = auditDashboardFixture({ fixture });
+  assert.equal(report.passed, false);
+  assert.deepEqual(
+    [...new Set(report.findings.map((finding) => finding.code))].sort(),
+    ['console_error', 'network_failure'],
+  );
+});
+
 process.stdout.write('P158 dashboard oracle adversarial self-test passed\n');
