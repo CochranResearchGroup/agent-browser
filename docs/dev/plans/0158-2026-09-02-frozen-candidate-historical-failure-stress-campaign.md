@@ -3985,3 +3985,17 @@ whitespace checks pass. Revised next action: commit and publish these dashboard
 assets into the development candidate, rerun exact candidate doctor and the
 external readiness workflow, then proceed directly into synchronized C01 only
 if both external oracles are clean.
+
+The first post-publication readiness dispatch stopped before page access
+because activation had closed the retained tab. Explicitly reopening the same
+sealed handoff succeeded and required refreshing only its tab and target
+identity fields. The replacement human-paced probe passed. The slow probe had
+no actionable network failures and no CDP handshake errors, but its dashboard
+oracle still reported two Guacamole resource-load console errors. Inspection
+showed that the first normalization had correctly linked both console records
+to expected lifecycle network records. The audit's second normalization then
+discarded those explicit classifications. Normalization now preserves an
+existing classification and applies inference only to raw records. A direct
+double-normalization regression proves the recovered lifecycle classification
+survives the oracle boundary while an unclassified CDP handshake remains
+actionable.

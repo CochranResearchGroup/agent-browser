@@ -323,7 +323,7 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
     const status = Number.isInteger(numericStatus) && numericStatus >= 100 && numericStatus <= 599
       ? numericStatus
       : null;
-    const classification = classifyExternalNetworkEntry(entry, networkEntries);
+    const classification = entry.classification ?? classifyExternalNetworkEntry(entry, networkEntries);
     return {
       entryId: entry.entryId ?? `network-${index + 1}`,
       url: redactOperatorUrl(entry.url),
@@ -361,7 +361,7 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
       messageClass: entry.messageClass ?? null,
       locationPathClass: entry.locationPathClass ?? null,
       locationUrlSha256: entry.locationUrlSha256 ?? null,
-      classification: lifecycleNetworkEntry
+      classification: entry.classification ?? (lifecycleNetworkEntry
         ? {
             disposition: 'expected_lifecycle_noise',
             code: 'console_resource_failure_matches_expected_network_lifecycle',
@@ -369,7 +369,7 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
           }
         : level === 'error'
         ? { disposition: 'actionable_failure', code: 'unexplained_console_error', recoveryEvidenceEntryIds: [] }
-        : { disposition: 'success', code: 'non_error_console_entry', recoveryEvidenceEntryIds: [] },
+        : { disposition: 'success', code: 'non_error_console_entry', recoveryEvidenceEntryIds: [] }),
     };
   });
   return { consoleEntries: normalizedConsoleEntries, networkEntries: normalizedNetworkEntries };

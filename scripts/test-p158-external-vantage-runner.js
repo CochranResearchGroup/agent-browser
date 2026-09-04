@@ -914,6 +914,11 @@ assert.deepEqual(
   recoveredGuacamoleAsset.consoleEntries[0].classification.recoveryEvidenceEntryIds,
   ['network-guac-asset-cancelled'],
 );
+assert.deepEqual(
+  normalizeExternalDashboardEvidence(recoveredGuacamoleAsset),
+  recoveredGuacamoleAsset,
+  'normalized lifecycle classifications must survive the oracle normalization pass',
+);
 
 const unrecoveredCdpHandshake = normalizeExternalDashboardEvidence({
   consoleEntries: [{
