@@ -856,7 +856,11 @@ async function executeExternalVantageProbe({
         if (remainingMs > 0) await new Promise((resolvePromise) => setTimeout(resolvePromise, remainingMs));
         if (event.kind === 'dashboard_action') {
           const actionStartedMs = Date.now();
-          await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
+          if (paceProfile === 'human_controller') {
+            await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
+          } else {
+            await observerPacedObservation(page, paceProfile);
+          }
           calibration.actionCount += 1;
           calibration.events.push({
             ...event,
@@ -1138,8 +1142,17 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     30_000,
   );
   const readyAt = new Date().toISOString();
-  await resetSyntheticRemoteDocument(page, paceProfile === 'slow_concurrency' ? 900 : 300);
-  if (performHumanAction) await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
+  if (paceProfile === 'human_controller') {
+    await acquireSyntheticRemoteController(page);
+    await resetSyntheticRemoteDocument(page, 300);
+  }
+  if (performHumanAction) {
+    if (paceProfile === 'human_controller') {
+      await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
+    } else {
+      await observerPacedObservation(page, paceProfile);
+    }
+  }
   const screenshotPath = join(outputDir, `${label}.png`);
   const markerPath = join(outputDir, `${label}-pixel-marker.png`);
   const pixelHash = await waitForExpectedPixelMarker({
@@ -1555,6 +1568,35 @@ export async function resetSyntheticRemoteDocument(page, settleMs) {
   }
   await page.waitForTimeout(settleMs);
   return true;
+}
+
+export async function acquireSyntheticRemoteController(page) {
+  const takeoverResponse = page.waitForResponse((response) => {
+    try {
+      const request = response.request();
+      return new URL(response.url()).pathname === '/api/service/request'
+        && request.method() === 'POST'
+        && request.postDataJSON()?.action === 'service_controller_lease_takeover';
+    } catch {
+      return false;
+    }
+  }, { timeout: 15_000 });
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Take control', exact: true }).click();
+  const response = await takeoverResponse;
+  if (!response.ok()) {
+    throw new Error(`Controller lease takeover failed with HTTP ${response.status()}`);
+  }
+  await page.waitForTimeout(1_000);
+}
+
+export async function observerPacedObservation(page, profile) {
+  const delay = profile === 'slow_concurrency' ? 900 : 300;
+  await page.mouse.move(220, 180, { steps: 8 });
+  await page.waitForTimeout(delay);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(delay);
+  await page.keyboard.press('Shift+Tab');
 }
 
 export function syntheticRemoteResetFocusPoint(iframeBox) {

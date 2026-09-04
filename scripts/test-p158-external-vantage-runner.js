@@ -11,6 +11,7 @@ import {
   PINNED_PLAYWRIGHT_VERSION,
   aggregateExternalVantageReceipts,
   aggregateExternalVantageDirectory,
+  acquireSyntheticRemoteController,
   buildExternalCalibrationDescriptor,
   buildExternalCalibrationSchedule,
   canonicalHash,
@@ -20,6 +21,7 @@ import {
   findInternalUrlLeaks,
   handoffResolutionReadinessGaps,
   humanPacedObservation,
+  observerPacedObservation,
   projectHandoffResolution,
   pixelMarkerClipForIframe,
   remoteViewIframeClipObservation,
@@ -230,6 +232,40 @@ assert.deepEqual(
   ],
   'each simulated human action must focus the remote canvas and force the synthetic document to its attested origin',
 );
+const controllerEvents = [];
+const takeoverResponse = {
+  url: () => 'https://external.example.test/api/service/request',
+  request: () => ({
+    method: () => 'POST',
+    postDataJSON: () => ({ action: 'service_controller_lease_takeover' }),
+  }),
+  ok: () => true,
+  status: () => 200,
+};
+await acquireSyntheticRemoteController({
+  waitForResponse(predicate) {
+    assert.equal(predicate(takeoverResponse), true);
+    return Promise.resolve(takeoverResponse);
+  },
+  getByRole(role, options) {
+    return {
+      async click() { controllerEvents.push(`${role}:${options.name}`); },
+    };
+  },
+  async waitForTimeout() {},
+});
+assert.deepEqual(controllerEvents, ['button:Advanced', 'menuitem:Take control']);
+const observerEvents = [];
+await observerPacedObservation({
+  mouse: {
+    async move() { observerEvents.push('mouse:move'); },
+  },
+  keyboard: {
+    async press(key) { observerEvents.push(`keyboard:${key}`); },
+  },
+  async waitForTimeout() {},
+}, 'slow_concurrency');
+assert.deepEqual(observerEvents, ['mouse:move', 'keyboard:Tab', 'keyboard:Shift+Tab']);
 assert.equal(
   remoteViewIframeClipObservation(
     { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },

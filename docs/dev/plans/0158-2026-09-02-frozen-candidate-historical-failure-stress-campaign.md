@@ -2465,3 +2465,23 @@ test requires the three bounded wheel events in the final reset sequence.
 Revised next action: publish the wheel-normalization repair and repeat the
 bounded readiness epoch against the unchanged retained browser. Do not dispatch
 another full calibration until initial and reconnect marker continuity pass.
+
+E31 ran from exact head `273fd3b4` as workflow run `33836416629`. The human
+client still failed initial marker validation with a healthy observer stream;
+the slow companion was canceled. Neither the shortcut nor large wheel events
+changed the remote document. Dashboard source and the rendered notice agree on
+the missing authority transition: durable handoff resolution reconnects an
+observer lease, while remote input requires the separate explicit controller
+takeover action.
+
+The harness now assigns distinct roles. The human client uses the dashboard's
+public Advanced, Take control action and requires a successful
+`service_controller_lease_takeover` response before sending remote input or
+normalizing the fixture. The slow concurrent client remains an observer and
+performs only non-mutating dashboard pacing. Provider-free tests cover the
+exact takeover request discriminator, public control sequence, and absence of
+remote click or wheel input from the observer pacing sequence.
+
+Revised next action: publish the role-correct controller acquisition repair and
+repeat bounded readiness. Require both observer continuity and human controller
+input before resuming C01.
