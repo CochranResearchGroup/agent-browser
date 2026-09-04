@@ -42,6 +42,7 @@ import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
 import { reportDashboardFailure } from "@/lib/failure-observation";
+import { resolveGuacamoleViewerFrame } from "@/lib/guacamole-connection-sharing";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
@@ -1340,6 +1341,7 @@ export function WorkspaceRemoteViewport({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
+  const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
   const [connectionRetryNonce, setConnectionRetryNonce] = useState(0);
@@ -1436,7 +1438,7 @@ export function WorkspaceRemoteViewport({
   const streamUrl = resolveWorkspaceStreamUrl(stream);
   const snapshotStream = isCdpSnapshotStream(stream);
   const externalStreamUrl = snapshotStream ? null : resolveWorkspaceStreamUrl(stream, "external");
-  const frameUrl = buildWorkspaceFrameUrl(streamUrl, streamRefreshNonce);
+  const frameUrl = buildWorkspaceFrameUrl(viewerFrameUrl, streamRefreshNonce);
   const snapshotUrl = snapshotStream ? buildCdpSnapshotUrl(streamUrl, tabSelection.tab?.targetId) : null;
   const foreignCdpPort = snapshotStream
     ? selectedDaemonSession?.cdpPort ?? selectedDaemonSession?.port ?? null
@@ -1639,6 +1641,56 @@ export function WorkspaceRemoteViewport({
   useEffect(() => {
     dispatchViewportController({ type: "target_changed", target: viewportTarget });
   }, [viewportTarget, viewportTargetToken]);
+
+  useEffect(() => {
+    if (!streamUrl || !stream) {
+      setViewerFrameUrl(null);
+      return;
+    }
+    const controller = new AbortController();
+    const targetToken = viewportTargetToken;
+    setViewerFrameUrl(null);
+    if (targetToken) {
+      dispatchViewportController({
+        type: "preflight_started",
+        targetToken,
+        message: "Joining the shared remote desktop session.",
+      });
+    }
+    void resolveGuacamoleViewerFrame({
+      dashboardHref: window.location.href,
+      frameUrl: streamUrl,
+      signal: controller.signal,
+      stream,
+    }).then((resolution) => {
+      if (!controller.signal.aborted) setViewerFrameUrl(resolution.url);
+    }).catch((cause) => {
+      if (controller.signal.aborted) return;
+      const message = cause instanceof Error ? cause.message : "Guacamole connection sharing failed.";
+      if (targetToken) {
+        dispatchViewportController({
+          type: "preflight_failed",
+          targetToken,
+          status: "error",
+          message,
+        });
+      }
+      void reportDashboardFailure({
+        category: "guacamole_load",
+        stage: "connection_sharing",
+        code: "guacamole_connection_sharing_failed",
+        summary: "The dashboard could not join the existing Guacamole session.",
+        action: "remote_view_load",
+        browserId: browser?.id,
+        profileId: browser?.profileId,
+        sessionId: viewportSelection?.selection.sessionId,
+        routeId: stream.routeId,
+        displayId: stream.displayAllocationId,
+        streamProvider: stream.provider,
+      });
+    });
+    return () => controller.abort();
+  }, [browser?.id, browser?.profileId, stream, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   useEffect(() => {
     if (!frameUrl || !canEmbed || !viewportTargetToken) {

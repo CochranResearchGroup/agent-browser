@@ -150,10 +150,14 @@ def render_sql(
     declarations = ["  canonical_count integer;", "  legacy_count integer;"]
     declarations.extend(f"  route_id_{index} integer;" for index in range(len(routes)))
     declarations.extend(
+        f"  route_sharing_profile_id_{index} integer;" for index in range(len(routes))
+    )
+    declarations.extend(
         [
             "  final_canonical_count integer;",
             "  final_legacy_count integer;",
             "  distinct_username_count integer;",
+            "  sharing_profile_count integer;",
         ]
     )
     blocks = [
@@ -171,6 +175,9 @@ def render_sql(
     legacy_names = [route["legacyConnectionName"] for route in routes if route["legacyConnectionName"]]
     legacy_name_sql = ", ".join(quote(name) for name in legacy_names) or "NULL"
     route_ids = ", ".join(f"route_id_{index}" for index in range(len(routes)))
+    sharing_profile_names = ", ".join(
+        quote(f'Agent Browser Shared Session {route["id"]}') for route in routes
+    )
     return f"""BEGIN;
 
 DO $$
@@ -191,12 +198,18 @@ BEGIN
   FROM guacamole_connection_parameter
   WHERE connection_id IN ({route_ids}) AND parameter_name = 'username';
 
+  SELECT count(*) INTO sharing_profile_count
+  FROM guacamole_sharing_profile
+  WHERE primary_connection_id IN ({route_ids})
+    AND sharing_profile_name IN ({sharing_profile_names});
+
   IF final_canonical_count <> {len(routes)}
      OR final_legacy_count <> 0
-     OR distinct_username_count <> {len(routes)} THEN
+     OR distinct_username_count <> {len(routes)}
+     OR sharing_profile_count <> {len(routes)} THEN
     RAISE EXCEPTION
-      'route-user inventory postcondition failed: canonical %, legacy %, distinct usernames %',
-      final_canonical_count, final_legacy_count, distinct_username_count;
+      'route-user inventory postcondition failed: canonical %, legacy %, distinct usernames %, sharing profiles %',
+      final_canonical_count, final_legacy_count, distinct_username_count, sharing_profile_count;
   END IF;
 END $$;
 
@@ -212,7 +225,9 @@ def route_sql_block(
     max_connections_per_user: int,
 ) -> str:
     route_id = f"route_id_{index}"
+    sharing_profile_id = f"route_sharing_profile_id_{index}"
     canonical = quote(route["connectionName"])
+    sharing_profile_name = quote(f'Agent Browser Shared Session {route["id"]}')
     legacy = quote(route["legacyConnectionName"]) if route["legacyConnectionName"] else "NULL"
     names = f"{canonical}, {legacy}" if route["legacyConnectionName"] else canonical
     params = {
@@ -275,6 +290,26 @@ def route_sql_block(
 
   INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
   SELECT entity.entity_id, {route_id}, 'READ'::guacamole_object_permission_type
+  FROM guacamole_entity entity WHERE entity.type = 'USER'
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO guacamole_sharing_profile (
+    sharing_profile_name, primary_connection_id
+  ) VALUES ({sharing_profile_name}, {route_id})
+  ON CONFLICT (sharing_profile_name, primary_connection_id) DO UPDATE
+  SET sharing_profile_name = EXCLUDED.sharing_profile_name
+  RETURNING sharing_profile_id INTO {sharing_profile_id};
+
+  INSERT INTO guacamole_sharing_profile_parameter (
+    sharing_profile_id, parameter_name, parameter_value
+  ) VALUES ({sharing_profile_id}, 'read-only', 'false')
+  ON CONFLICT (sharing_profile_id, parameter_name) DO UPDATE
+  SET parameter_value = EXCLUDED.parameter_value;
+
+  INSERT INTO guacamole_sharing_profile_permission (
+    entity_id, sharing_profile_id, permission
+  )
+  SELECT entity.entity_id, {sharing_profile_id}, 'READ'::guacamole_object_permission_type
   FROM guacamole_entity entity WHERE entity.type = 'USER'
   ON CONFLICT DO NOTHING;
 """

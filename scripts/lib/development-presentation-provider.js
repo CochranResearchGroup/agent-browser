@@ -490,7 +490,11 @@ export function evaluateDevelopmentPresentationProviderObservation(descriptor, o
       `presentation-provider:connection:${route.routeId}`,
       Boolean(connection?.connectionId) &&
         Number(connection?.maxConnections) === descriptor.connectionLimits.maxConnections &&
-        Number(connection?.maxConnectionsPerUser) === descriptor.connectionLimits.maxConnectionsPerUser,
+        Number(connection?.maxConnectionsPerUser) === descriptor.connectionLimits.maxConnectionsPerUser &&
+        Boolean(connection?.sharingProfileId) &&
+        connection?.sharingProfileName === `Agent Browser Shared Session ${route.routeId}` &&
+        connection?.sharingProfileReadOnly === 'false' &&
+        Number(connection?.sharingProfilePermissionCount) >= 1,
       connection || null,
     ));
   }

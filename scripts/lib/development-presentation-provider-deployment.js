@@ -486,7 +486,9 @@ export function probeDevelopmentPresentationProvider(
   const schemaSql = `select count(*) from information_schema.tables
 where table_schema = 'public' and table_name in
 ('guacamole_user','guacamole_entity','guacamole_connection',
- 'guacamole_connection_parameter','guacamole_connection_permission');`;
+ 'guacamole_connection_parameter','guacamole_connection_permission',
+ 'guacamole_sharing_profile','guacamole_sharing_profile_parameter',
+ 'guacamole_sharing_profile_permission');`;
   const schemaResult = postgresQuery(descriptor, schemaSql, run);
   const routeSql = `select coalesce(json_agg(row_to_json(t)), '[]'::json)
 from (
@@ -494,9 +496,20 @@ from (
          c.connection_name as "connectionName",
          c.max_connections as "maxConnections",
          c.max_connections_per_user as "maxConnectionsPerUser",
-         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user"
+         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user",
+         max(sp.sharing_profile_id)::text as "sharingProfileId",
+         max(sp.sharing_profile_name) as "sharingProfileName",
+         max(case when spp.parameter_name = 'read-only' then spp.parameter_value end) as "sharingProfileReadOnly",
+         count(distinct spermission.entity_id) as "sharingProfilePermissionCount"
   from guacamole_connection c
   left join guacamole_connection_parameter p on p.connection_id = c.connection_id
+  left join guacamole_sharing_profile sp
+    on sp.primary_connection_id = c.connection_id
+   and sp.sharing_profile_name like 'Agent Browser Shared Session %'
+  left join guacamole_sharing_profile_parameter spp
+    on spp.sharing_profile_id = sp.sharing_profile_id
+  left join guacamole_sharing_profile_permission spermission
+    on spermission.sharing_profile_id = sp.sharing_profile_id
   where c.connection_name like 'Agent Browser Dev RDP Route %'
   group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
   order by c.connection_id
@@ -543,7 +556,7 @@ from (
     ports,
     routeUsers,
     database: {
-      schemaReady: schemaResult.status === 0 && Number(schemaResult.stdout.trim()) === 5,
+      schemaReady: schemaResult.status === 0 && Number(schemaResult.stdout.trim()) === 8,
       routes: databaseRoutes,
       error: schemaResult.status === 0 && routesResult.status === 0
         ? null

@@ -458,6 +458,10 @@ try {
         user: route.user,
         maxConnections: 8,
         maxConnectionsPerUser: 8,
+        sharingProfileId: String(index + 200),
+        sharingProfileName: `Agent Browser Shared Session ${route.routeId}`,
+        sharingProfileReadOnly: 'false',
+        sharingProfilePermissionCount: 1,
       })),
     },
     displays: descriptor.routes.slice(0, descriptor.warmSlots).map((route, index) => ({
@@ -478,7 +482,7 @@ try {
       if (command === 'docker' && args[0] === 'exec') {
         const sql = args.at(-1);
         if (sql.includes('information_schema.tables')) {
-          return { status: 0, stdout: '5\n', stderr: '' };
+          return { status: 0, stdout: '8\n', stderr: '' };
         }
         return {
           status: 0,
@@ -520,6 +524,14 @@ try {
   assert.equal(driftedCapacity.success, false);
   assert.equal(
     driftedCapacity.checks.find((item) => item.name === 'presentation-provider:connection:development-route-1')?.ok,
+    false,
+  );
+  const missingSharingProfile = structuredClone(readyObservation);
+  missingSharingProfile.database.routes[0].sharingProfileId = null;
+  const driftedSharingProfile = doctorDevelopmentPresentationProvider({ env, probe: () => missingSharingProfile });
+  assert.equal(driftedSharingProfile.success, false);
+  assert.equal(
+    driftedSharingProfile.checks.find((item) => item.name === 'presentation-provider:connection:development-route-1')?.ok,
     false,
   );
 

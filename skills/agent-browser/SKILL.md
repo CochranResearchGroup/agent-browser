@@ -2852,6 +2852,13 @@ export AI_GATEWAY_URL=https://ai-gateway.vercel.sh           # optional default
 
 The Chat tab is always visible in the dashboard. Set `AI_GATEWAY_API_KEY` to enable AI responses.
 
+### Simultaneous Guacamole viewers
+
+When a managed Guacamole route declares `providerMode="simultaneous_view"`,
+the dashboard joins the existing Guacamole tunnel through a transient
+connection-sharing URL instead of opening another RDP login. Never expose
+that transient share key as an operator handoff or persist it in evidence.
+
 ## Ready-to-Use Templates
 
 | Template                                                                 | Description                         |

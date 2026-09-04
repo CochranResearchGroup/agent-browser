@@ -3049,6 +3049,11 @@ diagnose missing stream metadata before opening a remote desktop. Its **Open
 remote control** action uses the same path as browser rows, so it queues
 `view_focus` with target ID plus tab-index fallback before opening the embedded
 stream when the service reports a controllable input provider.
+For a Guacamole route that declares `providerMode="simultaneous_view"`, the
+dashboard joins the route's existing Guacamole tunnel through its managed
+sharing profile. It does not open another RDP login that would disconnect an
+existing viewer. The transient sharing key stays inside the iframe URL and is
+never used as an operator handoff.
 Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
 selected-browser inspector or embedded remote-control dialog; it drives the
 real dashboard UI with `agent-browser`, selects the remote-headed browser row,
