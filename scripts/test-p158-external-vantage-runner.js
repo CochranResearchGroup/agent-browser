@@ -210,6 +210,7 @@ await humanPacedObservation({
         return {
           async count() { return 1; },
           async boundingBox() { return { x: 10, y: 20, width: 1000, height: 700 }; },
+          async focus() { pacedInputEvents.push('iframe:focus'); },
         };
       },
     };
@@ -217,9 +218,9 @@ await humanPacedObservation({
 }, 'human_controller', {
   coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
 });
-assert.equal(
-  pacedInputEvents.at(-1),
-  'keyboard:Control+Home',
+assert.deepEqual(
+  pacedInputEvents.slice(-2),
+  ['iframe:focus', 'keyboard:Control+Home'],
   'each simulated human action must leave the synthetic remote document at its attested origin',
 );
 assert.equal(

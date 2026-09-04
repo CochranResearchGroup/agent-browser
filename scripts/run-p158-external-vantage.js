@@ -1138,6 +1138,7 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
     30_000,
   );
   const readyAt = new Date().toISOString();
+  await resetSyntheticRemoteDocument(page, paceProfile === 'slow_concurrency' ? 900 : 300);
   if (performHumanAction) await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
   const screenshotPath = join(outputDir, `${label}.png`);
   const markerPath = join(outputDir, `${label}-pixel-marker.png`);
@@ -1534,10 +1535,18 @@ export async function humanPacedObservation(page, profile, pixelMarkerRegion) {
       await page.keyboard.press('Escape');
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowUp');
-      await page.keyboard.press('Control+Home');
-      await page.waitForTimeout(delay);
+      await resetSyntheticRemoteDocument(page, delay);
     }
   }
+}
+
+export async function resetSyntheticRemoteDocument(page, settleMs) {
+  const remoteFrame = page.locator('iframe').first();
+  if (!(await remoteFrame.count())) return false;
+  await remoteFrame.focus();
+  await page.keyboard.press('Control+Home');
+  await page.waitForTimeout(settleMs);
+  return true;
 }
 
 export function syntheticRemoteInteractionPoint(region, iframeBox) {

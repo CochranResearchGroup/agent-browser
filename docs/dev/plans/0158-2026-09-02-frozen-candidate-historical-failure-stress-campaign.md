@@ -2411,3 +2411,21 @@ last remote input.
 Revised next action: validate, commit, and push the harness repair, then repeat
 C01 from the clean exact head. Continue to preserve the failed epoch and its
 diagnostics for the final defect-surface analysis.
+
+The immediate repeat from exact head `ef622060`, workflow run `33835467006`,
+failed both clients before the shared window. Both rendered the retained
+synthetic browser and Guacamole route without a 429, but their initial marker
+crops showed the same already-scrolled fixture state inherited from the prior
+epoch. The post-action reset could not run because initial identity validation
+correctly preceded the first scheduled action.
+
+The repair now focuses the remote-view iframe and sends the deterministic
+`Control+Home` reset at the start of every visit before pixel validation, as
+well as after every simulated human action. This lets a fresh epoch normalize
+retained synthetic fixture state without restarting or replacing the retained
+browser. The provider-free fake-page regression requires iframe focus to
+immediately precede the reset key.
+
+Revised next action: commit and push the pre-visit normalization, then repeat
+C01. A successful repeat must prove that the same retained browser can recover
+the inherited scroll state and pass all scheduled reconnect checks.
