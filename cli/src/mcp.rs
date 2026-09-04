@@ -1132,6 +1132,11 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minimum": 1,
                         "description": "Optional worker-bound timeout for this queued service request."
                     },
+                    "serviceStateLockTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional bounded Service State lock-acquisition wait. Values above the daemon cap are clamped to 300000 ms."
+                    },
                     "profileLeasePolicy": {
                         "type": "string",
                         "enum": ["reject", "wait"],

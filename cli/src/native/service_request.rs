@@ -142,6 +142,13 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
         false,
     ),
     ServiceRequestFieldSpec::field(
+        "serviceStateLockTimeoutMs",
+        FieldKind::PositiveInteger,
+        true,
+        true,
+        false,
+    ),
+    ServiceRequestFieldSpec::field(
         "profileLeasePolicy",
         FieldKind::Enum(PROFILE_LEASE_POLICIES),
         true,
@@ -2234,7 +2241,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 82);
+        assert_eq!(canonical_names.len(), 83);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -2410,6 +2417,19 @@ mod tests {
         assert_eq!(normalized.command["apply"], false);
         assert_eq!(normalized.command["staleCheckouts"], false);
         assert_eq!(normalized.command["stalePendingAcquisitions"], true);
+    }
+
+    #[test]
+    fn service_state_lock_timeout_is_a_canonical_command_and_trace_field() {
+        let normalized = normalize(json!({
+            "action": "service_remote_view_handoff_resolve",
+            "serviceStateLockTimeoutMs": 30_000,
+            "params": { "handoffId": "handoff-a" }
+        }))
+        .unwrap();
+
+        assert_eq!(normalized.command["serviceStateLockTimeoutMs"], 30_000);
+        assert_eq!(normalized.trace["serviceStateLockTimeoutMs"], 30_000);
     }
 
     #[test]
@@ -3381,11 +3401,17 @@ mod tests {
                 .message()
                 .to_string();
             let body = serde_json::to_string(&request).unwrap();
+            let mut expected_body = json!({"success": false, "error": message});
+            crate::native::service_failure::attach_service_failure_recourse(&mut expected_body);
+            let expected_mcp_data = json!({
+                "message": message,
+                "failure": crate::native::service_failure::classify_service_failure(&message)
+            });
             assert_eq!(
                 crate::native::stream::service_request_adapter_fixture(&body).unwrap_err(),
                 json!({
                     "status": "400 Bad Request",
-                    "body": {"success": false, "error": message}
+                    "body": expected_body
                 })
             );
             assert_eq!(
@@ -3396,7 +3422,7 @@ mod tests {
                     "error": {
                         "code": -32602,
                         "message": "Invalid params",
-                        "data": {"message": message}
+                        "data": expected_mcp_data
                     }
                 })
             );

@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.dev/contracts/service-request-field-roles.v1.json",
   "description": "Machine-readable role ledger for canonical service-request fields and transport-only compatibility fields.",
-  "canonicalPropertyCount": 82,
+  "canonicalPropertyCount": 83,
   "roles": {
     "structural": ["action", "params"],
     "command": [
-      "action", "jobTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
+      "action", "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
       "requiresCdpFree", "cdpAttachmentAllowed", "serviceTabHandle", "targetId",
       "script", "expression", "returnByValue", "timeoutMs", "maxReturnBytes",
       "maxTextBytes", "maxBodyBytes", "includeScreenshot", "screenshotDir",
@@ -21,7 +21,7 @@
       "browserId", "sessionName", "format", "maxBytes", "locator", "evidenceSurface", "episodeId", "includeFrame", "includeVisualization", "promptProfileId", "controllerLeaseId", "operationId", "recipe", "allowDuplicateProfileLane", "manualLoginLaunch", "handoffId", "remoteViewHandoffId", "pid", "expiresAt", "plan"
     ],
     "trace": [
-      "jobTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
+      "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
       "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "script", "expression",
       "returnByValue", "timeoutMs", "maxReturnBytes", "maxTextBytes", "maxBodyBytes",
       "includeScreenshot", "screenshotDir", "maxConsoleEntries", "maxErrorEntries",

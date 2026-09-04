@@ -160,6 +160,7 @@ export interface ServiceRequest {
   loginIds?: string[];
   accountIds?: string[];
   jobTimeoutMs?: number;
+  serviceStateLockTimeoutMs?: number;
   profileLeaseWaitTimeoutMs?: number;
   timeoutMs?: number;
   maxReturnBytes?: number;

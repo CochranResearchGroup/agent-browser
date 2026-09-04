@@ -2010,3 +2010,20 @@ within its existing 90-second job budget, and retain typed unsuccessful
 resolver response evidence in external failure receipts. Develop all three
 repairs red-green. Do not weaken the public URL oracle or retry the campaign
 until the provider-free regressions pass.
+
+The first installed `6024da72` validation stopped before campaign dispatch.
+The dashboard correctly supplied a 30-second lock budget, but the canonical
+HTTP service-request normalizer rejected the top-level
+`serviceStateLockTimeoutMs` field before relay. Placing the value inside
+`params` passed envelope validation but would not activate the command-scoped
+Service State lock override, so that shape was not accepted as a repair. The
+daemon and direct CLI already support this bounded field. The corrective slice
+adds it to the canonical service-request field authority, JSON schema,
+generated client types and validators, trace projection, and focused Rust
+regression. This is a pre-execution contract defect with no browser effect.
+
+Revised next action: install the contract-complete candidate, prove a real
+authenticated HTTP durable-resolution request accepts and retains the bounded
+lock field, explicitly reopen the disposable handoff target if installation
+closed it, refresh the environment-scoped identity if the target changed, and
+only then dispatch the next external readiness epoch.

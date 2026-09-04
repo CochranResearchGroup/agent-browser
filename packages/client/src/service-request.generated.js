@@ -170,6 +170,7 @@ export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
 
 export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "jobTimeoutMs",
+  "serviceStateLockTimeoutMs",
   "profileLeaseWaitTimeoutMs",
   "timeoutMs",
   "maxReturnBytes",

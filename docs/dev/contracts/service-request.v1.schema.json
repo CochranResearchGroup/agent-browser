@@ -132,6 +132,11 @@
       "minimum": 1,
       "description": "Optional worker-bound timeout for this queued service request."
     },
+    "serviceStateLockTimeoutMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional bounded wait for serialized Service State lock acquisition by this command. Values above the daemon cap are clamped to 300000 ms. This does not weaken lifecycle or effect authority."
+    },
     "profileLeasePolicy": {
       "type": "string",
       "enum": [

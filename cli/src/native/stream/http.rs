@@ -5545,15 +5545,14 @@ mod tests {
 
     #[test]
     fn service_request_error_uses_http_400_envelope() {
+        let expected_body =
+            service_request_rejection_response("jobTimeoutMs must be a positive integer");
         assert_eq!(
             service_request_adapter_fixture(r##"{"action":"navigate","jobTimeoutMs":"1000"}"##)
                 .unwrap_err(),
             json!({
                 "status": "400 Bad Request",
-                "body": {
-                    "success": false,
-                    "error": "jobTimeoutMs must be a positive integer"
-                }
+                "body": expected_body
             })
         );
     }
