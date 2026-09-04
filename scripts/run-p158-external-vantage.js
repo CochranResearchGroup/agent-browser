@@ -1066,6 +1066,29 @@ async function executeExternalVantageProbe({
     assertSecretsAbsent(serialized, env);
     writeFileSync(join(outputDir, 'receipt.json'), serialized, { mode: 0o600 });
     return receipt;
+  } catch (error) {
+    writeSanitizedHar(networkEntries, join(outputDir, 'network.redacted.har'));
+    const guacamoleEntries = networkEntries.filter((entry) => {
+      try {
+        return new URL(entry.url).pathname.startsWith('/guacamole');
+      } catch {
+        return false;
+      }
+    });
+    error.details = {
+      ...(error?.details && typeof error.details === 'object' ? error.details : {}),
+      networkEntryCount: networkEntries.length,
+      guacamoleNetworkEntryCount: guacamoleEntries.length,
+      guacamoleHttpStatusCounts: Object.fromEntries(
+        [...new Set(guacamoleEntries.map((entry) => entry.status))]
+          .sort((left, right) => left - right)
+          .map((status) => [String(status), guacamoleEntries.filter((entry) => entry.status === status).length]),
+      ),
+      websocketObservationCount: urlEvidence.filter((entry) => entry.role === 'websocket_endpoint').length,
+      consoleEntryCount: consoleEntries.length,
+      resolutionObservationCount: handoffResolutions.length,
+    };
+    throw error;
   } finally {
     await context?.close().catch(() => {});
     await browser.close().catch(() => {});
@@ -1946,6 +1969,21 @@ function safeExternalFailureDetails(value) {
   }
   if (Number.isSafeInteger(value.resolutionObservationCount) && value.resolutionObservationCount >= 0) {
     details.resolutionObservationCount = value.resolutionObservationCount;
+  }
+  for (const key of [
+    'networkEntryCount',
+    'guacamoleNetworkEntryCount',
+    'websocketObservationCount',
+    'consoleEntryCount',
+  ]) {
+    if (Number.isSafeInteger(value[key]) && value[key] >= 0) details[key] = value[key];
+  }
+  if (value.guacamoleHttpStatusCounts && typeof value.guacamoleHttpStatusCounts === 'object') {
+    details.guacamoleHttpStatusCounts = Object.fromEntries(
+      Object.entries(value.guacamoleHttpStatusCounts)
+        .filter(([status, count]) => /^\d{3}$/.test(status) && Number.isSafeInteger(count) && count >= 0)
+        .slice(0, 10),
+    );
   }
   if (Array.isArray(value.resolutionStatuses)) {
     details.resolutionStatuses = value.resolutionStatuses

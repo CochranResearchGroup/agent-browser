@@ -2172,3 +2172,38 @@ role and includes the affected safe URL roles in future oracle failure details.
 Revised next action: validate and commit the oracle repair, then dispatch one
 fresh external readiness epoch from that exact head. Do not rebuild or reinstall
 the unchanged runtime binary for this runner-only correction.
+
+The first E25 dispatch, workflow run `33825793040`, was canceled before browser
+execution because the manually supplied expected full commit contained a
+correct short prefix but an incorrect suffix. The replacement dispatch read
+the full SHA directly from Git and used exact remote-head equality before
+submission.
+
+E25 ran from exact clean remote head `9a788a6a` as workflow run `33825809638`.
+The slow external client passed the complete readiness sequence, including
+initial, concurrent, and reconnect pixel observations, external URL policy,
+the corrected oracle, and zero physical browser relaunches. The human-paced
+client failed its initial pixel observation with
+`external_stream_identity_marker_missing`. Its screenshot contained exactly
+one Guacamole iframe with a blank stream surface; the sign-in-expired and CDP
+connecting markers were both absent. The aggregate SHA-256 is
+`0c7ff01a5ee743901134fe515dd2b6c7a8145685d60c8609c58b67f450a91715`.
+
+Provider logs show no Guacamole authentication or tunnel connection for the
+failed human observation before its `2026-09-04T01:29:09Z` failure. The three
+subsequent Guacamole connections align with the slow client's three successful
+visits. This excludes the synthetic page, retained identity, and browser
+process as common causes, but the failed runner discarded its network capture
+before writing the HAR, so the exact missing HTTP or WebSocket transition
+cannot be recovered from E25.
+
+The failure path now always writes the sanitized network HAR before closing the
+browser and retains safe counts for all network entries, Guacamole entries and
+HTTP statuses, WebSocket observations, console entries, and resolver
+observations. Provider-free tests cover the new failure-detail allowlist.
+
+Revised next action: commit the failure-instrumentation repair and repeat one
+fresh readiness epoch. If the blank Guacamole load recurs, use the retained HAR
+and counts to diagnose the exact ingress transition. If it does not recur,
+retain E25 as an intermittent first-load failure and continue the broader
+campaign without pretending it did not occur.

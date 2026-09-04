@@ -288,6 +288,29 @@ assert.deepEqual(externalVantageFailureRecord(urlPolicyFailure, env), {
   details: urlPolicyFailure.details,
 });
 
+const guacamoleLoadFailure = new Error('The external dashboard did not render the prepared remote pixel marker');
+guacamoleLoadFailure.code = 'external_stream_identity_marker_missing';
+guacamoleLoadFailure.details = {
+  networkEntryCount: 17,
+  guacamoleNetworkEntryCount: 4,
+  guacamoleHttpStatusCounts: { 200: 3, 101: 1, invalid: 99 },
+  websocketObservationCount: 1,
+  consoleEntryCount: 2,
+  resolutionObservationCount: 1,
+};
+assert.deepEqual(externalVantageFailureRecord(guacamoleLoadFailure, env), {
+  code: 'external_stream_identity_marker_missing',
+  message: 'The external dashboard did not render the prepared remote pixel marker',
+  details: {
+    resolutionObservationCount: 1,
+    networkEntryCount: 17,
+    guacamoleNetworkEntryCount: 4,
+    websocketObservationCount: 1,
+    consoleEntryCount: 2,
+    guacamoleHttpStatusCounts: { 200: 3, 101: 1 },
+  },
+});
+
 const projectedResolution = projectHandoffResolution({
   status: 'ready',
   resolved: true,
