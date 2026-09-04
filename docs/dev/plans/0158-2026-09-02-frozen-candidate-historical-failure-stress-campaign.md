@@ -3083,3 +3083,33 @@ ingress unavailable response appears in the development failure journal without
 private request material, and rerun the reduced public two-client load loop.
 Only after that loop and a fresh externally hosted two-client E47 aggregate pass
 may the campaign dispatch C01 from the same frozen commit.
+
+The first installed-candidate focus proof exposed one remaining layer of the
+same blocker before E47 was dispatched. A fresh service-owned remote-view open
+returned a valid shared tab on the selected managed profile, a visible browser
+window, and `operatorVisible.state=ready`. The direct `view_focus` request then
+failed with `explicit_profile_conflicts_with_current_owner`. Inspection before
+retry proved that the browser, session, profile, CDP endpoint, and active
+fixture tab were live and mutually consistent, that the tab was already
+focused, and that the failure journal contained no new `lease-fail-open` or
+`existing_session_profile_identity` signature. The failed job retained an
+`effect_uncertain` terminal outcome, while readback showed no changed tab
+effect.
+
+The runtime-host repair had stopped writing the obsolete lane profile into the
+command, but daemon launch options still inherited the process environment's
+runtime-profile default before retained-browser recovery. Existing-owner
+selection could not distinguish that inherited default from a caller-authored
+profile and rejected it. A focused regression reproduced the exact
+profile-omitting `view_focus` case against a proven current owner and failed
+before the correction. The bounded correction lets only a profile-omitting
+`view_focus` use the current retained owner's profile. Caller-authored
+`runtimeProfile`, `profileId`, or `profile` values continue through the strict
+conflict checks. The focused existing-session group now passes all five tests,
+including the explicit-conflict and inconsistent-owner guards.
+
+Revised next action: complete Rust format, clippy, and affected focused tests;
+publish and install the exact corrected development candidate; reopen and
+reseal the synthetic handoff; then repeat the direct focus, durable ingress-
+failure logging, reduced public-load loop, and external E47 gates. E47 remains
+undispatched, so no epoch freeze was violated.

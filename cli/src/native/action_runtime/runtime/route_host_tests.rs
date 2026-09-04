@@ -659,6 +659,23 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         inherited_default_options.runtime_profile.as_deref(),
         Some(profile_id)
     );
+
+    let mut focus_options = LaunchOptions {
+        runtime_profile: Some("obsolete-lane-default".to_string()),
+        ..LaunchOptions::default()
+    };
+    let focus_selection = apply_service_profile_selection(
+        &mut focus_options,
+        &json!({
+            "action": "view_focus",
+            "serviceName": "OdolloFulfillment"
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(focus_selection, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(focus_options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(focus_options.profile.as_deref(), Some(profile_hint));
 }
 
 #[test]

@@ -840,11 +840,17 @@ pub(crate) fn apply_existing_session_profile_selection(
                     .is_ok_and(|requested_digest| requested_digest == profile_digest)
             })
             .unwrap_or(false);
+    let retained_focus_uses_current_owner_profile = command.get("action").and_then(Value::as_str)
+        == Some("view_focus")
+        && command.get("runtimeProfile").is_none()
+        && command.get("profileId").is_none()
+        && optional_command_or_params_string(command, "profile").is_none();
     if options
         .runtime_profile
         .as_deref()
         .is_some_and(|requested| requested != profile_id)
         && !exact_command_profile_overrides_inherited_default
+        && !retained_focus_uses_current_owner_profile
     {
         return Err("explicit_profile_conflicts_with_current_owner".to_string());
     }
