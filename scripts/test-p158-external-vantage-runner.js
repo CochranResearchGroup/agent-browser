@@ -29,6 +29,7 @@ import {
   syntheticRemoteInteractionPoint,
   redactOperatorUrl,
   runExternalVantageProbe,
+  sanitizeReceiptSecrets,
   validateExternalCalibrationLeadTime,
   validateExternalVantageConfiguration,
   waitForGuacamoleIframe,
@@ -146,6 +147,20 @@ const env = {
   RUNNER_OS: 'Linux',
   RUNNER_ARCH: 'X64',
 };
+const boundarySanitized = sanitizeReceiptSecrets({
+  nested: {
+    url: env.P158_DEV_HANDOFF_URL,
+    message: `navigation reached ${env.P158_DEV_HANDOFF_URL}`,
+  },
+  safe: 'retained',
+}, env);
+assert.equal(boundarySanitized.nested.url, '<redacted:P158_DEV_HANDOFF_URL>');
+assert.equal(
+  boundarySanitized.nested.message,
+  'navigation reached <redacted:P158_DEV_HANDOFF_URL>',
+);
+assert.equal(boundarySanitized.safe, 'retained');
+assert.doesNotMatch(JSON.stringify(boundarySanitized), /handoff-secret|never-print-me/);
 const typedStreamFailure = new Error('The external dashboard did not render the prepared remote pixel marker');
 typedStreamFailure.code = 'external_stream_auth_failed';
 typedStreamFailure.details = {

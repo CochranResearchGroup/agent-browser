@@ -2644,3 +2644,36 @@ Revised next action: commit and install the targeted rotation helper, run the
 development doctor, then create a fresh managed browser and durable handoff
 for a new external readiness epoch. If both external clients pass, dispatch
 C01 from that exact installed commit with its declared shared barrier.
+
+Exact source commit `de4eef79` produced installed development generation
+`0.28.0-6227d67369c4`. The three-launch smoke passed, the reviewed provider
+reconcile returned ready with no failed doctor checks, and a fresh
+`Plan158Epoch6` access plan selected managed one-time profile
+`managed-ephemeral-7f458f8238ec` under self-declared shared-local access. The
+new browser opened the synthetic fixture and its durable handoff resolved
+ready at presentation generation 1 without reopening the tab. Effective
+environment-scoped workflow secrets were refreshed without printing their
+values.
+
+E36 ran from exact head `de4eef79` as workflow run `33860851759`. Both clients
+failed deterministically at the final receipt safety check with `Receipt
+retained secret P158_DEV_HANDOFF_URL`. The guard detected an unsanitized
+handoff occurrence in the in-memory receipt, but threw before persistence.
+The wrapper then also failed to leave its structured failure receipt, so both
+artifact uploads found no files and the aggregate could record only missing
+client evidence. No retry occurred. This is a receipt-boundary and failure-
+logging defect, not a browser launch, handoff resolution, or ingress result.
+
+The repair adds a final recursive receipt-boundary sanitizer before digesting
+or writing successful, failed, and W8 action receipts. It replaces exact
+handoff, dashboard username, and dashboard password occurrences even when a
+new nested diagnostic field bypasses its field-specific sanitizer. The
+existing assertion remains after that boundary, so persistence still fails
+closed if the defense does not remove a secret. A provider-free red test first
+proved the boundary was absent, then passed with nested direct and embedded
+secret occurrences removed while unrelated evidence remained unchanged.
+
+Revised next action: publish the receipt-boundary repair, preserve E36 as the
+logging failure epoch, and dispatch a fresh two-client readiness observation
+against the unchanged ready E6 browser. A passing readiness result may proceed
+directly to C01 from the new exact source head.

@@ -713,7 +713,8 @@ export async function runExternalVantageProbe({
       calibrationTiming: failureCalibrationTiming(env),
       artifacts: artifactReceipts(outputDir),
     };
-    const serialized = `${JSON.stringify(failure, null, 2)}\n`;
+    const safeFailure = sanitizeReceiptSecrets(failure, env);
+    const serialized = `${JSON.stringify(safeFailure, null, 2)}\n`;
     assertSecretsAbsent(serialized, env);
     writeFileSync(join(outputDir, 'failure-receipt.json'), serialized, { mode: 0o600 });
     throw error;
@@ -1074,9 +1075,10 @@ async function executeExternalVantageProbe({
         findingCodes: oracle.findings.map((item) => item.code),
       },
     };
+    const safeReceiptBody = sanitizeReceiptSecrets(receiptBody, env);
     const receipt = mode === 'calibration'
-      ? { ...receiptBody, receiptSha256: campaignSha256(receiptBody) }
-      : receiptBody;
+      ? { ...safeReceiptBody, receiptSha256: campaignSha256(safeReceiptBody) }
+      : safeReceiptBody;
     const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
     assertSecretsAbsent(serialized, env);
     writeFileSync(join(outputDir, 'receipt.json'), serialized, { mode: 0o600 });
@@ -2006,6 +2008,28 @@ function assertSecretsAbsent(serialized, env) {
   }
 }
 
+export function sanitizeReceiptSecrets(value, env) {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeReceiptSecrets(item, env));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, sanitizeReceiptSecrets(item, env)]),
+    );
+  }
+  if (typeof value !== 'string') return value;
+  let sanitized = value;
+  for (const name of [
+    'P158_DEV_HANDOFF_URL',
+    'P158_DEV_DASHBOARD_USERNAME',
+    'P158_DEV_DASHBOARD_PASSWORD',
+  ]) {
+    const secret = env[name];
+    if (secret) sanitized = sanitized.split(secret).join(`<redacted:${name}>`);
+  }
+  return sanitized;
+}
+
 function parseSecretJson(value, label) {
   try {
     const parsed = JSON.parse(value);
@@ -2313,7 +2337,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
       publicHandoffUrl: env.P158_DEV_HANDOFF_URL,
     });
     mkdirSync(dirname(outputPath), { recursive: true });
-    const serialized = `${JSON.stringify(result, null, 2)}\n`;
+    const serialized = `${JSON.stringify(sanitizeReceiptSecrets(result, env), null, 2)}\n`;
     assertSecretsAbsent(serialized, env);
     writeFileSync(outputPath, serialized, { mode: 0o600 });
     process.stdout.write(`${JSON.stringify({ success: true, actionCount: result.actionCount, output: basename(outputPath) })}\n`);
