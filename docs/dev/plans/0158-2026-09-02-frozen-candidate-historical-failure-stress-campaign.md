@@ -2346,3 +2346,23 @@ Revised next action: apply the reviewed provider configuration through the
 development provider plan, stage, preflight, and apply workflow; verify the
 live database values and provider doctor; then repeat C01 from an exact clean
 head. Preserve the 429 receipt and frame for final analysis.
+
+The first capacity apply emitted `provider_ready_ingress_pending`, but exact
+development-database readback still showed the former four-total and
+two-per-user limits on all six routes. The reconciler observed only connection
+identity and RDP username. Because it did not observe connection limits, it
+classified the drifted database as ready, skipped `syncConnections`, and wrote
+a misleading successful receipt. A production-database query was also
+discarded as evidence because it addressed the wrong isolated container.
+
+The corrected provider model now carries the desired connection limits,
+includes them in the staged desired-provider descriptor, reads both live
+Guacamole columns, and requires exact equality in readiness. The SQL renderer
+accepts bounded values from that descriptor rather than relying on an
+unobservable text-only default. Provider-free tests prove that a four/two live
+observation fails doctor and forces reconciliation through `syncConnections`,
+while the exact eight/eight state passes without quarantine.
+
+Revised next action: commit the observable-capacity repair, restage and apply
+it, and require exact eight/eight readback from the isolated development
+PostgreSQL container before repeating any external browser epoch.

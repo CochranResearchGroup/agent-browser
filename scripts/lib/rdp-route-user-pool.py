@@ -125,7 +125,13 @@ def write_inventory_secret(path: Path, routes: list[dict[str, str]]) -> None:
     path.chmod(0o600)
 
 
-def render_sql(routes: list[dict[str, str]], hostname: str, port: str) -> str:
+def render_sql(
+    routes: list[dict[str, str]],
+    hostname: str,
+    port: str,
+    max_connections: int = MAX_CONNECTIONS,
+    max_connections_per_user: int = MAX_CONNECTIONS_PER_USER,
+) -> str:
     declarations = ["  canonical_count integer;", "  legacy_count integer;"]
     declarations.extend(f"  route_id_{index} integer;" for index in range(len(routes)))
     declarations.extend(
@@ -135,7 +141,17 @@ def render_sql(routes: list[dict[str, str]], hostname: str, port: str) -> str:
             "  distinct_username_count integer;",
         ]
     )
-    blocks = [route_sql_block(route, index, hostname, port) for index, route in enumerate(routes)]
+    blocks = [
+        route_sql_block(
+            route,
+            index,
+            hostname,
+            port,
+            max_connections,
+            max_connections_per_user,
+        )
+        for index, route in enumerate(routes)
+    ]
     canonical_names = ", ".join(quote(route["connectionName"]) for route in routes)
     legacy_names = [route["legacyConnectionName"] for route in routes if route["legacyConnectionName"]]
     legacy_name_sql = ", ".join(quote(name) for name in legacy_names) or "NULL"
@@ -172,7 +188,14 @@ END $$;
 COMMIT;"""
 
 
-def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str) -> str:
+def route_sql_block(
+    route: dict[str, str],
+    index: int,
+    hostname: str,
+    port: str,
+    max_connections: int,
+    max_connections_per_user: int,
+) -> str:
     route_id = f"route_id_{index}"
     canonical = quote(route["connectionName"])
     legacy = quote(route["legacyConnectionName"]) if route["legacyConnectionName"] else "NULL"
@@ -196,8 +219,8 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
     legacy_update = f"""
   IF legacy_count = 1 THEN
     UPDATE guacamole_connection
-    SET connection_name = {canonical}, protocol = 'rdp', max_connections = {MAX_CONNECTIONS},
-        max_connections_per_user = {MAX_CONNECTIONS_PER_USER}
+    SET connection_name = {canonical}, protocol = 'rdp', max_connections = {max_connections},
+        max_connections_per_user = {max_connections_per_user}
     WHERE parent_id IS NULL AND connection_name = {legacy}
     RETURNING connection_id INTO {route_id};
   ELSIF canonical_count = 1 THEN""" if route["legacyConnectionName"] else """
@@ -214,14 +237,14 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
   END IF;
 {legacy_update}
     UPDATE guacamole_connection
-    SET protocol = 'rdp', max_connections = {MAX_CONNECTIONS},
-        max_connections_per_user = {MAX_CONNECTIONS_PER_USER}
+    SET protocol = 'rdp', max_connections = {max_connections},
+        max_connections_per_user = {max_connections_per_user}
     WHERE parent_id IS NULL AND connection_name = {canonical}
     RETURNING connection_id INTO {route_id};
   ELSE
     INSERT INTO guacamole_connection (
       connection_name, protocol, max_connections, max_connections_per_user
-    ) VALUES ({canonical}, 'rdp', {MAX_CONNECTIONS}, {MAX_CONNECTIONS_PER_USER})
+    ) VALUES ({canonical}, 'rdp', {max_connections}, {max_connections_per_user})
     RETURNING connection_id INTO {route_id};
   END IF;
 
@@ -256,6 +279,13 @@ def text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def bounded_connection_limit(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1 or parsed > 64:
+        raise argparse.ArgumentTypeError("connection limit must be between 1 and 64")
+    return parsed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -266,6 +296,12 @@ def main() -> int:
     sql = subparsers.add_parser("sql")
     sql.add_argument("--hostname", required=True)
     sql.add_argument("--port", required=True)
+    sql.add_argument("--max-connections", type=bounded_connection_limit, default=MAX_CONNECTIONS)
+    sql.add_argument(
+        "--max-connections-per-user",
+        type=bounded_connection_limit,
+        default=MAX_CONNECTIONS_PER_USER,
+    )
     args = parser.parse_args()
     try:
         if args.command == "resolve":
@@ -279,7 +315,15 @@ def main() -> int:
             routes = normalized_inventory(json.load(sys.stdin))
             if any(not route["password"] for route in routes):
                 raise ValueError("route_user_inventory_password_missing")
-            print(render_sql(routes, args.hostname, args.port))
+            print(
+                render_sql(
+                    routes,
+                    args.hostname,
+                    args.port,
+                    args.max_connections,
+                    args.max_connections_per_user,
+                )
+            )
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)

@@ -204,7 +204,18 @@ export function createDevelopmentPresentationProviderSystemEffects({
       const sql = runRequired(
         run,
         'python3',
-        [helperPath, 'sql', '--hostname', descriptor.rdpTarget.host, '--port', String(descriptor.rdpTarget.port)],
+        [
+          helperPath,
+          'sql',
+          '--hostname',
+          descriptor.rdpTarget.host,
+          '--port',
+          String(descriptor.rdpTarget.port),
+          '--max-connections',
+          String(descriptor.connectionLimits.maxConnections),
+          '--max-connections-per-user',
+          String(descriptor.connectionLimits.maxConnectionsPerUser),
+        ],
         { input: JSON.stringify(routeSecrets) },
         'render development Guacamole routes',
       ).stdout;

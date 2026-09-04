@@ -87,6 +87,7 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
       database: descriptor.database,
       ports: descriptor.ports,
       rdpTarget: descriptor.rdpTarget,
+      connectionLimits: descriptor.connectionLimits,
       warmSlots: descriptor.warmSlots,
       hardMaxSlots: descriptor.hardMaxSlots,
       routes: descriptor.routes,
@@ -491,11 +492,13 @@ where table_schema = 'public' and table_name in
 from (
   select c.connection_id::text as "connectionId",
          c.connection_name as "connectionName",
+         c.max_connections as "maxConnections",
+         c.max_connections_per_user as "maxConnectionsPerUser",
          max(case when p.parameter_name = 'username' then p.parameter_value end) as "user"
   from guacamole_connection c
   left join guacamole_connection_parameter p on p.connection_id = c.connection_id
   where c.connection_name like 'Agent Browser Dev RDP Route %'
-  group by c.connection_id, c.connection_name
+  group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
   order by c.connection_id
 ) t;`;
   const routesResult = postgresQuery(descriptor, routeSql, run);

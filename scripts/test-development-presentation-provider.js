@@ -59,6 +59,10 @@ try {
   assert.equal(descriptor.environment, 'development');
   assert.equal(descriptor.warmSlots, 4);
   assert.equal(descriptor.hardMaxSlots, 6);
+  assert.deepEqual(descriptor.connectionLimits, {
+    maxConnections: 8,
+    maxConnectionsPerUser: 8,
+  });
   assert.equal(descriptor.routes.length, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.routeId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.user)).size, 6);
@@ -452,6 +456,8 @@ try {
         connectionId: String(index + 100),
         connectionName: route.connectionName,
         user: route.user,
+        maxConnections: 8,
+        maxConnectionsPerUser: 8,
       })),
     },
     displays: descriptor.routes.slice(0, descriptor.warmSlots).map((route, index) => ({
@@ -507,6 +513,15 @@ try {
   assert.equal(configured.status.state, 'configured');
   assert.equal(configured.status.ready, true);
   assert.equal(configured.status.manifest.schemaVersion, DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA);
+  const capacityDrift = structuredClone(readyObservation);
+  capacityDrift.database.routes[0].maxConnections = 4;
+  capacityDrift.database.routes[0].maxConnectionsPerUser = 2;
+  const driftedCapacity = doctorDevelopmentPresentationProvider({ env, probe: () => capacityDrift });
+  assert.equal(driftedCapacity.success, false);
+  assert.equal(
+    driftedCapacity.checks.find((item) => item.name === 'presentation-provider:connection:development-route-1')?.ok,
+    false,
+  );
 
   rmSync(descriptor.manifest, { force: true });
   const effectCalls = [];
@@ -638,6 +653,34 @@ try {
   assert.equal(reconciled.state, 'provider_ready_ingress_pending');
   assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
   assert.deepEqual(effectCalls, []);
+
+  effectCalls.length = 0;
+  let capacityObservation = capacityDrift;
+  const capacityReconciled = applyDevelopmentPresentationProvider({
+    env,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      createVolume: () => effectCalls.push('create-volume'),
+      startDatabase: () => effectCalls.push('start-database'),
+      ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
+      syncConnections: () => {
+        effectCalls.push('sync-connections');
+        capacityObservation = readyObservation;
+      },
+      startProvider: () => effectCalls.push('start-provider'),
+      grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
+      openWarmRoutes: () => effectCalls.push('open-warm-routes'),
+      observe: () => capacityObservation,
+      grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
+      quarantine: () => effectCalls.push('quarantine'),
+    },
+  });
+  assert.equal(capacityReconciled.providerReady, true);
+  assert.equal(effectCalls.includes('sync-connections'), true);
+  assert.equal(effectCalls.includes('quarantine'), false);
 
   effectCalls.length = 0;
   const stoppedObservation = structuredClone(readyObservation);

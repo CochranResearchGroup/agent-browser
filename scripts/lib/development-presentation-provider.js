@@ -104,6 +104,10 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
       sharedDaemon: true,
       restartAllowed: false,
     },
+    connectionLimits: {
+      maxConnections: 8,
+      maxConnectionsPerUser: 8,
+    },
     warmSlots,
     hardMaxSlots,
     routes,
@@ -484,7 +488,9 @@ export function evaluateDevelopmentPresentationProviderObservation(descriptor, o
     );
     checks.push(check(
       `presentation-provider:connection:${route.routeId}`,
-      Boolean(connection?.connectionId),
+      Boolean(connection?.connectionId) &&
+        Number(connection?.maxConnections) === descriptor.connectionLimits.maxConnections &&
+        Number(connection?.maxConnectionsPerUser) === descriptor.connectionLimits.maxConnectionsPerUser,
       connection || null,
     ));
   }
