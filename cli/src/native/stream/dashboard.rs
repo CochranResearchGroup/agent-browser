@@ -1254,7 +1254,7 @@ fn service_request_handoff_target_session_name_from_state(
 
 fn service_api_proxy_timeout(method: &str, path: &str, body: &str) -> Duration {
     let (path, _) = split_path_query(path);
-    if method == "GET" && path == "/api/service/status" {
+    if dashboard_service_status_cacheable(method, path) {
         return DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT;
     }
     if method == "POST" && path == "/api/service/request" {
@@ -1307,6 +1307,7 @@ fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String,
             .map(str::to_string)
             .unwrap_or_else(|| format!("dashboard-view-focus-{}", uuid::Uuid::new_v4())),
         "action": "view_focus",
+        crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: false,
     });
     for key in [
         "serviceName",
@@ -1449,7 +1450,11 @@ async fn run_dashboard_backend_io_phase<T>(
 }
 
 fn dashboard_service_status_cacheable(method: &str, path: &str) -> bool {
-    method == "GET" && split_path_query(path).0 == "/api/service/status"
+    method == "GET"
+        && matches!(
+            split_path_query(path).0,
+            "/api/service/status" | "/api/service/resources"
+        )
 }
 
 fn service_api_handler_backend_response(
@@ -3179,7 +3184,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_service_status_cache_only_coalesces_status_reads() {
+    fn dashboard_service_read_cache_coalesces_status_and_resources() {
         assert!(dashboard_service_status_cacheable(
             "GET",
             "/api/service/status"
@@ -3187,6 +3192,10 @@ mod tests {
         assert!(dashboard_service_status_cacheable(
             "GET",
             "/api/service/status?full-tab-history=true"
+        ));
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/resources"
         ));
         assert!(!dashboard_service_status_cacheable(
             "POST",
@@ -3238,7 +3247,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dashboard_service_status_single_flight_forwards_backend_bytes_unchanged() {
+    async fn dashboard_service_resources_single_flight_forwards_backend_bytes_unchanged() {
         let _guard = dashboard_status_cache_test_guard().await;
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -3260,7 +3269,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
             stream.write_all(&server_response).await.unwrap();
         });
-        let path = format!("/api/service/status?single-flight-port={port}");
+        let path = format!("/api/service/resources?single-flight-port={port}");
         let first =
             proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
         let second =
@@ -3939,6 +3948,14 @@ mod tests {
             service_api_proxy_timeout("GET", "/api/service/status", ""),
             DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
         );
+        assert_eq!(
+            service_api_proxy_timeout("GET", "/api/service/resources", ""),
+            DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
+        );
+        assert!(dashboard_service_status_cacheable(
+            "GET",
+            "/api/service/resources"
+        ));
     }
 
     #[test]
@@ -4095,6 +4112,10 @@ mod tests {
         assert_eq!(command["agentName"], "operator");
         assert_eq!(command["taskName"], "workspace-viewport-control");
         assert_eq!(command["jobTimeoutMs"], 5000);
+        assert_eq!(
+            command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            false
+        );
         assert!(command.get("sessionName").is_none());
     }
 

@@ -3138,3 +3138,50 @@ normalization tests pass.
 Revised next action: validate, publish, and install this provenance-backed
 repair, then repeat the same installed direct-focus gate before any load or
 external epoch. Preserve both failed installed proofs as pre-repair evidence.
+
+The provenance-backed candidate was installed as development generation
+`0.28.0-8cf35c42e39b`; required-provider doctor, local ingress, and public
+ingress all passed while production remained unchanged. A fresh synthetic
+remote-view acquisition returned a verified effect, a valid fixture tab, and
+`operatorVisible.state=ready`. The exact profile-omitting direct `view_focus`
+proof then passed with `verified_effect`, brought the retained browser forward,
+and requested maximize. A deliberately incomplete ingress request added
+exactly one `dashboard_ingress` record with stage `request_proxy`, code
+`invalid_ingress_request`, and action `dashboard_load`; the record contained no
+raw URL, headers, message, credential, or token fields.
+
+The first reduced-load harness attempt then found two more seams before E47.
+It also incorrectly accumulated a new anchor and two fresh clients on every
+round instead of retaining one anchor and closing each round's two fresh
+clients. That excess occupancy is preserved as an out-of-schedule finding, but
+it is not the acceptance shape for this gate. Even the first intended
+three-client slice proved two product defects. The dashboard's special
+owner-session focus proxy bypassed normal service-request normalization, so it
+did not attach the internal profile-omission marker and four automatic focus
+requests failed or timed out with the stale-profile mismatch. In parallel,
+each viewport polled `/api/service/resources` every seven seconds. Status reads
+were coalesced and cached, but resource reads were not. Duplicate process-table
+scans exceeded the ordinary two-second proxy budget, left queued and running
+resource jobs, caused one viewer-lease Service State lock timeout, and made the
+stable ingress emit and journal `selected_backend_unavailable`. The failure
+journal also captured repeated Guacamole disconnect observations, three focus
+HTTP 502s, and the viewer-lease application failure.
+
+Focused red regressions now require the special focus proxy to attach the
+non-forgeable profile-omission marker it constructs from an allowlisted request,
+and require authenticated status and resource reads to share the existing
+path-keyed single-flight cache and ten-second read budget. The repair keeps
+mutating requests outside that cache. All 53 dashboard gateway tests, Rust
+format, workspace clippy with warnings denied, and the focused single-flight
+test pass. An initial eight-job compile could not spawn a rustc work thread
+because old Cargo scopes contained hundreds of retained Chrome descendants and
+were near their aggregate task limit; a one-job compile passed without
+discarding those ownership-sensitive processes. This is retained as a separate
+resource-admission and test-residue finding for later campaign analysis.
+
+Revised next action: commit and publish the focus-proxy and resource-read
+coalescing repair, install its exact development candidate, recreate the
+synthetic handoff, and rerun one retained authenticated anchor plus two fresh
+clients for five bounded rounds, closing the fresh clients after each round.
+Require focus success, usable Guacamole pixels, no resource backlog, no ingress
+503 or 504, and no new stale-profile mismatch before dispatching E47.
