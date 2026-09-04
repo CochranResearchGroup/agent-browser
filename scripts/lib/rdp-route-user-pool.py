@@ -86,19 +86,34 @@ def normalized_inventory(raw: object) -> list[dict[str, str]]:
 
 
 def resolve_inventory(
-    secret_file: Path, generate_passwords: bool, allow_missing_passwords: bool = False
+    secret_file: Path,
+    generate_passwords: bool,
+    allow_missing_passwords: bool = False,
+    rotate_route_ids: set[str] | None = None,
 ) -> list[dict[str, str]]:
     values = read_env_file(secret_file)
     raw_text = os.environ.get(CANONICAL_ENV) or values.get(CANONICAL_SECRET)
     raw = json.loads(raw_text) if raw_text else legacy_inventory(values)
     routes = normalized_inventory(raw)
+    requested_rotations = rotate_route_ids or set()
+    known_route_ids = {route["id"] for route in routes}
+    missing_route_ids = requested_rotations - known_route_ids
+    if missing_route_ids:
+        missing_route_id = sorted(missing_route_ids)[0]
+        raise ValueError(f"route_user_inventory_rotate_route_missing:{missing_route_id}")
     if generate_passwords:
         for route in routes:
             if not route["password"]:
                 route["password"] = "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(32))
-        write_inventory_secret(secret_file, routes)
-    elif not allow_missing_passwords and any(not route["password"] for route in routes):
+    for route in routes:
+        if route["id"] in requested_rotations:
+            route["password"] = "".join(
+                secrets.choice(PASSWORD_ALPHABET) for _ in range(32)
+            )
+    if not allow_missing_passwords and any(not route["password"] for route in routes):
         raise ValueError("route_user_inventory_password_missing")
+    if generate_passwords or requested_rotations:
+        write_inventory_secret(secret_file, routes)
     return routes
 
 
@@ -293,6 +308,8 @@ def main() -> int:
     resolve.add_argument("--secret-file", required=True)
     resolve.add_argument("--generate-passwords", action="store_true")
     resolve.add_argument("--allow-missing-passwords", action="store_true")
+    resolve.add_argument("--rotate-route-id", action="append", default=[])
+    resolve.add_argument("--quiet", action="store_true")
     sql = subparsers.add_parser("sql")
     sql.add_argument("--hostname", required=True)
     sql.add_argument("--port", required=True)
@@ -309,8 +326,10 @@ def main() -> int:
                 Path(args.secret_file),
                 args.generate_passwords,
                 args.allow_missing_passwords,
+                set(args.rotate_route_id),
             )
-            print(json.dumps(routes, separators=(",", ":")))
+            if not args.quiet:
+                print(json.dumps(routes, separators=(",", ":")))
         else:
             routes = normalized_inventory(json.load(sys.stdin))
             if any(not route["password"] for route in routes):

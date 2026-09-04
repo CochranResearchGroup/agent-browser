@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_blocking_repair_candidate_validation_active`
+Execution state: `w6_external_readiness_reconstruction_active`
 
 Lane: P157
 
@@ -2619,3 +2619,28 @@ Revised next action: publish and install this dashboard repair only in the
 isolated development runtime, re-establish a coherent ready E5 successor if
 the install closes the disposable browser, and dispatch one new external
 readiness epoch from the exact installed commit. Production remains read-only.
+
+The isolated development services were stopped through their exact managed
+units so the candidate build could preserve the host memory reserve. The same
+queued build then admitted eight Cargo jobs, completed in the optimized CI
+profile, and installed generation `0.28.0-c3d42279662b`. Three disposable
+browser launch, URL read, close, and residue iterations passed. The install
+receipt proved production identity unchanged. Development provider doctor
+then identified only configuration drift. A reviewed reconcile restored the
+six-route provider at connection limits 8 and 8, while local and public HTTPS
+ingress checks remained successful.
+
+During the capacity readback, an operator query selected an RDP route password
+that should never have entered diagnostic output. The affected disposable
+development route credential is treated as exposed. A provider-free red test
+first proved that the route-user helper lacked safe targeted rotation. The
+helper now accepts one or more exact route IDs for rotation, rejects unknown
+IDs, preserves every other route password, and supports a quiet mode that
+emits no resolved inventory. Its focused test passes. Route 1 was rotated by
+exact ID and the provider was reconciled successfully; no production
+credential or route was involved, and production remained unchanged.
+
+Revised next action: commit and install the targeted rotation helper, run the
+development doctor, then create a fresh managed browser and durable handoff
+for a new external readiness epoch. If both external clients pass, dispatch
+C01 from that exact installed commit with its declared shared barrier.

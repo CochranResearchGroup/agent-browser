@@ -32,6 +32,32 @@ assert.equal(new Set(resolved.map((route) => route.routeUser)).size, 4);
 assert(resolved.every((route) => typeof route.password === 'string' && route.password.length === 32));
 assert.match(readFileSync(secretFile, 'utf8'), /XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON=/);
 
+const beforeRotation = resolved.map((route) => ({ ...route }));
+const rotate = spawnSync(
+  'python3',
+  [
+    'scripts/lib/rdp-route-user-pool.py',
+    'resolve',
+    '--secret-file', secretFile,
+    '--rotate-route-id', 'route-user-1',
+    '--quiet',
+  ],
+  { encoding: 'utf8' },
+);
+assert.equal(rotate.status, 0, rotate.stderr);
+assert.equal(rotate.stdout, '');
+const rotatedSecretLine = readFileSync(secretFile, 'utf8')
+  .split('\n')
+  .find((line) => line.startsWith('XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON='));
+assert.ok(rotatedSecretLine);
+const rotated = JSON.parse(rotatedSecretLine.slice(rotatedSecretLine.indexOf('=') + 1));
+assert.notEqual(rotated[0].password, beforeRotation[0].password);
+assert.equal(rotated[0].password.length, 32);
+assert.deepEqual(
+  rotated.slice(1).map((route) => route.password),
+  beforeRotation.slice(1).map((route) => route.password),
+);
+
 const sql = spawnSync(
   'python3',
   ['scripts/lib/rdp-route-user-pool.py', 'sql', '--hostname', 'host.docker.internal', '--port', '3389'],
