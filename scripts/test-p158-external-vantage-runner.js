@@ -30,6 +30,7 @@ import {
   runExternalVantageProbe,
   validateExternalCalibrationLeadTime,
   validateExternalVantageConfiguration,
+  waitForGuacamoleIframe,
 } from './run-p158-external-vantage.js';
 import { sha256 as campaignSha256 } from './lib/p158-campaign-controller.js';
 import {
@@ -255,6 +256,19 @@ await acquireSyntheticRemoteController({
   async waitForTimeout() {},
 });
 assert.deepEqual(controllerEvents, ['button:Advanced', 'menuitem:Take control']);
+let iframeWaitCount = 0;
+await waitForGuacamoleIframe({
+  locator() {
+    return {
+      async count() { iframeWaitCount += 1; return 1; },
+      first() {
+        return { async getAttribute() { return 'https://external.example.test/guacamole/'; } };
+      },
+    };
+  },
+  async waitForTimeout() {},
+});
+assert.equal(iframeWaitCount, 1);
 const observerEvents = [];
 await observerPacedObservation({
   mouse: {

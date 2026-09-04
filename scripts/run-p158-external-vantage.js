@@ -1143,7 +1143,9 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   );
   const readyAt = new Date().toISOString();
   if (paceProfile === 'human_controller') {
+    await waitForGuacamoleIframe(page);
     await acquireSyntheticRemoteController(page);
+    await waitForGuacamoleIframe(page);
     await resetSyntheticRemoteDocument(page, 300);
   }
   if (performHumanAction) {
@@ -1571,23 +1573,46 @@ export async function resetSyntheticRemoteDocument(page, settleMs) {
 }
 
 export async function acquireSyntheticRemoteController(page) {
-  const takeoverResponse = page.waitForResponse((response) => {
-    try {
-      const request = response.request();
-      return new URL(response.url()).pathname === '/api/service/request'
-        && request.method() === 'POST'
-        && request.postDataJSON()?.action === 'service_controller_lease_takeover';
-    } catch {
-      return false;
-    }
-  }, { timeout: 15_000 });
-  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Take control', exact: true }).click();
-  const response = await takeoverResponse;
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => {
+      try {
+        const request = candidate.request();
+        return new URL(candidate.url()).pathname === '/api/service/request'
+          && request.method() === 'POST'
+          && request.postDataJSON()?.action === 'service_controller_lease_takeover';
+      } catch {
+        return false;
+      }
+    }, { timeout: 15_000 }),
+    (async () => {
+      await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Take control', exact: true }).click();
+    })(),
+  ]);
   if (!response.ok()) {
     throw new Error(`Controller lease takeover failed with HTTP ${response.status()}`);
   }
   await page.waitForTimeout(1_000);
+}
+
+export async function waitForGuacamoleIframe(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const frames = page.locator('iframe');
+    if (await frames.count() === 1) {
+      const src = await frames.first().getAttribute('src');
+      try {
+        const path = new URL(src).pathname;
+        if (path === '/guacamole' || path === '/guacamole/') return;
+      } catch {
+        // Keep waiting for the public dashboard to publish its route iframe.
+      }
+    }
+    await page.waitForTimeout(250);
+  } while (Date.now() < deadline);
+  const error = new Error('The external dashboard did not converge to one Guacamole iframe');
+  error.code = 'external_stream_not_embeddable';
+  throw error;
 }
 
 export async function observerPacedObservation(page, profile) {

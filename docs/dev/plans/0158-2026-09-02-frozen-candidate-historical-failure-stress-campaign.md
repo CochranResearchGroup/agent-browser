@@ -2485,3 +2485,40 @@ remote click or wheel input from the observer pacing sequence.
 Revised next action: publish the role-correct controller acquisition repair and
 repeat bounded readiness. Require both observer continuity and human controller
 input before resuming C01.
+
+E32 ran from exact head `b56f9519` as workflow run `33836791368`. The human
+client's dashboard projection temporarily lost its embeddable service stream
+before the new controller request could be emitted. The simultaneously-started
+response waiter timed out after 15 seconds. Because the UI click promise and
+response promise were not awaited as one operation, the abandoned response
+waiter rejected as an unhandled promise and bypassed the structured failure
+receipt. Only the video survived. This is a campaign logging defect.
+
+Live readback then exposed the lifecycle boundary underneath the projection
+failure. The old E4 browser record still projected PID 50340 as healthy and
+route-attached while the runtime owner registry classified the same logical
+browser as terminal with process absence proven and cleanup satisfied. Direct
+session access returned `existing_session_profile_identity_unproven`. The
+process subsequently exited, and bounded service reconciliation repaired three
+orphaned display allocations without broad cleanup.
+
+A fresh `Plan158Epoch5` access plan selected a one-time managed profile with
+shared-local access, self-declared client identity, and no acquisition blocker.
+The current runtime launched a new remote-headed browser and established a new
+durable handoff on an exact ready route. A current authenticated resolution
+proved ready presentation generation, exact tab identity, and the same
+synthetic fixture. The environment-scoped handoff and expected identity secrets
+were refreshed without printing their values.
+
+The harness repair now waits for exactly one public Guacamole iframe before
+controller acquisition and again after the accepted takeover before remote
+input. Controller UI actions and their response waiter execute under one
+`Promise.all`, so either failure remains handled by the outer structured
+failure-receipt path. Provider-free tests cover iframe convergence and the
+takeover request discriminator.
+
+Revised next action: publish the logging and convergence repair, then run a
+bounded readiness epoch against the new coherent E5 runtime. If it passes,
+resume C01 immediately. Preserve E32 as evidence that contradictory owner and
+browser projections can outlive the daemon route and that abandoned waiters
+can defeat post-mortem logging.
