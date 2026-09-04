@@ -39,6 +39,17 @@ function guacamoleRoot(frameUrl: string, dashboardHref: string): URL | null {
   }
 }
 
+function guacamoleSharingRoot(root: URL): URL {
+  const labels = root.hostname.split(".");
+  if (labels.length < 2 || !labels[0] || labels[0].endsWith("-share")) {
+    throw new Error("Guacamole connection-sharing origin is unavailable");
+  }
+  const shared = new URL(root);
+  labels[0] = `${labels[0]}-share`;
+  shared.hostname = labels.join(".");
+  return shared;
+}
+
 async function readJson<T>(response: Response, operation: string): Promise<T> {
   if (!response.ok) throw new Error(`${operation} returned HTTP ${response.status}`);
   return response.json() as Promise<T>;
@@ -126,8 +137,7 @@ export async function resolveGuacamoleViewerFrame({
   const key = credentials.values?.key;
   if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
 
-  const shared = new URL(root);
-  shared.pathname = shared.pathname.replace(/\/guacamole\/$/i, "/guacamole-share/");
+  const shared = guacamoleSharingRoot(root);
   shared.hash = `/?key=${encodeURIComponent(key)}`;
   return { mode: "shared", url: shared.toString() };
 }

@@ -3538,3 +3538,29 @@ and rerun the unchanged two-client external oracle. Treat a no-key route that
 can enumerate or open any connection as a security failure. A green concurrent
 marker and reconnect sequence advances to the frozen campaign; any new failure
 is preserved, diagnosed, and repaired under this still-active goal.
+
+The path-isolation attempt was committed as Agent Browser `81a43e70` and Cooper
+`46a70b0`, installed as development generation `0.28.0-013bcece3d17`, and
+passed three browser launches, all provider checks, local ingress, public
+ingress, and no-key connection-name checks. The original durable handoff was
+explicitly reopened without rotating its identifier or URL. E52 ran as external
+workflow `33910218160`; the human client passed, while the slow client's
+concurrent view again rendered Guacamole's full connection home.
+
+E52's preserved HAR proves the new path carried 36 successful Guacamole
+requests, so this was not stale code or route selection. It also recorded 79
+requests on the ordinary Guacamole path and a header-authenticated user resource
+inside the nominal share path. The path removed ingress header injection but
+did not isolate Guacamole's origin-scoped browser authentication state. The
+dashboard's primary-owner API calls and prior iframe share cookies and storage
+remain available to another path on the same origin. The visible full operator
+home is therefore the same symptom with a narrower, now-proven cause.
+
+Revised repair: move the capability-only Guacamole client to a distinct sibling
+origin with no stable operator header. Keep primary-owner discovery and
+credential creation on the authenticated dashboard origin, then navigate the
+iframe to the sibling origin with only the one-time sharing key. This separates
+both ingress authentication and browser storage. Remove the now-insufficient
+same-origin capability route. The next external oracle must prove the sibling
+origin was used, the concurrent marker remained correct, and a no-key client
+cannot enumerate or open connections.

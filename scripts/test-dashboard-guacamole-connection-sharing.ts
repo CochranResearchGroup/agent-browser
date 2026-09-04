@@ -78,7 +78,7 @@ const shared = await resolveGuacamoleViewerFrame({
   stream,
 });
 assert.equal(shared.mode, "shared");
-assert.equal(shared.url, "https://dashboard.example.test/guacamole-share/#/?key=share-secret");
+assert.equal(shared.url, "https://dashboard-share.example.test/guacamole/#/?key=share-secret");
 assert.equal(requests.length, 4);
 assert.equal(requests[0].init?.method, "POST");
 assert.equal(new Headers(requests[1].init?.headers).get("Guacamole-Token"), "auth-secret");
