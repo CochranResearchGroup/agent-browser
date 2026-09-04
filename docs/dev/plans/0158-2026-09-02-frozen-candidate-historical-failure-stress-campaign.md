@@ -3642,3 +3642,34 @@ then redispatch C01 with the same durable handoff and unchanged installed
 candidate. A further disconnect remains a campaign blocker and must be
 diagnosed from the preserved screenshots, HAR, transport receipt, and provider
 logs before another attempt.
+
+Workflow `33914568752` proved that the background-throttling repair worked:
+initial and concurrent marker captures passed, three viewers remained attached,
+and the earlier not-responding disconnect did not recur. The slow client failed
+later at the first synchronized reconnect. Both external clients closed their
+current dashboard pages at the same scheduled instant. The primary Guacamole
+connection disappeared between active-connection discovery and sharing-key
+creation, which returned HTTP 404. The dashboard treated that expected
+stale-primary race as terminal and removed the iframe, producing the preserved
+`external_stream_not_embeddable` receipt and visible Stream unavailable state.
+
+The product repair now treats two precise states as primary re-election points:
+only shared children remain after discovery, or sharing-credential creation
+returns 404 because the discovered primary vanished. In either case the
+dashboard uses the already authorized direct frame URL to establish a new
+primary. Other credential failures remain terminal. Red tests reproduced both
+states before the repair; the focused dashboard sharing suite and production
+dashboard build now pass without weakening the external marker oracle.
+
+Development generation `0.28.0-faf7a6687342` contains the repair. The isolated
+provider was restaged and applied after exact ingress preflight, the reviewed
+dashboard and capability origins were republished, provider doctor passed, and
+the three-launch smoke passed with production unchanged. The original durable
+handoff was explicitly resolved after installation, returned to ready, and its
+protected expected-identity binding was refreshed without disclosing operator
+or provider URLs.
+
+Revised next action: commit and push the stale-primary recovery, then redispatch
+C01. Preserve the exact simultaneous reconnect schedule. If it fails again,
+classify the next failure from the retained client and provider records rather
+than adding a retry inside the run.

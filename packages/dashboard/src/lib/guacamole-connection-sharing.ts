@@ -111,8 +111,10 @@ export async function resolveGuacamoleViewerFrame({
     ([, active]) => !active.sharingProfileIdentifier,
   )?.[0];
   if (!activeConnectionId) {
-    if (matchingActiveConnections.length === 0) return { mode: "direct", url: frameUrl };
-    throw new Error("Guacamole primary active connection is unavailable");
+    // Shared children can outlive the primary connection record briefly. A
+    // direct open re-establishes the primary instead of stranding reconnecting
+    // viewers on an otherwise valid durable handoff.
+    return { mode: "direct", url: frameUrl };
   }
 
   const sharingProfiles = await authenticatedFetch<Record<string, GuacamoleSharingProfile>>(
@@ -127,8 +129,23 @@ export async function resolveGuacamoleViewerFrame({
     throw new Error("Guacamole simultaneous-view sharing profile is unavailable");
   }
 
-  const credentials = await authenticatedFetch<GuacamoleSharingCredentials>(
+  const credentialsResponse = await fetchImpl(new URL(
     `api/session/data/postgresql/activeConnections/${encodeURIComponent(activeConnectionId)}/sharingCredentials/${encodeURIComponent(sharingProfile.identifier)}`,
+    root,
+  ), {
+    credentials: "include",
+    headers: { "Guacamole-Token": token.authToken },
+    cache: "no-store",
+    signal,
+  });
+  if (credentialsResponse.status === 404) {
+    // The primary may disappear between discovery and credential creation
+    // when several viewers reconnect together. Recover by becoming the new
+    // primary rather than projecting a terminal stream failure.
+    return { mode: "direct", url: frameUrl };
+  }
+  const credentials = await readJson<GuacamoleSharingCredentials>(
+    credentialsResponse,
     "Guacamole connection-sharing credential creation",
   );
   const keyExpected = credentials.expected?.some(
