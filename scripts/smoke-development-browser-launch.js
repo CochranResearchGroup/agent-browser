@@ -81,7 +81,11 @@ if (json) console.log(JSON.stringify(report, null, 2));
 else console.log(`Development browser launch smoke passed: iterations=${iterations}`);
 
 function runJson(commandArgs) {
-  const output = execFileSync(descriptor.executable, commandArgs, {
+  const output = execFileSync(descriptor.executable, [
+    '--service-state-lock-timeout-ms',
+    '10000',
+    ...commandArgs,
+  ], {
     encoding: 'utf8',
     timeout: 45_000,
   });

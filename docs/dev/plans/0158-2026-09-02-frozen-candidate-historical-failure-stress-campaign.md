@@ -3351,3 +3351,13 @@ The unchanged live CDP streaming check then passed. Retain this as campaign
 evidence that abandoned validation scopes can starve browser launches and that
 the current admission surface does not reclaim or clearly report stale task
 claims.
+
+The exact `5433b4e5` candidate installed as development generation
+`0.28.0-44a4e6ae02e5` with production unchanged. Its immediate launch smoke
+then failed on a one-second Service State file-lock wait while the freshly
+restarted development services were reconciling. The services remained ready
+and no crashed holder existed. The smoke had omitted the repository's existing
+per-command lock-timeout escape hatch. It now supplies a bounded ten-second
+budget to each open, read, and close operation, retaining a finite failure for
+a wedged holder. The unchanged three-iteration launch and residue sequence
+passes with that contract.
