@@ -3999,3 +3999,16 @@ existing classification and applies inference only to raw records. A direct
 double-normalization regression proves the recovered lifecycle classification
 survives the oracle boundary while an unclassified CDP handshake remains
 actionable.
+
+The next slow-client readiness pass then exposed a distinct simultaneous-view
+reconnect race. Initial and concurrent captures both rendered the exact fixture,
+but reconnect found a Guacamole active-primary row whose sharing credentials
+already returned 404. The resolver treated any active row as proof of a live
+primary and never asked the server-side primary lease whether the stale owner
+could be replaced. It remained without an iframe until the pixel deadline.
+The resolver now asks the bounded primary-claim endpoint after a sharing
+credential 404. A live owner remains protected because its unexpired claim is
+denied; an expired stale owner can be replaced immediately. A provider-free
+regression holds the stale active row in place and proves exactly one granted
+claim selects the direct primary URL. Connection-sharing, view-stream, dashboard
+production-build, and whitespace checks pass.

@@ -124,6 +124,17 @@ export async function resolveGuacamoleViewerFrame({
     }),
     operation,
   );
+  const claimPrimary = async (): Promise<GuacamolePrimaryClaim> => readJson<GuacamolePrimaryClaim>(
+    await fetchImpl(new URL("/api/guacamole-primary-claim", dashboardHref), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ routeId, connectionId }),
+      cache: "no-store",
+      signal,
+    }),
+    "Guacamole primary election",
+  );
 
   const electionDeadline = Date.now() + 15_000;
   while (Date.now() < electionDeadline) {
@@ -135,17 +146,7 @@ export async function resolveGuacamoleViewerFrame({
       ([, active]) => active.connectionIdentifier === connectionId && !active.sharingProfileIdentifier,
     )?.[0];
     if (!activeConnectionId) {
-      const claim = await readJson<GuacamolePrimaryClaim>(await fetchImpl(
-        new URL("/api/guacamole-primary-claim", dashboardHref),
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ routeId, connectionId }),
-          cache: "no-store",
-          signal,
-        },
-      ), "Guacamole primary election");
+      const claim = await claimPrimary();
       if (claim.granted) return { mode: "direct", url: frameUrl };
       const retryAfterMs = Number.isFinite(claim.retryAfterMs) ? claim.retryAfterMs! : 250;
       await waitImpl(Math.max(50, Math.min(250, retryAfterMs)), signal);
@@ -174,6 +175,11 @@ export async function resolveGuacamoleViewerFrame({
       signal,
     });
     if (credentialsResponse.status === 404) {
+      // Guacamole can retain an active-connection row briefly after its
+      // primary iframe closes. Let the server-side lease decide whether this
+      // client may replace that stale primary instead of waiting on the row.
+      const claim = await claimPrimary();
+      if (claim.granted) return { mode: "direct", url: frameUrl };
       await waitImpl(100, signal);
       continue;
     }
