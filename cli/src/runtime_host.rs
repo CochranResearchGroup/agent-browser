@@ -104,6 +104,7 @@ pub(crate) fn command_accepts_lane_profile_defaults(command: &Value) -> bool {
                 | "desktop_evidence_observe"
                 | "desktop_prompt_observe"
                 | "desktop_interact"
+                | "view_focus"
         )
     )
 }
@@ -342,6 +343,17 @@ mod tests {
         ));
         assert!(command_accepts_lane_profile_defaults(
             &serde_json::json!({"action": "remote_view_open"})
+        ));
+    }
+
+    #[test]
+    fn exact_lane_view_focus_does_not_accept_stale_lane_profile_defaults() {
+        assert!(!command_accepts_lane_profile_defaults(
+            &serde_json::json!({"action": "view_focus"})
+        ));
+
+        assert!(!command_accepts_lane_profile_defaults(
+            &serde_json::json!({"action": "view_focus", "runtimeProfile": "explicit-profile"})
         ));
     }
 

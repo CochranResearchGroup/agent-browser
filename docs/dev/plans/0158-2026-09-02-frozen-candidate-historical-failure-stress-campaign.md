@@ -3021,3 +3021,65 @@ changes, reopen and reseal a synthetic handoff if installation closes it, then
 dispatch a fresh two-client readiness epoch. Do not begin C01 until both
 external clients retain the exact marker through concurrent viewing and the
 aggregate seals successfully.
+
+E46 ran from exact head `97c054eb0ce01f6bf9269dd150c128ae00af0e9a` as
+workflow run `33874989172`. The human client passed initial load, concurrent
+marker observation, reconnect, exact browser identity, and exact marker pixels.
+The delayed client failed before handoff resolution because three required
+hashed dashboard JavaScript chunks returned HTTP 504 after approximately 27.2
+seconds. The aggregate sealed the passing human receipt and the failed delayed
+receipt without retry or repair inside the epoch. This result proves the stable
+Guacamole sharing mount works through concurrent use, while disproving that the
+earlier dashboard-ingress repair eliminated the complete external-load failure
+class.
+
+A local external-ingress reproducer then kept one authenticated durable handoff
+viewer connected while opening fresh clients through the public origin. Twelve
+fresh clients produced ten failures. The scenario remained red after reduction
+to the historical shape of one established client plus two fresh clients: the
+fourth bounded repetition produced one client that never acquired an iframe.
+That client observed repeated service-resource 503 responses, a service-request
+502, a service-status 504, a failed Guacamole sharing-credential request, and
+multiple API reads pending for 5 to 17 seconds. A separate 30-way comparison
+kept the generation backend below 6 milliseconds, stable ingress below 8
+milliseconds, and settled public static reads predominantly below 750
+milliseconds. The defect therefore depends on fresh dashboard convergence and
+is not ordinary static-file throughput saturation.
+
+The durable failure journal exposed the causal amplification. Every newly
+opened control viewport automatically submitted `view_focus`. The runtime host
+had committed its lane configuration before the retained managed browser was
+attached. It consequently injected the lane's obsolete `lease-fail-open`
+runtime-profile default into each later profile-omitting focus command. The
+active browser correctly rejected that invented profile mismatch. Repeated
+clients accumulated failed and timed-out focus jobs, then contended on the
+Service State lock needed by viewer-lease acquisition. The journal recorded the
+dashboard and Guacamole failures visible after application startup, but a 503
+emitted by stable ingress itself had no durable record. That omission explains
+why the E46 bundle-load failure depended on external HAR evidence for its first
+post-mortem signal.
+
+Two focused red-to-green regressions now freeze the repaired invariants.
+`view_focus` is an exact operation on the already-selected runtime lane and no
+longer accepts an implicit lane-initialization profile default. An explicitly
+supplied profile remains in the command and therefore still reaches the
+existing mismatch guard. Separately, every stable-ingress unavailable response
+constructs and appends a privacy-bounded `dashboard_action` failure record with
+source `dashboard_ingress`, stage `request_proxy`, the exact typed ingress code,
+and action `dashboard_load`. The record deliberately excludes raw request URLs,
+headers, backend messages, and credentials. Nine runtime-host tests, 28
+dashboard-ingress tests, Rust format, and workspace clippy with warnings denied
+pass. The first focused build encountered a transient sccache daemon fork
+failure under host process pressure; the preserved cache-sanitized diagnostics
+contained no credential values, and the same tests passed with only the cache
+disabled while retaining the wrapper's admitted eight Cargo jobs.
+
+Revised next action: commit and publish this bounded runtime-host and ingress
+logging repair, install its exact candidate only into the development runtime,
+and prepare a fresh synthetic handoff because installation may close the current
+browser. Verify that one direct focus request against the installed retained
+browser does not inherit an obsolete lane profile, verify an induced stable-
+ingress unavailable response appears in the development failure journal without
+private request material, and rerun the reduced public two-client load loop.
+Only after that loop and a fresh externally hosted two-client E47 aggregate pass
+may the campaign dispatch C01 from the same frozen commit.

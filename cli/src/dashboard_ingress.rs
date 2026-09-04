@@ -1426,6 +1426,9 @@ async fn proxy_ingress_connection(client: &mut TcpStream, backend: &mut TcpStrea
 }
 
 async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: &str) {
+    crate::native::service_failure_journal::append_service_failure_best_effort(
+        &dashboard_ingress_failure_record(code),
+    );
     let body = serde_json::json!({
         "success": false,
         "error": code,
@@ -1443,6 +1446,19 @@ async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: 
         body.len(), body
     );
     let _ = client.write_all(response.as_bytes()).await;
+}
+
+fn dashboard_ingress_failure_record(
+    code: &str,
+) -> crate::native::service_failure_journal::ServiceFailureRecord {
+    crate::native::service_failure_journal::ServiceFailureRecord::new(
+        crate::native::service_failure_journal::ServiceFailureCategory::DashboardAction,
+        "dashboard_ingress",
+        "request_proxy",
+        code,
+        "Stable dashboard ingress could not serve the request.",
+    )
+    .with_action("dashboard_load")
 }
 
 #[cfg(test)]
@@ -1478,6 +1494,21 @@ mod tests {
             authenticated_ingress_probe_at: "2026-08-15T12:00:00Z".to_string(),
             operator_surface_load_result: "ready".to_string(),
         }
+    }
+
+    #[test]
+    fn ingress_unavailable_response_has_a_postmortem_failure_record() {
+        let record = dashboard_ingress_failure_record("selected_backend_unavailable");
+
+        assert_eq!(
+            record.category,
+            crate::native::service_failure_journal::ServiceFailureCategory::DashboardAction
+        );
+        assert_eq!(record.source, "dashboard_ingress");
+        assert_eq!(record.stage, "request_proxy");
+        assert_eq!(record.code, "selected_backend_unavailable");
+        assert_eq!(record.action.as_deref(), Some("dashboard_load"));
+        assert!(record.details.is_none());
     }
 
     #[test]
