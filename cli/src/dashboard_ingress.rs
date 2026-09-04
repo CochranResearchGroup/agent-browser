@@ -1113,7 +1113,14 @@ pub(crate) async fn run_dashboard_ingress_server(public_port: u16, fallback_back
             let registry = match load_ingress_registry_for_request(repository).await {
                 Ok(registry) => registry,
                 Err(error) => {
-                    write_ingress_unavailable(&mut client, "registry_unavailable", &error).await;
+                    write_ingress_unavailable(
+                        &mut client,
+                        "registry_unavailable",
+                        &error,
+                        "dashboard_load",
+                        None,
+                    )
+                    .await;
                     return;
                 }
             };
@@ -1134,10 +1141,19 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
     let request = match read_initial_http_request(client).await {
         Ok(request) => request,
         Err(error) => {
-            write_ingress_unavailable(client, "invalid_ingress_request", &error).await;
+            write_ingress_unavailable(
+                client,
+                "invalid_ingress_request",
+                &error,
+                "dashboard_load",
+                None,
+            )
+            .await;
             return;
         }
     };
+    let (request_method, request_path, request_action) =
+        dashboard_ingress_request_identity(&request);
     let retry_safe = request.starts_with(b"GET ")
         || request.starts_with(b"HEAD ")
         || request.starts_with(b"OPTIONS ");
@@ -1157,6 +1173,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
         }
     }
     let mut failures = Vec::new();
+    let mut failure_stages = Vec::new();
     let mut mutation_outcome_unknown = false;
     for backend in attempts {
         match attempt_dashboard_backend(backend, &backend_request, first_response_timeout).await {
@@ -1168,6 +1185,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
             }
             Err(error) => {
                 mutation_outcome_unknown |= !retry_safe && error.request_may_have_been_delivered();
+                failure_stages.push(error.failure_stage());
                 failures.push(format!("{}: {}", backend.generation_id, error.message()));
             }
         }
@@ -1192,6 +1210,16 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
             registry.selected_backend().generation_id,
             failures.join("; ")
         ),
+        &request_action,
+        Some(serde_json::json!({
+            "requestMethod": request_method,
+            "requestPath": request_path,
+            "retrySafe": retry_safe,
+            "selectedBackendGeneration": registry.selected_backend().generation_id,
+            "fallbackAttempted": registry.fallback_backend().is_some() && retry_safe,
+            "backendFailureStages": failure_stages,
+            "firstResponseTimeoutMs": first_response_timeout.as_millis(),
+        })),
     )
     .await;
 }
@@ -1211,6 +1239,51 @@ impl DashboardBackendAttemptError {
             Self::BeforeDelivery(message) | Self::AfterDelivery(message) => message,
         }
     }
+
+    fn failure_stage(&self) -> &'static str {
+        match self {
+            Self::BeforeDelivery(_) => "before_delivery",
+            Self::AfterDelivery(message) if message == "first response byte timed out" => {
+                "first_response_timeout"
+            }
+            Self::AfterDelivery(_) => "after_delivery",
+        }
+    }
+}
+
+fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String) {
+    let request_line = String::from_utf8_lossy(request)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let mut fields = request_line.split_whitespace();
+    let method = fields.next().unwrap_or("UNKNOWN").to_string();
+    let raw_path = fields
+        .next()
+        .unwrap_or("/")
+        .split('?')
+        .next()
+        .unwrap_or("/");
+    let (path, action) = match raw_path {
+        "/api/service/resources" => (raw_path.to_string(), "service_resources".to_string()),
+        "/api/service/status" => (raw_path.to_string(), "service_status".to_string()),
+        "/api/service/request" => (raw_path.to_string(), "service_request".to_string()),
+        "/api/runtime/manifest" => (raw_path.to_string(), "runtime_manifest".to_string()),
+        path if path.starts_with("/remote-view/") => (
+            "/remote-view/<redacted>".to_string(),
+            "remote_view_handoff_load".to_string(),
+        ),
+        path if path.starts_with("/guacamole") => (
+            "/guacamole/<redacted>".to_string(),
+            "guacamole_load".to_string(),
+        ),
+        _ => (
+            "/dashboard/<route>".to_string(),
+            "dashboard_load".to_string(),
+        ),
+    };
+    (method, path, action)
 }
 
 /// Service requests may commit a mutation before the backend writes its first
@@ -1220,6 +1293,8 @@ impl DashboardBackendAttemptError {
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
     if request.starts_with(b"GET /api/service/status ")
         || request.starts_with(b"GET /api/service/status?")
+        || request.starts_with(b"GET /api/service/resources ")
+        || request.starts_with(b"GET /api/service/resources?")
     {
         // A live service projection can take longer than an ordinary dashboard
         // read while the host is under admitted pressure. Keep this allowance
@@ -1425,9 +1500,15 @@ async fn proxy_ingress_connection(client: &mut TcpStream, backend: &mut TcpStrea
     let _ = backend.shutdown().await;
 }
 
-async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: &str) {
+async fn write_ingress_unavailable(
+    client: &mut TcpStream,
+    code: &str,
+    message: &str,
+    action: &str,
+    details: Option<serde_json::Value>,
+) {
     crate::native::service_failure_journal::append_service_failure_best_effort(
-        &dashboard_ingress_failure_record(code),
+        &dashboard_ingress_failure_record(code, action, details),
     );
     let body = serde_json::json!({
         "success": false,
@@ -1450,15 +1531,21 @@ async fn write_ingress_unavailable(client: &mut TcpStream, code: &str, message: 
 
 fn dashboard_ingress_failure_record(
     code: &str,
+    action: &str,
+    details: Option<serde_json::Value>,
 ) -> crate::native::service_failure_journal::ServiceFailureRecord {
-    crate::native::service_failure_journal::ServiceFailureRecord::new(
+    let record = crate::native::service_failure_journal::ServiceFailureRecord::new(
         crate::native::service_failure_journal::ServiceFailureCategory::DashboardAction,
         "dashboard_ingress",
         "request_proxy",
         code,
         "Stable dashboard ingress could not serve the request.",
     )
-    .with_action("dashboard_load")
+    .with_action(action);
+    match details {
+        Some(details) => record.with_details(details),
+        None => record,
+    }
 }
 
 #[cfg(test)]
@@ -1498,7 +1585,15 @@ mod tests {
 
     #[test]
     fn ingress_unavailable_response_has_a_postmortem_failure_record() {
-        let record = dashboard_ingress_failure_record("selected_backend_unavailable");
+        let record = dashboard_ingress_failure_record(
+            "selected_backend_unavailable",
+            "service_resources",
+            Some(serde_json::json!({
+                "requestMethod": "GET",
+                "requestPath": "/api/service/resources",
+                "firstResponseTimeoutMs": 10_000,
+            })),
+        );
 
         assert_eq!(
             record.category,
@@ -1507,8 +1602,39 @@ mod tests {
         assert_eq!(record.source, "dashboard_ingress");
         assert_eq!(record.stage, "request_proxy");
         assert_eq!(record.code, "selected_backend_unavailable");
-        assert_eq!(record.action.as_deref(), Some("dashboard_load"));
-        assert!(record.details.is_none());
+        assert_eq!(record.action.as_deref(), Some("service_resources"));
+        assert_eq!(
+            record.details.as_ref().unwrap()["requestPath"],
+            "/api/service/resources"
+        );
+        assert_eq!(
+            record.details.as_ref().unwrap()["firstResponseTimeoutMs"],
+            10_000
+        );
+    }
+
+    #[test]
+    fn ingress_failure_request_identity_redacts_handoff_and_guacamole_paths() {
+        assert_eq!(
+            dashboard_ingress_request_identity(
+                b"GET /remote-view/private-handoff?token=secret HTTP/1.1\r\n\r\n"
+            ),
+            (
+                "GET".to_string(),
+                "/remote-view/<redacted>".to_string(),
+                "remote_view_handoff_load".to_string(),
+            )
+        );
+        assert_eq!(
+            dashboard_ingress_request_identity(
+                b"GET /guacamole/api/session/data/private-token HTTP/1.1\r\n\r\n"
+            ),
+            (
+                "GET".to_string(),
+                "/guacamole/<redacted>".to_string(),
+                "guacamole_load".to_string(),
+            )
+        );
     }
 
     #[test]
@@ -2556,10 +2682,16 @@ mod tests {
     }
 
     #[test]
-    fn service_status_read_gets_a_pressure_tolerant_first_response_timeout() {
+    fn service_status_and_resources_reads_get_a_pressure_tolerant_first_response_timeout() {
         assert_eq!(
             dashboard_ingress_first_response_timeout(
                 b"GET /api/service/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/service/resources HTTP/1.1\r\nHost: localhost\r\n\r\n"
             ),
             Duration::from_secs(10)
         );

@@ -3223,3 +3223,37 @@ publish the scheduler repair; install its exact development candidate; recreate
 one coherent managed browser and prove the dashboard-routed `view_focus` no
 longer receives a fail-open profile. Then rerun the corrected five-round public
 load gate and dispatch E47 only if its failure-journal delta remains clean.
+
+The exact scheduler repair was committed, published, installed as development
+generation `0.28.0-31868282c605`, and re-proved through the dashboard route. A
+fresh remote-view acquisition reached `operatorVisible.state=ready`, and the
+same retained handoff browser accepted dashboard-routed `view_focus` without a
+profile mismatch or identity rejection. Production remained unchanged.
+
+The corrected external-ingress load gate then stopped on its anchor because one
+`GET /api/service/resources` returned HTTP 503 after roughly two seconds. The
+durable failure journal recorded two nearby `selected_backend_unavailable`
+events while direct readback showed the service worker ready with queue depth
+zero. The defect was a split timeout contract: the inner dashboard proxy had
+already been widened to ten seconds for both status and resources, but the
+outer stable ingress granted ten seconds only to status and still terminated
+all resource reads after two seconds. The backend subsequently returned HTTP
+200, explaining the observed 503 followed by 200 sequence. This was a campaign
+sequence blocker, so the campaign paused for diagnosis and repair while the
+Plan 0158 goal remained active.
+
+A red regression proved that `/api/service/resources` received only the
+ordinary two-second ingress allowance. The bounded repair gives status and
+resources the same ten-second outer-ingress allowance, matching their shared
+single-flight inner proxy contract. Focused red-to-green validation passes.
+Ingress failures now also journal a redacted request route, request method,
+route-specific action, retry safety, selected generation, fallback attempt,
+failure phase, and first-response timeout. Handoff identifiers, Guacamole
+session paths, query strings, cookies, and tokens remain excluded. Focused
+tests cover both the richer resource-failure record and path redaction.
+
+Revised next action: finish workspace format and clippy validation, publish and
+install the exact timeout-alignment candidate in development, then recreate the
+handoff and rerun the corrected external five-round load gate from its anchor.
+Only dispatch E47 if that gate has no 502, 503, or 504 response, no unusable
+handoff or stream, no resource backlog, and no new identity rejection.
