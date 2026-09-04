@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
@@ -22,6 +22,8 @@ const descriptor = developmentRuntimeDescriptor();
 const productionBefore = productionSnapshot();
 const runId = `${Date.now()}-${process.pid}`;
 const results = [];
+
+waitForServiceStateReady();
 
 for (let index = 1; index <= iterations; index += 1) {
   const identity = `p126-fresh-${runId}-${index}`;
@@ -100,6 +102,40 @@ function waitForNoProcess(identity) {
     execFileSync('sleep', ['0.1']);
   }
   throw new Error(`Development browser process remained after close: ${identity}`);
+}
+
+function waitForServiceStateReady() {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const result = spawnSync(descriptor.executable, [
+      '--service-state-lock-timeout-ms',
+      '10000',
+      '--json',
+      'service',
+      'status',
+    ], {
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 15_000,
+    });
+    let response = null;
+    try {
+      response = JSON.parse(result.stdout.trim());
+    } catch {
+      // The structured failure below distinguishes transport errors from lock contention.
+    }
+    if (result.status === 0) {
+      if (response.success === true) return;
+    }
+    const error = typeof response?.error === 'string'
+      ? response.error
+      : result.error?.message || result.stderr || 'unknown preflight failure';
+    if (!error.startsWith('service_state_lock_timeout:')) {
+      throw new Error(`Development Service State preflight failed: ${error}`);
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+  throw new Error('Development Service State did not become readable within 30 seconds');
 }
 
 function takeOption(values, option) {

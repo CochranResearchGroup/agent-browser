@@ -3385,3 +3385,25 @@ browser-capability registry, and per-session tab reads. This keeps the left
 rail bounded to ten-second freshness while coalescing both component-local and
 cross-client load. The dashboard build, source contracts, all 53 dashboard
 backend tests, format, and workspace clippy pass.
+
+The `9c7ff9cb` candidate installed as development generation
+`0.28.0-a9259486b184` with production unchanged. The immediate launch smoke
+again exposed the one-second pre-command file-lock boundary. A read-only
+preflight was added so the smoke never retries an `open` effect. Its first
+implementation then misclassified a 1 MB `spawnSync` buffer overflow as live
+lock contention because the partial 4.36 MB status payload contained a
+historical lock-timeout string. The corrected preflight uses a bounded 16 MB
+buffer and classifies only the top-level structured error. It and all three
+launch cycles pass.
+
+The next external gate loaded all ten fresh clients and reduced retained-anchor
+Service Status reads from 51 to 10. No status, runtime-health, resource,
+registry, focus, handoff, Guacamole, or fresh-client failure occurred. The
+final anchor check alone retained two session-tabs 504s. A follow-up external
+per-port probe issued 110 requests across all ten retained session ports with
+zero failures and a maximum latency below 0.8 seconds, proving no session route
+was intrinsically slow. The remaining load exists only where the five-second
+all-session tab walk overlaps full dashboard startup. Session and tab polling
+now uses the same ten-second freshness bound as Service Status, cutting that
+background volume approximately in half without sacrificing the left rail's
+bounded accuracy.

@@ -209,7 +209,7 @@ const reconcileSessionsAtom = atom(
 // Sync hook
 // ---------------------------------------------------------------------------
 
-export function useSessionsSync(pollInterval = 5000) {
+export function useSessionsSync(pollInterval = 10_000) {
   const failCountRef = useRef(0);
   const fetchInFlightRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

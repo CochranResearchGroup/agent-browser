@@ -25,6 +25,12 @@ const cliInstall = readFileSync('cli/src/install.rs', 'utf8');
 const dashboardHttp = readFileSync('cli/src/native/stream/http.rs', 'utf8');
 
 assert.match(
+  sessionsStore,
+  /useSessionsSync\(pollInterval = 10_000\)/,
+  'Session and tab polling must use the shared ten-second dashboard freshness bound',
+);
+
+assert.match(
   page,
   /import \{ WorkspaceNavigator \} from "@\/components\/workspace-navigator";/,
   'Dashboard page must render the workspace navigator instead of importing SessionTree',
