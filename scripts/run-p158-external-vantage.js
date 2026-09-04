@@ -1514,7 +1514,7 @@ export function projectHandoffResolution(data) {
   };
 }
 
-async function humanPacedObservation(page, profile, pixelMarkerRegion) {
+export async function humanPacedObservation(page, profile, pixelMarkerRegion) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
   await page.waitForTimeout(delay);
@@ -1534,6 +1534,8 @@ async function humanPacedObservation(page, profile, pixelMarkerRegion) {
       await page.keyboard.press('Escape');
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('Control+Home');
+      await page.waitForTimeout(delay);
     }
   }
 }

@@ -2366,3 +2366,48 @@ while the exact eight/eight state passes without quarantine.
 Revised next action: commit the observable-capacity repair, restage and apply
 it, and require exact eight/eight readback from the isolated development
 PostgreSQL container before repeating any external browser epoch.
+
+The first corrected reconciliation detected the capacity drift, but the
+provider's full reconcile also tried to reopen four already-owned warm viewer
+profiles and hit `explicit_profile_conflicts_with_current_owner`. The provider
+quarantined itself rather than performing broad cleanup. The four exact
+development warm-viewer sessions were closed individually, after which the
+reviewed provider apply succeeded with ingress deferred. Exact readback from
+the isolated development database then showed eight total and eight per-user
+connections for all six managed routes. Production remained unchanged.
+
+E29 ran from exact clean remote head `6aeb2dd0` as workflow run `33834110809`.
+Both external clients passed the complete readiness sequence, including the
+slow client's concurrent page. The aggregate passed with the same durable
+handoff, retained service browser identity, external ingress, exact synthetic
+pixel marker, zero retries, zero repairs, zero internal URL disclosures, and
+zero physical browser relaunches. This accepts the capacity reconciliation as
+sufficient for readiness while preserving the earlier 429 as a campaign
+finding.
+
+The next C01 attempt, workflow run `33834420571`, reached the shared
+measurement window. Initial and first reconnect pixel checks passed. The human
+client failed the second reconnect with
+`external_stream_identity_marker_missing`, and the companion client was
+canceled because the epoch could no longer produce a valid paired result. The
+failure bundle retained 3,646 completed requests, 13 failed requests, 42
+pending requests, 159 Guacamole entries with 144 HTTP 200 responses and no
+429, 57 WebSocket observations, and 476 console observations.
+
+The failed screenshot proves that the Guacamole stream, retained fixture, and
+dashboard were all visible. The sampled 400 by 100 marker crop instead
+contained the fixture's prompt-like-dialog control. Repeated simulated human
+actions had scrolled the remote synthetic document away from its attested
+origin: each action issued balanced wheel input, but asynchronous remote input
+delivery did not guarantee an exactly reversible scroll position. This is a
+false-negative harness defect, not a browser or ingress outage.
+
+The repair makes every simulated human action finish with a remote
+`Control+Home`, restoring the synthetic document to the attested origin before
+the next identity check. A provider-free regression test drives the input
+sequence through a fake page and requires that deterministic reset to be the
+last remote input.
+
+Revised next action: validate, commit, and push the harness repair, then repeat
+C01 from the clean exact head. Continue to preserve the failed epoch and its
+diagnostics for the final defect-surface analysis.

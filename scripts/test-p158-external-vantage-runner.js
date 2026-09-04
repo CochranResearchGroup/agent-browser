@@ -19,6 +19,7 @@ import {
   externalVantageFailureRecord,
   findInternalUrlLeaks,
   handoffResolutionReadinessGaps,
+  humanPacedObservation,
   projectHandoffResolution,
   pixelMarkerClipForIframe,
   remoteViewIframeClipObservation,
@@ -191,6 +192,35 @@ assert.throws(
     { x: 310, y: 337, width: 1110, height: 641 },
   ),
   /does not fit the rendered remote-view iframe/,
+);
+const pacedInputEvents = [];
+await humanPacedObservation({
+  mouse: {
+    async move() { pacedInputEvents.push('mouse:move'); },
+    async wheel(_x, y) { pacedInputEvents.push(`mouse:wheel:${y}`); },
+    async click() { pacedInputEvents.push('mouse:click'); },
+  },
+  keyboard: {
+    async press(key) { pacedInputEvents.push(`keyboard:${key}`); },
+  },
+  async waitForTimeout() {},
+  locator() {
+    return {
+      first() {
+        return {
+          async count() { return 1; },
+          async boundingBox() { return { x: 10, y: 20, width: 1000, height: 700 }; },
+        };
+      },
+    };
+  },
+}, 'human_controller', {
+  coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
+});
+assert.equal(
+  pacedInputEvents.at(-1),
+  'keyboard:Control+Home',
+  'each simulated human action must leave the synthetic remote document at its attested origin',
 );
 assert.equal(
   remoteViewIframeClipObservation(
