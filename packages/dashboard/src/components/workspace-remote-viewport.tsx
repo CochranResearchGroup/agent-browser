@@ -1417,6 +1417,13 @@ export function WorkspaceRemoteViewport({
     ?? { tab: null, tabIndex: null, recoveredFromStaleSelection: false, staleSelectionId: null };
   const streamChoices = selectedProjection?.streamChoices ?? [];
   const stream = selectedProjection?.stream ?? null;
+  const guacamoleSharingStream = useMemo<ServiceViewStream | null>(() => stream ? {
+    connectionId: stream.connectionId,
+    displayAllocationId: stream.displayAllocationId,
+    provider: stream.provider,
+    providerMode: stream.providerMode,
+    routeId: stream.routeId,
+  } : null, [stream?.connectionId, stream?.displayAllocationId, stream?.provider, stream?.providerMode, stream?.routeId]);
   const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
   const sourceResolution = useMemo(
     () => resolveWorkspaceViewSources({ streams: streamChoices, selected: stream, mode: singleWorkspaceMode }),
@@ -1643,7 +1650,7 @@ export function WorkspaceRemoteViewport({
   }, [viewportTarget, viewportTargetToken]);
 
   useEffect(() => {
-    if (!streamUrl || !stream) {
+    if (!streamUrl || !guacamoleSharingStream) {
       setViewerFrameUrl(null);
       return;
     }
@@ -1661,7 +1668,7 @@ export function WorkspaceRemoteViewport({
       dashboardHref: window.location.href,
       frameUrl: streamUrl,
       signal: controller.signal,
-      stream,
+      stream: guacamoleSharingStream,
     }).then((resolution) => {
       if (!controller.signal.aborted) setViewerFrameUrl(resolution.url);
     }).catch((cause) => {
@@ -1684,13 +1691,13 @@ export function WorkspaceRemoteViewport({
         browserId: browser?.id,
         profileId: browser?.profileId,
         sessionId: viewportSelection?.selection.sessionId,
-        routeId: stream.routeId,
-        displayId: stream.displayAllocationId,
-        streamProvider: stream.provider,
+        routeId: guacamoleSharingStream.routeId,
+        displayId: guacamoleSharingStream.displayAllocationId,
+        streamProvider: guacamoleSharingStream.provider,
       });
     });
     return () => controller.abort();
-  }, [browser?.id, browser?.profileId, stream, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
+  }, [browser?.id, browser?.profileId, guacamoleSharingStream, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   useEffect(() => {
     if (!frameUrl || !canEmbed || !viewportTargetToken) {

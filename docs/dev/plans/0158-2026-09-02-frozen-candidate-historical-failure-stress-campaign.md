@@ -2963,3 +2963,61 @@ rejects coordinate clicks.
 Revised next action: publish the passive-readiness correction and dispatch a
 fresh exact-commit readiness epoch against the still-correct E7 target. If its
 two clients and aggregate pass, begin C01 immediately from that same commit.
+
+E43 ran from exact head `c348d2d498da7484474e64d50b46b3a669744715`
+as workflow run `33870248318`. The human client rendered the expected synthetic
+marker. The slow client initially rendered it alone, but its concurrent view
+became black when the human view connected. Existing provider live tests had
+classified simultaneous viewing from frame presence alone and therefore
+missed the content loss.
+
+The route used one direct Guacamole connection for each dashboard iframe.
+Each iframe consequently opened an independent RDP login, and xrdp logged off
+the earlier desktop when the later client arrived. The provider repair now
+creates one stable managed Guacamole sharing profile for every route. The
+dashboard authenticates to Guacamole, finds the current active connection and
+its exact route sharing profile, requests a transient share credential, and
+uses that credential only inside the iframe. It does not expose the credential
+through the Agent Browser service API or durable operator handoff. Provider
+schema drift is now visible to readiness probes. Focused sharing, provider,
+workstation, dashboard, fixture, release-asset, format, clippy, build, install,
+doctor, launch-smoke, and external-ingress checks passed. Commit `1d061647`
+was pushed and installed as development generation
+`0.28.0-bd846cd12ea0`; production remained unchanged.
+
+E44 ran from exact head `1d061647d18ec61cc10796c12aefabaa8b95bcd3`
+as workflow run `33873479843`. Both clients received
+`handoff_target_closed_operator_action_required` before Guacamole access. The
+development installation had closed the E7 browser, but preparation had
+incorrectly assumed the retained identity and handoff remained live. Both
+failure receipts and the aggregate were sealed before repair. This was a
+campaign preparation defect, not evidence about connection sharing.
+
+The profile was then opened through a fresh service-owned remote-view lane.
+The request returned a verified terminal effect, a valid service tab, and
+`operatorVisible.state=ready`. The new opaque durable handoff and exact browser,
+profile, session, tab, and target identity were sealed in the protected GitHub
+environment without logging their values.
+
+E45 ran from the same exact head as workflow run `33874034647`. Both clients
+resolved the new handoff and successfully reached the Guacamole authentication
+and active-connection APIs, but neither retained an iframe long enough to
+render the marker. The dashboard remained at “Checking stream.” Network
+evidence showed repeated successful token requests interleaved with aborted
+tunnels. The sharing effect depended on the whole projected stream object.
+Routine projection refreshes recreated that object, aborted the current
+effect, cleared the iframe, generated another one-time share credential, and
+started the cycle again. The failure journal recorded the aborted Guacamole
+loads, while the external receipts supplied the missing higher-level context.
+
+A focused red regression now requires the component to memoize the five
+semantic Guacamole route fields and forbids whole-projection object churn from
+invalidating the sharing effect. The repair passes that regression and the
+dashboard production build.
+
+Revised next action: publish and install the stable-sharing-effect repair,
+reconcile the development provider and external ingress if the generation
+changes, reopen and reseal a synthetic handoff if installation closes it, then
+dispatch a fresh two-client readiness epoch. Do not begin C01 until both
+external clients retain the exact marker through concurrent viewing and the
+aggregate seals successfully.

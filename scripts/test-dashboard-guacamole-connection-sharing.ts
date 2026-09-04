@@ -1,7 +1,29 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolveGuacamoleViewerFrame } from "../packages/dashboard/src/lib/guacamole-connection-sharing.ts";
+
+const viewportSource = readFileSync(
+  "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+  "utf8",
+);
+
+assert.match(
+  viewportSource,
+  /const guacamoleSharingStream = useMemo<ServiceViewStream \| null>/,
+  "the sharing effect must receive a stream descriptor stabilized across projection rerenders",
+);
+assert.match(
+  viewportSource,
+  /\[stream\?\.connectionId, stream\?\.displayAllocationId, stream\?\.provider, stream\?\.providerMode, stream\?\.routeId\]/,
+  "only semantic Guacamole route fields may invalidate the sharing descriptor",
+);
+assert.match(
+  viewportSource,
+  /\}, \[browser\?\.id, browser\?\.profileId, guacamoleSharingStream, streamUrl, viewportSelection\?\.selection\.sessionId, viewportTargetToken\]\);/,
+  "projection object churn must not regenerate a share credential or remount the iframe",
+);
 
 const direct = "https://dashboard.example.test/guacamole/#/client/direct-id";
 const stream = {
