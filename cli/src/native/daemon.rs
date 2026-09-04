@@ -934,22 +934,7 @@ async fn handle_connection<S>(
                     }
                 };
                 let control_plane = lane.control_plane.clone();
-                if crate::runtime_host::command_accepts_lane_profile_defaults(&cmd) {
-                    if let (Some(runtime_profile), Some(object)) =
-                        (lane.config.runtime_profile.as_ref(), cmd.as_object_mut())
-                    {
-                        object
-                            .entry("runtimeProfile".to_string())
-                            .or_insert_with(|| Value::String(runtime_profile.clone()));
-                    }
-                    if let (Some(profile), Some(object)) =
-                        (lane.config.profile.as_ref(), cmd.as_object_mut())
-                    {
-                        object
-                            .entry("profile".to_string())
-                            .or_insert_with(|| Value::String(profile.clone()));
-                    }
-                }
+                crate::runtime_host::reconcile_lane_profile_defaults(&mut cmd, &lane.config);
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());

@@ -14,6 +14,8 @@ use std::sync::RwLock;
 pub(crate) const RUNTIME_HOST_ENDPOINT_KEY: &str = "runtime-host";
 pub(crate) const RUNTIME_HOST_LANE_FIELD: &str = "_agentBrowserRuntimeLane";
 pub(crate) const RUNTIME_HOST_LANE_CONFIG_FIELD: &str = "_agentBrowserRuntimeLaneConfig";
+pub(crate) const SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: &str =
+    "_agentBrowserServiceRequestExplicitProfileRouting";
 pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
 pub(crate) const RUNTIME_HOST_PROCESS_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST_PROCESS";
 pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
@@ -107,6 +109,45 @@ pub(crate) fn command_accepts_lane_profile_defaults(command: &Value) -> bool {
                 | "view_focus"
         )
     )
+}
+
+/// Reconcile profile fields at the final shared-host boundary.
+///
+/// Service-request normalization records whether profile routing came from
+/// the caller before any cached lane default can be attached. A retained
+/// `view_focus` without caller-authored profile routing must follow its proven
+/// browser/session owner, so discard defaults inherited from another lane.
+/// Direct commands and explicitly profiled service requests stay fail-closed.
+pub(crate) fn reconcile_lane_profile_defaults(command: &mut Value, config: &RuntimeLaneConfig) {
+    let explicit_service_profile_routing = command
+        .as_object_mut()
+        .and_then(|object| object.remove(SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD))
+        .and_then(|value| value.as_bool());
+    let inherited_service_focus = command.get("action").and_then(Value::as_str)
+        == Some("view_focus")
+        && explicit_service_profile_routing == Some(false);
+    if inherited_service_focus {
+        if let Some(object) = command.as_object_mut() {
+            object.remove("runtimeProfile");
+            object.remove("profileId");
+            object.remove("profile");
+        }
+    }
+    if !command_accepts_lane_profile_defaults(command) {
+        return;
+    }
+    if let Some(object) = command.as_object_mut() {
+        if let Some(runtime_profile) = config.runtime_profile.as_ref() {
+            object
+                .entry("runtimeProfile".to_string())
+                .or_insert_with(|| Value::String(runtime_profile.clone()));
+        }
+        if let Some(profile) = config.profile.as_ref() {
+            object
+                .entry("profile".to_string())
+                .or_insert_with(|| Value::String(profile.clone()));
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +396,42 @@ mod tests {
         assert!(!command_accepts_lane_profile_defaults(
             &serde_json::json!({"action": "view_focus", "runtimeProfile": "explicit-profile"})
         ));
+    }
+
+    #[test]
+    fn normalized_view_focus_strips_only_inherited_profile_routing() {
+        let config = RuntimeLaneConfig {
+            runtime_profile: Some("obsolete-lane-default".to_string()),
+            profile: Some("/tmp/obsolete-lane-default".to_string()),
+            ..RuntimeLaneConfig::default()
+        };
+        let mut inherited = serde_json::json!({
+            "action": "view_focus",
+            "runtimeProfile": "obsolete-lane-default",
+            "profile": "/tmp/obsolete-lane-default",
+            SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: false
+        });
+        reconcile_lane_profile_defaults(&mut inherited, &config);
+        assert!(inherited.get("runtimeProfile").is_none());
+        assert!(inherited.get("profile").is_none());
+        assert!(inherited
+            .get(SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD)
+            .is_none());
+
+        let mut explicit = serde_json::json!({
+            "action": "view_focus",
+            "runtimeProfile": "caller-selected-profile",
+            SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: true
+        });
+        reconcile_lane_profile_defaults(&mut explicit, &config);
+        assert_eq!(explicit["runtimeProfile"], "caller-selected-profile");
+
+        let mut direct = serde_json::json!({
+            "action": "view_focus",
+            "runtimeProfile": "direct-command-profile"
+        });
+        reconcile_lane_profile_defaults(&mut direct, &config);
+        assert_eq!(direct["runtimeProfile"], "direct-command-profile");
     }
 
     #[tokio::test]

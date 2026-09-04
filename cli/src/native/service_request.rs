@@ -540,6 +540,15 @@ pub(crate) fn normalize_service_request(
                 "service request requires action",
             )
         })?;
+    let explicit_profile_routing = ["runtimeProfile", "profileId", "profile"]
+        .iter()
+        .any(|field| {
+            request
+                .get(*field)
+                .or_else(|| request.get("params").and_then(|params| params.get(*field)))
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        });
     if !SERVICE_REQUEST_ACTIONS.contains(&action) {
         return Err(ServiceRequestIssue::new(
             ServiceRequestIssueKind::UnsupportedAction,
@@ -552,6 +561,10 @@ pub(crate) fn normalize_service_request(
     let attribution = derive_service_request_attribution(&input, request)?;
 
     let mut command = json!({ "action": action });
+    if action == "view_focus" {
+        command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD] =
+            json!(explicit_profile_routing);
+    }
     if let Some(params) = request.get("params") {
         let params = params.as_object().ok_or_else(|| {
             ServiceRequestIssue::new(
@@ -1968,6 +1981,34 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
+    }
+
+    #[test]
+    fn view_focus_records_whether_profile_routing_was_caller_authored() {
+        let inherited = normalize(json!({
+            "action": "view_focus",
+            "browserId": "session:retained",
+            "sessionName": "retained",
+            "params": {"targetId": "target-1", "index": 1, "maximize": true}
+        }))
+        .unwrap();
+        assert_eq!(
+            inherited.command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            false
+        );
+
+        let explicit = normalize(json!({
+            "action": "view_focus",
+            "browserId": "session:retained",
+            "sessionName": "retained",
+            "runtimeProfile": "caller-selected-profile",
+            "params": {"targetId": "target-1", "index": 1, "maximize": true}
+        }))
+        .unwrap();
+        assert_eq!(
+            explicit.command[crate::runtime_host::SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD],
+            true
+        );
     }
 
     #[test]

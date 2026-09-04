@@ -3113,3 +3113,28 @@ publish and install the exact corrected development candidate; reopen and
 reseal the synthetic handoff; then repeat the direct focus, durable ingress-
 failure logging, reduced public-load loop, and external E47 gates. E47 remains
 undispatched, so no epoch freeze was violated.
+
+The next installed proof showed why command-level provenance was also
+required. The daemon accepted current-owner selection, but the final active-
+browser guard still received `runtimeProfile=lease-fail-open-...` and rejected
+it against the correct managed profile. The failure occurred through both
+stable ingress and the generation backend, ruling out proxy mutation. Exact
+job and tab readback again showed an effect-uncertain failure with the fixture
+tab still active. The service request body omitted all profile fields; the
+stale value came from cached lane routing between normalization and final
+dispatch.
+
+The completed repair records one internal, caller-non-forgeable boolean during
+service-request normalization stating whether `runtimeProfile`, `profileId`,
+or `profile` was actually caller-authored. At the shared runtime-host boundary,
+a normalized `view_focus` marked profile-omitting discards any cached profile
+fields before dispatch. Explicitly profiled service requests and direct daemon
+commands retain their fields and the existing fail-closed mismatch guard. The
+runtime host removes the internal marker before daemon action dispatch. A new
+red-to-green regression covers inherited, explicit, and direct-command cases;
+the seven focused view-focus, HTTP-routing, dashboard-routing, and service-
+normalization tests pass.
+
+Revised next action: validate, publish, and install this provenance-backed
+repair, then repeat the same installed direct-focus gate before any load or
+external epoch. Preserve both failed installed proofs as pre-repair evidence.
