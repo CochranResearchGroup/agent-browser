@@ -106,9 +106,11 @@ async function fetchJson(fetchImpl, url, init, label) {
   return { response, body };
 }
 
-function validateMalformedLineReceipt(receipt, candidateSha256) {
+function validateMalformedLineReceipt(receipt, candidate) {
   if (receipt?.schemaVersion !== 'agent-browser.p158-w6-malformed-line-seam-receipt.v1' ||
-      receipt.candidateSha256 !== candidateSha256 || receipt.runtimeEnvironment !== 'development' ||
+      receipt.candidateSha256 !== candidate.candidateSha256 || receipt.runtimeEnvironment !== 'development' ||
+      receipt.executableSha256 !== candidate.executableSha256 ||
+      receipt.installedGenerationIdSha256 !== sha256(candidate.installedGenerationId) ||
       receipt.isolatedRuntimeState !== true || receipt.liveJournalMutated !== false ||
       receipt.malformedLineCount < 1 || receipt.validRecordBeforeMalformed !== true ||
       receipt.validRecordAfterMalformed !== true || receipt.resultState !== 'passed' ||
@@ -124,16 +126,18 @@ function validateMalformedLineReceipt(receipt, candidateSha256) {
  * disposable journal; the installed development journal is never modified.
  */
 export function createP158W6MalformedLineSeamReceipt({
-  candidateSha256, isolationId, readback, beforeCode, afterCode,
+  candidateSha256, executableSha256, installedGenerationId, isolationId, readback, beforeCode, afterCode,
   clock = () => new Date().toISOString(),
 }) {
-  if (!SHA256.test(candidateSha256 ?? '') || typeof isolationId !== 'string' || !isolationId ||
+  if (!SHA256.test(candidateSha256 ?? '') || !SHA256.test(executableSha256 ?? '') ||
+      typeof installedGenerationId !== 'string' || !installedGenerationId ||
+      typeof isolationId !== 'string' || !isolationId ||
       typeof beforeCode !== 'string' || !beforeCode || typeof afterCode !== 'string' || !afterCode) {
     fail('w6_malformed_line_input_invalid', 'Malformed-line calibration requires exact isolated inputs');
   }
   const normalized = validateReadback(readback, 'Isolated malformed-line readback');
   const beforeIndex = normalized.records.findIndex((record) => record.code === beforeCode);
-  const afterIndex = normalized.records.findIndex((record) => record.code === afterCode);
+  const afterIndex = normalized.records.findLastIndex((record) => record.code === afterCode);
   if (normalized.malformedLineCount < 1 || beforeIndex < 0 || afterIndex <= beforeIndex) {
     fail('w6_malformed_line_recovery_missing',
       'Isolated readback must preserve valid records on both sides of at least one malformed line');
@@ -141,6 +145,7 @@ export function createP158W6MalformedLineSeamReceipt({
   const body = {
     schemaVersion: 'agent-browser.p158-w6-malformed-line-seam-receipt.v1',
     planId: 'P158', candidateSha256, runtimeEnvironment: 'development',
+    executableSha256, installedGenerationIdSha256: sha256(installedGenerationId),
     isolationIdSha256: sha256(isolationId), isolatedRuntimeState: true,
     liveJournalMutated: false, malformedLineCount: normalized.malformedLineCount,
     validRecordBeforeMalformed: true, validRecordAfterMalformed: true,
@@ -165,7 +170,7 @@ function validateInput({
   return {
     origin: exactOrigin(environment.dashboardOrigin),
     boundedWindow: validateWindow(window, clock),
-    malformedLineReceipt: validateMalformedLineReceipt(malformedLineReceipt, candidate.candidateSha256),
+    malformedLineReceipt: validateMalformedLineReceipt(malformedLineReceipt, candidate),
   };
 }
 
@@ -179,6 +184,7 @@ function validateBrowserManagerInduction(receipt, { candidate, engine, boundedWi
       receipt.installedGenerationIdSha256 !== sha256(candidate.installedGenerationId) ||
       receipt.engine !== engine || receipt.browserManagerLaunchInvoked !== true ||
       receipt.browserProcessSpawnAttempted !== false || receipt.resultState !== 'failed_as_expected' ||
+      receipt.clientHomeIsolated !== true || receipt.clientHomeRemoved !== true ||
       receipt.retryAttempted !== false || receipt.repairAttempted !== false ||
       !Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt < startedAt ||
       startedAt < Date.parse(boundedWindow.notBefore) ||
@@ -223,15 +229,16 @@ async function readQuietBrowserManagerDelta({
     }
     const readback = validateReadback(result.body, 'BrowserManager failure quiet-window readback');
     const delta = newRecords(readback, baselineIds);
-    if (delta.length > 1 || (delta.length === 1 && !isExactBrowserManagerFailure(delta[0], engine))) {
+    const matches = delta.filter((record) => isExactBrowserManagerFailure(record, engine));
+    if (matches.length > 1) {
       fail('w6_browser_manager_induction_invalid',
-        'W6 quiet-window delta was not exactly the induced BrowserManager launch failure');
+        'W6 quiet-window readback contained duplicate induced BrowserManager launch failures');
     }
-    if (delta.length === 1) {
-      const currentSha256 = sha256(delta);
+    if (matches.length === 1) {
+      const currentSha256 = sha256(matches[0]);
       stableReads = currentSha256 === stableSha256 ? stableReads + 1 : 1;
       stableSha256 = currentSha256;
-      if (stableReads === QUIET_WINDOW_READS) return { readback, record: delta[0], stableReads };
+      if (stableReads === QUIET_WINDOW_READS) return { readback, record: matches[0], stableReads };
     }
     if (attempt + 1 < MAX_QUIET_WINDOW_ATTEMPTS) await sleep(25);
   }
@@ -340,7 +347,7 @@ export async function executeP158W6FiveSurfaceJournalCalibration({
     selected.push(...matches);
   }
   if (launchMatches.length !== 1 || launchMatches[0].occurrenceId !== quiet.record.occurrenceId ||
-      selected.length !== 5 || delta.length !== 5 ||
+      selected.length !== 5 ||
       new Set(selected.map((record) => record.occurrenceId)).size !== 5 ||
       P158_W6_FAILURE_CATEGORIES.some((category) =>
         selected.filter((record) => record.category === category).length !== 1)) {
@@ -350,6 +357,8 @@ export async function executeP158W6FiveSurfaceJournalCalibration({
           [category, selected.filter((record) => record.category === category).length])),
       });
   }
+  const selectedOccurrenceIds = new Set(selected.map((record) => record.occurrenceId));
+  const background = delta.filter((record) => !selectedOccurrenceIds.has(record.occurrenceId));
   const completedAt = clock();
   if (Date.parse(completedAt) > Date.parse(validated.boundedWindow.notAfter)) {
     fail('w6_journal_time_window_expired', 'W6 journal calibration completed after its bounded execution window');
@@ -366,6 +375,10 @@ export async function executeP158W6FiveSurfaceJournalCalibration({
     records: selected.sort((left, right) =>
       P158_W6_FAILURE_CATEGORIES.indexOf(left.category) - P158_W6_FAILURE_CATEGORIES.indexOf(right.category))
       .map(safeProjection),
+    backgroundFailureCount: background.length,
+    backgroundFailureCategoryCounts: Object.fromEntries([...new Set(background.map((record) => record.category))]
+      .sort().map((category) => [category, background.filter((record) => record.category === category).length])),
+    backgroundRecords: background.map(safeProjection),
     baselineReadbackSha256: sha256(before),
     browserManagerQuietReadbackSha256: sha256(quiet.readback),
     browserManagerQuietStableReadCount: quiet.stableReads,

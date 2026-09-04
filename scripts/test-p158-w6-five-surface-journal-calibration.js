@@ -53,7 +53,8 @@ const MALFORMED_READBACK = {
 
 function malformedReceipt() {
   return createP158W6MalformedLineSeamReceipt({
-    candidateSha256: CANDIDATE.candidateSha256, isolationId: 'disposable-journal-p158',
+    candidateSha256: CANDIDATE.candidateSha256, executableSha256: CANDIDATE.executableSha256,
+    installedGenerationId: CANDIDATE.installedGenerationId, isolationId: 'disposable-journal-p158',
     readback: MALFORMED_READBACK, beforeCode: 'before-malformed', afterCode: 'after-malformed',
     clock: () => NOW,
   });
@@ -76,7 +77,7 @@ function response(url, status, body) {
 }
 
 function fixtureFetch({ authenticated = true, wrongManifest = false, omitCategory = null,
-  duplicateCategory = null, legacyParserOnly = false } = {}) {
+  duplicateCategory = null, legacyParserOnly = false, companionFailure = false } = {}) {
   const calls = [];
   const records = [];
   let baselineRead = false;
@@ -139,6 +140,13 @@ function fixtureFetch({ authenticated = true, wrongManifest = false, omitCategor
       : journalRecord({ occurrenceId: 'browser-launch-occurrence', category: 'browser_launch',
           code: 'browser_launch_failed', action: 'open', stage: 'launch',
           details: { engine, profileConfigured: false, headed: false } }));
+    if (companionFailure) {
+      records.push({
+        ...journalRecord({ occurrenceId: 'companion-service-action', category: 'service_action',
+          code: 'service_operation_failed', action: 'launch', stage: 'execution' }),
+        source: 'service_control_plane', references: { requestId: 'private-request-id' },
+      });
+    }
     return {
       schemaVersion: 'agent-browser.p158-w6-browser-manager-induction.v1',
       runtimeEnvironment: environment.runtimeLane,
@@ -148,6 +156,8 @@ function fixtureFetch({ authenticated = true, wrongManifest = false, omitCategor
       engine,
       browserManagerLaunchInvoked: !legacyParserOnly,
       browserProcessSpawnAttempted: false,
+      clientHomeIsolated: true,
+      clientHomeRemoved: true,
       resultState: 'failed_as_expected',
       startedAt: NOW,
       completedAt: NOW,
@@ -176,7 +186,8 @@ await runTest('seals malformed-line recovery only from an isolated readback seam
   const { receiptSha256, ...body } = receipt;
   assert.equal(receiptSha256, sha256(body));
   assert.throws(() => createP158W6MalformedLineSeamReceipt({
-    candidateSha256: CANDIDATE.candidateSha256, isolationId: 'bad-seam',
+    candidateSha256: CANDIDATE.candidateSha256, executableSha256: CANDIDATE.executableSha256,
+    installedGenerationId: CANDIDATE.installedGenerationId, isolationId: 'bad-seam',
     readback: { ...MALFORMED_READBACK, malformedLineCount: 0 },
     beforeCode: 'before-malformed', afterCode: 'after-malformed', clock: () => NOW,
   }), (error) => error instanceof P158W6JournalCalibrationError &&
@@ -198,6 +209,8 @@ await runTest('records exactly the five named development failure surfaces', asy
   assert.equal(artifact.liveJournalMalformedLineInjected, false);
   assert.equal(artifact.browserManagerLaunchInvoked, true);
   assert.equal(artifact.browserProcessSpawnAttempted, false);
+  assert.equal(artifact.backgroundFailureCount, 0);
+  assert.deepEqual(artifact.backgroundRecords, []);
   assert.equal(fixture.calls.length, 10);
   assert.equal(fixture.calls.filter((call) => call.method === 'POST').length, 4);
   assert(fixture.calls.every((call) => new URL(call.url).origin === ENVIRONMENT.dashboardOrigin));
@@ -205,6 +218,19 @@ await runTest('records exactly the five named development failure surfaces', asy
   assert(!JSON.stringify(artifact).includes('sessionId'));
   const { artifactSha256, ...body } = artifact;
   assert.equal(artifactSha256, sha256(body));
+});
+
+await runTest('retains companion telemetry without weakening exact five-surface correlation', async () => {
+  const fixture = fixtureFetch({ companionFailure: true });
+  const artifact = await executeP158W6FiveSurfaceJournalCalibration({
+    ...input(), fetch: fixture.fetch, induceBrowserLaunchFailure: fixture.induceBrowserLaunchFailure,
+    sleep: async () => {},
+  });
+  assert.equal(artifact.observedFailureCount, 5);
+  assert.equal(artifact.backgroundFailureCount, 1);
+  assert.deepEqual(artifact.backgroundFailureCategoryCounts, { service_action: 1 });
+  assert.deepEqual(artifact.backgroundRecords.map((record) => record.category), ['service_action']);
+  assert(!JSON.stringify(artifact).includes('private-request-id'));
 });
 
 await runTest('fails closed before effects for production, authentication, candidate, time, and seam drift', async () => {
@@ -264,6 +290,7 @@ await runTest('binds the live inducer to the installed development generation an
   const executableSha256 = createHash('sha256').update(binary).digest('hex');
   const candidate = { ...CANDIDATE, executableSha256, installedGenerationId: 'generation-p158' };
   let invocation;
+  let removedHome;
   const inducer = await createDevelopmentBrowserManagerInducer({
     env: { SAFE_PARENT: 'preserved', AGENT_BROWSER_PROFILE: 'must-not-leak' },
     clock: () => NOW,
@@ -277,6 +304,8 @@ await runTest('binds the live inducer to the installed development generation an
       assert.equal(path, '/development/generations/generation-p158/bin/agent-browser');
       return binary;
     },
+    makeTemporaryHome: async () => '/tmp/p158-w6-isolated-client-home',
+    removeTemporaryHome: async (path) => { removedHome = path; },
     runProcess: async (command, args, options) => {
       invocation = { command, args, options };
       return { code: 0, signal: null, stderr: '', stdout: JSON.stringify({
@@ -293,13 +322,17 @@ await runTest('binds the live inducer to the installed development generation an
     'open', 'about:blank',
   ]);
   assert.equal(invocation.command, '/development/generations/generation-p158/bin/agent-browser');
-  assert.equal(invocation.options.env.HOME, '/development/home');
+  assert.equal(invocation.options.env.HOME, '/tmp/p158-w6-isolated-client-home');
   assert.equal(invocation.options.env.AGENT_BROWSER_RUNTIME_ENVIRONMENT, 'development');
   assert.equal(invocation.options.env.AGENT_BROWSER_SOCKET_DIR, '/development/socket');
   assert.equal(invocation.options.env.AGENT_BROWSER_PROFILE, undefined);
+  assert.equal(invocation.options.env.AGENT_BROWSER_RUNTIME_PROFILE, undefined);
+  assert.equal(removedHome, '/tmp/p158-w6-isolated-client-home');
   assert.equal(receipt.executableSha256, executableSha256);
   assert.equal(receipt.browserManagerLaunchInvoked, true);
   assert.equal(receipt.browserProcessSpawnAttempted, false);
+  assert.equal(receipt.clientHomeIsolated, true);
+  assert.equal(receipt.clientHomeRemoved, true);
 });
 
 await runTest('CLI writes one private hash-bound artifact without printing sensitive inputs', async () => {
@@ -309,7 +342,22 @@ await runTest('CLI writes one private hash-bound artifact without printing sensi
     const malformedPath = join(root, 'malformed.json');
     const outputPath = join(root, 'artifact.json');
     await writeFile(configPath, JSON.stringify(input({ malformedLineReceipt: undefined, fetch: undefined })));
-    await writeFile(malformedPath, JSON.stringify(malformedReceipt()));
+    const receipt = malformedReceipt();
+    const malformedBody = {
+      schemaVersion: 'agent-browser.p158-w6-malformed-line-live-artifact.v1',
+      candidateSha256: receipt.candidateSha256,
+      executableSha256: receipt.executableSha256,
+      installedGenerationIdSha256: receipt.installedGenerationIdSha256,
+      candidateWriterUsed: true,
+      candidateReadbackUsed: true,
+      liveJournalMutated: false,
+      productionJournalMutated: false,
+      receipt,
+    };
+    await writeFile(malformedPath, JSON.stringify({
+      ...malformedBody,
+      artifactSha256: sha256(malformedBody),
+    }));
     const fixture = fixtureFetch();
     let stdout = '';
     const artifact = await runP158W6JournalCalibrationCli([

@@ -3874,3 +3874,45 @@ candidate-bound five-surface live journal calibration. Then schedule a fresh
 synchronized C01 far enough ahead to start the 500-command local half and both
 external viewers inside the same 20-minute window. Finalize those artifacts,
 seal E1 and E2, and write the zero-start campaign freeze before W7.
+
+### W6 Live Journal Calibration Unblocked
+
+State transition: `w6_repaired_candidate_ready_for_publication ->
+w6_live_journal_calibration_passed`.
+
+The repaired source was committed as `4ee8534c`. Because the Rust executable
+was unchanged, development publication retained generation
+`0.28.0-cb0e442bd453` while installing the new dashboard assets. Exact-bound
+development doctor and all three disposable browser-launch smoke iterations
+passed with production unchanged.
+
+The first live five-surface attempt exposed two harness defects. The induced
+invalid-engine command correctly produced one exact `browser_launch` record,
+but the Service control plane also wrote a legitimate companion
+`service_action` failure. The harness incorrectly required the entire live
+journal delta to contain only the target record. It now requires exactly one
+stable engine-bound BrowserManager record, rejects missing or duplicate target
+records, and retains other concurrent records as redacted background evidence.
+
+The next attempt exposed a shared-profile dependency in the live inducer. A
+client using the development pseudo-home inherited its default profile and was
+rejected with `existing_session_profile_identity_unproven` before reaching
+BrowserManager. The inducer now gives each one-shot client a disposable home,
+removes inherited profile selectors, preserves the exact development socket
+and ingress binding, and removes that home after the command. This reaches the
+unsupported-engine failure without opening Chrome or disturbing a retained
+profile. Provider-free tests prove both isolation and cleanup.
+
+The live calibration then passed against the exact E2 development candidate.
+It observed one correlated record for each of `browser_launch`,
+`guacamole_load`, `handoff_link`, `cdp_stream`, and `dashboard_action`, with two
+stable BrowserManager readbacks. It also retained the companion
+`service_action` record as background evidence. The isolated malformed-line
+seam used the same installed candidate for writing and readback while proving
+that neither the production nor live development journal changed.
+
+Revised next action: finish aggregate validation and commit this calibration
+repair. Then schedule a fresh synchronized C01 far enough ahead to start the
+500-command local half and both external viewers inside the same 20-minute
+window. Finalize those artifacts, seal E1 and E2, and write the zero-start
+campaign freeze before W7.

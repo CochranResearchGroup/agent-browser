@@ -3,8 +3,9 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
 import { developmentRuntimeDescriptor } from './lib/development-runtime.js';
@@ -48,6 +49,19 @@ async function readJson(path, label) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch {
     fail(`${label} is not readable JSON`);
   }
+}
+
+function malformedLineReceiptFromArtifact(value) {
+  if (value?.schemaVersion !== 'agent-browser.p158-w6-malformed-line-live-artifact.v1') return value;
+  const { artifactSha256, ...body } = value;
+  if (artifactSha256 !== sha256(body) || value.receipt?.candidateSha256 !== value.candidateSha256 ||
+      value.receipt?.executableSha256 !== value.executableSha256 ||
+      value.receipt?.installedGenerationIdSha256 !== value.installedGenerationIdSha256 ||
+      value.candidateWriterUsed !== true || value.candidateReadbackUsed !== true ||
+      value.liveJournalMutated !== false || value.productionJournalMutated !== false) {
+    fail('Malformed-line live artifact is missing or changed');
+  }
+  return value.receipt;
 }
 
 async function authenticatedFetch(origin, authEnv, fetchImpl) {
@@ -105,6 +119,8 @@ export async function createDevelopmentBrowserManagerInducer({
   realpathImpl = realpath,
   readFileImpl = readFile,
   runProcess = runBounded,
+  makeTemporaryHome = (prefix) => mkdtemp(prefix),
+  removeTemporaryHome = (path) => rm(path, { recursive: true, force: true }),
 } = {}) {
   const generationPath = await realpathImpl(descriptor.current);
   const executable = join(generationPath, 'bin', 'agent-browser');
@@ -116,20 +132,27 @@ export async function createDevelopmentBrowserManagerInducer({
       fail('Installed development generation does not match the sealed W6 candidate');
     }
     const startedAt = clock();
-    const childEnv = {
-      ...env,
-      HOME: descriptor.pseudoHome,
-      AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
-      AGENT_BROWSER_RUNTIME_HOST: '1',
-      AGENT_BROWSER_SOCKET_DIR: descriptor.socketDir,
-      AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE: descriptor.runtimeHostIngressState,
-    };
-    delete childEnv.AGENT_BROWSER_PROFILE;
-    delete childEnv.AGENT_BROWSER_HEADED;
-    const result = await runProcess(executable, [
-      '--json', '--session', `p158-w6-journal-${calibrationKey}`,
-      '--engine', engine, 'open', 'about:blank',
-    ], { env: childEnv });
+    const clientHome = await makeTemporaryHome(join(tmpdir(), 'p158-w6-journal-client-'));
+    let result;
+    try {
+      const childEnv = {
+        ...env,
+        HOME: clientHome,
+        AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
+        AGENT_BROWSER_RUNTIME_HOST: '1',
+        AGENT_BROWSER_SOCKET_DIR: descriptor.socketDir,
+        AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE: descriptor.runtimeHostIngressState,
+      };
+      delete childEnv.AGENT_BROWSER_PROFILE;
+      delete childEnv.AGENT_BROWSER_RUNTIME_PROFILE;
+      delete childEnv.AGENT_BROWSER_HEADED;
+      result = await runProcess(executable, [
+        '--json', '--session', `p158-w6-journal-${calibrationKey}`,
+        '--engine', engine, 'open', 'about:blank',
+      ], { env: childEnv });
+    } finally {
+      await removeTemporaryHome(clientHome);
+    }
     const lines = result.stdout.trim().split(/\r?\n/u).filter(Boolean);
     let payload;
     try { payload = JSON.parse(lines.at(-1) ?? ''); } catch { payload = null; }
@@ -142,6 +165,7 @@ export async function createDevelopmentBrowserManagerInducer({
       runtimeEnvironment: 'development', candidateSha256: candidate.candidateSha256,
       executableSha256, installedGenerationIdSha256: sha256(candidate.installedGenerationId),
       engine, browserManagerLaunchInvoked: true, browserProcessSpawnAttempted: false,
+      clientHomeIsolated: true, clientHomeRemoved: true,
       resultState: 'failed_as_expected', startedAt, completedAt: clock(),
       retryAttempted: false, repairAttempted: false,
     };
@@ -159,7 +183,9 @@ export async function runP158W6JournalCalibrationCli(argv, dependencies = {}) {
     fail('All W6 journal calibration paths must be absolute');
   }
   const config = await readJson(configPath, 'Calibration config');
-  const malformedLineReceipt = await readJson(malformedReceiptPath, 'Malformed-line receipt');
+  const malformedLineReceipt = malformedLineReceiptFromArtifact(
+    await readJson(malformedReceiptPath, 'Malformed-line receipt'),
+  );
   if (config.environment?.environmentId !== 'E2' ||
       config.environment?.runtimeLane !== 'development' || config.environment?.production !== false ||
       config.candidate?.candidateSha256 !== malformedLineReceipt.candidateSha256) {
