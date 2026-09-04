@@ -21,8 +21,18 @@ assert.match(
 );
 assert.match(
   viewportSource,
-  /\}, \[browser\?\.id, browser\?\.profileId, guacamoleSharingStream, streamUrl, viewportSelection\?\.selection\.sessionId, viewportTargetToken\]\);/,
+  /\}, \[browser\?\.id, browser\?\.profileId, guacamoleSharingStream, sharingResolutionNonce, streamUrl, viewportSelection\?\.selection\.sessionId, viewportTargetToken\]\);/,
   "projection object churn must not regenerate a share credential or remount the iframe",
+);
+assert.match(
+  viewportSource,
+  /stream\?\.providerMode === "simultaneous_view"[\s\S]*setSharingResolutionNonce\(\(current\) => current \+ 1\)/,
+  "a disconnected simultaneous viewer must re-enter primary election instead of requiring takeover",
+);
+assert.match(
+  viewportSource,
+  /sharingRecoveryRetryRef\.current < 3/,
+  "automatic simultaneous-view re-election must remain bounded",
 );
 
 const direct = "https://dashboard.example.test/guacamole/#/client/direct-id";

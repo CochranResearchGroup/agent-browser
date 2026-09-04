@@ -3718,3 +3718,43 @@ Revised next action: finish the Rust and dashboard validation gates, publish
 and install the repaired development candidate, reconcile provider ingress if
 the generation changes, resolve the exact sealed handoff, and redispatch C01
 without staggering or weakening its shared-start schedule.
+
+The primary-election repair was committed and published as `4e9e287d` after
+the focused Rust exclusion/expiry test, dashboard sharing test, production
+dashboard build, workspace clippy, Rust formatting, and the complete Plan 0158
+provider-free aggregate harness passed. Development generation
+`0.28.0-9c8935eb95b0` was installed, the exact reviewed provider binding was
+restaged and applied, both Cooper ingress routes were republished, provider
+doctor passed, and three disposable browser launches passed with production
+unchanged. The exact E54 handoff was recovered by its sealed URL hash and
+returned ready at a new presentation generation.
+
+Workflow `33918919898` and the first follow-up readiness workflow
+`33919334254` stopped before useful product execution because campaign setup
+updated the repository-level `P158_DEV_EXPECTED_IDENTITY_JSON`, while the
+workflow consumes the same-named secret from the `p158-external-vantage`
+environment. The environment binding correctly took precedence and both
+clients rejected the stale expected tab ID. This was a confirmed pre-effect
+campaign-configuration error. The environment-scoped secret was then refreshed
+from the current exact handoff resolution without exposing its contents.
+
+Readiness workflow `33919582358` proved the corrected identity binding: the
+human-paced external client passed. Its deliberately delayed companion then
+rendered the correct retained browser through Guacamole but lost the shared
+tunnel after the first client's primary connection closed. The dashboard
+classified this simultaneous-view disconnect as a single-viewer takeover,
+retained a visually stale iframe briefly, and then removed the iframe instead
+of invoking primary election. The preserved failure is
+`external_stream_not_embeddable`; its redacted HAR contains one Guacamole 404
+and no leaked operator URL.
+
+The bounded follow-up repair gives simultaneous-view disconnects a separate
+three-attempt recovery budget and re-runs the existing server-arbitrated
+connection resolver. A surviving primary is joined with a fresh share key; a
+departed primary causes one contender to claim and recreate it. Single-viewer
+takeover behavior is unchanged, and the recovery budget does not reset on each
+iframe load.
+
+Revised next action: validate, commit, rebuild, and install the bounded
+disconnect recovery. Re-run the two-client readiness probe before redispatching
+C01 so a departing first viewer and delayed second viewer are both proven.

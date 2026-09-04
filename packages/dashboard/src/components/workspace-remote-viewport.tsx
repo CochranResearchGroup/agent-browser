@@ -1342,6 +1342,7 @@ export function WorkspaceRemoteViewport({
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
+  const [sharingResolutionNonce, setSharingResolutionNonce] = useState(0);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
   const [connectionRetryNonce, setConnectionRetryNonce] = useState(0);
@@ -1354,6 +1355,7 @@ export function WorkspaceRemoteViewport({
   const viewportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const focusedKeyRef = useRef("");
   const streamFrameRetryRef = useRef(0);
+  const sharingRecoveryRetryRef = useRef(0);
   const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -1642,6 +1644,7 @@ export function WorkspaceRemoteViewport({
 
   useEffect(() => {
     streamFrameRetryRef.current = 0;
+    sharingRecoveryRetryRef.current = 0;
     setFrameIssue(null);
   }, [streamUrl]);
 
@@ -1697,7 +1700,7 @@ export function WorkspaceRemoteViewport({
       });
     });
     return () => controller.abort();
-  }, [browser?.id, browser?.profileId, guacamoleSharingStream, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
+  }, [browser?.id, browser?.profileId, guacamoleSharingStream, sharingResolutionNonce, streamUrl, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   useEffect(() => {
     if (!frameUrl || !canEmbed || !viewportTargetToken) {
@@ -1797,6 +1800,13 @@ export function WorkspaceRemoteViewport({
     }
 
     if (failure === "remote-disconnected" || failure === "taken-over") {
+      if (stream?.providerMode === "simultaneous_view" && sharingRecoveryRetryRef.current < 3) {
+        sharingRecoveryRetryRef.current += 1;
+        setFrameIssue(null);
+        setFocusMessage("The shared viewer closed; electing or joining the current Guacamole primary.");
+        setSharingResolutionNonce((current) => current + 1);
+        return;
+      }
       setFrameIssue({
         kind: failure,
         message: failure === "taken-over"
