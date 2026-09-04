@@ -1543,10 +1543,21 @@ export async function humanPacedObservation(page, profile, pixelMarkerRegion) {
 export async function resetSyntheticRemoteDocument(page, settleMs) {
   const remoteFrame = page.locator('iframe').first();
   if (!(await remoteFrame.count())) return false;
+  const iframeBox = await remoteFrame.boundingBox();
+  if (!iframeBox) return false;
   await remoteFrame.focus();
+  const focusPoint = syntheticRemoteResetFocusPoint(iframeBox);
+  await page.mouse.click(focusPoint.x, focusPoint.y);
   await page.keyboard.press('Control+Home');
   await page.waitForTimeout(settleMs);
   return true;
+}
+
+export function syntheticRemoteResetFocusPoint(iframeBox) {
+  return {
+    x: iframeBox.x + Math.min(100, iframeBox.width / 2),
+    y: iframeBox.y + Math.min(150, iframeBox.height / 2),
+  };
 }
 
 export function syntheticRemoteInteractionPoint(region, iframeBox) {

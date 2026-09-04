@@ -2429,3 +2429,21 @@ immediately precede the reset key.
 Revised next action: commit and push the pre-visit normalization, then repeat
 C01. A successful repeat must prove that the same retained browser can recover
 the inherited scroll state and pass all scheduled reconnect checks.
+
+The repeat from exact head `bfaf1245`, workflow run `33835828862`, again
+failed both clients during initial marker validation. The Guacamole iframe was
+healthy and returned only successful HTTP responses, but the fixture remained
+scrolled. This proves that focusing the outer iframe element does not itself
+route Playwright keyboard input into Guacamole's remote input handler.
+
+The reset now focuses the iframe and clicks a fixed blank point inside the
+synthetic fixture's remote browser content before sending `Control+Home`. The
+click is intentionally confined to the attested synthetic fixture and gives
+Guacamole an actual pointer event with which to acquire remote keyboard focus.
+The regression test requires iframe focus, remote click, and reset key in that
+exact final sequence.
+
+Revised next action: publish the click-to-focus repair and run one readiness
+epoch first. If readiness proves inherited-state recovery, immediately proceed
+to a fresh C01 calibration; otherwise retain its receipt and continue diagnosis
+without restarting the retained browser.
