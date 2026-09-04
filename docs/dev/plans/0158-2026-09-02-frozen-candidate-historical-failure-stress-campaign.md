@@ -2657,12 +2657,15 @@ values.
 
 E36 ran from exact head `de4eef79` as workflow run `33860851759`. Both clients
 failed deterministically at the final receipt safety check with `Receipt
-retained secret P158_DEV_HANDOFF_URL`. The guard detected an unsanitized
-handoff occurrence in the in-memory receipt, but threw before persistence.
-The wrapper then also failed to leave its structured failure receipt, so both
-artifact uploads found no files and the aggregate could record only missing
-client evidence. No retry occurred. This is a receipt-boundary and failure-
-logging defect, not a browser launch, handoff resolution, or ingress result.
+retained secret P158_DEV_HANDOFF_URL`. Both artifact uploads found no files and
+the aggregate could record only missing client evidence. No retry occurred.
+The apparent receipt leak was misleading: the GitHub CLI invocation used
+`--body -`, which stores the literal value `-` rather than reading standard
+input. Both refreshed environment secrets therefore contained one dash. The
+receipt assertion matched every ordinary hyphen as the supposed secret and
+then prevented the failure receipt from being written. This is a dispatch-
+preparation and defensive-redaction defect, not a browser launch, handoff
+resolution, or ingress result.
 
 The repair adds a final recursive receipt-boundary sanitizer before digesting
 or writing successful, failed, and W8 action receipts. It replaces exact
@@ -2677,3 +2680,28 @@ Revised next action: publish the receipt-boundary repair, preserve E36 as the
 logging failure epoch, and dispatch a fresh two-client readiness observation
 against the unchanged ready E6 browser. A passing readiness result may proceed
 directly to C01 from the new exact source head.
+
+E37 ran from exact head `d30eebd6` as workflow run `33861451832` while the
+effective secrets still contained the literal dash. The slow client again
+escaped without an artifact after the assertion matched a hyphen. The human
+client reached the new boundary sanitizer, which replaced every hyphen in its
+receipt, including those in its client ID and timestamps, before persisting an
+`Invalid URL` failure. Its artifact therefore proved persistence but was not
+semantically usable. The aggregate observed only that malformed client
+receipt. E37 is sealed as a failed preparation epoch. Source edits began after
+the slow client had failed but before the human job finished; the runners
+remained pinned to the exact published commit, but this violated the local
+no-edit discipline and independently disqualifies E37 as a frozen result.
+
+The environment secrets were then refreshed correctly by piping each value to
+`gh secret set` without a body argument. No secret value was printed. The
+redaction boundary now ignores values shorter than eight characters, so an
+invalid or placeholder value cannot corrupt ordinary punctuation throughout a
+receipt. A provider-free regression first reproduced the dash corruption and
+then passed with the client ID unchanged. Long handoff and credential values
+remain scrubbed and asserted absent.
+
+Revised next action: publish the short-value hardening, then dispatch E38 from
+the corrected environment against the unchanged E6 browser. Make no local
+source edit until both client and aggregate jobs finish and their artifacts
+are sealed.

@@ -714,7 +714,10 @@ export async function runExternalVantageProbe({
       artifacts: artifactReceipts(outputDir),
     };
     const safeFailure = sanitizeReceiptSecrets(failure, env);
-    const serialized = `${JSON.stringify(safeFailure, null, 2)}\n`;
+    const serialized = sanitizeSerializedReceipt(
+      `${JSON.stringify(safeFailure, null, 2)}\n`,
+      env,
+    );
     assertSecretsAbsent(serialized, env);
     writeFileSync(join(outputDir, 'failure-receipt.json'), serialized, { mode: 0o600 });
     throw error;
@@ -1079,7 +1082,7 @@ async function executeExternalVantageProbe({
     const receipt = mode === 'calibration'
       ? { ...safeReceiptBody, receiptSha256: campaignSha256(safeReceiptBody) }
       : safeReceiptBody;
-    const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
+    const serialized = sanitizeSerializedReceipt(`${JSON.stringify(receipt, null, 2)}\n`, env);
     assertSecretsAbsent(serialized, env);
     writeFileSync(join(outputDir, 'receipt.json'), serialized, { mode: 0o600 });
     return receipt;
@@ -2002,9 +2005,8 @@ function assertSameIdentity(left, right, label) {
 }
 
 function assertSecretsAbsent(serialized, env) {
-  for (const name of ['P158_DEV_HANDOFF_URL', 'P158_DEV_DASHBOARD_USERNAME', 'P158_DEV_DASHBOARD_PASSWORD']) {
-    const value = env[name];
-    if (value && serialized.includes(value)) throw new Error(`Receipt retained secret ${name}`);
+  for (const [name, value] of redactableSecretEntries(env)) {
+    if (serialized.includes(value)) throw new Error(`Receipt retained secret ${name}`);
   }
 }
 
@@ -2019,15 +2021,29 @@ export function sanitizeReceiptSecrets(value, env) {
   }
   if (typeof value !== 'string') return value;
   let sanitized = value;
-  for (const name of [
+  for (const [name, secret] of redactableSecretEntries(env)) {
+    sanitized = sanitized.split(secret).join(`<redacted:${name}>`);
+  }
+  return sanitized;
+}
+
+export function sanitizeSerializedReceipt(serialized, env) {
+  let sanitized = serialized;
+  for (const [name, secret] of redactableSecretEntries(env)) {
+    sanitized = sanitized.split(secret).join(`<redacted:${name}>`);
+  }
+  return sanitized;
+}
+
+function redactableSecretEntries(env) {
+  return [
     'P158_DEV_HANDOFF_URL',
     'P158_DEV_DASHBOARD_USERNAME',
     'P158_DEV_DASHBOARD_PASSWORD',
-  ]) {
-    const secret = env[name];
-    if (secret) sanitized = sanitized.split(secret).join(`<redacted:${name}>`);
-  }
-  return sanitized;
+  ].flatMap((name) => {
+    const value = env[name];
+    return typeof value === 'string' && value.length >= 8 ? [[name, value]] : [];
+  });
 }
 
 function parseSecretJson(value, label) {
@@ -2117,9 +2133,8 @@ function listFiles(root) {
 
 function safeErrorMessage(error, env) {
   let message = error instanceof Error ? error.message : String(error);
-  for (const name of ['P158_DEV_HANDOFF_URL', 'P158_DEV_DASHBOARD_USERNAME', 'P158_DEV_DASHBOARD_PASSWORD']) {
-    const value = env[name];
-    if (value) message = message.split(value).join(`<redacted:${name}>`);
+  for (const [name, value] of redactableSecretEntries(env)) {
+    message = message.split(value).join(`<redacted:${name}>`);
   }
   try {
     const handoff = new URL(env.P158_DEV_HANDOFF_URL);
@@ -2337,7 +2352,10 @@ async function main(args = process.argv.slice(2), env = process.env) {
       publicHandoffUrl: env.P158_DEV_HANDOFF_URL,
     });
     mkdirSync(dirname(outputPath), { recursive: true });
-    const serialized = `${JSON.stringify(sanitizeReceiptSecrets(result, env), null, 2)}\n`;
+    const serialized = sanitizeSerializedReceipt(
+      `${JSON.stringify(sanitizeReceiptSecrets(result, env), null, 2)}\n`,
+      env,
+    );
     assertSecretsAbsent(serialized, env);
     writeFileSync(outputPath, serialized, { mode: 0o600 });
     process.stdout.write(`${JSON.stringify({ success: true, actionCount: result.actionCount, output: basename(outputPath) })}\n`);
