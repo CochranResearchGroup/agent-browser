@@ -2089,3 +2089,28 @@ Revised next action: commit this pre-execution record, build and install the
 resulting exact head using the wrapper's normal eight-job default, repeat live
 readiness and effective environment-secret preparation, and dispatch only when
 the branch head, expected commit, and installed source are identical.
+
+E22 ran from exact clean remote head `10352020` as workflow run `33823571606`.
+Both clients reached the external handoff and captured the exact synthetic
+pixel marker, but each stopped during initial identity validation with
+`Authoritative handoff resolution does not match expected tabId`. No reconnect
+or concurrent-page assertion ran. The aggregate retained both failure receipts,
+both client identities, zero retries, and zero repairs. Its SHA-256 is
+`7fe68177d5cda3b50eaa53cb8b653421fe961072ea90b701581e63ece7cb7a90`.
+
+Authoritative runtime events show one target, recorded only here by SHA-256
+`520ade2f9071882e73c57bf29b924e6e47691278dd025dcdf5c1af653e7a648a`,
+was created during the explicit preparation reopen at
+`2026-09-04T00:52:43Z` and was reused by both external resolver jobs at
+`00:54:24Z` and `00:55:04Z`. The browser process identity and logical browser
+remained unchanged. The public handoff therefore did not replace the physical
+browser or target. The failure is a tab-identity representation or
+effective-secret comparison defect, but the current receipts retain neither
+value in safe form.
+
+Revised next action: add a typed `visible_identity_mismatch` receipt with hashed
+expected and observed values, the exact identity field, and boolean tab-to-target
+canonical-equivalence flags. Do not expose either opaque identifier. Run the
+provider-free runner test, then use one fresh external epoch to distinguish
+prefix normalization from a genuinely different identity before changing the
+identity acceptance rule.

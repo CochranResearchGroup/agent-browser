@@ -353,6 +353,27 @@ assert.deepEqual(externalVantageFailureRecord(resolutionTimeout, env), {
   message: resolutionTimeout.message,
   details: resolutionTimeout.details,
 });
+const identityMismatch = new Error('Authoritative handoff resolution does not match expected tabId');
+identityMismatch.code = 'visible_identity_mismatch';
+identityMismatch.details = {
+  identityField: 'tabId',
+  expectedIdentityValueSha256: 'c'.repeat(64),
+  observedIdentityValueSha256: 'd'.repeat(64),
+  expectedTabMatchesTarget: true,
+  observedTabMatchesTarget: true,
+  expectedRawValue: 'must-not-survive',
+};
+assert.deepEqual(externalVantageFailureRecord(identityMismatch, env), {
+  code: 'visible_identity_mismatch',
+  message: identityMismatch.message,
+  details: {
+    identityField: 'tabId',
+    expectedIdentityValueSha256: 'c'.repeat(64),
+    observedIdentityValueSha256: 'd'.repeat(64),
+    expectedTabMatchesTarget: true,
+    observedTabMatchesTarget: true,
+  },
+});
 assert.deepEqual(classifyHandoffResolutionFailure({
   status: 'failed',
   failureCode: 'service_state_lock_timeout',

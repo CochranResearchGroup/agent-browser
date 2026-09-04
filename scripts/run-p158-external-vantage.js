@@ -1548,10 +1548,23 @@ function identityFromResolution(resolution, expected) {
   };
   for (const field of REQUIRED_IDENTITY_FIELDS.filter((field) => !['pixelHash'].includes(field))) {
     if (identity[field] !== expected[field]) {
-      throw new Error(`Authoritative handoff resolution does not match expected ${field}`);
+      const error = new Error(`Authoritative handoff resolution does not match expected ${field}`);
+      error.code = 'visible_identity_mismatch';
+      error.details = {
+        identityField: field,
+        expectedIdentityValueSha256: hashText(String(expected[field] ?? '')),
+        observedIdentityValueSha256: hashText(String(identity[field] ?? '')),
+        expectedTabMatchesTarget: canonicalTabIdentity(expected.tabId) === canonicalTabIdentity(expected.targetId),
+        observedTabMatchesTarget: canonicalTabIdentity(identity.tabId) === canonicalTabIdentity(identity.targetId),
+      };
+      throw error;
     }
   }
   return identity;
+}
+
+function canonicalTabIdentity(value) {
+  return String(value ?? '').replace(/^target:/, '');
 }
 
 function buildOracleSession({ clientId, handoff, resolvedAddresses, tls, initial, reconnect, reconnectObservations, expectedIdentity, urlEvidence, cookieMetadata, serverPhysicalBrowserLaunchDelta }) {
@@ -1940,6 +1953,17 @@ function safeExternalFailureDetails(value) {
     details.resolutionReadinessGaps = value.resolutionReadinessGaps
       .filter((item) => typeof item === 'string' && /^[a-z0-9_]{1,64}$/.test(item))
       .slice(0, 20);
+  }
+  if (typeof value.identityField === 'string' && REQUIRED_IDENTITY_FIELDS.includes(value.identityField)) {
+    details.identityField = value.identityField;
+  }
+  for (const key of ['expectedIdentityValueSha256', 'observedIdentityValueSha256']) {
+    if (typeof value[key] === 'string' && /^[a-f0-9]{64}$/.test(value[key])) {
+      details[key] = value[key];
+    }
+  }
+  for (const key of ['expectedTabMatchesTarget', 'observedTabMatchesTarget']) {
+    if (typeof value[key] === 'boolean') details[key] = value[key];
   }
   if (Array.isArray(value.urlFindingRoles)) {
     details.urlFindingRoles = value.urlFindingRoles
