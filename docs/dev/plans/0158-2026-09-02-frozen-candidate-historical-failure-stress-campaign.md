@@ -3564,3 +3564,25 @@ both ingress authentication and browser storage. Remove the now-insufficient
 same-origin capability route. The next external oracle must prove the sibling
 origin was used, the concurrent marker remained correct, and a no-key client
 cannot enumerate or open connections.
+
+The sibling-origin repair was committed as Agent Browser `781967a4` and Cooper
+`dbbb423`, installed as development generation `0.28.0-f9b8f97789db`, and
+passed the three-launch smoke, provider doctor, trusted public TLS, and a fresh
+no-key browser probe that exposed only the login surface. The original durable
+handoff reopened directly through its explicit repair action and retained its
+identifier and URL.
+
+E53 ran as external workflow `33911361222`. The human client passed. The slow
+client reached the sibling origin but rendered a blank iframe. Its HAR recorded
+one successful sibling-origin document response and no sibling assets; direct
+header readback found `X-Frame-Options: DENY`. The generic external
+`security-headers` middleware was therefore blocking the deliberate cross-origin
+embed before Guacamole could consume the sharing key. This differs from E51 and
+E52: the full operator connection home did not reappear.
+
+Revised next action: remove only that generic middleware from the capability
+origin, leaving the authenticated dashboard origin unchanged. Republish and
+prove the sibling document is embeddable, while a fresh no-key browser still
+shows only login and no operator identity or connection list. Then rerun the
+same two-client external oracle against the already-installed exact candidate;
+no Agent Browser rebuild is required for this ingress-only correction.
