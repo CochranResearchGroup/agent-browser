@@ -1540,19 +1540,18 @@ export function projectHandoffResolution(data) {
   };
 }
 
-export async function humanPacedObservation(page, profile, pixelMarkerRegion) {
+export async function humanPacedObservation(page, profile, _pixelMarkerRegion) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
-  await page.waitForTimeout(delay);
-  await page.keyboard.press('Tab');
-  await page.waitForTimeout(delay);
-  await page.keyboard.press('Shift+Tab');
   const remoteFrame = page.locator('iframe').first();
   if (await remoteFrame.count()) {
     const box = await remoteFrame.boundingBox();
     if (box) {
-      const point = syntheticRemoteInteractionPoint(pixelMarkerRegion, box);
-      await page.mouse.click(point.x, point.y);
+      await remoteFrame.focus();
+      await page.waitForTimeout(delay);
+      await page.keyboard.press('Tab');
+      await page.waitForTimeout(delay);
+      await page.keyboard.press('Shift+Tab');
       await page.waitForTimeout(delay);
       await page.keyboard.press('Escape');
       await page.keyboard.press('ArrowDown');
@@ -1568,8 +1567,6 @@ export async function resetSyntheticRemoteDocument(page, settleMs) {
   const iframeBox = await remoteFrame.boundingBox();
   if (!iframeBox) return false;
   await remoteFrame.focus();
-  const focusPoint = syntheticRemoteResetFocusPoint(iframeBox);
-  await page.mouse.click(focusPoint.x, focusPoint.y);
   await page.keyboard.press('Control+Home');
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await page.mouse.wheel(0, -2_000);
@@ -1629,13 +1626,6 @@ export async function observerPacedObservation(page, profile) {
   await page.keyboard.press('Tab');
   await page.waitForTimeout(delay);
   await page.keyboard.press('Shift+Tab');
-}
-
-export function syntheticRemoteResetFocusPoint(iframeBox) {
-  return {
-    x: iframeBox.x + Math.min(100, iframeBox.width / 2),
-    y: iframeBox.y + Math.min(150, iframeBox.height / 2),
-  };
 }
 
 export function syntheticRemoteInteractionPoint(region, iframeBox) {

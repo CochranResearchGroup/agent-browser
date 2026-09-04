@@ -260,20 +260,24 @@ assert.deepEqual(
   pacedInputEvents.slice(0, 7),
   [
     'mouse:move',
+    'iframe:focus',
     'keyboard:Tab',
     'keyboard:Shift+Tab',
-    'mouse:click',
     'keyboard:Escape',
     'keyboard:ArrowDown',
     'keyboard:ArrowUp',
   ],
-  'simulated human input must click the attested marker before any scrolling can move document-space controls under that point',
+  'generic human pacing must use focused keyboard input without an unverified Guacamole coordinate click',
+);
+assert.equal(
+  pacedInputEvents.includes('mouse:click'),
+  false,
+  'generic human pacing must leave coordinate clicks to target-located action cases',
 );
 assert.deepEqual(
-  pacedInputEvents.slice(-6),
+  pacedInputEvents.slice(-5),
   [
     'iframe:focus',
-    'mouse:click',
     'keyboard:Control+Home',
     'mouse:wheel:-2000',
     'mouse:wheel:-2000',

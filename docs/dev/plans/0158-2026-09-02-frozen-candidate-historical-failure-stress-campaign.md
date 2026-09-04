@@ -2919,3 +2919,25 @@ refresh the external expected identity only if live readback changes, and
 dispatch one fresh readiness epoch from the exact clean commit. If both clients
 and the aggregate pass, dispatch C01 immediately from that same commit and
 freeze source and runtime state through the shared calibration barrier.
+
+E41 ran the first input-order correction from exact head `bbf5fb78` as workflow
+run `33869354975`. The E7 target was restored to `/fixture` before dispatch and
+the first external resolver again succeeded. The human client nevertheless
+navigated the shared tab to `/error-action` immediately after the first good
+fixture frame. The delayed client then reported the same truthful wrong-tab
+proof failure. Both receipts and the aggregate sealed without retry or repair.
+
+Frame-by-frame review shows the remaining unsafe operation is the blind remote
+coordinate click itself, including the click used to focus the Guacamole
+surface before reset. A visible pixel location is not yet a proven input
+location across the Guacamole coordinate transform. The generic human-paced
+probe must therefore use iframe focus, keyboard traversal, arrow-key scrolling,
+and deterministic reset without any coordinate click. Target-located W8 action
+cases retain click coverage after their own locator proof. The provider-free
+runner test now rejects any mouse click in generic human pacing and proves the
+focused keyboard and reset sequence.
+
+Revised next action: publish this stricter runner correction, restore the same
+E7 tab once more, and dispatch a fresh exact-commit readiness epoch. A further
+self-induced navigation is a blocking test-harness defect and must be diagnosed
+before C01; a clean two-client aggregate permits immediate C01 dispatch.
