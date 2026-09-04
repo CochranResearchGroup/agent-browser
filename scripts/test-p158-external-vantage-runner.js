@@ -257,6 +257,19 @@ await humanPacedObservation({
   coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40,
 });
 assert.deepEqual(
+  pacedInputEvents.slice(0, 7),
+  [
+    'mouse:move',
+    'keyboard:Tab',
+    'keyboard:Shift+Tab',
+    'mouse:click',
+    'keyboard:Escape',
+    'keyboard:ArrowDown',
+    'keyboard:ArrowUp',
+  ],
+  'simulated human input must click the attested marker before any scrolling can move document-space controls under that point',
+);
+assert.deepEqual(
   pacedInputEvents.slice(-6),
   [
     'iframe:focus',

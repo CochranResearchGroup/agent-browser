@@ -1547,9 +1547,6 @@ export async function humanPacedObservation(page, profile, pixelMarkerRegion) {
   await page.keyboard.press('Tab');
   await page.waitForTimeout(delay);
   await page.keyboard.press('Shift+Tab');
-  await page.mouse.wheel(0, 240);
-  await page.waitForTimeout(delay);
-  await page.mouse.wheel(0, -240);
   const remoteFrame = page.locator('iframe').first();
   if (await remoteFrame.count()) {
     const box = await remoteFrame.boundingBox();

@@ -2874,3 +2874,48 @@ Revised next action: publish and install the shared-local terminal-replacement
 repair, refresh the E7 access plan, and execute its service-owned remote-view
 request through the deterministic replacement lane. Preserve restricted and
 exclusive capability enforcement unchanged.
+
+The shared-local repair landed at `64460847` and installed as development
+generation `0.28.0-f9cb4543a693`. Unattended startup created the dashboard
+backend lane on its second bounded attempt. Provider state and Cooper ingress
+were reconciled without changing production. The refreshed access plan was
+internally consistent: shared-local access was allowed, no permission was
+missing, and the terminal replacement request was executable. A first
+preparation request mistakenly placed the target URL outside `params` and
+opened `about:blank`; the corrected request reused the same browser and opened
+the loopback synthetic fixture. Its operator-visible proof was ready, its
+service tab handle was valid, and its opaque durable handoff was published to
+the external environment without printing it.
+
+E39, workflow run `33868209317`, was a preparation failure. The external pixel
+region was copied from the fixture's 1440 by 1000 document attestation instead
+of the previously proven 400 by 100 iframe crop. The human client rejected the
+oversized crop, while the slow client could not match its pixels. Both failure
+receipts and the aggregate were sealed without repair inside the epoch. The
+environment secret was corrected to the exact provider-free tested iframe
+region before a new epoch.
+
+E40, workflow run `33868662141`, reached the public dashboard from both hosted
+runners. The human client successfully resolved the prepared handoff and
+loaded Guacamole, but its simulated input changed the shared tab from
+`/fixture` to `/error-action`. The delayed client then correctly failed its
+post-checkout proof because the retained target no longer matched the durable
+handoff's expected URL. The human pixel check also correctly rejected the
+resulting error page. The aggregate retained both typed failures, both client
+identities, zero retries, and zero repairs.
+
+The job record and captured video identify a runner defect rather than an
+identity, resolver, browser, or ingress defect. Human-paced input scrolled the
+remote document before clicking a coordinate defined in unscrolled document
+space. The shifted point landed on the fixture's intentional error link and
+invalidated the shared target before the second client resolved it. A
+provider-free regression now freezes the safe ordering: keyboard focus checks
+and the harmless marker click occur before any scrolling input, while the
+existing arrow-key exercise and deterministic origin reset remain afterward.
+
+Revised next action: publish the runner-only correction, restore the existing
+E7 target to the attested fixture without replacing its browser or handoff,
+refresh the external expected identity only if live readback changes, and
+dispatch one fresh readiness epoch from the exact clean commit. If both clients
+and the aggregate pass, dispatch C01 immediately from that same commit and
+freeze source and runtime state through the shared calibration barrier.
