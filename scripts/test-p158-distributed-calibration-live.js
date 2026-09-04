@@ -42,7 +42,7 @@ function makeDispatch() {
   const durationMs = END_MS - START_MS;
   const schedule = [];
   for (let ordinal = 1; ordinal <= 25; ordinal += 1) {
-    const offsetMs = Math.floor((ordinal * durationMs) / 25);
+    const offsetMs = Math.floor((ordinal * durationMs) / 26);
     schedule.push({ kind: 'dashboard_action', ordinal, offsetMs });
     if (ordinal % 5 === 0) schedule.push({ kind: 'handoff_reconnect', ordinal: ordinal / 5, offsetMs });
   }

@@ -54,7 +54,7 @@ function dispatch() {
   };
   const schedule = [];
   for (let ordinal = 1; ordinal <= 25; ordinal += 1) {
-    const offsetMs = Math.floor((ordinal * value.durationMs) / 25);
+    const offsetMs = Math.floor((ordinal * value.durationMs) / 26);
     schedule.push({ kind: 'dashboard_action', ordinal, offsetMs });
     if (ordinal % 5 === 0) schedule.push({ kind: 'handoff_reconnect', ordinal: ordinal / 5, offsetMs });
   }

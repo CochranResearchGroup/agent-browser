@@ -41,6 +41,7 @@ import { sha256 as campaignSha256 } from './lib/p158-campaign-controller.js';
 import {
   canonicalExternalDispatchDigest,
   canonicalExternalRunnerReceiptDigest,
+  prepareDistributedC01Calibration,
 } from './lib/p158-distributed-calibration.js';
 
 const workflow = readFileSync('.github/workflows/p158-external-vantage.yml', 'utf8');
@@ -122,6 +123,28 @@ assert.equal(calibrationDescriptor.calibrationStartAt, '2026-09-02T12:00:00.000Z
 assert.equal(calibrationDescriptor.calibrationEndAt, '2026-09-02T12:20:00.000Z');
 assert.match(calibrationDescriptor.descriptorSha256, /^[a-f0-9]{64}$/);
 assert.equal(calibrationDescriptor.descriptorSha256, canonicalExternalDispatchDigest(calibrationDescriptor));
+assert.doesNotThrow(() => prepareDistributedC01Calibration({
+  calibrationId: 'p158-external-distributed-integration',
+  runId: calibrationDescriptor.runId,
+  sourceCommit: calibrationDescriptor.candidateCommit,
+  workflowRunId: calibrationDescriptor.workflowRunId,
+  workflowRunAttempt: calibrationDescriptor.workflowRunAttempt,
+  developmentTargets: ['E1', 'E2'].map((environmentId) => ({
+    environmentId,
+    scope: 'development',
+    serviceUrl: environmentId === 'E1' ? 'http://127.0.0.1:4951' : 'https://service.example.test',
+    dashboardUrl: environmentId === 'E1' ? 'http://127.0.0.1:4951' : 'https://dashboard.example.test',
+    profileRoot: `/tmp/p158-external-distributed/${environmentId.toLowerCase()}`,
+    handoffUrlSha256: calibrationDescriptor.handoffUrlSha256,
+  })),
+  agentClientIds: Array.from({ length: 25 }, (_, index) => `p158-integration-agent-${index + 1}`),
+  externalClients: [
+    { clientId: 'external-runner-human', viewerId: 'external-viewer-human', paceProfile: 'human_controller' },
+    { clientId: 'external-runner-slow', viewerId: 'external-viewer-slow', paceProfile: 'slow_concurrency' },
+  ],
+  externalDispatchDescriptor: calibrationDescriptor,
+  clock: { wallNow: () => '2026-09-02T11:59:00.000Z' },
+}));
 assert.doesNotMatch(
   runnerSource,
   /Calibration start must remain at least .* in the future when the probe begins/,

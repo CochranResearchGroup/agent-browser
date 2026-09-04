@@ -3916,3 +3916,36 @@ repair. Then schedule a fresh synchronized C01 far enough ahead to start the
 500-command local half and both external viewers inside the same 20-minute
 window. Finalize those artifacts, seal E1 and E2, and write the zero-start
 campaign freeze before W7.
+
+### C01 Predispatch Integration Defects
+
+State transition: `w6_live_journal_calibration_passed ->
+c01_predispatch_repair_active`.
+
+The first synchronized replacement dispatch, workflow `33927882151`, stopped
+before the shared start and before any campaign browsing action. Both external
+clients retained `handoff_target_closed_operator_action_required`, zero
+retries, and no in-workflow repair. The exact hash-selected durable handoff
+still exists, but its browser target requires the already authorized explicit
+operator reopen before the next dispatch.
+
+Local distributed preparation independently stopped before writing its
+preparation envelope. It first rejected an authenticated dashboard port used
+as the unauthenticated E1 Service target. The correct E1 agent endpoint is the
+development runtime lane, while E2 remains the authenticated public ingress.
+
+After that configuration correction, preparation exposed a source-level
+integration defect. The external workflow schedules 25 actions strictly
+inside the 20-minute window by dividing it into 26 intervals. The distributed
+validator independently reconstructed offsets with 25 intervals, placing its
+last expected action at the window boundary. Both implementations passed
+isolated tests while rejecting each other in the live seam. The validator now
+uses the same 26-interval contract, and the external-runner test directly
+passes a real workflow descriptor through distributed preparation so this
+drift cannot recur unnoticed.
+
+Revised next action: validate and commit the schedule-contract repair, then
+explicitly reopen the one handoff selected by its sealed URL digest. Dispatch a
+new exact-commit workflow with a fresh shared start, prepare E1 on the runtime
+lane and E2 on external ingress, and start all 500 local reads at the same
+barrier as both external viewers.
