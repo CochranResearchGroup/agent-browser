@@ -3295,3 +3295,59 @@ Revised next action: run the complete dashboard and ingress module tests,
 format, clippy, and patch checks; commit and publish the bounded read and focus
 repair; install its exact development candidate; then repeat the same external
 anchor plus ten-fresh-client gate without changing the harness.
+
+The bounded read and focus repair was committed and published as `dcb1eb29`,
+installed as development generation `0.28.0-a26c9bd8af0c`, and passed the
+three-launch smoke plus all 59 required provider checks. The launch smoke
+recorded one transient one-second Service State lock wait but completed all
+three iterations. A new managed browser and durable handoff again reached
+`operatorVisible.state=ready` with a verified effect.
+
+The unchanged public gate improved from two to nine passing fresh clients out
+of ten, while its retained anchor also passed. There were no client-visible
+focus 502s and no 503s from resources or browser-capability registry. One
+first-round client failed after a 504 from `/api/session-tabs`; its Guacamole
+iframe never appeared. Isolated external probes then showed all 15 current
+session-tab reads returning HTTP 200 in at most 0.717 seconds, so the endpoint
+was not intrinsically slow. The pressure source was the dashboard's polling
+amplification. Its current service-status payload is 4.36 MB, dominated by
+historical remote-view acquisition leases, runtime-owner history, jobs,
+profiles, and events. One client took about 2.6 seconds to fetch it, while an
+eleven-client coalesced wave took about ten seconds. Three independent
+seven-second UI pollers and an overlap-prone five-second session poller could
+start new cycles while earlier cycles remained unresolved, repeatedly sending
+that projection and every live session's tabs to each client.
+
+The next bounded repair prevents overlapping cycles independently in session
+synchronization, the workspace navigator, selected-workspace context, and the
+service panel. It preserves polling and left-rail coverage but refuses to start
+a second cycle while the same component's first cycle is in flight. Because
+backend stalls affect static and lightweight reads as well as the explicitly
+heavy routes, stable ingress now gives every idempotent GET, HEAD, or OPTIONS
+request the same ten-second first-response budget. Mutation requests retain
+their separate delivery-aware budgets and no-replay rules. Expanded structured
+logging recognizes sessions, models, runtime health, dashboard auth, and chat
+status routes without storing query strings or dynamic route identifiers. A
+red regression proved generic GET and HEAD requests previously retained only
+two seconds; it now passes. The dashboard production build, non-overlap source
+contract, selected-workspace, navigator, inspector-action tests, all 29 ingress
+tests, Rust format, and workspace clippy pass.
+
+Revised next action: commit and publish the non-overlap and generalized
+idempotent-read repair, install its exact development candidate, and rerun the
+same public gate. If it passes, inspect its full anchor and failure-journal
+delta before dispatching E47; the current harness validates the anchor only at
+startup and therefore needs an end-of-run anchor health assertion before the
+campaign can treat a green client count as acceptance.
+
+The selected live CDP streaming check initially failed because Chrome could
+not create threads or fork its utility process. Direct capacity readback found
+the shared Cargo validation slice at 945 of its 1,024-task ceiling. Five Rust
+test scopes had remained active since September 2 or 3, and one command scope
+was stranded by the failed smoke. This was not a browser, dashboard, memory, or
+per-service limit failure. Stopping those six exact stale validation scopes
+reduced the slice to nine tasks without disturbing either installed runtime.
+The unchanged live CDP streaming check then passed. Retain this as campaign
+evidence that abandoned validation scopes can starve browser launches and that
+the current admission surface does not reclaim or clearly report stale task
+claims.

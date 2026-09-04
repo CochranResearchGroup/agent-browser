@@ -7071,6 +7071,7 @@ export function ServicePanel({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const serviceFetchInFlightRef = useRef(false);
   const [eventKind, setEventKind] = useState<EventKindFilter>("all");
   const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
@@ -7178,7 +7179,8 @@ export function ServicePanel({
     (incidentOnly ? 1 : 0);
 
   const fetchService = useCallback(async (showSpinner: boolean) => {
-    if (!canFetch) return;
+    if (!canFetch || serviceFetchInFlightRef.current) return;
+    serviceFetchInFlightRef.current = true;
     if (showSpinner) setLoading(true);
     setError("");
     try {
@@ -7225,6 +7227,7 @@ export function ServicePanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
+      serviceFetchInFlightRef.current = false;
       if (showSpinner) setLoading(false);
     }
   }, [activePort, canFetch, eventBrowserId, eventKind, eventLimit, eventWindow, jobLimit]);

@@ -1275,6 +1275,11 @@ fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String
         ),
         "/api/service/request" => (raw_path.to_string(), "service_request".to_string()),
         "/api/session-tabs" => (raw_path.to_string(), "session_tabs".to_string()),
+        "/api/sessions" => (raw_path.to_string(), "sessions_read".to_string()),
+        "/api/models" => (raw_path.to_string(), "models_read".to_string()),
+        "/api/runtime/health" => (raw_path.to_string(), "runtime_health".to_string()),
+        "/api/dashboard-auth/status" => (raw_path.to_string(), "dashboard_auth_status".to_string()),
+        "/api/chat/status" => (raw_path.to_string(), "chat_status".to_string()),
         "/api/runtime/manifest" => (raw_path.to_string(), "runtime_manifest".to_string()),
         path if path.starts_with("/remote-view/") => (
             "/remote-view/<redacted>".to_string(),
@@ -1297,20 +1302,14 @@ fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String
 /// timeout plus a small response grace so a committed request is not reported
 /// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
-    if request.starts_with(b"GET /api/service/status ")
-        || request.starts_with(b"GET /api/service/status?")
-        || request.starts_with(b"GET /api/service/resources ")
-        || request.starts_with(b"GET /api/service/resources?")
-        || request.starts_with(b"GET /api/service/contracts ")
-        || request.starts_with(b"GET /api/service/contracts?")
-        || request.starts_with(b"GET /api/service/browser-capability-registry ")
-        || request.starts_with(b"GET /api/service/browser-capability-registry?")
-        || request.starts_with(b"GET /api/session-tabs ")
-        || request.starts_with(b"GET /api/session-tabs?")
+    if request.starts_with(b"GET ")
+        || request.starts_with(b"HEAD ")
+        || request.starts_with(b"OPTIONS ")
     {
-        // A live service projection can take longer than an ordinary dashboard
-        // read while the host is under admitted pressure. Keep this allowance
-        // route-specific so unrelated reads still fail over promptly.
+        // Idempotent dashboard reads can queue behind a large live projection
+        // while the host is under admitted pressure. They are safe to retry,
+        // but must not be declared unavailable before the selected backend's
+        // own bounded read budget can finish.
         return DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT;
     }
     if !request.starts_with(b"POST /api/service/request ") {
@@ -2721,9 +2720,21 @@ mod tests {
         );
         assert_eq!(
             dashboard_ingress_first_response_timeout(
+                b"GET /api/models HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"HEAD /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
                 b"GET /api/runtime/manifest HTTP/1.1\r\nHost: localhost\r\n\r\n"
             ),
-            DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+            DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT
         );
     }
 

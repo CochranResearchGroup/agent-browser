@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { sessionsAtom } from "@/store/sessions";
 import { engineForPortAtom, tabsForPortAtom } from "@/store/tabs";
@@ -87,9 +87,11 @@ export function useSelectedWorkspaceContext(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
+  const refreshInFlightRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled || refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     setLoading(true);
     try {
       const [statusResponse, resourcesResponse] = await Promise.all([
@@ -111,6 +113,7 @@ export function useSelectedWorkspaceContext(
       setServiceResources(null);
       setRefreshedAt(Date.now());
     } finally {
+      refreshInFlightRef.current = false;
       setLoading(false);
     }
   }, [enabled]);

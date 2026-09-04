@@ -7,6 +7,7 @@ const page = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
 const navigator = readFileSync('packages/dashboard/src/components/workspace-navigator.tsx', 'utf8');
 const servicePanel = readFileSync('packages/dashboard/src/components/service-panel.tsx', 'utf8');
 const sessionsStore = readFileSync('packages/dashboard/src/store/sessions.ts', 'utf8');
+const selectedWorkspaceContextHook = readFileSync('packages/dashboard/src/hooks/use-selected-workspace-context.ts', 'utf8');
 const chatStore = readFileSync('packages/dashboard/src/store/chat.ts', 'utf8');
 const remoteViewport = readFileSync('packages/dashboard/src/components/workspace-remote-viewport.tsx', 'utf8');
 const dashboardApi = readFileSync('packages/dashboard/src/lib/dashboard-api.ts', 'utf8');
@@ -167,6 +168,19 @@ assert.match(
   /fetch\(sessionTabsApiUrl\(s\.port\)\)/,
   'Workspace tab polling must use the same-origin dashboard session-tabs proxy',
 );
+
+for (const [label, source, guard] of [
+  ['session synchronization', sessionsStore, 'fetchInFlightRef'],
+  ['workspace navigator status', navigator, 'serviceStatusInFlightRef'],
+  ['selected workspace context', selectedWorkspaceContextHook, 'refreshInFlightRef'],
+  ['service panel status', servicePanel, 'serviceFetchInFlightRef'],
+]) {
+  assert.match(
+    source,
+    new RegExp(`${guard}\\.current[\\s\\S]*return[\\s\\S]*${guard}\\.current = true[\\s\\S]*finally[\\s\\S]*${guard}\\.current = false`),
+    `${label} must not start a new polling cycle while its prior cycle is still in flight`,
+  );
+}
 
 for (const [label, text] of [
   ['workspace navigator', navigator],

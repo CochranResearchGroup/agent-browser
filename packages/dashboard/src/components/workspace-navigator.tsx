@@ -1388,10 +1388,12 @@ export function WorkspaceNavigator() {
     node?: WorkspaceNode;
   } | null>(null);
   const loadedOnceRef = useRef(false);
+  const serviceStatusInFlightRef = useRef(false);
   const lastScrolledSelectionRef = useRef<string | null>(null);
 
   const fetchServiceStatus = useCallback(async (): Promise<ServiceStatusData | null> => {
-    if (typeof window === "undefined") return null;
+    if (typeof window === "undefined" || serviceStatusInFlightRef.current) return null;
+    serviceStatusInFlightRef.current = true;
     try {
       const base = serviceBase(activePort);
       const statusPromise = fetch(`${serviceBase(activePort)}/status`);
@@ -1419,6 +1421,8 @@ export function WorkspaceNavigator() {
     } catch (err) {
       setServiceError(err instanceof Error ? err.message : "Service status unavailable");
       return null;
+    } finally {
+      serviceStatusInFlightRef.current = false;
     }
   }, [activePort]);
 

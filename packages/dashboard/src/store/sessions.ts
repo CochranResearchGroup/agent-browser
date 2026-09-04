@@ -211,6 +211,7 @@ const reconcileSessionsAtom = atom(
 
 export function useSessionsSync(pollInterval = 5000) {
   const failCountRef = useRef(0);
+  const fetchInFlightRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const reconcile = useAtomCallback(
@@ -222,6 +223,8 @@ export function useSessionsSync(pollInterval = 5000) {
   const fetchSessions = useAtomCallback(
     useCallback(
       async (get, set) => {
+        if (fetchInFlightRef.current) return;
+        fetchInFlightRef.current = true;
         try {
           const resp = await fetch(getSessionsUrl());
           if (resp.ok) {
@@ -272,6 +275,8 @@ export function useSessionsSync(pollInterval = 5000) {
           }
         } catch {
           // Server unreachable
+        } finally {
+          fetchInFlightRef.current = false;
         }
         failCountRef.current++;
         if (failCountRef.current >= 2) set(polledSessionsAtom, []);
