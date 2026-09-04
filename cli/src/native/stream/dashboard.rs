@@ -167,11 +167,41 @@ pub async fn run_dashboard_server(port: u16) {
 }
 
 pub(crate) async fn ensure_dashboard_service_backend() {
-    if let Err(err) =
-        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None).await
+    if let Err(err) = ensure_dashboard_service_backend_with_retry(
+        || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
+        Duration::from_millis(250),
+    )
+    .await
     {
         eprintln!("Failed to initialize dashboard service backend: {err}");
     }
+}
+
+async fn ensure_dashboard_service_backend_with_retry<F, Fut>(
+    mut ensure: F,
+    retry_delay: Duration,
+) -> Result<(), String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    const MAX_ATTEMPTS: usize = 3;
+    let mut last_error = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match ensure().await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                if attempt < MAX_ATTEMPTS {
+                    eprintln!(
+                        "Dashboard service backend bootstrap attempt {attempt}/{MAX_ATTEMPTS} failed: {error}; retrying"
+                    );
+                    tokio::time::sleep(retry_delay).await;
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "dashboard service backend bootstrap failed".to_string()))
 }
 
 async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
@@ -3088,6 +3118,27 @@ mod tests {
     async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
         static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_backend_bootstrap_retries_after_runtime_host_convergence() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+        let result = ensure_dashboard_service_backend_with_retry(
+            move || {
+                let attempt = observed.fetch_add(1, Ordering::SeqCst);
+                std::future::ready(if attempt == 0 {
+                    Err("runtime host is still converging".to_string())
+                } else {
+                    Ok(())
+                })
+            },
+            Duration::ZERO,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
     #[test]

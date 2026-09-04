@@ -2295,7 +2295,7 @@ pub(super) async fn ensure_service_daemon_session(
         return Ok(());
     }
     Err(format!(
-        "Service daemon session '{}' did not become ready (exit status {})",
+        "Service daemon session '{}' did not become ready (child {})",
         session_name, status
     ))
 }

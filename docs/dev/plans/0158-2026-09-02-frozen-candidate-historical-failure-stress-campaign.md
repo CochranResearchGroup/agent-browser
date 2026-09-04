@@ -2795,3 +2795,29 @@ E7 through an explicit service-owned remote-view lane. Seal its opaque handoff
 and identity values into the external-vantage environment without printing
 them, and dispatch a fresh two-client readiness epoch from the exact installed
 commit.
+
+Commit `5170374f` installed as development generation
+`0.28.0-1aa5838cd691`. The three-launch smoke passed, production remained
+unchanged, provider generation drift was reconciled, all six provider routes
+passed doctor, and local and public dashboard probes returned 200. The live
+post-install check then showed the first repair was necessary but incomplete:
+the dashboard still exhausted its five-second named-lane wait during the
+simultaneous systemd startup, and `dashboard-service-backend.stream` remained
+absent. A later manual invocation created the lane immediately and returned
+the expected already-enabled stream result.
+
+Runtime-host and dashboard journals showed all three generation units starting
+in the same second. The dashboard's one bootstrap attempt could therefore lose
+the runtime-host replacement race, even though its child command exited zero.
+No later dashboard path retried the missing internal lane. A second focused red
+test models that exact sequence: the first convergence attempt fails and the
+next succeeds. Dashboard bootstrap now performs at most three attempts with a
+250 millisecond gap after a failed bounded recovery, records every failed
+attempt and its ordinal in stderr, and returns immediately on success. The
+earlier five-second named-lane publication wait remains in each recovery
+attempt. The retry regression, named-lane regression, format, and workspace
+clippy with warnings denied pass.
+
+Revised next action: publish and install the bounded dashboard-bootstrap retry,
+repeat the provider reconciliation, and require a fresh unattended startup to
+materialize `dashboard-service-backend.stream` before preparing E7.
