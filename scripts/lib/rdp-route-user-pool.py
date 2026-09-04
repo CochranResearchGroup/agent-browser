@@ -14,6 +14,8 @@ from pathlib import Path
 CANONICAL_ENV = "AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON"
 CANONICAL_SECRET = "XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON"
 PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-_."
+MAX_CONNECTIONS = 8
+MAX_CONNECTIONS_PER_USER = 8
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -194,8 +196,8 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
     legacy_update = f"""
   IF legacy_count = 1 THEN
     UPDATE guacamole_connection
-    SET connection_name = {canonical}, protocol = 'rdp', max_connections = 4,
-        max_connections_per_user = 2
+    SET connection_name = {canonical}, protocol = 'rdp', max_connections = {MAX_CONNECTIONS},
+        max_connections_per_user = {MAX_CONNECTIONS_PER_USER}
     WHERE parent_id IS NULL AND connection_name = {legacy}
     RETURNING connection_id INTO {route_id};
   ELSIF canonical_count = 1 THEN""" if route["legacyConnectionName"] else """
@@ -212,13 +214,14 @@ def route_sql_block(route: dict[str, str], index: int, hostname: str, port: str)
   END IF;
 {legacy_update}
     UPDATE guacamole_connection
-    SET protocol = 'rdp', max_connections = 4, max_connections_per_user = 2
+    SET protocol = 'rdp', max_connections = {MAX_CONNECTIONS},
+        max_connections_per_user = {MAX_CONNECTIONS_PER_USER}
     WHERE parent_id IS NULL AND connection_name = {canonical}
     RETURNING connection_id INTO {route_id};
   ELSE
     INSERT INTO guacamole_connection (
       connection_name, protocol, max_connections, max_connections_per_user
-    ) VALUES ({canonical}, 'rdp', 4, 2)
+    ) VALUES ({canonical}, 'rdp', {MAX_CONNECTIONS}, {MAX_CONNECTIONS_PER_USER})
     RETURNING connection_id INTO {route_id};
   END IF;
 

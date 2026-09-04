@@ -40,6 +40,9 @@ const sql = spawnSync(
 assert.equal(sql.status, 0, sql.stderr);
 for (const route of requested) assert(sql.stdout.includes(route.connectionName));
 assert.match(sql.stdout, /distinct_username_count <> 4/);
+assert.doesNotMatch(sql.stdout, /max_connections = 4/);
+assert.match(sql.stdout, /max_connections = 8/);
+assert.match(sql.stdout, /max_connections_per_user = 8/);
 
 const legacySecret = join(fixtureRoot, 'legacy.env');
 writeFileSync(legacySecret, [

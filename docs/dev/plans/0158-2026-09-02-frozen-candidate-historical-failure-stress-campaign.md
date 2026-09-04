@@ -2315,3 +2315,34 @@ Revised next action: complete Rust and dashboard validation, publish and install
 the repaired development candidate, revalidate the durable handoff identity,
 and repeat C01. Preserve this failed attempt and its captured frame, transport
 diagnostics, journal records, and failure receipt for final analysis.
+
+E28 ran from exact remote head `7ebda2ff` as workflow run `33832442510` after
+the viewer-lease routing repair was installed. Both external clients passed the
+complete readiness sequence. The aggregate recorded two distinct off-host
+clients, the same durable handoff and retained identity, all ingress checks,
+zero retries, zero repairs, zero internal URL leaks, zero physical browser
+relaunches, and aggregate SHA-256
+`b023895b20e40dddae2939692752599859754cafe6c78bbb4d8eed842a62937b`.
+
+The next C01 attempt, workflow run `33832786999`, failed before the shared
+window when Guacamole returned HTTP 429 to the human client. The captured frame
+explicitly reported that the authenticated Guacamole user had exhausted its
+simultaneous connection limit. The viewer-lease request had succeeded, proving
+that E28's relay repair remained effective. The failure receipt retained 196
+completed network entries, zero failed browser requests, two pending dashboard
+reads, 74 Guacamole entries including the single 429, eight WebSocket
+observations, and 27 console observations. The companion client was canceled
+immediately and Plan 0158 remained active.
+
+The managed Guacamole route definition allowed only four total connections and
+two connections per authenticated route user. That bound cannot reliably hold
+the campaign's legitimate overlap of two external clients, the slow client's
+second concurrent page, and brief old/new viewer overlap during reconnect.
+The repair preserves a hard provider limit while raising each managed route to
+eight total connections and eight per authenticated route user. The generated
+SQL regression test rejects the former limits and asserts both new bounds.
+
+Revised next action: apply the reviewed provider configuration through the
+development provider plan, stage, preflight, and apply workflow; verify the
+live database values and provider doctor; then repeat C01 from an exact clean
+head. Preserve the 429 receipt and frame for final analysis.
