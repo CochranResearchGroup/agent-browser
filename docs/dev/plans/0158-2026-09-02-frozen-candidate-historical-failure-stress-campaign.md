@@ -3673,3 +3673,22 @@ Revised next action: commit and push the stale-primary recovery, then redispatch
 C01. Preserve the exact simultaneous reconnect schedule. If it fails again,
 classify the next failure from the retained client and provider records rather
 than adding a retry inside the run.
+
+Workflow `33916185995` did not exercise the product repair. Both clients stopped
+before page access with `handoff_target_closed_operator_action_required`. The
+post-install recovery had selected the oldest handoff sharing the expected
+browser and profile, but historical execution left several such handoffs. The
+protected external URL names a different exact handoff. This was an operator
+selection error in campaign preparation, not a product or ingress regression.
+
+The exact handoff was recovered without exposing its identifier or URL by
+matching the SHA-256 of each retained handoff URL against the hash sealed in
+E54's green external receipt. Explicit reopen then returned `status=ready`,
+`resolved=true`, `reopenedClosedTab=true`, and
+`operatorVisible.state=ready`. The protected expected-identity secret was
+refreshed from that exact retained record. Future campaign recovery must select
+the sealed handoff hash, never infer identity from a browser/profile pair that
+can legitimately own multiple historical handoffs.
+
+Revised next action: redispatch C01 at the current exact commit and unchanged
+installed candidate. The external URL hash remains the E54-sealed identity.
