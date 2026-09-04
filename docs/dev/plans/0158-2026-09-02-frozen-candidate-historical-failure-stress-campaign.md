@@ -2075,3 +2075,17 @@ dashboard retry loop, and retain safe resolver observation counts, statuses,
 readiness gaps, and oracle finding summaries in failure receipts. Validate the
 provider-free runner, oracle, dashboard handoff, inspector, and dashboard build
 before installing and dispatching one fresh external readiness epoch.
+
+E21, workflow run `33823413339`, stopped at the exact-commit pre-execution
+guard. It was dispatched with expected commit `914fdd05`, then the tracked
+branch advanced to documentation-only commit `219769f0` before the runners
+checked it out. Both client jobs and the aggregate rejected the mismatch before
+dependency installation or browser execution. No test evidence was created,
+and the mandatory artifact uploads correctly failed because their source
+directories did not exist. This is a dispatch preparation error, not a product
+or external-ingress result.
+
+Revised next action: commit this pre-execution record, build and install the
+resulting exact head using the wrapper's normal eight-job default, repeat live
+readiness and effective environment-secret preparation, and dispatch only when
+the branch head, expected commit, and installed source are identical.
