@@ -46,6 +46,12 @@ assert.match(
 );
 
 assert.match(
+  dashboardPage,
+  /presentationMayStillConverge[\s\S]*nextResolution\.status === "ready"[\s\S]*nextResolution\.status === "converging"[\s\S]*status: "converging"/,
+  'an incoherent ready response must enter the bounded presentation retry loop',
+);
+
+assert.match(
   streamStore,
   /dashboardStreamWebSocketUrl[\s\S]*\/api\/stream\/\$\{encodeURIComponent\(port\)\}[\s\S]*location\.protocol === "https:" \? "wss:" : "ws:"/,
   'external dashboard CDP streams must use the authenticated same-origin WebSocket proxy',

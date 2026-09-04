@@ -18,6 +18,7 @@ import {
   classifyHandoffResolutionFailure,
   externalVantageFailureRecord,
   findInternalUrlLeaks,
+  handoffResolutionReadinessGaps,
   projectHandoffResolution,
   pixelMarkerClipForIframe,
   remoteViewIframeClipObservation,
@@ -310,6 +311,48 @@ assert.deepEqual(classifyHandoffResolutionFailure(closedResolution), {
   details: { resolutionStatus: 'closed', reopenRequired: true },
 });
 assert.equal(classifyHandoffResolutionFailure({ status: 'converging' }), null);
+assert.deepEqual(handoffResolutionReadinessGaps({
+  status: 'ready',
+  resolved: false,
+  browserId: 'browser-1',
+  targetId: 'target-1',
+  viewStreamProvider: 'rdp_gateway',
+  presentationGeneration: 2,
+  presentationReceipt: {
+    generation: 1,
+    dashboardDeploymentGeneration: '',
+    logicalBrowserId: 'browser-2',
+    daemonOwnerGeneration: 0,
+    processInstanceDigest: '',
+    targetId: 'target-2',
+    requiredStreamProvider: 'cdp',
+    observedStreamProvider: 'rdp_gateway',
+    state: 'converging',
+  },
+}), [
+  'resolved_false',
+  'receipt_generation_mismatch',
+  'dashboard_generation_missing',
+  'logical_browser_mismatch',
+  'daemon_generation_missing',
+  'process_identity_missing',
+  'target_mismatch',
+  'required_provider_mismatch',
+  'observed_provider_mismatch',
+  'receipt_not_ready',
+]);
+const resolutionTimeout = new Error('Authoritative ready handoff resolution was not observed before timeout');
+resolutionTimeout.code = 'handoff_resolution_observation_timeout';
+resolutionTimeout.details = {
+  resolutionObservationCount: 1,
+  resolutionStatuses: ['ready'],
+  resolutionReadinessGaps: ['resolved_false', 'receipt_generation_mismatch'],
+};
+assert.deepEqual(externalVantageFailureRecord(resolutionTimeout, env), {
+  code: 'handoff_resolution_observation_timeout',
+  message: resolutionTimeout.message,
+  details: resolutionTimeout.details,
+});
 assert.deepEqual(classifyHandoffResolutionFailure({
   status: 'failed',
   failureCode: 'service_state_lock_timeout',

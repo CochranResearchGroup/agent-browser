@@ -2027,3 +2027,51 @@ authenticated HTTP durable-resolution request accepts and retains the bounded
 lock field, explicitly reopen the disposable handoff target if installation
 closed it, refresh the environment-scoped identity if the target changed, and
 only then dispatch the next external readiness epoch.
+
+Candidate generation `0.28.0-e87200d2d908` installed from commit
+`7a446e2228df841f981be5c74395f4ca8edd5791` with production unchanged. A live
+authenticated HTTP request accepted the top-level 30-second Service State lock
+budget and returned the deliberate closed-target contract without recreating a
+tab. The separately authorized reopen then returned a ready presentation with
+a matching receipt. Three independent development launch smokes completed
+three open, read, close, and residue iterations each. The provider-required
+doctor passed against the reviewed public ingress and all six isolated routes.
+A bounded public-origin browser probe observed only authenticated same-origin
+TLS WebSockets for the two CDP proxy ports and Guacamole tunnel. It observed no
+loopback WebSocket.
+
+E20 ran from that exact commit as workflow run `33822225799`. Both external
+clients rendered the exact expected synthetic marker. The human client captured
+matching initial and reconnect marker SHA-256 values of
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`,
+which clears the E19 loopback-stream failure, but its oracle reported
+`iframe_failure`. Its full screenshots still show the ready embedded remote
+view. A local public-origin DOM reproduction observed exactly one connected
+`/guacamole/` iframe after presentation convergence. The runner sampled iframe
+URLs once before its pixel-convergence loop, so it could record no iframe and
+then prove iframe-relative pixels moments later. This is an evidence-ordering
+race, not a missing stream.
+
+The slow client completed its initial marker capture, then timed out waiting
+for an authoritative ready resolution on its concurrent page. Service State
+records one correlated resolver job beginning at
+`2026-09-04T00:34:52.10803933Z` and succeeding at
+`2026-09-04T00:34:52.651895547Z`; the earlier one-second lock failure did not
+recur. Its failure receipt did not retain the observed non-ready resolution
+shape, which prevents exact post-mortem classification. The dashboard currently
+normalizes `resolved=true` receipt mismatches into `converging`, but leaves an
+incoherent `status=ready, resolved=false` response outside both its ready path
+and retry effect. That state can leave the runner waiting even though the
+server-side operation succeeded.
+
+The E20 aggregate correctly retained both failure receipts, both client IDs,
+zero retries, and zero repairs. Its SHA-256 is
+`158a72434878ee30f0ac9ee5043e6c10e2bf92a906ed94a808b599f6d21cb5fa`.
+
+Revised next action: bind iframe and form evidence collection to the accepted
+post-convergence pixel observation, normalize every potentially usable but
+receipt-incoherent `ready` or `converging` response into the existing bounded
+dashboard retry loop, and retain safe resolver observation counts, statuses,
+readiness gaps, and oracle finding summaries in failure receipts. Validate the
+provider-free runner, oracle, dashboard handoff, inspector, and dashboard build
+before installing and dispatching one fresh external readiness epoch.

@@ -541,7 +541,10 @@ function RemoteViewHandoffGate({
         throw new Error(payload.error || "The remote-view handoff could not be resolved.");
       }
       let nextResolution = payload.data;
-      if (nextResolution.resolved && !durableHandoffPresentationReady(nextResolution)) {
+      const presentationMayStillConverge = nextResolution.resolved === true
+        || nextResolution.status === "ready"
+        || nextResolution.status === "converging";
+      if (presentationMayStillConverge && !durableHandoffPresentationReady(nextResolution)) {
         nextResolution = {
           ...nextResolution,
           status: "converging",

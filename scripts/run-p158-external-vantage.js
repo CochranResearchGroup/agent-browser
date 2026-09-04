@@ -949,7 +949,16 @@ async function executeExternalVantageProbe({
     });
     const oracle = auditExternalHandoffSession({ session: oracleSession });
     if (!oracle.passed) {
-      throw new Error(`External handoff oracle rejected evidence: ${oracle.findings.map((item) => item.code).join(',')}`);
+      const findingCodes = [...new Set(oracle.findings.map((item) => item.code))].sort();
+      const error = new Error(`External handoff oracle rejected evidence: ${findingCodes.join(',')}`);
+      error.code = 'external_handoff_oracle_rejected';
+      error.details = {
+        urlFindingCount: oracle.findings.length,
+        urlFindingCodes: findingCodes,
+        iframeCount: oracleSession.surfaceScans?.iframeUrlCount
+          ?? oracleSession.urlObservations.filter((item) => item.role === 'iframe_src').length,
+      };
+      throw error;
     }
     const viewerId = `external-viewer-${clientId.replace(/^external-runner-/, '')}`;
     const w8ActionObservations = reviewedW8Manifest
@@ -1072,11 +1081,23 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   );
   const readyAt = new Date().toISOString();
   if (performHumanAction) await humanPacedObservation(page, paceProfile, pixelMarkerRegion);
+  const screenshotPath = join(outputDir, `${label}.png`);
+  const markerPath = join(outputDir, `${label}-pixel-marker.png`);
+  const pixelHash = await waitForExpectedPixelMarker({
+    page,
+    screenshotPath,
+    markerPath,
+    pixelMarkerRegion,
+    expectedPixelHash: expectedIdentity.pixelHash,
+  });
+  // Bind the DOM evidence to the same converged presentation that supplied
+  // the accepted pixels. Sampling before convergence can observe the brief
+  // React replacement between the placeholder and its iframe.
   const iframeUrls = await page.locator('iframe').evaluateAll((frames) => frames.map((frame) => frame.src).filter(Boolean));
   const formActions = await page.locator('form').evaluateAll((forms) => forms.map((form) => form.action).filter(Boolean));
   const copiedActions = await page.locator('a,button').evaluateAll((elements) => elements.flatMap((element) => {
-    const label = `${element.textContent || ''} ${element.getAttribute('aria-label') || ''}`;
-    if (!/copy/i.test(label)) return [];
+    const elementLabel = `${element.textContent || ''} ${element.getAttribute('aria-label') || ''}`;
+    if (!/copy/i.test(elementLabel)) return [];
     const value = element.getAttribute('data-copy-url') || element.getAttribute('href');
     return value ? [new URL(value, document.baseURI).href] : [];
   }));
@@ -1091,15 +1112,6 @@ async function captureVisit({ page, handoff, expectedIdentity, outputDir, label,
   if (label.startsWith('reconnect')) {
     urlEvidence.push({ evidenceId: `${label}-target`, role: 'reconnect_target', url: handoff.href });
   }
-  const screenshotPath = join(outputDir, `${label}.png`);
-  const markerPath = join(outputDir, `${label}-pixel-marker.png`);
-  const pixelHash = await waitForExpectedPixelMarker({
-    page,
-    screenshotPath,
-    markerPath,
-    pixelMarkerRegion,
-    expectedPixelHash: expectedIdentity.pixelHash,
-  });
   await page.screenshot({ path: screenshotPath, fullPage: false });
   const identity = identityFromResolution(resolution, expectedIdentity);
   identity.pixelHash = pixelHash;
@@ -1438,7 +1450,33 @@ async function waitForAuthoritativeHandoffResolution(resolutions, startIndex, ti
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
   }
-  throw new Error('Authoritative ready handoff resolution was not observed before timeout');
+  const observed = resolutions.slice(startIndex);
+  const error = new Error('Authoritative ready handoff resolution was not observed before timeout');
+  error.code = 'handoff_resolution_observation_timeout';
+  error.details = {
+    resolutionObservationCount: observed.length,
+    resolutionStatuses: [...new Set(observed.map((item) => safeFailureToken(item?.status)).filter(Boolean))].sort(),
+    resolutionReadinessGaps: [...new Set(observed.flatMap(handoffResolutionReadinessGaps))].sort(),
+  };
+  throw error;
+}
+
+export function handoffResolutionReadinessGaps(resolution) {
+  const receipt = resolution?.presentationReceipt;
+  return [
+    [resolution?.resolved === true, 'resolved_false'],
+    [resolution?.status === 'ready', 'status_not_ready'],
+    [Number.isInteger(resolution?.presentationGeneration) && resolution.presentationGeneration > 0, 'presentation_generation_missing'],
+    [receipt?.generation === resolution?.presentationGeneration, 'receipt_generation_mismatch'],
+    [typeof receipt?.dashboardDeploymentGeneration === 'string' && receipt.dashboardDeploymentGeneration.length > 0, 'dashboard_generation_missing'],
+    [receipt?.logicalBrowserId === resolution?.browserId, 'logical_browser_mismatch'],
+    [Number.isInteger(receipt?.daemonOwnerGeneration) && receipt.daemonOwnerGeneration > 0, 'daemon_generation_missing'],
+    [typeof receipt?.processInstanceDigest === 'string' && receipt.processInstanceDigest.length > 0, 'process_identity_missing'],
+    [receipt?.targetId === resolution?.targetId, 'target_mismatch'],
+    [receipt?.requiredStreamProvider === resolution?.viewStreamProvider, 'required_provider_mismatch'],
+    [receipt?.observedStreamProvider === receipt?.requiredStreamProvider, 'observed_provider_mismatch'],
+    [receipt?.state === 'ready', 'receipt_not_ready'],
+  ].filter(([passed]) => !passed).map(([, code]) => code);
 }
 
 export function classifyHandoffResolutionFailure(resolution) {
@@ -1889,6 +1927,19 @@ function safeExternalFailureDetails(value) {
   }
   if (Number.isSafeInteger(value.urlFindingCount) && value.urlFindingCount >= 0) {
     details.urlFindingCount = value.urlFindingCount;
+  }
+  if (Number.isSafeInteger(value.resolutionObservationCount) && value.resolutionObservationCount >= 0) {
+    details.resolutionObservationCount = value.resolutionObservationCount;
+  }
+  if (Array.isArray(value.resolutionStatuses)) {
+    details.resolutionStatuses = value.resolutionStatuses
+      .filter((item) => typeof item === 'string' && /^[a-z0-9_]{1,64}$/.test(item))
+      .slice(0, 10);
+  }
+  if (Array.isArray(value.resolutionReadinessGaps)) {
+    details.resolutionReadinessGaps = value.resolutionReadinessGaps
+      .filter((item) => typeof item === 'string' && /^[a-z0-9_]{1,64}$/.test(item))
+      .slice(0, 20);
   }
   if (Array.isArray(value.urlFindingRoles)) {
     details.urlFindingRoles = value.urlFindingRoles
