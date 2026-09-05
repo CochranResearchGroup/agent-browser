@@ -5053,3 +5053,20 @@ prefix, while the descriptor emits namespace-qualified names. A bounded
 closed-world repair is testing that exact SQL seam before a new preflight and
 materially changed apply. No blind retry, provider-ready claim, public ingress
 publication, full-scene capture, or external dispatch has occurred.
+
+The exact-name SQL repair in `93042cde` passed the primary provider suite and
+was pushed before preflight B, which passed exact retained-resource admission.
+Apply B progressed through connection discovery, then quarantined on the
+missing provider inventory required by the first warm-route viewer. The file
+is normally written only after warm routes are ready. This is a separate
+first-install bootstrap dependency, not recurrence of the SQL lookup failure.
+Both failed apply receipts remain immutable in the new provider receipts
+directory. Fresh `baselines-b.json` readback again passed production and
+default-development non-interference after quarantine.
+
+The bounded repair must initialize only an explicitly unready, valid inventory
+for first bootstrap, never a ready route or configured provider manifest.
+Existing inventory authority must not be overwritten. This preserves the
+missing-file fail-closed contract while allowing the provider-owned bootstrap
+viewer to initialize its own new routes. No public publication or visual
+workflow is authorized by a bootstrap inventory alone.

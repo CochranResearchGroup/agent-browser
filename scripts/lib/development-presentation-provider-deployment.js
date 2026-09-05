@@ -390,6 +390,7 @@ export function applyDevelopmentPresentationProvider({
     completedSteps.push('start-provider');
     effects.grantOperatorRouteAccess(descriptor);
     completedSteps.push('grant-operator-route-access');
+    ensureDevelopmentPresentationBootstrapInventory(descriptor);
     effects.openWarmRoutes(descriptor);
     completedSteps.push('open-warm-routes');
     const stagedObservation = effects.observe(descriptor);
@@ -795,6 +796,29 @@ function loadDevelopmentRouteSecrets(descriptor) {
 function assertChecks(checks, message) {
   const failed = checks.filter((item) => !item.ok).map((item) => item.name);
   if (failed.length) throw new Error(`${message}: ${failed.join(', ')}`);
+}
+
+/** Seed launcher input without publishing configured authority or ready routes. */
+export function ensureDevelopmentPresentationBootstrapInventory(descriptor) {
+  validateDevelopmentPresentationProviderIsolation(descriptor);
+  if (existsSync(descriptor.manifest) || existsSync(descriptor.inventoryPath)) return false;
+  mkdirSync(descriptor.stateDir, { recursive: true, mode: 0o700 });
+  const inventory = {
+    schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+    environment: 'development',
+    localDiagnosticUrl: descriptor.localDiagnosticUrl,
+    externalIngress: descriptor.externalIngress,
+    routes: [],
+  };
+  try {
+    writeFileSync(descriptor.inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, {
+      mode: 0o600, flag: 'wx',
+    });
+  } catch (error) {
+    if (error.code === 'EEXIST') return false;
+    throw error;
+  }
+  return true;
 }
 
 export function writeProviderAuthority(descriptor, observation) {

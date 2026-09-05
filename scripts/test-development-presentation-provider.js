@@ -21,6 +21,7 @@ import {
   DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA,
   applyDevelopmentPresentationProvider,
   developmentPresentationProviderDeploymentPlan,
+  ensureDevelopmentPresentationBootstrapInventory,
   probeDevelopmentPresentationProvider,
   prepareDevelopmentPresentationProviderSecrets,
   renderDevelopmentPresentationProviderBundle,
@@ -132,6 +133,33 @@ try {
   assert.equal(developmentPresentationProviderDeploymentPlan(namespaced).providerRoot, namespaced.root);
   assert.equal(namespaced.warmSlots, 4);
   assert.equal(namespaced.hardMaxSlots, 6);
+  const bootstrapOrder = [];
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv, authorizeEffects: true,
+    effects: {
+      snapshotProduction: () => ({}), assertProductionUnchanged: assert.deepEqual,
+      createVolume: () => {}, startDatabase: () => {}, ensureRouteUser: () => {},
+      syncConnections: () => {}, startProvider: () => {},
+      grantOperatorRouteAccess: () => bootstrapOrder.push('access'),
+      openWarmRoutes: () => {
+        bootstrapOrder.push('open');
+        assert.equal(existsSync(namespaced.manifest), false);
+        assert.deepEqual(JSON.parse(readFileSync(namespaced.inventoryPath, 'utf8')).routes, []);
+        throw new Error('bootstrap viewer failure');
+      },
+      quarantine: () => {},
+    },
+  }), /apply quarantined: bootstrap viewer failure/);
+  assert.deepEqual(bootstrapOrder, ['access', 'open']);
+  assert.equal(existsSync(namespaced.manifest), false);
+  const retainedBootstrap = readFileSync(namespaced.inventoryPath, 'utf8');
+  assert.equal(ensureDevelopmentPresentationBootstrapInventory(namespaced), false);
+  assert.equal(readFileSync(namespaced.inventoryPath, 'utf8'), retainedBootstrap);
+  mkdirSync(secondProvider.root, { recursive: true });
+  writeFileSync(secondProvider.manifest, 'existing configured authority');
+  assert.equal(ensureDevelopmentPresentationBootstrapInventory(secondProvider), false);
+  assert.equal(readFileSync(secondProvider.manifest, 'utf8'), 'existing configured authority');
+  assert.equal(existsSync(secondProvider.inventoryPath), false);
   for (const key of ['routeId', 'slotId', 'user', 'connectionKey', 'displayReservationId', 'viewerProfilePath']) {
     assert.ok(secondProvider.routes.every((route) => !namespaced.routes.some((other) => other[key] === route[key])));
   }
@@ -770,7 +798,14 @@ try {
       syncConnections: () => effectCalls.push('sync-connections'),
       startProvider: () => effectCalls.push('start-provider'),
       grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
-      openWarmRoutes: () => effectCalls.push('open-warm-routes'),
+      openWarmRoutes: () => {
+        assert.equal(existsSync(descriptor.manifest), false);
+        assert.equal(existsSync(descriptor.inventoryPath), true);
+        const bootstrap = JSON.parse(readFileSync(descriptor.inventoryPath, 'utf8'));
+        assert.equal(bootstrap.schemaVersion, 'agent-browser.development-presentation-inventory.v1');
+        assert.deepEqual(bootstrap.routes, []);
+        effectCalls.push('open-warm-routes');
+      },
       observe: () => readyObservation,
       grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
       publishIngress: () => effectCalls.push('publish-ingress'),
