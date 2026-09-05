@@ -4297,3 +4297,37 @@ all five journal surfaces, refresh only candidate-bound sealed handoff identity
 if activation changes it, and require both external readiness clients plus
 their aggregate to pass. Only then dispatch one fresh synchronized C01 against
 that exact installed commit.
+
+### Repaired Candidate Installed And Journal-Calibrated
+
+State transition: `c01_repaired_candidate_ready_for_publication ->
+c01_repaired_candidate_external_readiness_active`.
+
+The four reviewed repair commits were published through `8c7e68cb`. The exact
+optimized executable was installed as development generation
+`0.28.0-d207ba36a77c`; the installer reported production unchanged. Filesystem
+use was 70 percent against the campaign's 90 percent stop threshold.
+Provider-required development doctor passed with all three services bound to
+the selected generation, six distinct presentation routes, four distinct warm
+displays, private secrets, protected lease authority, and configured external
+ingress. All three disposable open, URL-read, close, and residue smoke
+iterations passed.
+
+A fresh candidate-bound malformed-line proof passed in an isolated temporary
+runtime without changing the live development or production journals. The
+live five-surface journal calibration then observed exactly five requested
+failures: `browser_launch`, `guacamole_load`, `handoff_link`, `cdp_stream`, and
+`dashboard_action`. It retained one legitimate `service_action` companion as
+background evidence, reached two stable BrowserManager readbacks, started no
+browser process, attempted no retry or repair, and allowed no production
+access. Provider-required doctor remained green afterward. The first package
+alias invocation failed before effects because the live runner requires its
+four explicit path arguments; this was an operator invocation error rather
+than a product or calibration failure, and the successful attempt supplied the
+exact candidate-bound configuration and off-repository outputs.
+
+Revised next action: verify or reopen the existing sealed development handoff
+without publishing its URL, refresh only its candidate-bound expected identity
+if the installed generation changed the target, and dispatch a fresh pair of
+external readiness clients. Proceed to synchronized C01 only if both clients
+and their aggregate are clean for this exact candidate.
