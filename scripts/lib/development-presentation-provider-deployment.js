@@ -520,6 +520,10 @@ where table_schema = 'public' and table_name in
  'guacamole_sharing_profile','guacamole_sharing_profile_parameter',
  'guacamole_sharing_profile_permission');`;
   const schemaResult = postgresQuery(descriptor, schemaSql, run);
+  // Match the descriptor's exact connections, including parallel namespaces.
+  // Explicit escape strings keep quotes and backslashes literal in PostgreSQL.
+  const connectionNamesSql = descriptor.routes.map((route) =>
+    `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
   const routeSql = `select coalesce(json_agg(row_to_json(t)), '[]'::json)
 from (
   select c.connection_id::text as "connectionId",
@@ -540,7 +544,7 @@ from (
     on spp.sharing_profile_id = sp.sharing_profile_id
   left join guacamole_sharing_profile_permission spermission
     on spermission.sharing_profile_id = sp.sharing_profile_id
-  where c.connection_name like 'Agent Browser Dev RDP Route %'
+  where c.connection_name in (${connectionNamesSql || 'NULL'})
   group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
   order by c.connection_id
 ) t;`;

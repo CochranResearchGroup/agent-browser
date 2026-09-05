@@ -620,6 +620,34 @@ try {
   assert.equal(probed.displays.length, 6);
   assert.equal(probed.displays.at(-1).displayReservationId, 'development-display-6');
   assert.equal(probed.secrets.private, true);
+  for (const probeDescriptor of [descriptor, namespaced, {
+    ...namespaced,
+    routes: [{ ...namespaced.routes[0], connectionName: "Fixture O'Brien\\route" }],
+  }]) {
+    let routeQueryObserved = false;
+    const exactRows = probeDescriptor.routes.map((route, index) => ({
+      connectionId: String(index + 100), connectionName: route.connectionName, user: route.user,
+    }));
+    const exactProbe = probeDevelopmentPresentationProvider(probeDescriptor, {
+      run(command, args) {
+        if (command === 'docker' && args[0] === 'exec') {
+          assert.equal(args[1], probeDescriptor.services.postgres);
+          const sql = args.at(-1);
+          if (sql.includes('information_schema.tables')) return { status: 0, stdout: '8\n' };
+          routeQueryObserved = true;
+          const exactNames = probeDescriptor.routes.map((route) =>
+            `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
+          assert.ok(sql.includes(`where c.connection_name in (${exactNames})`), sql);
+          assert.doesNotMatch(sql, /c\.connection_name like/i);
+          return { status: 0, stdout: JSON.stringify(exactRows) };
+        }
+        return { status: 0, stdout: '' };
+      },
+      displaySocketExists: () => false,
+    });
+    assert.equal(routeQueryObserved, true);
+    assert.deepEqual(exactProbe.database.routes, exactRows);
+  }
   const configured = doctorDevelopmentPresentationProvider({ env, probe: () => readyObservation });
   assert.equal(configured.success, true);
   assert.equal(configured.status.state, 'configured');

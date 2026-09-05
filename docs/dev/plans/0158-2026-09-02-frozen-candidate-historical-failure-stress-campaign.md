@@ -5029,3 +5029,27 @@ effects; wrong-owner and timeout regressions now reject it. Unit rendering is
 unchanged. Provider staging and non-mutating preflight also passed, including
 exact unused resources and non-interactive helper readiness. Provider apply
 still awaits installed startup repair readback.
+
+### Installed host repair and isolated provider quarantine
+
+Source `415fb421` was pushed before the second installation. `install-b.json`
+passed both environment non-interference guards; its SHA-256 is
+`edfdef1f0541d16513c8262b1e37b0f26cfebf8652e51cef0d43003993db8339`.
+Doctor B passed exact host ingress, all three unit identities and discovery
+policies, and all ports. Only the deliberately unpublished local ingress was
+red. The full provider-free P158 harness passed in the primary workspace;
+these fixture counts are not live campaign execution.
+
+The first isolated provider apply quarantined before opening warm routes.
+Its receipt records volume/database creation, six exact route users, connection
+sync, provider startup and operator grants, then the missing-connection error
+for `development-p158-route-1`. The resource guard passed. Quarantine stopped
+all three exact namespaced containers; direct Docker readback confirmed their
+stopped state and namespace project labels. Their volume, database and route
+users remain owned cleanup obligations, not permission for broad cleanup.
+
+The database probe still filters the legacy development connection-name
+prefix, while the descriptor emits namespace-qualified names. A bounded
+closed-world repair is testing that exact SQL seam before a new preflight and
+materially changed apply. No blind retry, provider-ready claim, public ingress
+publication, full-scene capture, or external dispatch has occurred.
