@@ -359,6 +359,66 @@ runTest('preserves explicit lifecycle noise while failing closed on unexplained 
   assertValid(validateMaterializedFixture, fixture, 'classified external dashboard evidence');
   assert.equal(auditDashboardFixture({ fixture }).passed, true);
 
+  const recoveredGuacamoleConsole = {
+    entryId: 'console-recovered-guacamole-resource',
+    level: 'error',
+    message: `sha256:${'9'.repeat(64)}`,
+    timestamp: '2026-09-04T00:00:00.250Z',
+    messageClass: 'resource_load_failed',
+    locationPathClass: 'guacamole_transport',
+    classification: {
+      disposition: 'expected_lifecycle_noise',
+      code: 'console_resource_failure_matches_expected_network_lifecycle',
+      recoveryEvidenceEntryIds: ['network-lifecycle-404'],
+    },
+  };
+  const recoveredFixture = clone(fixture);
+  recoveredFixture.consoleEntries = [recoveredGuacamoleConsole];
+  assert.equal(
+    auditDashboardFixture({ fixture: recoveredFixture }).findings.some(
+      (finding) => finding.code === 'console_error',
+    ),
+    false,
+    'an exact recovered Guacamole resource-load console tuple must remain evidence without becoming a defect',
+  );
+
+  const assertConsoleActionable = (entry, label) => {
+    const candidate = clone(recoveredFixture);
+    candidate.consoleEntries = [entry];
+    assert.ok(
+      auditDashboardFixture({ fixture: candidate }).findings.some((finding) => finding.code === 'console_error'),
+      label,
+    );
+  };
+  const unclassifiedConsole = clone(recoveredGuacamoleConsole);
+  delete unclassifiedConsole.classification;
+  assertConsoleActionable(unclassifiedConsole, 'unclassified console errors must remain actionable');
+
+  const cdpConsole = clone(recoveredGuacamoleConsole);
+  cdpConsole.messageClass = 'cdp_stream_websocket_handshake_failed';
+  cdpConsole.locationPathClass = 'cdp_transport';
+  assertConsoleActionable(cdpConsole, 'CDP console errors must remain actionable');
+
+  const missingRecovery = clone(recoveredGuacamoleConsole);
+  missingRecovery.classification.recoveryEvidenceEntryIds = [];
+  assertConsoleActionable(missingRecovery, 'console lifecycle noise without recovery IDs must remain actionable');
+
+  const wrongMessageClass = clone(recoveredGuacamoleConsole);
+  wrongMessageClass.messageClass = 'websocket_handshake_failed';
+  assertConsoleActionable(wrongMessageClass, 'the wrong console message class must remain actionable');
+
+  const wrongPathClass = clone(recoveredGuacamoleConsole);
+  wrongPathClass.locationPathClass = 'dashboard_api';
+  assertConsoleActionable(wrongPathClass, 'the wrong console location path class must remain actionable');
+
+  const wrongRecoveryId = clone(recoveredGuacamoleConsole);
+  wrongRecoveryId.classification.recoveryEvidenceEntryIds = ['network-missing'];
+  assertConsoleActionable(wrongRecoveryId, 'recovery IDs must name exact expected lifecycle network evidence');
+
+  const wrongClassificationCode = clone(recoveredGuacamoleConsole);
+  wrongClassificationCode.classification.code = 'unreviewed_console_suppression';
+  assertConsoleActionable(wrongClassificationCode, 'the wrong console classification code must remain actionable');
+
   const unsupportedSuppression = clone(fixture);
   unsupportedSuppression.consoleEntries = [{
     entryId: 'console-error-with-unsupported-classification',

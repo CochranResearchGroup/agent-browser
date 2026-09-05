@@ -464,8 +464,52 @@ function auditHandoffUrls(fixture, findings) {
   }
 }
 
-function isExpectedLifecycleNoise(entry, evidenceType) {
+function exactRecoveryIds(entry) {
+  const recoveryIds = entry.classification?.recoveryEvidenceEntryIds;
+  if (!Array.isArray(recoveryIds) || recoveryIds.length === 0 ||
+      new Set(recoveryIds).size !== recoveryIds.length) {
+    return null;
+  }
+  return recoveryIds.every((recoveryId) => typeof recoveryId === 'string' && recoveryId.length > 0)
+    ? recoveryIds
+    : null;
+}
+
+function hasLaterSuccessfulNetworkRecovery(entry, networkEntries) {
+  const recoveryIds = exactRecoveryIds(entry);
+  const failedAt = Date.parse(entry.completedAt ?? entry.startedAt ?? '');
+  if (!recoveryIds || !Number.isFinite(failedAt) ||
+      !/^[a-f0-9]{64}$/.test(String(entry.urlSha256 ?? '')) ||
+      typeof entry.method !== 'string' || entry.method.length === 0) {
+    return false;
+  }
+  return recoveryIds.every((recoveryId) => {
+    const recovery = networkEntries.find((candidate) => candidate.entryId === recoveryId);
+    const recoveredAt = Date.parse(recovery?.startedAt ?? recovery?.completedAt ?? '');
+    return recovery?.urlSha256 === entry.urlSha256 && recovery?.method === entry.method &&
+      Number.isFinite(recoveredAt) && recoveredAt > failedAt &&
+      Number.isInteger(recovery.status) && recovery.status >= 200 && recovery.status < 400 &&
+      recovery.error === null;
+  });
+}
+
+function hasExactExpectedLifecycleRecovery(entry, networkEntries) {
+  const recoveryIds = exactRecoveryIds(entry);
+  return recoveryIds !== null && recoveryIds.every((recoveryId) => {
+    const recovery = networkEntries.find((candidate) => candidate.entryId === recoveryId);
+    return recovery !== undefined && isExpectedLifecycleNoise(recovery, 'network', networkEntries);
+  });
+}
+
+function isExpectedLifecycleNoise(entry, evidenceType, networkEntries = []) {
   if (entry.classification?.disposition !== 'expected_lifecycle_noise') return false;
+  if (evidenceType === 'console') {
+    return entry.classification.code ===
+        'console_resource_failure_matches_expected_network_lifecycle' &&
+      entry.messageClass === 'resource_load_failed' &&
+      entry.locationPathClass === 'guacamole_transport' &&
+      hasExactExpectedLifecycleRecovery(entry, networkEntries);
+  }
   if (evidenceType !== 'network') return false;
   if (entry.classification.code === 'guacamole_active_connection_observation_absent') {
     return entry.status === 404 &&
@@ -482,7 +526,9 @@ function isExpectedLifecycleNoise(entry, evidenceType) {
       (/\/guacamole\/tunnel$/i.test(String(entry.url ?? '')) ||
         entry.pathClass === 'dashboard_auth_status' ||
         (/\/guacamole\/api\/tokens$/i.test(String(entry.url ?? '')) &&
-          entry.classification.recoveryEvidenceEntryIds?.length > 0));
+          entry.classification.recoveryEvidenceEntryIds?.length > 0) ||
+        (entry.pathClass === 'guacamole_transport' &&
+          hasLaterSuccessfulNetworkRecovery(entry, networkEntries)));
   }
   return false;
 }
@@ -512,7 +558,11 @@ function auditStreamAndUi(fixture, findings) {
     }
   }
   for (const entry of fixture.consoleEntries ?? []) {
-    const expectedLifecycleNoise = isExpectedLifecycleNoise(entry, 'console');
+    const expectedLifecycleNoise = isExpectedLifecycleNoise(
+      entry,
+      'console',
+      fixture.networkEntries ?? [],
+    );
     if (!expectedLifecycleNoise && ['error', 'exception'].includes(String(entry.level).toLowerCase())) {
       addFinding(findings, {
         code: 'console_error', field: 'consoleEntries', recordIds: [entry.entryId],
@@ -521,7 +571,11 @@ function auditStreamAndUi(fixture, findings) {
     }
   }
   for (const entry of fixture.networkEntries ?? []) {
-    const expectedLifecycleNoise = isExpectedLifecycleNoise(entry, 'network');
+    const expectedLifecycleNoise = isExpectedLifecycleNoise(
+      entry,
+      'network',
+      fixture.networkEntries ?? [],
+    );
     if (!expectedLifecycleNoise &&
         (entry.success === false || entry.status === null || finite(entry.status, 200) >= 400)) {
       addFinding(findings, {

@@ -919,6 +919,51 @@ assert.deepEqual(
   recoveredGuacamoleAsset,
   'normalized lifecycle classifications must survive the oracle normalization pass',
 );
+const recoveredGuacamoleAssetAudit = auditExternalDashboardEvidence({
+  clientId: 'external-runner-recovered-guacamole-asset',
+  consoleEntries: recoveredGuacamoleAsset.consoleEntries,
+  networkEntries: recoveredGuacamoleAsset.networkEntries,
+  auditedAt: '2026-09-04T00:00:05.050Z',
+});
+assert.equal(recoveredGuacamoleAssetAudit.passed, true);
+assert.equal(
+  recoveredGuacamoleAssetAudit.findings.some((finding) => finding.code === 'console_error'),
+  false,
+  'the external evidence normalizer and dashboard oracle must agree on recovered Guacamole resource noise',
+);
+for (const [label, mutateRecovery] of [
+  ['wrong recovery ID', (evidence) => {
+    evidence.networkEntries[0].classification.recoveryEvidenceEntryIds = ['network-missing'];
+  }],
+  ['different recovery method', (evidence) => {
+    evidence.networkEntries[1].method = 'POST';
+  }],
+  ['different recovery URL digest', (evidence) => {
+    evidence.networkEntries[1].urlSha256 = '7'.repeat(64);
+  }],
+  ['non-later recovery', (evidence) => {
+    evidence.networkEntries[1].startedAt = '2026-09-04T00:00:04.000Z';
+  }],
+]) {
+  const invalidRecoveryEvidence = structuredClone(recoveredGuacamoleAsset);
+  mutateRecovery(invalidRecoveryEvidence);
+  const invalidRecoveryAudit = auditExternalDashboardEvidence({
+    clientId: `external-runner-invalid-guacamole-recovery-${label.replaceAll(' ', '-')}`,
+    consoleEntries: invalidRecoveryEvidence.consoleEntries,
+    networkEntries: invalidRecoveryEvidence.networkEntries,
+    auditedAt: '2026-09-04T00:00:05.050Z',
+  });
+  assert.equal(
+    invalidRecoveryAudit.findings.some((finding) => finding.code === 'network_failure'),
+    true,
+    `${label} must not suppress the failed Guacamole network request`,
+  );
+  assert.equal(
+    invalidRecoveryAudit.findings.some((finding) => finding.code === 'console_error'),
+    true,
+    `${label} must not suppress the linked Guacamole console error`,
+  );
+}
 
 const unrecoveredCdpHandshake = normalizeExternalDashboardEvidence({
   consoleEntries: [{
@@ -928,6 +973,17 @@ const unrecoveredCdpHandshake = normalizeExternalDashboardEvidence({
 });
 assert.equal(unrecoveredCdpHandshake.consoleEntries[0].classification.disposition, 'actionable_failure');
 assert.equal(unrecoveredCdpHandshake.consoleEntries[0].classification.code, 'unexplained_console_error');
+const unrecoveredCdpHandshakeAudit = auditExternalDashboardEvidence({
+  clientId: 'external-runner-unrecovered-cdp',
+  consoleEntries: unrecoveredCdpHandshake.consoleEntries,
+  networkEntries: unrecoveredCdpHandshake.networkEntries,
+  auditedAt: '2026-09-04T00:00:06.010Z',
+});
+assert.equal(
+  unrecoveredCdpHandshakeAudit.findings.some((finding) => finding.code === 'console_error'),
+  true,
+  'unrecovered CDP console errors must remain actionable through external evidence audit',
+);
 
 const dashboardEvidenceAudit = auditExternalDashboardEvidence({
   clientId: 'external-runner-human',

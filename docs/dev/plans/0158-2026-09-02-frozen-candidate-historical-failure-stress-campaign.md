@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_candidate_publication_active`
+Execution state: `w6_oracle_candidate_publication_active`
 
 Lane: P157
 
@@ -4078,3 +4078,47 @@ Revised next action: commit and publish the repair, build and install the exact
 development candidate, run provider doctor and the three-launch smoke, reopen
 the sealed handoff if candidate activation closes its target, refresh only its
 candidate-bound expected identity, and dispatch both external readiness clients.
+
+### External Reconnect Passed And Console Oracle Repaired
+
+State transition: `w6_candidate_publication_active ->
+w6_oracle_candidate_publication_active`.
+
+Development generation `0.28.0-79ea57179d52` passed the provider-required
+development doctor and all three disposable browser-launch smoke iterations.
+The sealed handoff reopened with a current ready presentation receipt. The
+first external dispatch, workflow `33932182021`, terminated before page access
+because the operator's secret-update command stored a literal stdin marker
+instead of the eight-field JSON payload. Both clients retained redacted failure
+receipts with zero retries and no repair attempt. The environment-scoped secret
+was corrected through actual stdin input and a distinct workflow was dispatched.
+
+In workflow `33932413878`, the human-paced client passed. The slow concurrent
+client reached the exact initial, concurrent, and reconnect pixel markers, so
+the safe multi-candidate resolver repaired the blocking stale-row plus
+surviving-shared-child visibility sequence. Its final dashboard oracle
+nevertheless rejected one console record. The same redacted
+evidence had already classified that resource-load error as expected Guacamole
+lifecycle noise and linked it to the exact accepted 404 network observation.
+The final oracle ignored all console lifecycle classifications even though it
+validated their network counterparts.
+
+The repaired oracle accepts only the exact recovered Guacamole console tuple:
+the expected lifecycle disposition and code, resource-load message class,
+Guacamole transport location, and unique recovery identifiers that resolve to
+network entries independently accepted by the oracle. Generic canceled
+Guacamole requests additionally require a strictly later 2xx or 3xx record
+with the same URL digest and method and no error. Missing, wrong, duplicate, or
+unresolved recovery identifiers; unclassified console errors; CDP errors; and
+wrong message, path, or classification codes remain actionable.
+
+The regression was red before the repair. The dashboard-oracle and
+external-vantage suites pass afterward, as does the complete provider-free
+Plan 0158 harness through all historical, logging, dashboard, schedule,
+calibration, W7, W8, W9, teardown, and W10 analyzer layers.
+
+Revised next action: commit and publish the oracle repair, reinstall the exact
+candidate checkpoint, rerun development doctor and the three-launch smoke,
+reopen and refresh the sealed handoff identity if activation changes it, and
+repeat external readiness under a distinct attempt. Proceed to synchronized
+C01 only after both external jobs and their aggregate are clean.
