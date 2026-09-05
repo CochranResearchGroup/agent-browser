@@ -145,7 +145,11 @@ in `cli/src/native/`. The `--engine` flag selects Chrome vs Lightpanda. The
   `AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL` to its reviewed public HTTPS origin
   and `AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION` to the immutable reviewed
   Cooper deployment revision or receipt ID. They are required together and
-  are bound by a deterministic digest. Loopback is a local diagnostic only.
+  are bound by a deterministic digest. Read-only status and doctor commands
+  reuse a validated binding from an installed v2 provider manifest when both
+  variables are absent. Initial staging and provider mutation still require
+  the explicit pair; partial or changed explicit values fail closed. Loopback
+  is a local diagnostic only.
 - Before provider mutation, run `pnpm development-runtime:provider-plan`,
   `pnpm development-runtime:provider-stage`, and
   `pnpm development-runtime:provider-preflight`. Apply only with

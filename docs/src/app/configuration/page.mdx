@@ -348,8 +348,8 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_ALLOW_FILE_ACCESS</code></td><td>Allow <code>file://</code> URLs to access local files.</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_COLOR_SCHEME</code></td><td>Color scheme preference (<code>dark</code>, <code>light</code>, <code>no-preference</code>).</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_DOWNLOAD_PATH</code></td><td>Default directory for browser downloads.</td><td>(temp directory)</td></tr>
-    <tr><td><code>AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL</code></td><td>Reviewed public HTTPS origin used for development provider handoffs. Requires the matching external ingress revision.</td><td>(unconfigured)</td></tr>
-    <tr><td><code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code></td><td>Immutable reviewed Cooper deployment revision or receipt ID bound to the development public operator origin.</td><td>(unconfigured)</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL</code></td><td>Reviewed public HTTPS origin used for initial development-provider staging and provider mutation. Requires the matching external ingress revision. Read-only status and doctor commands reuse a validated installed v2 binding when both variables are absent.</td><td>(unconfigured)</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code></td><td>Immutable reviewed Cooper deployment revision or receipt ID bound to the development public operator origin. Supply it with the public operator URL for staging and provider mutation; partial explicit configuration fails closed.</td><td>(unconfigured)</td></tr>
     <tr><td><code>AGENT_BROWSER_DEFAULT_TIMEOUT</code></td><td>Default timeout in ms. Keep below 30000 to avoid IPC timeouts.</td><td><code>25000</code></td></tr>
     <tr><td><code>AGENT_BROWSER_SESSION_NAME</code></td><td>Auto-save/load state persistence name.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete saved session states older than N days.</td><td><code>30</code></td></tr>

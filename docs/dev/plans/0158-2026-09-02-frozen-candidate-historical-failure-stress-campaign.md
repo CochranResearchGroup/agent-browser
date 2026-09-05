@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_external_readiness_reconstruction_active`
+Execution state: `w6_safe_reconnect_repair_active`
 
 Lane: P157
 
@@ -4015,3 +4015,39 @@ was canceled, the development runtime was restored to the preceding safe
 generation, and the unsafe 404 claim path was removed. Reclaiming this case now
 requires owner and provider evidence strong enough to prevent split-brain; a
 credential 404 alone is explicitly insufficient.
+
+### Persisted Ingress Doctor Consistency And Safe Reconnect Design
+
+State transition: `w6_external_readiness_reconstruction_active ->
+w6_safe_reconnect_repair_active`.
+
+The development provider doctor also exposed an installation-coherence defect.
+After a v2 provider had durably recorded its reviewed external ingress binding,
+an ordinary read-only status or doctor invocation without the two staging
+environment variables reconstructed an unconfigured expectation and reported
+false manifest drift. Read-only status and doctor now reuse the persisted
+binding only when both variables are absent and only after recomputing and
+validating its public HTTPS URL, reviewed revision, deterministic digest, and
+whole-manifest equality. Explicit empty, partial, changed, invalid, or tampered
+values continue to fail closed. Provider staging and mutation still require the
+explicit pair. Provider-focused, development-runtime, handoff-documentation,
+docs-build, and whitespace validation pass for this repair.
+
+The reconnect blocker now has a bounded safe design. Guacamole's active
+connection representation does not expose a sharing-profile identifier, so the
+dashboard cannot classify one arbitrary matching row as the primary. It must
+enumerate every row for the configured connection, order candidates
+deterministically, and request the configured restricted sharing credentials
+from each. A candidate-specific 404 means only that candidate is stale and may
+be skipped; the first valid restricted key wins. Authentication, server, and
+malformed-success responses remain terminal. If rows remain but all return 404,
+the resolver must relist and wait without opening a new direct connection.
+Primary election is allowed only after two consecutive provider snapshots show
+no matching row. The unrestricted connectable-active-connection route is
+prohibited because it would bypass the configured sharing-profile limits.
+
+Revised next action: implement and validate the multi-candidate restricted
+sharing resolver, commit both coherent repair slices, publish a new development
+candidate, and rerun exact-candidate doctor, three-launch smoke, and both
+external readiness clients. Proceed to synchronized C01 only if both external
+oracles are clean.

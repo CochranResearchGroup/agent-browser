@@ -1051,7 +1051,11 @@ reviewed public HTTPS origin and
 deployment revision or receipt ID. The variables are an atomic pair whose
 canonical binding digest is retained in the manifest and route inventory.
 Loopback is exposed only as `localDiagnosticUrl`; never use it as an operator
-handoff.
+handoff. Once a v2 provider is configured, read-only status and doctor commands
+reuse its validated persisted binding when both variables are absent. Initial
+staging and provider mutation still require the explicit pair. Supplying one
+value or a pair that differs from installed authority fails closed instead of
+silently adopting it.
 Before provider mutation, run `pnpm development-runtime:provider-plan`,
 `pnpm development-runtime:provider-stage`, and
 `pnpm development-runtime:provider-preflight`. Apply only with

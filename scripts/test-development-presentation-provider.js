@@ -517,6 +517,91 @@ try {
   assert.equal(configured.status.state, 'configured');
   assert.equal(configured.status.ready, true);
   assert.equal(configured.status.manifest.schemaVersion, DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA);
+  const statusEnvWithoutIngress = { ...env };
+  delete statusEnvWithoutIngress.AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL;
+  delete statusEnvWithoutIngress.AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION;
+  const configuredFromPersistedIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED: '1',
+    },
+    probe: () => readyObservation,
+  });
+  assert.equal(configuredFromPersistedIngress.success, true);
+  assert.equal(configuredFromPersistedIngress.status.state, 'configured');
+  assert.deepEqual(
+    configuredFromPersistedIngress.status.descriptor.externalIngress,
+    descriptor.externalIngress,
+  );
+  let mismatchedProbeCalls = 0;
+  const explicitlyMismatchedIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...env,
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-different-revision-002',
+    },
+    probe: () => {
+      mismatchedProbeCalls += 1;
+      return readyObservation;
+    },
+  });
+  assert.equal(explicitlyMismatchedIngress.status.state, 'drifted');
+  assert.equal(mismatchedProbeCalls, 0);
+  const explicitlyEmptyIngress = doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: '',
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: '',
+    },
+    probe: () => readyObservation,
+  });
+  assert.equal(explicitlyEmptyIngress.status.state, 'drifted');
+  assert.throws(() => doctorDevelopmentPresentationProvider({
+    env: {
+      ...statusEnvWithoutIngress,
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: descriptor.publicOperatorUrl,
+    },
+  }), /requires both/);
+  const canonicalManifest = developmentPresentationProviderManifest(descriptor);
+  const tamperedIngressManifests = [
+    { ...structuredClone(canonicalManifest), publicOperatorUrl: 'https://other.example.test' },
+    {
+      ...structuredClone(canonicalManifest),
+      publicOperatorUrl: 'https://127.0.0.1',
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        publicOperatorUrl: 'https://127.0.0.1',
+      },
+    },
+    {
+      ...structuredClone(canonicalManifest),
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        reviewedRevision: 'tampered-revision',
+      },
+    },
+    {
+      ...structuredClone(canonicalManifest),
+      externalIngress: {
+        ...canonicalManifest.externalIngress,
+        bindingSha256: '00'.repeat(32),
+      },
+    },
+  ];
+  for (const tamperedManifest of tamperedIngressManifests) {
+    writeFileSync(descriptor.manifest, `${JSON.stringify(tamperedManifest, null, 2)}\n`);
+    let tamperedProbeCalls = 0;
+    const tampered = doctorDevelopmentPresentationProvider({
+      env: statusEnvWithoutIngress,
+      probe: () => {
+        tamperedProbeCalls += 1;
+        return readyObservation;
+      },
+    });
+    assert.equal(tampered.success, false);
+    assert.equal(tampered.status.state, 'drifted');
+    assert.equal(tamperedProbeCalls, 0);
+  }
+  writeFileSync(descriptor.manifest, `${JSON.stringify(canonicalManifest, null, 2)}\n`);
   const capacityDrift = structuredClone(readyObservation);
   capacityDrift.database.routes[0].maxConnections = 4;
   capacityDrift.database.routes[0].maxConnectionsPerUser = 2;

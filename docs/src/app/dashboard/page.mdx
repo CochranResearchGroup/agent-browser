@@ -88,7 +88,11 @@ reviewed public HTTPS origin and
 <code>AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION</code> to the immutable
 reviewed Cooper deployment revision or receipt ID. Both are required together,
 and the provider retains their deterministic binding digest. Loopback remains
-a local diagnostic URL and is never an operator handoff.
+a local diagnostic URL and is never an operator handoff. After a v2 provider is
+configured, read-only status and doctor commands reuse its validated persisted
+binding when both variables are absent. Initial staging and provider mutation
+still require the explicit pair. A partial pair fails, and a changed explicit
+pair remains visible as configuration drift.
 Review and stage those effects with
 <code>pnpm development-runtime:provider-plan</code> and
 <code>pnpm development-runtime:provider-stage</code>, then run

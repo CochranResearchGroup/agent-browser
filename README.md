@@ -175,7 +175,12 @@ provider-backed acceptance run. Before staging, set
 revision or reviewed receipt ID. Both values are required together. The provider
 manifest and route inventory retain their deterministic binding digest. The
 loopback dashboard address remains a local diagnostic only and is never an
-operator handoff. Review the provider plan, stage its secret-free
+operator handoff. After a v2 provider is configured, read-only status and doctor
+commands reuse the validated binding in its provider manifest when both
+variables are absent. Initial staging and provider mutation still require the
+explicit pair. Supplying either variable makes the invocation explicit, so a
+partial pair fails and a changed pair is reported as drift.
+Review the provider plan, stage its secret-free
 artifacts, and pass preflight before using the explicit apply command above.
 An installed v1 provider authority may cross this boundary only when its
 loopback URL equals the new local diagnostic URL and every other provider

@@ -308,8 +308,53 @@ export function developmentPresentationProviderManifestUpgradeCompatible(manifes
   return JSON.stringify(manifest) === JSON.stringify(legacyExpected);
 }
 
-export function developmentPresentationProviderStatus({ env = process.env, probe = null } = {}) {
+/**
+ * Resolve the descriptor used by read-only status and doctor commands. A
+ * configured v2 provider already owns a durable reviewed ingress binding, so
+ * those commands may reuse it when the invoking shell supplies neither member
+ * of the pair. Explicit, partial, invalid, or changed environment values never
+ * fall back to stored authority and remain visible as configuration drift.
+ */
+function developmentPresentationProviderStatusDescriptor(env) {
   const descriptor = developmentPresentationProviderDescriptor(env);
+  if (
+    env.AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL !== undefined ||
+    env.AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION !== undefined
+  ) {
+    return descriptor;
+  }
+  const manifest = readJson(descriptor.manifest);
+  const persisted = manifest?.externalIngress;
+  if (
+    manifest?.schemaVersion !== DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA ||
+    manifest.environment !== 'development' || persisted?.configured !== true
+  ) {
+    return descriptor;
+  }
+  let rebound;
+  try {
+    rebound = developmentExternalIngressBinding({
+      AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: persisted.publicOperatorUrl,
+      AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: persisted.reviewedRevision,
+    });
+  } catch {
+    return descriptor;
+  }
+  if (
+    manifest.publicOperatorUrl !== rebound.publicOperatorUrl ||
+    JSON.stringify(persisted) !== JSON.stringify(rebound)
+  ) {
+    return descriptor;
+  }
+  return developmentPresentationProviderDescriptor({
+    ...env,
+    AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: rebound.publicOperatorUrl,
+    AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: rebound.reviewedRevision,
+  });
+}
+
+export function developmentPresentationProviderStatus({ env = process.env, probe = null } = {}) {
+  const descriptor = developmentPresentationProviderStatusDescriptor(env);
   const required = env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED === '1';
   let isolationError = null;
   try {
