@@ -147,10 +147,14 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Continue Plan 0158 W6 from the clean preflight checkpoint. Rebuild and install
-one isolated development candidate, configure its reviewed public HTTPS
-binding, prove E2 through two off-host clients, run the exact calibration, and
-freeze all digests with zero started campaign cases.
+Follow Plan 0158's September 5 priority reconciliation: diagnose authorized
+Profile/lease usability first and audit the same requests for postmortem-quality
+logging, then prove ordinary durable remote-view entry and recovery. Start with
+read-only evidence and current isolated ownership/identity reconciliation.
+Do not automatically resume calibration, reinstall, restart, or the prior
+harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
+freeze gate, and full acceptance criteria are retained. Anchored readiness does
+not prove ordinary anchor-free links or production reliability.
 
 ## P156 | Full Runtime Shutdown Replacement
 

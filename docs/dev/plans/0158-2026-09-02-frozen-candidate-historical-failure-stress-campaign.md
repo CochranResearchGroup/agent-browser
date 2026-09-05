@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `resumed_candidate_validation_and_live_preparation`
+Execution state: `priority_reconciled_execution_not_started`
 
 Lane: P157
 
@@ -31,6 +31,106 @@ Dependencies: [P46, P97, P101, P125, P134, P142, P147, P148, P150, P155,
 P156, P157]
 
 Overlaps: [P144]
+
+## September 5 Priority Reconciliation
+
+This revision follows the operator's priority handoff and supersedes historical
+next-action instructions to resume anchored readiness, calibration, reinstall,
+restart, or harness repair automatically. This turn reconciles the plan only;
+it does not start runtime execution. The original objective, case matrix,
+work-unit acceptance criteria, failed epochs, and safety boundaries remain.
+
+The three outcomes now determine the next diagnostic sequence:
+
+| Priority | Current evidence and limit | Required outcome evidence |
+| --- | --- | --- |
+| 1. Usable leases and ACLs | W1–W5 tooling and specialized A02/A03/A05/A08 drivers exist; full installed acceptance remains outstanding. A04/A06/A12 still lack complete live producers. | Independent authorized clients acquire and reuse their own Profile, release only their own tabs, and preserve peers. Unauthorized clients receive exact denials. Revision, revocation, reconnect, restart, and unproven/inconsistent identity paths preserve authority and give actionable recourse. |
+| 2. Postmortem-quality logging | The prior candidate has recorded five-surface journal and malformed-line checks. This is partial proof. Calibration W lost in-memory local observations on termination; that is a harness custody failure, not evidence that the entire product journal failed. | Join response, job, terminal event, trace, applicable incident, dashboard projection, and failure journal. Count expected, observed, missing, duplicate, conflicting, and redaction violations, including pre-dispatch, timeout, crash, and external-only failures. Prove interruption/reboot durability independently of final-write success and event-ring retention. |
+| 3. Working remote-view links | Anchored readiness V passed, but anchor-free P/Q failed. Calibration W subsequently failed on both external clients. Production unreliability is operator-reported; no new production measurement is claimed here. | Ordinary authenticated durable handoff entry from an external client reaches ready with matching browser pixels and usable input; the same URL reopens, supports concurrent viewers/controller ownership, and recovers truthfully or provides an actionable failure. Development evidence does not establish production acceptance. |
+
+### Next Bounded Slice And Dependencies
+
+The primary agent owns this sequence. No calibration prerequisite is added to
+focused diagnostics. These diagnostics are separate preparation evidence, not
+W7/W8 terminal campaign passes or an exception to the unchanged W6 freeze gate.
+
+1. **Read-only diagnosis first:** reconcile current isolated installed identity,
+   ownership and post-reboot state without restarting anything. Inspect retained
+   A-family evidence and current authorized production failure metadata where
+   available. Select one concrete authorized-profile failure and identify the
+   earliest divergence in identity, assurance, policy revision, lease, or
+   retained-browser ownership. Inventory visibility never grants access.
+2. **Lease behavior with logging attached:** define one small isolated,
+   synthetic reproducer using two independent authorized clients and an
+   unauthorized control, own-tab release, and the actual unproven/inconsistent
+   path. Bind it to A02/A03/A05/A08 without claiming their full repetition
+   counts. Audit the same requests against the Logging Completeness Oracle.
+   Account explicitly for missing producers for A04/A06/A12 and generation
+   transitions; build only the seam needed for the selected failure.
+3. **Ordinary remote-view entry:** use the supported `handoffUrl` or durable
+   `externalUrl`, without an artificially retained authenticated anchor as the
+   acceptance fixture. Require `operatorVisible.state=ready`, exact synthetic
+   pixels, input, and reopening the same URL. Preserve anchored results as
+   conditional evidence. External evidence continues through the existing
+   manual workflow and its synthetic-capture and identity gates; production
+   observation remains read-only and cannot capture private pages.
+4. **Repair only an adjudicated blocker:** distinguish product behavior,
+   product logging, infrastructure recovery, and measurement-tool custody.
+   Require a red-capable reproducer and repair at that failing seam. Preserve
+   the old epoch and identify any replacement candidate before installed
+   verification. Infrastructure recovery is a prerequisite, not an acceptance
+   result. Harness report retention, bounded deadlines, partial observation
+   durability, and coordinator terminality are known defects, not an automatic
+   queue to complete before useful diagnosis.
+
+For this priority sequence, allow at most two diagnostic attempts per selected
+failure and one repair/verification cycle before a written disposition. Failure
+to reproduce or verify ends that loop: record the missing evidence, reframe, or
+move to another safe priority unit. Checkpoint at each outcome or blocker and
+at 60 minutes at the latest. Do not reset these bounds by renaming an attempt.
+These bounds supersede the historical unlimited repair traversal for this
+sequence; reaching a bound does not itself create a user approval gate.
+
+The first slice exits with one source-backed lease/identity diagnosis (or an
+explicit evidence gap), its logging counts, and the smallest next repair or
+probe. It does not exit merely because an installer, doctor, or harness passes.
+Production replacement, eviction, Profile/ACL mutation, credential entry, and
+private capture remain outside authority. Reconcile exact isolated ownership
+before any later runtime recovery; stale process IDs are not ownership proof.
+
+### Retained Campaign State And Evidence
+
+W1–W5 remain complete only at their recorded tooling scope. W6 is incomplete;
+W7–W10 execution, teardown, and final analysis remain outstanding. Preserve all
+eleven acceptance criteria and the missing-producer table below. The exact
+20-minute C01 workload and performance budgets remain required for later
+calibration/freeze; they are deferred, not reduced or passed. A future
+calibration requires an explicit sequencing decision and runnable evidence
+producers, not an automatic retry after the next focused repair.
+
+Reconciliation readback matched clean source baseline `4481d8f1`. Sources are
+the operator handoff `/tmp/plan-0158-priority-handoff-2026-09-05.md`, the
+existing plan checkpoints, and retained private campaign records
+`calibration-w-failure-adjudication.json`,
+`w6-handoff-report-custody-gap-w.json`, and
+`w10-prior-failure-index-w.json` under the cleanroom evidence root. The latter
+index explicitly remains partial, not W10 analysis. No raw runtime artifacts
+or credentials are copied into the repo.
+
+Those records report both W clients failed `external_stream_not_embeddable`
+with zero iframes and zero retries before the later anchor SIGTERM. A shared
+infrastructure cause is unproven. Completed local command count is unknown.
+Full client archive verification remains incomplete; selective JSON custody
+does not establish full archive verification. The handoff reports a later
+reboot and unavailable isolated services; current runtime health was not
+measured in this planning turn. Earlier clean calibration claims rejected by
+oracle replay remain rejected.
+
+Checkpoint: execution preparation transitions to priority reconciliation;
+acceptance remains incomplete. Classification: `no_progress` on live outcome
+acceptance, with sequencing corrected. No calibration, install, restart,
+runtime repair, external dispatch, or production probe occurs in this revision.
+Next action is step 1 above, not the older calibration recommendation.
 
 ## Incident And Acceptance Correction
 
