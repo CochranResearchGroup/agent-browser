@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_shared_clients_verified_denial_recourse_gap`
+Execution state: `priority_child_denial_verified_remote_view_next`
 
 Lane: P157
 
@@ -5726,3 +5726,46 @@ do not rerun the completed acquisition verification merely to reconfirm it.
 Authenticated ACL/revocation/restart, interruption durability, missing A-family
 producers, ordinary external remote-view links, W6, and W7–W10 remain open.
 Calibration and production mutation remain absent.
+
+### Priority Repair Verification: Actionable Child Denials
+
+The subject-mismatch regression failed against d0596ad3 with the generic
+service_operation_failed code while confirming child state was unchanged.
+The compatibility classifier now maps the four exact child-authority guard
+messages to distinct profile_child_* causes, profile_access axis,
+child_admission phase, no_effect, and concrete recourse. Unknown or wrapped
+messages remain conservative. The authority decision, inherited permissions,
+connection ownership, and physical-release ordering are unchanged.
+
+One isolated repair verification uses built candidate SHA-256
+22f36d5ada2c8b5571a236d5a38c285eab9f7d46d6873f3960dd315467d37ac3.
+Two disposable tabs provide the denial fixture; this is not a repeat of the
+acquisition campaign. The foreign release reports profile_child_subject_mismatch
+and use_own_service_tab_handle. Response, durable job, terminal event, and trace
+contain matching structured failures. One journal occurrence preserves the
+same code and no-effect certainty. Counts are one on each of these five
+surfaces, zero duplicate matches, and zero failure conflicts. Both tabs remain
+open after the denial. Own-tab release still preserves the peer.
+
+Evidence is in private campaign directory
+`child-denial-verification-20260905T233224Z`: one-run disposition, fsynced
+ledger, terminal state/journal copies, and hashed checkpoint. Exact fixture
+cleanup succeeds with host exit zero, zero retained browsers/sessions/tabs,
+and no matching synthetic-root process at readback. No installed runtime or
+production state was changed. Dashboard projection and interruption/reboot
+durability remain explicitly unproven.
+
+The optimized build, clippy with warnings denied, format, generated client
+checks, API/MCP parity, docs build, handoff docs, and logging-auditor self-tests
+pass. The 10-test child selection and the strengthened authority-guard
+regression also pass. This is focused validation, not the full Rust suite. This is outcome_progress for actionable shared-client
+denials and their normal-operation evidence, not full Profile ACL or logging
+acceptance. The repair's one live verification is consumed and passed.
+
+The next priority slice is ordinary durable
+remote-view entry: reconcile current isolated service ownership and retained
+anchor-free failure evidence, then identify one bounded synthetic external
+handoff probe through the supported durable contract. Do not restore the
+anchored calibration loop as a prerequisite. Authenticated Profile ACLs,
+revocation/restart, interruption durability, missing A-family producers,
+ordinary link reliability, W6, and W7–W10 remain outstanding.

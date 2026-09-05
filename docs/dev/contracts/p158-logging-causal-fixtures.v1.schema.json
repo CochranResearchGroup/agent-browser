@@ -159,8 +159,8 @@
       "properties": {
         "schemaVersion": { "const": "agent-browser.service-failure-recourse.v1" },
         "code": { "type": "string", "minLength": 1 },
-        "axis": { "enum": ["request", "service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"] },
-        "phase": { "enum": ["ingress_validation", "process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"] },
+        "axis": { "enum": ["request", "service_state", "lifecycle_owner", "profile_lease", "profile_access", "presentation", "unknown"] },
+        "phase": { "enum": ["ingress_validation", "process_mutex_wait", "file_lock_wait", "launch_admission", "child_admission", "commit", "finalize", "unknown"] },
         "effectState": { "enum": ["no_effect", "effect_uncertain", "verified_effect"] },
         "retryDisposition": { "enum": ["do_not_retry", "inspect_before_retry", "retry_same_request", "refresh_access_plan"] },
         "recommendedAction": { "type": "string" }

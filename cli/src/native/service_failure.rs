@@ -13,6 +13,7 @@ pub enum ServiceFailureAxis {
     ServiceState,
     LifecycleOwner,
     ProfileLease,
+    ProfileAccess,
     Presentation,
     #[default]
     Unknown,
@@ -25,6 +26,7 @@ pub enum ServiceFailurePhase {
     ProcessMutexWait,
     FileLockWait,
     LaunchAdmission,
+    ChildAdmission,
     Commit,
     Finalize,
     #[default]
@@ -81,6 +83,46 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    // These exact compatibility messages originate from the child authority
+    // guard before child reconnect or the guarded browser operation. Never
+    // infer no-effect from a substring or an unrecognized policy reason.
+    let child_denial = match error {
+        "profile child access denied: subject_mismatch" => Some((
+            "profile_child_subject_mismatch",
+            "use_own_service_tab_handle",
+        )),
+        "profile child access denied: permission_not_inherited" => Some((
+            "profile_child_permission_not_inherited",
+            "inspect_profile_access_policy",
+        )),
+        "profile child access denied: owner_connection_still_active" => Some((
+            "profile_child_owner_connection_still_active",
+            "use_owner_connection_or_wait",
+        )),
+        "profile child access denied: explicit_reconnect_required" => Some((
+            "profile_child_explicit_reconnect_required",
+            "reconnect_owned_service_tab_handle",
+        )),
+        _ => None,
+    };
+    if let Some((code, action)) = child_denial {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: code.to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::ChildAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: action.to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![action.to_string(), "inspect_service_trace".to_string()],
+            hard_stops: vec![
+                "blind_retry".to_string(),
+                "impersonate_child_owner".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
     let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
     let route_bound_blocker_code = failure_metadata_value(error, "route_bound_blocker_code");
@@ -436,6 +478,53 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn child_authority_denials_preserve_cause_without_claiming_unknown_errors_are_effect_free() {
+        for (reason, code, action) in [
+            (
+                "subject_mismatch",
+                "profile_child_subject_mismatch",
+                "use_own_service_tab_handle",
+            ),
+            (
+                "permission_not_inherited",
+                "profile_child_permission_not_inherited",
+                "inspect_profile_access_policy",
+            ),
+            (
+                "owner_connection_still_active",
+                "profile_child_owner_connection_still_active",
+                "use_owner_connection_or_wait",
+            ),
+            (
+                "explicit_reconnect_required",
+                "profile_child_explicit_reconnect_required",
+                "reconnect_owned_service_tab_handle",
+            ),
+        ] {
+            let failure =
+                classify_service_failure(&format!("profile child access denied: {reason}"));
+            assert_eq!(failure.code, code);
+            assert_eq!(failure.axis, ServiceFailureAxis::ProfileAccess);
+            assert_eq!(failure.phase, ServiceFailurePhase::ChildAdmission);
+            assert_eq!(failure.effect_state, ServiceEffectState::NoEffect);
+            assert_eq!(
+                failure.retry_disposition,
+                ServiceRetryDisposition::DoNotRetry
+            );
+            assert_eq!(failure.recommended_action, action);
+        }
+        for error in [
+            "profile child access denied: future_reason",
+            "operation failed after profile child access denied: subject_mismatch",
+        ] {
+            assert_eq!(
+                classify_service_failure(error).effect_state,
+                ServiceEffectState::EffectUncertain
+            );
+        }
+    }
 
     #[test]
     fn control_queue_rejection_is_safe_to_retry_as_the_same_request() {

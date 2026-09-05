@@ -524,6 +524,8 @@ fn authorize_profile_child_access_in_state(
         reconnect,
     });
     if !result.allowed {
+        // Keep the exact reason: Service recourse classifies these pre-effect
+        // authority denials without changing this ownership decision.
         return Err(format!("profile child access denied: {}", result.reason));
     }
     if result.reconnected {
@@ -817,6 +819,7 @@ mod tests {
             ProfilePermission::TabCloseOwn,
         )
         .expect("the owner connection may close its own tab");
+        let before_denial = serde_json::to_value(&state).unwrap();
         let wrong_subject_error = authorize_profile_child_access_in_state(
             &mut state,
             handle,
@@ -828,5 +831,14 @@ mod tests {
         )
         .expect_err("a different subject cannot use the child");
         assert!(wrong_subject_error.contains("subject_mismatch"));
+        assert_eq!(serde_json::to_value(&state).unwrap(), before_denial);
+        let failure =
+            crate::native::service_failure::classify_service_failure(&wrong_subject_error);
+        assert_eq!(failure.code, "profile_child_subject_mismatch");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        assert_eq!(failure.recommended_action, "use_own_service_tab_handle");
     }
 }

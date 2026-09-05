@@ -3736,6 +3736,16 @@ journal request ID as HTTP `id` or MCP error `data.requestId`. Correct invalid
 requests before resubmitting. Runtime provenance uses the server's deployment
 environment; clients cannot submit `runtimeEnvironmentId`.
 
+Child-resource authority denials report `axis: "profile_access"`,
+`phase: "child_admission"`, and `effectState: "no_effect"` before the guarded
+operation. `profile_child_subject_mismatch` requires your own service tab
+handle; do not impersonate its owner. `profile_child_permission_not_inherited`
+requires inspecting the current profile policy. `profile_child_owner_connection_still_active`
+requires using the owning connection or waiting for its release.
+`profile_child_explicit_reconnect_required` requires an explicit authorized
+reconnect. These denials prohibit blind retries and changing identity labels
+to acquire another client's child resource.
+
 The guarded service read surface has MCP parity: contracts, access-plan, profile lookup, per-profile readiness, allocation, seeding handoff, service collections, incidents, events, jobs, and incident activity all have matching HTTP and MCP read paths. Agents should usually start with MCP `service_access_plan` or `agent-browser://access-plan{?...}` because it returns the service-owned profile decision, readiness, policy, providers, retained challenges, monitor findings, and copyable queued request before browser control is requested. Use narrower resources such as profile lookup, readiness, allocation, or seeding handoff only when the caller already knows it does not need the full recommendation.
 
 MCP `agent-browser://profiles/{profile_id}/allocation` mirrors `GET /api/service/profiles/<id>/allocation` for agents that need one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
