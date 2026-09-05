@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 
 import { canonicalJson, sha256 } from './p158-campaign-controller.js';
 import { buildP158CampaignPhasePreparation } from './p158-campaign-phase-orchestrator.js';
+import { createP158FinalAnalysisDescriptorHook } from './p158-final-analysis-descriptor.js';
 import {
   createP158LoggingHarvestHook,
   p158LoggingEvidenceSourceBinding,
@@ -553,6 +554,14 @@ export async function constructP158LiveCampaignBundles({
     fail('logging_request_expectations_incomplete',
       'Frozen logging requests differ from concrete driver-emitted request and action identities');
   }
+  const analysisAuthorities = Object.fromEntries(await Promise.all(Object.entries({
+    manifest: descriptor.manifest, freeze: descriptor.freeze,
+    schedule: descriptor.schedule, registry: configuration.registry,
+  }).map(async ([label, binding]) => {
+    const bytes = await readFile(binding.path);
+    if (sha256(bytes) !== binding.sha256) fail('analysis_authority_binding_changed', label);
+    return [label, { ...clone(binding), byteCount: bytes.byteLength }];
+  })));
   const w9 = {
     target: clone(configuration.w9.target), caseWindows: clone(configuration.w9.caseWindows),
     drivers: w9Bundle.drivers, adapterBindings: w9Entries.adapterBindings,
@@ -568,6 +577,21 @@ export async function constructP158LiveCampaignBundles({
         loggingOperationGapsSha256: sha256(exactLoggingOperationGaps) },
       artifactStore, runRoot: descriptor.runRoot, clock,
     }),
+  };
+  w9.finalAnalysis = {
+    createHook: ({ controller }) => createP158FinalAnalysisDescriptorHook({
+      runRoot: descriptor.runRoot, controller, artifactStore,
+      authorities: clone(analysisAuthorities),
+      loggingExpectations: clone(exactLoggingRequestExpectations),
+      architectureCriteria: clone(configuration.finalAnalysis?.architectureCriteria ?? []),
+      p157Criteria: clone(configuration.finalAnalysis?.p157Criteria ?? []),
+      loggingOperationGapsSha256: sha256(exactLoggingOperationGaps),
+      loggingOperationGapCount: exactLoggingOperationGaps.length,
+    }),
+    loggingOperationGaps: clone(exactLoggingOperationGaps),
+    resolveRawArtifactInventory: ({ snapshot }) => (snapshot.evidence?.artifacts ?? []).map((artifact) => ({
+      ...clone(artifact), analysisRole: artifact.analysisRole ?? artifact.capturePurpose ?? 'campaign_evidence',
+    })),
   };
   verifyAdapterManifest(liveHookManifest, { w7Bundle, w8Bundle, w9 });
   const expectedPreparation = buildP158CampaignPhasePreparation({

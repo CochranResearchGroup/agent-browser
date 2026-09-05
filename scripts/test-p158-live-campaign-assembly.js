@@ -235,4 +235,14 @@ await runTest('fails closed before bundle construction when a concrete receipt i
   }), (error) => error.code === 'assembly_artifact_changed');
 }));
 
+await runTest('assembles the W10 hook with sealed authorities and terminal artifact inventory', async () => {
+  const source = await readFile('scripts/lib/p158-live-campaign-assembly.js', 'utf8');
+  assert.match(source, /createP158FinalAnalysisDescriptorHook/);
+  assert.match(source, /manifest: descriptor\.manifest/);
+  assert.match(source, /registry: configuration\.registry/);
+  assert.match(source, /byteCount: bytes\.byteLength/);
+  assert.match(source, /resolveRawArtifactInventory: \(\{ snapshot \}\)/);
+  assert.match(source, /loggingOperationGapCount: exactLoggingOperationGaps\.length/);
+});
+
 process.stdout.write('P158 live campaign assembly test passed\n');

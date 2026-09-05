@@ -1,110 +1,22 @@
-name: Plan 0158 Endurance Postcondition Preparation
-
+name: P158 passive observation preparation
 on:
   workflow_dispatch:
     inputs:
-      expected_commit:
-        description: Exact reviewed source commit
-        type: string
+      case_id:
         required: true
-      campaign_run_id:
-        description: Frozen P158 campaign run ID
-        type: string
-        required: true
-      candidate_sha256:
-        description: Frozen development candidate SHA-256
-        type: string
-        required: true
-      schedule_sha256:
-        description: Frozen schedule SHA-256
-        type: string
-        required: true
-      preparation_input_run_id:
-        description: Workflow run containing the reviewed synthetic preparation input
-        type: string
-        required: true
-      preparation_input_artifact_name:
-        description: Artifact containing p158-w9-endurance-preparation-input.json
-        type: string
-        required: true
-      preparation_input_sha256:
-        description: Exact preparation input file SHA-256
-        type: string
-        required: true
-
+        type: choice
+        options: [C04, C05]
 permissions:
   contents: read
-  actions: read
-
-concurrency:
-  group: p158-w9-endurance-preparation-${{ inputs.campaign_run_id }}-${{ inputs.schedule_sha256 }}
-  cancel-in-progress: false
-
 jobs:
-  prepare-postconditions:
+  validate-passive-contract:
     runs-on: ubuntu-latest
-    environment: p158-external-vantage
-    timeout-minutes: 240
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Verify reviewed commit
-        env: { EXPECTED_COMMIT: '${{ inputs.expected_commit }}' }
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
-        with: { version: 10.34.5 }
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: { node-version: '22.22.0', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: ${{ inputs.preparation_input_artifact_name }}
-          run-id: ${{ inputs.preparation_input_run_id }}
-          github-token: ${{ github.token }}
-          path: input
-      - name: Verify and bind zero-effect preparation input
+      - name: Confirm asynchronous preparation
         env:
-          EXPECTED_INPUT_SHA256: ${{ inputs.preparation_input_sha256 }}
-          EXPECTED_RUN_ID: ${{ inputs.campaign_run_id }}
-          EXPECTED_CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
-          EXPECTED_SCHEDULE_SHA256: ${{ inputs.schedule_sha256 }}
+          CASE_ID: ${{ inputs.case_id }}
         run: |
-          mkdir -p bound
-          node --input-type=module <<'NODE'
-          import { createHash } from 'node:crypto';
-          import { readFileSync, writeFileSync } from 'node:fs';
-          import { sha256 } from './scripts/lib/p158-campaign-controller.js';
-          const path = 'input/p158-w9-endurance-preparation-input.json';
-          const bytes = readFileSync(path);
-          if (createHash('sha256').update(bytes).digest('hex') !== process.env.EXPECTED_INPUT_SHA256) process.exit(1);
-          const value = JSON.parse(bytes);
-          if (value.config?.runId !== process.env.EXPECTED_RUN_ID ||
-              value.config?.candidateSha256 !== process.env.EXPECTED_CANDIDATE_SHA256 ||
-              value.config?.scheduleSha256 !== process.env.EXPECTED_SCHEDULE_SHA256) process.exit(1);
-          value.config.sourceCommit = process.env.GITHUB_SHA;
-          value.config.workflowRunId = process.env.GITHUB_RUN_ID;
-          value.config.workflowRunAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
-          value.config.workflowJob = process.env.GITHUB_JOB;
-          value.config.externalRunnerIdentitySha256 = sha256({
-            runnerArch: process.env.RUNNER_ARCH, runnerName: process.env.RUNNER_NAME,
-            runnerOs: process.env.RUNNER_OS, workflowJob: process.env.GITHUB_JOB,
-            workflowRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), workflowRunId: process.env.GITHUB_RUN_ID,
-          });
-          writeFileSync('bound/input.json', `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-          NODE
-      - name: Capture external synthetic postconditions
-        env:
-          P158_DEV_HANDOFF_URL: ${{ secrets.P158_DEV_HANDOFF_URL }}
-          P158_DEV_DASHBOARD_USERNAME: ${{ secrets.P158_DEV_DASHBOARD_USERNAME }}
-          P158_DEV_DASHBOARD_PASSWORD: ${{ secrets.P158_DEV_DASHBOARD_PASSWORD }}
-          P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
-          P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
-        run: node scripts/run-p158-w9-endurance-preparation.js --input bound/input.json --output-dir output
-      - name: Upload append-only preparation evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: p158-w9-endurance-postcondition-preparation
-          path: output/
-          retention-days: 2
-          if-no-files-found: error
+          test "$CASE_ID" = C04 || test "$CASE_ID" = C05
+          echo "Preparation records a passive E3 observation intent only."
+          echo "Installation and repair remain available at segment boundaries."

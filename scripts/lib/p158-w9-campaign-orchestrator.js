@@ -18,6 +18,7 @@ export const P158_W9_LIVE_HOOK_CONTRACT = Object.freeze({
   executeExternalHandoffReconnect: 'agent-browser.p158-w9-action-receipt.v1',
   executeDeclaredBrowserCrash: 'agent-browser.p158-w9-action-receipt.v1',
   executeDeclaredSupervisorTransition: 'agent-browser.p158-w9-action-receipt.v1',
+  schedulePassiveObservation: 'agent-browser.p158-production-observation-descriptor.v1',
   executeScheduledTeardown: 'agent-browser.p158-w9-teardown-receipt.v1',
   verifyEvidenceArtifact: 'agent-browser.p158-evidence-artifact-verification.v1',
 });
@@ -126,11 +127,15 @@ function assertAdapterBindings(adapterBindings) {
       /^[a-f0-9]{64}$/u.test(binding.sourceSha256 ?? '');
     const concrete = binding.mode === 'concrete_live' && binding.effectsAllowed === true &&
       binding.blocker === null && binding.blockedActionCount === 0;
+    const passive = binding.mode === 'passive_observer' && binding.effectsAllowed === false &&
+      binding.blocker === null && binding.implementedActionCount === 0 && binding.blockedActionCount === 0 &&
+      binding.observationScheduled === true;
     const blocked = binding.mode === 'explicit_blocked' && binding.effectsAllowed === false &&
-      binding.implementedActionCount === 0 && binding.blockedActionCount > 0 &&
+      binding.implementedActionCount === 0 && Number.isInteger(binding.blockedActionCount) &&
+      binding.blockedActionCount >= 0 &&
       binding.blocker?.code === 'live_case_hook_missing' &&
       typeof binding.blocker.detail === 'string' && binding.blocker.detail.length > 0;
-    if (!sourceValid || (!concrete && !blocked) || binding.providerFree === true) {
+    if (!sourceValid || (!concrete && !passive && !blocked) || binding.providerFree === true) {
       fail('w9_adapter_binding_unproven', `${binding.caseId} lacks an exact frozen live or explicit-blocked classification`);
     }
     byCase.set(binding.caseId, clone(binding));
@@ -141,6 +146,10 @@ function assertAdapterBindings(adapterBindings) {
 function requiredDriverMethods(plan, bindings) {
   const methods = new Set(['executeScheduledTeardown', 'verifyEvidenceArtifact']);
   for (const entry of plan) {
+    if (bindings.get(entry.attempt.caseId).mode === 'passive_observer') {
+      methods.add('schedulePassiveObservation');
+      continue;
+    }
     if (bindings.get(entry.attempt.caseId).mode !== 'concrete_live') continue;
     if (entry.attempt.caseId === 'C01') methods.add('executeDistributedC01');
     for (const action of entry.actions) methods.add(DRIVER_METHODS[action.kind]);
@@ -434,9 +443,7 @@ function plannedTime(caseWindows, entry) {
   const start = Date.parse(window.startAt);
   const end = Date.parse(window.endAt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) fail('case_window_invalid', entry.attempt.caseId);
-  const required = entry.attempt.caseId === 'C01' ? 1_200_000
-    : entry.attempt.caseId === 'C04' ? 28_800_000
-      : entry.attempt.caseId === 'C05' ? 86_400_000 : 0;
+  const required = entry.attempt.caseId === 'C01' ? 1_200_000 : 0;
   if (end - start < required) fail('case_window_invalid', `${entry.attempt.caseId} duration is below contract`);
   const offset = entry.attempt.executionUnit.plannedOffsetSeconds ?? 0;
   return { wallTime: new Date(start + offset * 1000).toISOString(), endAt: window.endAt };
@@ -444,7 +451,7 @@ function plannedTime(caseWindows, entry) {
 
 function validateWindowOrder(caseWindows) {
   let priorEnd = -Infinity;
-  for (const caseId of P158_W9_CASE_IDS) {
+  for (const caseId of ['C01', 'C02', 'C03']) {
     const window = caseWindows?.[caseId];
     const start = Date.parse(window?.startAt);
     const end = Date.parse(window?.endAt);
@@ -452,6 +459,15 @@ function validateWindowOrder(caseWindows) {
       fail('case_window_invalid', 'W9 case windows must be complete, ordered, and non-overlapping');
     }
     priorEnd = end;
+  }
+  for (const [caseId, durationSeconds] of [['C04', 28_800], ['C05', 86_400]]) {
+    const window = caseWindows?.[caseId];
+    if (window?.observationMode !== 'passive_segmented' ||
+        window?.completionMode !== 'asynchronous_nonblocking' ||
+        window.environmentId !== 'E3' || window.minimumDurationSeconds !== durationSeconds ||
+        window.productionActionsGenerated !== false || window.blocksInstallationOrRepair !== false) {
+      fail('passive_observation_window_invalid', `${caseId} must be a passive nonblocking E3 observation descriptor`);
+    }
   }
 }
 
@@ -530,7 +546,7 @@ function c01ActionReceipts(aggregate, actions, target, schedule) {
 
 export async function runP158W9Phase({
   schedule, target, caseWindows, drivers, adapterBindings, controller, runRoot, artifactStore, clock, scheduler,
-  safetyStop, loggingHarvest, loggingExpectations,
+  safetyStop, loggingHarvest, loggingExpectations, finalAnalysis = null,
 }) {
   assertSchedule(schedule);
   assertP158W9DevelopmentTarget(target);
@@ -541,7 +557,8 @@ export async function runP158W9Phase({
   );
   if (!Array.isArray(loggingExpectations) || loggingExpectations.some((entry) => entry.phaseId !== 'W9') ||
       schedule.attempts.filter((entry) => P158_W9_CASE_IDS.includes(entry.caseId))
-        .some((attempt) => !expectationAttemptIds.has(attempt.attemptId))) {
+        .some((attempt) => bindings.get(attempt.caseId).mode !== 'passive_observer' &&
+          !expectationAttemptIds.has(attempt.attemptId))) {
     fail('logging_request_expectations_incomplete', 'W9 requires its exact pre-freeze request envelopes');
   }
   validateWindowOrder(caseWindows);
@@ -582,6 +599,12 @@ export async function runP158W9Phase({
         item.executionMode !== 'concrete_live')) {
         fail('logging_request_expectations_incomplete', `${entry.attempt.attemptId} logging actions differ from the frozen plan`);
       }
+    } else if (binding.mode === 'passive_observer') {
+      if (entry.actions.length !== 0 || attemptExpectations.length !== 0 ||
+          entry.attempt.environmentIds.join(',') !== 'E3') {
+        fail('passive_observation_contract_invalid',
+          `${entry.attempt.attemptId} must have zero product actions and zero product-request logging envelopes`);
+      }
     } else if (attemptExpectations.length !== entry.attempt.environmentIds.length ||
         attemptExpectations.some((item) => item.actionId !== null || item.executionMode !== 'explicit_blocked')) {
       fail('logging_request_expectations_incomplete', `${entry.attempt.attemptId} blocker logging envelopes are incomplete`);
@@ -604,11 +627,14 @@ export async function runP158W9Phase({
   }
   const initialControllerSnapshot = controller.snapshot();
   const recordedAttemptIds = new Set(initialControllerSnapshot.results.map((result) => result.attemptId));
+  const terminalByAttemptId = new Map(initialControllerSnapshot.results.map((result) => [result.attemptId, clone(result)]));
+  const w9AttemptIds = new Set(plan.map((entry) => entry.attempt.attemptId));
   if (initialControllerSnapshot.state === 'frozen') await controller.startExecution();
   const recordAttemptOnce = async (terminal) => {
     if (recordedAttemptIds.has(terminal.attemptId)) return;
     await controller.recordAttempt(terminal);
     recordedAttemptIds.add(terminal.attemptId);
+    terminalByAttemptId.set(terminal.attemptId, clone(terminal));
     if (terminal.blocksDependents === true) {
       for (const result of controller.snapshot().results) recordedAttemptIds.add(result.attemptId);
     }
@@ -659,6 +685,30 @@ export async function runP158W9Phase({
 
   for (const entry of plan) {
     const adapterBinding = bindings.get(entry.attempt.caseId);
+    const blockedDependencies = entry.attempt.dependsOnAttemptIds.filter((attemptId) => {
+      if (!w9AttemptIds.has(attemptId)) return false;
+      const terminal = terminalByAttemptId.get(attemptId);
+      return !terminal || terminal.blocksDependents === true ||
+        ['skipped_blocked', 'safety_stopped', 'harness_failure'].includes(terminal.resultState);
+    });
+    if (blockedDependencies.length > 0) {
+      const attemptPath = checkpointPath('attempts', entry.attempt.attemptId);
+      let terminal = await readOptional(store, attemptPath);
+      if (!terminal) terminal = await writeCheckpoint(store, attemptPath, {
+        caseId: entry.attempt.caseId, attemptId: entry.attempt.attemptId,
+        resultState: 'skipped_blocked', effectState: 'not_started', requestedEffects: [],
+        actionCount: 0, blockedActionCount: entry.actions.length,
+        actionReceiptSha256: sha256([]), completedAt: clock.wallNow(), blocksDependents: true,
+        retryDisposition: 'prohibited_opportunistic_retry',
+        blocker: { code: 'dependency_terminal_unusable', blockedByAttemptIds: blockedDependencies.sort() },
+        blockerCode: 'dependency_terminal_unusable', causalIds: {}, causalIdsAuthoritative: false,
+        causalEnvelopes: [], causalRecords: [], repairAttempted: false, retryAttempted: false,
+        garbageCollectionAttempted: false,
+      });
+      await recordAttemptOnce(Object.fromEntries(Object.entries(terminal)
+        .filter(([key]) => key !== 'checkpointSha256')));
+      continue;
+    }
     if (adapterBinding.mode === 'explicit_blocked') {
       const exactBlocker = sourceBoundBlocker(adapterBinding);
       const attemptPath = checkpointPath('attempts', entry.attempt.attemptId);
@@ -676,6 +726,29 @@ export async function runP158W9Phase({
           blockerCode: exactBlocker.code,
           causalIds: {}, causalIdsAuthoritative: false,
           causalEnvelopes: w9CausalEnvelopes(entry.attempt, loggingExpectations), causalRecords,
+          repairAttempted: false, retryAttempted: false, garbageCollectionAttempted: false,
+        });
+      } else verifyCheckpoint(terminal);
+      await recordAttemptOnce(Object.fromEntries(Object.entries(terminal)
+        .filter(([key]) => key !== 'checkpointSha256')));
+      continue;
+    }
+    if (adapterBinding.mode === 'passive_observer') {
+      const attemptPath = checkpointPath('attempts', entry.attempt.attemptId);
+      let terminal = await readOptional(store, attemptPath);
+      if (!terminal) {
+        const observation = await drivers.schedulePassiveObservation({
+          caseId: entry.attempt.caseId, attempt: clone(entry.attempt),
+        });
+        terminal = await writeCheckpoint(store, attemptPath, {
+          caseId: entry.attempt.caseId, attemptId: entry.attempt.attemptId,
+          resultState: 'inconclusive', effectState: 'no_effect',
+          observationState: 'scheduled_async',
+          observationDescriptorSha256: observation.descriptorSha256,
+          evidenceArtifactIds: clone(observation.evidenceArtifactIds),
+          actionCount: 0, actionReceiptSha256: sha256([]), completedAt: clock.wallNow(),
+          blocksDependents: false, retryDisposition: 'not_applicable',
+          causalIds: {}, causalIdsAuthoritative: false, causalEnvelopes: [], causalRecords: [],
           repairAttempted: false, retryAttempted: false, garbageCollectionAttempted: false,
         });
       } else verifyCheckpoint(terminal);
@@ -769,7 +842,7 @@ export async function runP158W9Phase({
     await recordAttemptOnce(terminal);
   }
 
-  for (const caseId of ['C01', 'C04', 'C05']) {
+  for (const caseId of ['C01']) {
     if (bindings.get(caseId).mode === 'explicit_blocked') continue;
     await scheduler.waitUntil({ wallTime: caseWindows[caseId].endAt, caseId });
   }
@@ -800,8 +873,19 @@ export async function runP158W9Phase({
   }
   const artifactIds = new Set(teardown.receipt.evidenceArtifactIds);
   for (const entry of plan) {
+    const recordedTerminal = await readOptional(store, checkpointPath('attempts', entry.attempt.attemptId));
+    if (recordedTerminal?.resultState === 'skipped_blocked') {
+      verifyCheckpoint(recordedTerminal);
+      continue;
+    }
     if (bindings.get(entry.attempt.caseId).mode === 'explicit_blocked') {
       verifyCheckpoint(await readOptional(store, checkpointPath('attempts', entry.attempt.attemptId)));
+      continue;
+    }
+    if (bindings.get(entry.attempt.caseId).mode === 'passive_observer') {
+      const terminal = verifyCheckpoint(await readOptional(store,
+        checkpointPath('attempts', entry.attempt.attemptId)));
+      for (const artifactId of terminal.evidenceArtifactIds ?? []) artifactIds.add(artifactId);
       continue;
     }
     for (const action of entry.actions) {
@@ -873,10 +957,25 @@ export async function runP158W9Phase({
     await controller.finishExecution();
     controllerState = 'execution_terminal';
   }
+  let analysisPreparation = null;
+  if (controllerState === 'execution_terminal' && finalAnalysis) {
+    const analysisHook = finalAnalysis.hook ?? finalAnalysis.createHook?.({ controller });
+    const rawArtifactInventory = finalAnalysis.resolveRawArtifactInventory
+      ? finalAnalysis.resolveRawArtifactInventory({ snapshot: controller.snapshot() })
+      : finalAnalysis.rawArtifactInventory;
+    analysisPreparation = await analysisHook.prepareBeforeSeal({
+      rawArtifactInventory: clone(rawArtifactInventory),
+      loggingOperationGaps: clone(finalAnalysis.loggingOperationGaps),
+    });
+    finalAnalysis = { ...finalAnalysis, hook: analysisHook };
+  }
   if (controllerState === 'execution_terminal') await controller.sealEvidence();
+  const analysis = finalAnalysis && controller.snapshot().state === 'evidence_sealed'
+    ? await finalAnalysis.hook.finalizeAfterSeal({ preparation: analysisPreparation }) : null;
   return {
     state: controller.snapshot().state, sourceDigest, safetyStop: stopped,
     planAttemptCount: plan.length, evidenceAuditSha256: audit.checkpointSha256,
     loggingHarvestSha256: harvestTerminal.checkpointSha256,
+    finalAnalysisDescriptorSha256: analysis?.descriptorSha256 ?? null,
   };
 }

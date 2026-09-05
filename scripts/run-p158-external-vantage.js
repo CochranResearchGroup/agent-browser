@@ -822,13 +822,25 @@ export async function runExternalVantageProbe({
   mode = 'readiness',
   outputDir,
   w8ActionManifest = null,
+  wallNowMs = () => Date.now(),
+  monotonicNow = () => process.hrtime.bigint(),
 }) {
+  const runnerStartedAtMs = wallNowMs();
+  const runnerStartedMonotonicNanoseconds = monotonicNow();
   mkdirSync(outputDir, { recursive: true });
   try {
     return await executeExternalVantageProbe({
       env, clientId, paceProfile, mode, outputDir, w8ActionManifest,
     });
   } catch (error) {
+    const failedAtMs = wallNowMs();
+    const failedMonotonicNanoseconds = monotonicNow();
+    const calibrationTiming = failureCalibrationTiming(env, {
+      runnerStartedAtMs,
+      runnerStartedMonotonicNanoseconds,
+      failedAtMs,
+      failedMonotonicNanoseconds,
+    });
     const failureRecord = externalVantageFailureRecord(error, env);
     const failure = {
       schemaVersion: EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
@@ -840,9 +852,13 @@ export async function runExternalVantageProbe({
       success: false,
       repairAttempted: false,
       retryCount: 0,
-      failedAt: new Date().toISOString(),
+      failedAt: new Date(failedAtMs).toISOString(),
+      elapsedMs: monotonicElapsedMilliseconds(
+        runnerStartedMonotonicNanoseconds,
+        failedMonotonicNanoseconds,
+      ),
       failure: failureRecord,
-      calibrationTiming: failureCalibrationTiming(env),
+      calibrationTiming,
       artifacts: artifactReceipts(outputDir),
     };
     const safeFailure = sanitizeReceiptSecrets(failure, env);
@@ -2441,14 +2457,36 @@ function safeFailureToken(value) {
   return typeof value === 'string' && /^[a-z0-9_]{1,64}$/.test(value) ? value : null;
 }
 
-function failureCalibrationTiming(env) {
+function monotonicElapsedMilliseconds(start, end) {
+  try {
+    const startNanoseconds = BigInt(start);
+    const endNanoseconds = BigInt(end);
+    if (startNanoseconds < 0n || endNanoseconds < startNanoseconds) return null;
+    return Number(endNanoseconds - startNanoseconds) / 1_000_000;
+  } catch {
+    return null;
+  }
+}
+
+function failureCalibrationTiming(env, {
+  runnerStartedAtMs,
+  runnerStartedMonotonicNanoseconds,
+  failedAtMs,
+  failedMonotonicNanoseconds,
+}) {
   const startMs = Date.parse(env.P158_CALIBRATION_START_AT);
   if (!Number.isFinite(startMs)) return null;
-  const observedMs = Date.now();
+  const elapsedMs = monotonicElapsedMilliseconds(
+    runnerStartedMonotonicNanoseconds,
+    failedMonotonicNanoseconds,
+  );
   return {
     calibrationStartAt: new Date(startMs).toISOString(),
-    observedAt: new Date(observedMs).toISOString(),
-    runnerStartDelayMs: observedMs - startMs,
+    runnerStartedAt: new Date(runnerStartedAtMs).toISOString(),
+    runnerStartDelayMs: runnerStartedAtMs - startMs,
+    runnerQueueDelayMs: Math.max(0, runnerStartedAtMs - startMs),
+    failedAt: new Date(failedAtMs).toISOString(),
+    elapsedMs,
   };
 }
 

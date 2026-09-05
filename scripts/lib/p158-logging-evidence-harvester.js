@@ -568,7 +568,7 @@ export function createP158LoggingHarvestHook({
       const artifactIds = [];
       const corpusSha256s = [];
       const findingCodes = new Set();
-      if (loggingOperationGaps.length > 0) {
+      {
         const operationGapBody = {
           schemaVersion: 'agent-browser.p158-logging-operation-gaps.v1', planId: 'P158', runId, scheduleSha256,
           sourcePath, sourceSha256: sourceDigest, loggingOperationGapsSha256,
@@ -586,8 +586,10 @@ export function createP158LoggingHarvestHook({
         if (registerArtifact) await registerArtifact(operationGapWrite);
         else await artifactStore.writeOnce(operationGapWrite.relativePath, operationGapWrite.content);
         artifactIds.push(operationGapArtifactId);
-        findingCodes.add('request_id_correlation_unavailable');
-        findingCodes.add('unobserved_due_to_uncorrelatable_id');
+        if (loggingOperationGaps.length > 0) {
+          findingCodes.add('request_id_correlation_unavailable');
+          findingCodes.add('unobserved_due_to_uncorrelatable_id');
+        }
       }
       for (const key of [...groups.keys()].sort()) {
         const [phaseId, environmentId] = key.split(':');

@@ -145,14 +145,29 @@ function fetchHarness(candidate, { failedOrdinal = null } = {}) {
         : isFailure
           ? { success: false, failure: { code: 'injected_read_failure', message: 'first failure retained' } }
           : { success: true, data: { observed: true } };
+      const rawBody = JSON.stringify(body);
       return {
         ok: !isFailure,
         status: isFailure ? 503 : 200,
         redirected: false,
         url,
+        headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'application/json' : null },
+        arrayBuffer: async () => Buffer.from(rawBody),
         json: async () => structuredClone(body),
       };
     },
+  };
+}
+
+function serviceRequest(config, ordinal) {
+  const rotation = C01_READ_ONLY_ROTATION[(ordinal - 1) % C01_READ_ONLY_ROTATION.length];
+  return {
+    ordinal,
+    target: structuredClone(config.developmentTargets[(ordinal - 1) % 2]),
+    clientId: config.agentClientIds[(ordinal - 1) % 25],
+    action: rotation.action,
+    effectClass: 'read_only',
+    attempt: 1,
   };
 }
 
@@ -385,6 +400,137 @@ await runTest('rejects a reordered action, client, or environment before fetch',
     );
   }
   assert.equal(network.calls.length, before);
+}));
+
+await runTest('retains 502, 504, and non-JSON response evidence without retaining raw bodies', () => withRunRoot(async (runRoot) => {
+  const config = makeConfig();
+  const time = clockHarness();
+  const envelope = await prepareLiveDistributedCalibration({
+    config, runRoot, fetch: fetchHarness(config.candidate).fetch, clock: time.clock,
+  });
+  const cases = [
+    { status: 502, contentType: 'text/html', rawBody: '<html><h1>Bad Gateway</h1></html>', bodyClass: 'gateway_html', code: 'service_http_status', stage: 'response_status' },
+    { status: 504, contentType: 'text/plain', rawBody: 'Gateway Timeout', bodyClass: 'gateway_text', code: 'service_http_status', stage: 'response_status' },
+    { status: 200, contentType: 'text/plain', rawBody: 'upstream returned an unexpected body', bodyClass: 'non_json', code: 'service_response_non_json', stage: 'response_body_parse' },
+  ];
+  for (const [index, fixture] of cases.entries()) {
+    const transport = createDevelopmentC01ServiceTransport({
+      preparation: envelope,
+      clock: time.clock,
+      fetch: async (url) => ({
+        ok: fixture.status >= 200 && fixture.status < 300,
+        status: fixture.status,
+        redirected: false,
+        url,
+        headers: { get: () => fixture.contentType },
+        arrayBuffer: async () => Buffer.from(fixture.rawBody),
+      }),
+    });
+    const result = await transport.executeReadOnlyCommand(serviceRequest(config, index + 1));
+    assert.equal(result.state, 'failed');
+    assert.equal(result.httpStatus, fixture.status);
+    assert.equal(result.transportStage, fixture.stage);
+    assert.equal(result.failure.code, fixture.code);
+    assert.deepEqual(result.responseBody, {
+      bodyClass: fixture.bodyClass,
+      sha256: sha256(Buffer.from(fixture.rawBody)),
+      byteCount: Buffer.byteLength(fixture.rawBody),
+    });
+    assert.equal(result.retryAttempted, false);
+    assert.equal(result.repairAttempted, false);
+    assert.doesNotMatch(JSON.stringify(result), new RegExp(fixture.rawBody.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  }
+}));
+
+await runTest('hashes exact response bytes and fails closed on oversized bodies', () => withRunRoot(async (runRoot) => {
+  const config = makeConfig();
+  const time = clockHarness();
+  const envelope = await prepareLiveDistributedCalibration({
+    config, runRoot, fetch: fetchHarness(config.candidate).fetch, clock: time.clock,
+  });
+  const invalidUtf8 = Buffer.from([0xff, 0xfe, 0x00, 0x41]);
+  const invalidTransport = createDevelopmentC01ServiceTransport({
+    preparation: envelope,
+    clock: time.clock,
+    fetch: async (url) => ({
+      ok: true, status: 200, redirected: false, url,
+      headers: { get: () => 'application/octet-stream' },
+      arrayBuffer: async () => invalidUtf8,
+    }),
+  });
+  const invalidResult = await invalidTransport.executeReadOnlyCommand(serviceRequest(config, 1));
+  assert.equal(invalidResult.state, 'failed');
+  assert.equal(invalidResult.failure.code, 'service_response_non_json');
+  assert.deepEqual(invalidResult.responseBody, {
+    bodyClass: 'non_json',
+    sha256: sha256(invalidUtf8),
+    byteCount: invalidUtf8.byteLength,
+  });
+
+  const oversized = Buffer.alloc((8 * 1024 * 1024) + 1, 0x61);
+  const oversizedTransport = createDevelopmentC01ServiceTransport({
+    preparation: envelope,
+    clock: time.clock,
+    fetch: async (url) => ({
+      ok: true, status: 200, redirected: false, url,
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => oversized,
+    }),
+  });
+  const oversizedResult = await oversizedTransport.executeReadOnlyCommand(serviceRequest(config, 1));
+  assert.equal(oversizedResult.state, 'failed');
+  assert.equal(oversizedResult.httpStatus, 200);
+  assert.equal(oversizedResult.transportStage, 'response_body_read');
+  assert.equal(oversizedResult.failure.code, 'service_response_body_too_large');
+  assert.equal(oversizedResult.responseBody, undefined);
+  assert.equal(oversizedResult.retryAttempted, false);
+  assert.equal(oversizedResult.repairAttempted, false);
+}));
+
+await runTest('holds a deterministic 500-read two-page workload to two provider-free workers', () => withRunRoot(async (runRoot) => {
+  const config = makeConfig();
+  const time = clockHarness();
+  const envelope = await prepareLiveDistributedCalibration({
+    config, runRoot, fetch: fetchHarness(config.candidate).fetch, clock: time.clock,
+  });
+  let activeWorkers = 0;
+  let peakWorkers = 0;
+  let fetchCount = 0;
+  const transport = createDevelopmentC01ServiceTransport({
+    preparation: envelope,
+    clock: time.clock,
+    fetch: async (url) => {
+      fetchCount += 1;
+      activeWorkers += 1;
+      peakWorkers = Math.max(peakWorkers, activeWorkers);
+      await new Promise((resolveTurn) => queueMicrotask(resolveTurn));
+      activeWorkers -= 1;
+      const rawBody = JSON.stringify({ success: true, data: { observed: true } });
+      return {
+        ok: true, status: 200, redirected: false, url,
+        headers: { get: () => 'application/json' },
+        arrayBuffer: async () => Buffer.from(rawBody),
+      };
+    },
+  });
+  let nextOrdinal = 1;
+  const pageCounts = [0, 0];
+  const pageWorker = async (pageIndex) => {
+    while (nextOrdinal <= 500) {
+      const ordinal = nextOrdinal;
+      nextOrdinal += 1;
+      const result = await transport.executeReadOnlyCommand(serviceRequest(config, ordinal));
+      assert.equal(result.state, 'passed');
+      assert.equal(result.retryAttempted, false);
+      assert.equal(result.repairAttempted, false);
+      pageCounts[pageIndex] += 1;
+    }
+  };
+  await Promise.all([pageWorker(0), pageWorker(1)]);
+  assert.equal(fetchCount, 500);
+  assert.equal(transport.observations().length, 500);
+  assert.deepEqual(pageCounts, [250, 250]);
+  assert.equal(peakWorkers, 2);
 }));
 
 await runTest('supports provider-free prepare, start, and finalize CLI phases', () => withRunRoot(async (runRoot) => {

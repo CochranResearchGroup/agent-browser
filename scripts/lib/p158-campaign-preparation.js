@@ -194,6 +194,7 @@ function inspectExecutionSchedule(input, artifacts, findings, executionContext, 
     attemptId: attempt.attemptId,
     environmentId: attempt.environmentId,
     environmentIds: attempt.environmentIds,
+    executionMode: attempt.executionMode,
     seed: attempt.seed,
     dependsOn: attempt.dependsOnAttemptIds,
   })));
@@ -213,21 +214,21 @@ function inspectExecutionSchedule(input, artifacts, findings, executionContext, 
     persisted?.schemaVersion === 'agent-browser.p158-execution-schedule.v1' &&
     persisted?.scheduleSha256 === seal?.scheduleSha256 &&
     persisted?.caseCount === 54 &&
-    persisted?.attemptCount === 1592 &&
-    seal?.attemptCount === 1592 &&
+    persisted?.attemptCount === 894 &&
+    seal?.attemptCount === 894 &&
     persisted?.adapterReadiness?.ready === true &&
     persisted?.adapterReadiness?.readyCaseCount === 54 &&
     independentlyCompiled !== null &&
     independentlyCompiled.executionSchedule.registrySha256 === controllerSnapshot.registrySha256 &&
     digest(persisted) === digest(independentlyCompiled.executionSchedule) &&
     Array.isArray(input.schedule) &&
-    input.schedule.length === 1592 &&
+    input.schedule.length === 894 &&
     digest(input.schedule) === digest(expectedAttempts) &&
     digest(input.schedule) === digest(bindPreExecutionBlockers(independentlyCompiled.controllerSchedule));
   if (!valid) {
     addFinding(findings, 'execution_schedule_mismatch', 'executionScheduleSeal', {
       caseCount: 54,
-      attemptCount: 1592,
+      attemptCount: 894,
       adaptersReady: true,
       exactControllerSchedule: true,
     }, {

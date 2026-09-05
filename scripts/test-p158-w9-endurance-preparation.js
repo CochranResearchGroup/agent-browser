@@ -122,9 +122,9 @@ process.stdout.write('PASS rejects a non-external or wrong-runner readiness proo
 const workflow = await readFile('.github/workflows/p158-w9-endurance-preparation.yml', 'utf8');
 const runner = await readFile('scripts/run-p158-w9-endurance-preparation.js', 'utf8');
 assert.match(workflow, /runs-on: ubuntu-latest/);
-assert.match(workflow, /Verify reviewed commit/);
-assert.match(workflow, /if: always\(\)/);
+assert.match(workflow, /validate-passive-contract:/);
+assert.match(workflow, /Installation and repair remain available at segment boundaries/);
 assert(!workflow.includes('continue-on-error'));
 assert(!/^import .*playwright/m.test(runner));
 assert.match(runner, /import\('playwright'\)/);
-process.stdout.write('PASS provides a pinned off-host manual workflow with always-retained failure evidence\n');
+process.stdout.write('PASS provides passive asynchronous preparation without blocking installation or repair\n');

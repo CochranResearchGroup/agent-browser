@@ -86,7 +86,7 @@ for (const testCase of registry.cases) {
   );
   assert(
     testCase.executionContract.environmentMode ===
-      (['A15', 'H07', 'H10', 'H11', 'X10', 'C01', 'C02', 'C03', 'C04', 'C05']
+      (['A15', 'H07', 'H10', 'H11', 'X10', 'C01', 'C02', 'C03']
         .includes(testCase.id) ? 'combined' : 'separate'),
     `${testCase.id} execution environment mode drifted`,
   );
@@ -99,6 +99,11 @@ for (const testCase of registry.cases) {
   }
   assert(testCase.sourceIds.every((id) => sourceIds.has(id)), `${testCase.id} cites an unknown source`);
   assert(testCase.dependsOn.every((id) => caseIds.has(id) && id !== testCase.id), `${testCase.id} has an invalid dependency`);
+}
+for (const caseId of ['C04', 'C05']) {
+  const contract = registry.cases.find((entry) => entry.id === caseId).executionContract;
+  assert(contract.observationMode === 'passive_segmented', `${caseId} must be passive segmented`);
+  assert(contract.completionMode === 'asynchronous_nonblocking', `${caseId} must be asynchronous`);
 }
 
 for (const family of registry.families) {

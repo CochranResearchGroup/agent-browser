@@ -291,7 +291,7 @@
         "artifactId": { "$ref": "#/$defs/id" },
         "artifactSha256": { "$ref": "#/$defs/sha256" },
         "scheduleSha256": { "$ref": "#/$defs/sha256" },
-        "attemptCount": { "const": 1592 }
+        "attemptCount": { "const": 894 }
       },
       "additionalProperties": false
     },
@@ -302,6 +302,7 @@
         "caseId": { "$ref": "#/$defs/id" },
         "attemptId": { "$ref": "#/$defs/id" },
         "environmentId": { "enum": ["E0", "E1", "E2", "E3"] },
+        "executionMode": { "enum": ["active_stimulus", "passive_observer"] },
         "environmentIds": {
           "type": "array",
           "minItems": 1,

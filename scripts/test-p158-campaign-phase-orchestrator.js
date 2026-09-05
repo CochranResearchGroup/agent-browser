@@ -213,7 +213,7 @@ await withRoot(async (runRoot) => {
   assert.deepEqual(w9Starts, [preAttempts.length]);
   assert.equal(calls.length, preAttempts.filter((attempt) => ['A02', 'D02'].includes(attempt.caseId)).length);
   assert.equal(result.loggingExpectations.length, prepared.loggingRequestExpectations.length +
-    schedule.attempts.filter((attempt) => !['A02', 'D02'].includes(attempt.caseId))
+    schedule.attempts.filter((attempt) => !['A02', 'D02', 'C04', 'C05'].includes(attempt.caseId))
       .reduce((count, attempt) => count + attempt.environmentIds.length, 0));
   assert.ok(result.loggingExpectations.every((entry) => entry.operationCorrelationId.includes(entry.attemptId)));
   assert.ok(result.loggingExpectations.every((entry) => entry.operationCorrelationId.includes(`:${entry.environmentId}:`) &&

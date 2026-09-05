@@ -738,15 +738,35 @@ try {
   const failureRoot = join(fixtureRoot, 'failure');
   mkdirSync(failureRoot, { recursive: true });
   writeFileSync(join(failureRoot, 'partial.har'), 'synthetic partial evidence');
+  const calibrationStartMs = Date.parse('2026-09-04T12:00:00.000Z');
+  const failureWallTimes = [calibrationStartMs + 100, calibrationStartMs + 900];
+  const failureMonotonicTimes = [1_000_000_000n, 1_500_000_000n];
   await assert.rejects(() => runExternalVantageProbe({
-    env: { ...env, P158_DEV_DASHBOARD_PASSWORD: '' },
+    env: {
+      ...env,
+      P158_DEV_DASHBOARD_PASSWORD: '',
+      P158_CALIBRATION_START_AT: new Date(calibrationStartMs).toISOString(),
+    },
     clientId: 'external-runner-human',
     paceProfile: 'human_controller',
     outputDir: failureRoot,
+    wallNowMs: () => failureWallTimes.shift(),
+    monotonicNow: () => failureMonotonicTimes.shift(),
   }));
   const failureReceipt = JSON.parse(readFileSync(join(failureRoot, 'failure-receipt.json'), 'utf8'));
   assert.equal(failureReceipt.success, false);
   assert.equal(failureReceipt.retryCount, 0);
+  assert.equal(failureReceipt.repairAttempted, false);
+  assert.equal(failureReceipt.failedAt, '2026-09-04T12:00:00.900Z');
+  assert.equal(failureReceipt.elapsedMs, 500);
+  assert.deepEqual(failureReceipt.calibrationTiming, {
+    calibrationStartAt: '2026-09-04T12:00:00.000Z',
+    runnerStartedAt: '2026-09-04T12:00:00.100Z',
+    runnerStartDelayMs: 100,
+    runnerQueueDelayMs: 100,
+    failedAt: '2026-09-04T12:00:00.900Z',
+    elapsedMs: 500,
+  });
   assert.equal(failureReceipt.artifacts[0].relativePath, 'partial.har');
   assert.equal(failureReceipt.artifacts[0].bytes, 26);
   assert.match(failureReceipt.artifacts[0].sha256, /^[a-f0-9]{64}$/);

@@ -48,8 +48,12 @@ function windows() {
     C01: { startAt: new Date(BASE + 60_000).toISOString(), endAt: new Date(BASE + 1_260_000).toISOString() },
     C02: { startAt: new Date(BASE + 1_270_000).toISOString(), endAt: new Date(BASE + 1_271_000).toISOString() },
     C03: { startAt: new Date(BASE + 1_280_000).toISOString(), endAt: new Date(BASE + 1_281_000).toISOString() },
-    C04: { startAt: new Date(BASE + 1_300_000).toISOString(), endAt: new Date(BASE + 30_100_000).toISOString() },
-    C05: { startAt: new Date(BASE + 30_200_000).toISOString(), endAt: new Date(BASE + 116_600_000).toISOString() },
+    C04: { environmentId: 'E3', observationMode: 'passive_segmented',
+      completionMode: 'asynchronous_nonblocking', minimumDurationSeconds: 28_800,
+      productionActionsGenerated: false, blocksInstallationOrRepair: false },
+    C05: { environmentId: 'E3', observationMode: 'passive_segmented',
+      completionMode: 'asynchronous_nonblocking', minimumDurationSeconds: 86_400,
+      productionActionsGenerated: false, blocksInstallationOrRepair: false },
   };
 }
 
@@ -129,6 +133,7 @@ function receipt(action) {
 
 function driverHarness({ failOnceAt = null } = {}) {
   const calls = [];
+  const passiveCalls = [];
   let failed = false;
   const execute = async (action) => {
     calls.push(structuredClone(action));
@@ -141,7 +146,8 @@ function driverHarness({ failOnceAt = null } = {}) {
   const hookNames = [
     'executeDistributedC01', 'executeServiceCommand', 'executeExternalDashboardAction',
     'executeExternalHandoffReconnect', 'executeDeclaredBrowserCrash',
-    'executeDeclaredSupervisorTransition', 'executeScheduledTeardown', 'verifyEvidenceArtifact',
+    'executeDeclaredSupervisorTransition', 'schedulePassiveObservation',
+    'executeScheduledTeardown', 'verifyEvidenceArtifact',
   ];
   return {
     enduranceCaseWindowsSha256: sha256({ C04: windows().C04, C05: windows().C05 }),
@@ -149,7 +155,7 @@ function driverHarness({ failOnceAt = null } = {}) {
       implementationKind: 'concrete_live', sourcePath: `scripts/live-hooks/${method}.js`,
       sourceSha256: String(index + 1).padStart(64, '0'),
     }])),
-    calls,
+    calls, passiveCalls,
     executeDistributedC01: async ({ actions }) => {
       const artifact = { artifactId: 'c01-frozen-result', content: '{"clean":true}\n' };
       artifact.declaredSha256 = sha256(artifact.content);
@@ -174,6 +180,17 @@ function driverHarness({ failOnceAt = null } = {}) {
     executeExternalHandoffReconnect: execute,
     executeDeclaredBrowserCrash: execute,
     executeDeclaredSupervisorTransition: execute,
+    schedulePassiveObservation: async ({ caseId, attempt }) => {
+      passiveCalls.push({ caseId, attemptId: attempt.attemptId });
+      const body = {
+        schemaVersion: 'agent-browser.p158-production-observation-descriptor.v1',
+        caseId, environmentId: 'E3', observationMode: 'passive_segmented',
+        completionMode: 'asynchronous_nonblocking', productionActionsGenerated: false,
+        blocksInstallationOrRepair: false, waitPerformed: false,
+      };
+      return { ...body, descriptorSha256: sha256(body),
+        evidenceArtifactIds: [`artifact:${caseId}:passive-observation`] };
+    },
     executeScheduledTeardown: async ({ target: binding }) => {
       const body = {
         schemaVersion: 'agent-browser.p158-w9-teardown-receipt.v1',
@@ -199,12 +216,14 @@ function adapterBindings(blockedCaseIds = []) {
     const sourcePath = 'scripts/lib/p158-w9-concrete-drivers.js';
     const sourceSha256 = 'ab'.repeat(32);
     const isBlocked = blocked.has(caseId);
+    const isPassive = !isBlocked && ['C04', 'C05'].includes(caseId);
     return {
-      caseId, mode: isBlocked ? 'explicit_blocked' : 'concrete_live', providerFree: false,
+      caseId, mode: isBlocked ? 'explicit_blocked' : isPassive ? 'passive_observer' : 'concrete_live', providerFree: false,
       sourcePath, sourceSha256, hookIds: [],
-      implementedActionCount: isBlocked ? 0 : actionCounts.get(caseId),
+      implementedActionCount: isBlocked || isPassive ? 0 : actionCounts.get(caseId),
       blockedActionCount: isBlocked ? actionCounts.get(caseId) : 0,
-      effectsAllowed: !isBlocked,
+      effectsAllowed: !isBlocked && !isPassive,
+      observationScheduled: isPassive,
       blocker: isBlocked ? { code: 'live_case_hook_missing', detail: `missing ${caseId}` } : null,
     };
   });
@@ -273,11 +292,11 @@ async function runTest(name, body) {
   catch (error) { error.message = `${name}: ${error.message}`; throw error; }
 }
 
-await runTest('materializes the exact corrected C01 through C05 action allocation', async () => {
+await runTest('materializes active C01 through C03 actions and passive C04/C05 descriptors', async () => {
   const plan = buildP158W9ActionPlan(schedule);
   assert.deepEqual(Object.fromEntries(['C01', 'C02', 'C03', 'C04', 'C05'].map((caseId) => [
     caseId, plan.filter((entry) => entry.attempt.caseId === caseId).length,
-  ])), { C01: 10, C02: 100, C03: 25, C04: 200, C05: 500 });
+  ])), { C01: 10, C02: 100, C03: 25, C04: 1, C05: 1 });
   const counts = {};
   for (const action of plan.flatMap((entry) => entry.actions)) {
     counts[`${action.caseId}:${action.kind}`] = (counts[`${action.caseId}:${action.kind}`] ?? 0) + 1;
@@ -287,9 +306,6 @@ await runTest('materializes the exact corrected C01 through C05 action allocatio
     'C02:service_command': 2000, 'C02:dashboard_action': 500, 'C02:handoff_reconnect': 100,
     'C02:declared_browser_crash': 20,
     'C03:declared_supervisor_transition': 25,
-    'C04:service_command': 10000, 'C04:dashboard_action': 2000, 'C04:handoff_reconnect': 200,
-    'C04:declared_browser_crash': 50,
-    'C05:handoff_reconnect': 500,
   });
   assert.ok(plan.flatMap((entry) => entry.actions)
     .filter((action) => ['dashboard_action', 'handoff_reconnect'].includes(action.kind))
@@ -297,37 +313,55 @@ await runTest('materializes the exact corrected C01 through C05 action allocatio
   assert.deepEqual([...new Set(plan.filter((entry) => entry.attempt.caseId === 'C03')
     .flatMap((entry) => entry.actions.map((action) => action.mixedLoad)))].sort(),
   ['dashboard_use', 'durable_handoff_reopen', 'retained_browser_commands']);
-  assert.deepEqual([...new Set(plan.filter((entry) => entry.attempt.caseId === 'C05')
-    .flatMap((entry) => entry.actions.map((action) => action.enduranceEvent)))].sort(),
-  ['client_restart', 'controller_expiry', 'scheduled_network_profile', 'viewer_expiry']);
+  assert.ok(plan.filter((entry) => ['C04', 'C05'].includes(entry.attempt.caseId))
+    .every((entry) => entry.attempt.executionMode === 'passive_observer' && entry.actions.length === 0));
 });
 
-await runTest('executes once, crosses future 20m 8h and 24h barriers, tears down, and seals', () => withRoot(async (runRoot) => {
+await runTest('executes active work once, schedules passive epochs without waiting, tears down, and seals', () => withRoot(async (runRoot) => {
   const controller = controllerHarness();
   const drivers = driverHarness();
   const time = clockHarness();
   const artifactStore = createMemoryArtifactStore();
+  const analysisOrder = [];
+  const finalAnalysis = { rawArtifactInventory: [], loggingOperationGaps: [], hook: {
+    prepareBeforeSeal: async () => {
+      assert.equal(controller.snapshot().state, 'execution_terminal');
+      analysisOrder.push('prepare');
+      return { preparationSha256: 'aa'.repeat(32) };
+    },
+    finalizeAfterSeal: async () => {
+      assert.equal(controller.snapshot().state, 'evidence_sealed');
+      analysisOrder.push('finalize');
+      return { descriptorSha256: 'bb'.repeat(32) };
+    },
+  } };
   const frozenInputs = { schedule: structuredClone(schedule), target: target(), caseWindows: windows(),
     adapterBindings: adapterBindings() };
   const result = await runP158W9Phase({
     ...frozenInputs, drivers, controller, runRoot, artifactStore, clock: time.clock, scheduler: time.scheduler,
-    loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(),
+    loggingHarvest: loggingHarvest(), loggingExpectations: loggingExpectations(), finalAnalysis,
   });
   assert.equal(result.state, 'evidence_sealed');
+  assert.deepEqual(analysisOrder, ['prepare', 'finalize']);
+  assert.equal(result.finalAnalysisDescriptorSha256, 'bb'.repeat(32));
   assert.equal(controller.startCount, 1);
   assert.equal(controller.sealCount, 1);
-  assert.equal(controller.snapshotCount, 4,
-    'W9 orchestration must take a constant four controller snapshots on the clean path');
-  assert.equal(controller.snapshot().results.length, 835);
-  assert.equal(drivers.calls.length, 15395);
+  assert.equal(controller.snapshotCount, 7,
+    'W9 plus two-stage analysis must take a bounded controller snapshot set on the clean path');
+  assert.equal(controller.snapshot().results.length, 137);
+  assert.equal(drivers.calls.length, 2645);
+  assert.deepEqual(drivers.passiveCalls.map((entry) => entry.caseId), ['C04', 'C05']);
   assert.equal(new Set(drivers.calls.map((call) => call.actionId)).size, drivers.calls.length);
-  assert.equal(drivers.calls.filter((call) => call.kind === 'declared_browser_crash').length, 70);
+  assert.equal(drivers.calls.filter((call) => call.kind === 'declared_browser_crash').length, 20);
   assert.equal(drivers.calls.filter((call) => call.kind === 'declared_supervisor_transition').length, 25);
   assert.ok(drivers.calls.filter((call) => ['dashboard_action', 'handoff_reconnect'].includes(call.kind))
     .every((call) => call.environmentId === 'E2' && call.transport === 'external_ingress'));
-  assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-started/')).length, 15955);
-  assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-terminal/')).length, 15955);
-  assert.equal(artifactStore.paths().filter((path) => path.includes('/attempts/')).length, 835);
+  assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-started/')).length, 3205);
+  assert.equal(artifactStore.paths().filter((path) => path.includes('/actions-terminal/')).length, 3205);
+  assert.equal(artifactStore.paths().filter((path) => path.includes('/attempts/')).length, 137);
+  const passiveResults = controller.snapshot().results.filter((entry) => ['C04', 'C05'].includes(entry.caseId));
+  assert.ok(passiveResults.every((entry) => entry.resultState === 'inconclusive' &&
+    entry.effectState === 'no_effect' && entry.blocksDependents === false));
   const externalResult = controller.snapshot().results.find((entry) =>
     entry.causalEnvelopes?.some((envelope) => envelope.environmentId === 'E2' && envelope.actionId));
   const externalExpectation = loggingExpectations().find((entry) =>
@@ -378,7 +412,9 @@ await runTest('safety stop terminalizes remaining work without effects', () => w
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(result.safetyStop.code, 'injected_safety_stop');
   assert.equal(drivers.calls.length, 0);
-  assert.ok(controller.snapshot().results.every((entry) => entry.resultState === 'safety_stopped'));
+  assert.ok(controller.snapshot().results.every((entry) =>
+    entry.resultState === 'safety_stopped' ||
+    (entry.resultState === 'skipped_blocked' && entry.effectState === 'not_started')));
 }));
 
 await runTest('refuses production and source mutation before undeclared effects', () => withRoot(async (runRoot) => {
@@ -449,11 +485,15 @@ await runTest('terminalizes a mixed explicit blocker without invoking its action
   });
   assert.equal(result.state, 'evidence_sealed');
   assert.equal(drivers.calls.some((call) => call.caseId === 'C02'), false);
-  assert.ok(drivers.calls.some((call) => call.caseId === 'C03'));
+  assert.equal(drivers.calls.some((call) => call.caseId === 'C03'), false,
+    'dependent C03 must be blocked before any concrete action');
   const blocked = controller.snapshot().results.filter((entry) => entry.caseId === 'C02');
   assert.equal(blocked.length, 100);
   assert.ok(blocked.every((entry) => entry.resultState === 'skipped_blocked' &&
     entry.effectState === 'not_started' && entry.requestedEffects.length === 0));
+  const dependent = controller.snapshot().results.filter((entry) => entry.caseId === 'C03');
+  assert.ok(dependent.every((entry) => entry.resultState === 'skipped_blocked' &&
+    entry.blockerCode === 'dependency_terminal_unusable' && entry.actionCount === 0));
   assert.deepEqual(blocked[0].causalRecords.map((entry) => entry.surfaceRole),
     ['controller_transition', 'pre_execution_blocker', 'terminal_event',
       'controller_transition', 'pre_execution_blocker', 'terminal_event']);
@@ -476,7 +516,7 @@ await runTest('resumes an all-blocked W9 phase without effects or duplicate term
   assert.equal(first.state, 'evidence_sealed');
   assert.equal(second.state, 'evidence_sealed');
   assert.equal(drivers.calls.length, 0);
-  assert.equal(controller.snapshot().results.length, 835);
+  assert.equal(controller.snapshot().results.length, 137);
   assert.equal(controller.startCount, 1);
   assert.equal(controller.sealCount, 1);
 }));
@@ -506,7 +546,7 @@ await runTest('retains a failed pre-seal harvest without replaying campaign work
     (error) => error.code === 'logging_harvest_failed');
   assert.equal(harvestCalls, 1);
   assert.equal(drivers.calls.length, 0);
-  assert.equal(controller.snapshot().results.length, 835);
+  assert.equal(controller.snapshot().results.length, 137);
 }));
 
 await runTest('seals an explicit logging capture gap for independent W10 analysis', () => withRoot(async (runRoot) => {

@@ -8,6 +8,8 @@
   "properties": {
     "schemaVersion": { "const": "agent-browser.p158-case-execution-contract.v1" },
     "environmentMode": { "enum": ["separate", "combined"] },
+    "observationMode": { "enum": ["active_stimulus", "passive_segmented"] },
+    "completionMode": { "enum": ["synchronous", "asynchronous_nonblocking"] },
     "expansion": { "$ref": "#/$defs/expansion" },
     "dimensions": {
       "type": "array",

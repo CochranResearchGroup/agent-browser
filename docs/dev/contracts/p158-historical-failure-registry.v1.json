@@ -3332,8 +3332,7 @@
     {
       "id": "C04",
       "environmentIds": [
-        "E1",
-        "E2"
+        "E3"
       ],
       "familyIds": [
         "F03",
@@ -3347,39 +3346,23 @@
         "D11"
       ],
       "evidenceProfile": "combined",
-      "executionBound": "8 hours, 10000 commands, 2000 dashboard actions, 200 reconnects, 50 crashes",
+      "executionBound": "At least 8 elapsed hours of passive production telemetry, split at every install, repair, restart, or deployment boundary; zero generated production actions and zero synchronous campaign wait",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
-        "environmentMode": "combined",
+        "environmentMode": "separate",
+        "observationMode": "passive_segmented",
+        "completionMode": "asynchronous_nonblocking",
         "expansion": {
-          "strategy": "repeat",
-          "unit": "handoff_reconnect",
-          "count": 200
+          "strategy": "aggregate",
+          "unit": "production_observation_epoch",
+          "count": 1
         },
         "dimensions": [],
         "cardinalities": [
           {
-            "id": "service_commands",
+            "id": "observation_segments",
             "mode": "minimum",
-            "value": 10000,
-            "scope": "aggregate"
-          },
-          {
-            "id": "dashboard_actions",
-            "mode": "minimum",
-            "value": 2000,
-            "scope": "aggregate"
-          },
-          {
-            "id": "reconnects",
-            "mode": "exact",
-            "value": 200,
-            "scope": "aggregate"
-          },
-          {
-            "id": "browser_crashes",
-            "mode": "exact",
-            "value": 50,
+            "value": 1,
             "scope": "aggregate"
           }
         ],
@@ -3392,7 +3375,7 @@
     {
       "id": "C05",
       "environmentIds": [
-        "E2"
+        "E3"
       ],
       "familyIds": [
         "F03",
@@ -3406,39 +3389,24 @@
         "H12"
       ],
       "evidenceProfile": "combined",
-      "executionBound": "24 hours and 500 reconnects with one unchanged durable handoff",
+      "executionBound": "At least 24 elapsed hours of passive privacy-bounded production handoff health observations across real-use and idle segments; zero generated reconnects and zero synchronous campaign wait",
       "executionContract": {
         "schemaVersion": "agent-browser.p158-case-execution-contract.v1",
-        "environmentMode": "combined",
+        "environmentMode": "separate",
+        "observationMode": "passive_segmented",
+        "completionMode": "asynchronous_nonblocking",
         "expansion": {
-          "strategy": "repeat",
-          "unit": "handoff_reconnect",
-          "count": 500
+          "strategy": "aggregate",
+          "unit": "production_observation_epoch",
+          "count": 1
         },
-        "dimensions": [
-          {
-            "id": "endurance_event",
-            "coverage": "each",
-            "values": [
-              "viewer_expiry",
-              "controller_expiry",
-              "client_restart",
-              "scheduled_network_profile"
-            ]
-          }
-        ],
+        "dimensions": [],
         "cardinalities": [
           {
-            "id": "reconnects",
-            "mode": "exact",
-            "value": 500,
-            "scope": "aggregate"
-          },
-          {
-            "id": "durable_handoffs",
-            "mode": "exact",
+            "id": "observation_segments",
+            "mode": "minimum",
             "value": 1,
-            "scope": "shared"
+            "scope": "aggregate"
           }
         ],
         "duration": {

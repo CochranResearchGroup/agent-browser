@@ -239,13 +239,13 @@ process.stdout.write('PASS refuses descriptor-only dashboard and expiry executio
 
 const workflow = await readFile('.github/workflows/p158-w9-endurance.yml', 'utf8');
 const segmentWorkflow = await readFile('.github/workflows/p158-w9-endurance-segment.yml', 'utf8');
-assert.match(workflow, /c04-segment-1:/);
-assert.match(workflow, /c04-segment-2:/);
-for (let index = 1; index <= 6; index += 1) assert.match(workflow, new RegExp(`c05-segment-${index}:`));
-assert.match(workflow, /if: always\(\)/);
-assert.match(workflow, /Bind dispatch to this workflow run/);
-assert.match(workflow, /finalize:[\s\S]*Verify reviewed commit/);
-assert.match(segmentWorkflow, /timeout-minutes: 250/);
+assert.match(workflow, /schedule-passive-observation:/);
+assert.match(workflow, /performs no elapsed-time wait/);
+assert.match(segmentWorkflow, /validate-passive-segment:/);
+assert.match(segmentWorkflow, /No browser action, reconnect, repair, installation block, or synchronous wait/);
+assert(!workflow.includes('c04-segment-1:'));
+assert(!workflow.includes('c05-segment-1:'));
+assert(!segmentWorkflow.includes('timeout-minutes: 250'));
 assert(!workflow.includes('continue-on-error'));
 assert(!segmentWorkflow.includes('continue-on-error'));
 const runnerSource = await readFile('scripts/run-p158-w9-endurance.js', 'utf8');
@@ -267,4 +267,4 @@ const sourceBound = bindP158W9EnduranceDispatchTemplate({
 });
 assert.equal(sourceBound.workflowRunId, '987654321');
 assert.equal(sourceBound.workflowRunAttempt, 2);
-process.stdout.write('PASS binds the reviewed workflows runner and finalizer sources before the shared barrier\n');
+process.stdout.write('PASS retires active endurance workflows in favor of passive nonblocking observation\n');

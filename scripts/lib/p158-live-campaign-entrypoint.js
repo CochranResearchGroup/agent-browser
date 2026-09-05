@@ -554,7 +554,7 @@ export async function runP158LiveCampaignEntrypoint({
   const liveHooks = hooksLoaded.value;
   const runtimeIdentity = runtimeLoaded.value;
   verifyFrozenAuthorities({ descriptor, manifest, manifestBytes: manifestLoaded.bytes, freeze, schedule, phasePreparation, liveHooks, runtimeIdentity });
-  if (!testing && (schedule.caseCount !== 54 || schedule.attemptCount !== 1592 || schedule.attempts.length !== 1592)) {
+  if (!testing && (schedule.caseCount !== 54 || schedule.attemptCount !== 894 || schedule.attempts.length !== 894)) {
     fail('schedule_identity_drift', 'A live P158 campaign requires the exact 54-case, 1,592-attempt schedule');
   }
   await verifyCandidateAndSources({ descriptor, manifest, liveHooks, sourceCommitReadback });

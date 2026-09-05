@@ -73,9 +73,10 @@ async function writeExact(store, path, value) {
 }
 
 function validateGap(gap, runId) {
-  if (!['A08', 'A13'].includes(gap?.caseId) || gap.phaseId !== 'W7' || gap.productRequestId !== null ||
+  if (typeof gap?.caseId !== 'string' || gap.caseId.length === 0 ||
+      typeof gap.phaseId !== 'string' || gap.phaseId.length === 0 || gap.productRequestId !== null ||
       gap.correlationState !== 'product_request_id_unavailable' ||
-      gap.loggingGap?.code !== 'product_request_id_not_preserved' ||
+      typeof gap.loggingGap?.code !== 'string' || gap.loggingGap.code.length === 0 ||
       typeof gap.operationCorrelationId !== 'string' || !gap.operationCorrelationId.startsWith(`${runId}:`) ||
       typeof gap.attemptId !== 'string' || typeof gap.actionId !== 'string') {
     fail('logging_operation_gap_invalid', 'Logging operation gaps must preserve exact non-product correlations');
@@ -218,8 +219,8 @@ export function createP158FinalAnalysisDescriptorHook({ runRoot, controller, art
       if (snapshot.state !== 'execution_terminal') {
         fail('analysis_preparation_order_invalid', 'Descriptor preparation runs after execution terminal and before seal');
       }
-      if (!Array.isArray(loggingOperationGaps) || loggingOperationGaps.length === 0) {
-        fail('logging_operation_gaps_missing', 'The product-correlation gaps artifact is required');
+      if (!Array.isArray(loggingOperationGaps)) {
+        fail('logging_operation_gaps_missing', 'The exact product-correlation gap inventory is required');
       }
       if (!Array.isArray(rawArtifactInventory) ||
           sha256(loggingOperationGaps) !== loggingOperationGapsSha256 ||

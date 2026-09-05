@@ -21,7 +21,6 @@ import {
   createDistributedC01LiveHook,
   P158_W9_CASE_IDS,
 } from './p158-w9-campaign-orchestrator.js';
-import { validateP158W9EndurancePlanBinding } from './p158-w9-endurance.js';
 
 const SOURCE_PATH = 'scripts/lib/p158-w9-concrete-drivers.js';
 const SOURCE_SHA256 = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex');
@@ -32,7 +31,7 @@ const C01_SOURCE_SHA256 = createHash('sha256').update(readFileSync(
 
 export const P158_W9_MANIFEST_HOOK_IDS = Object.freeze([
   'w9.browser_crash', 'w9.external_dashboard_action', 'w9.external_handoff_reconnect',
-  'w9.service_command', 'w9.supervisor_transition',
+  'w9.passive_production_observation', 'w9.service_command', 'w9.supervisor_transition',
 ]);
 
 const SERVICE_CLIENT_CALLS = Object.freeze([
@@ -100,12 +99,13 @@ function requiredKinds(caseId) {
     C01: ['service_command', 'dashboard_action', 'handoff_reconnect'],
     C02: ['service_command', 'dashboard_action', 'handoff_reconnect', 'declared_browser_crash'],
     C03: ['declared_supervisor_transition'],
-    C04: ['service_command', 'dashboard_action', 'handoff_reconnect', 'declared_browser_crash'],
-    C05: ['handoff_reconnect'],
+    C04: [],
+    C05: [],
   }[caseId];
 }
 
 function hookIds(caseId) {
+  if (['C04', 'C05'].includes(caseId)) return ['w9.passive_production_observation'];
   const ids = {
     service_command: 'w9.service_command',
     dashboard_action: 'w9.external_dashboard_action',
@@ -228,16 +228,15 @@ export function createP158W9ConcreteDriverBundle({
     const caseActions = actions.filter((action) => action.caseId === caseId);
     const missing = [];
     if (caseId === 'C01' && !c01Hook) missing.push('distributed_c01_live_driver');
-    if (['C04', 'C05'].includes(caseId)) {
-      const endurance = validateP158W9EndurancePlanBinding({
-        externalWorkflowPlan,
-        caseId,
-        actions: caseActions,
-        target,
-        caseWindow: caseWindows?.[caseId],
-      });
-      if (!endurance.valid) missing.push(`external_endurance_producer:${endurance.code}`);
-    }
+    if (['C04', 'C05'].includes(caseId) && (
+      caseActions.length !== 0 ||
+      caseWindows?.[caseId]?.environmentId !== 'E3' ||
+      caseWindows?.[caseId]?.observationMode !== 'passive_segmented' ||
+      caseWindows?.[caseId]?.completionMode !== 'asynchronous_nonblocking' ||
+      caseWindows?.[caseId]?.minimumDurationSeconds !== (caseId === 'C04' ? 28_800 : 86_400) ||
+      caseWindows?.[caseId]?.productionActionsGenerated !== false ||
+      caseWindows?.[caseId]?.blocksInstallationOrRepair !== false
+    )) missing.push('passive_production_observation_descriptor');
     for (const action of caseActions) {
       if (caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind) && !external.has(action.actionId)) {
         missing.push(`external_workflow:${action.actionId}`);
@@ -247,7 +246,9 @@ export function createP158W9ConcreteDriverBundle({
       }
     }
     classification.set(caseId, {
-      mode: missing.length === 0 ? 'concrete_live' : 'explicit_blocked',
+      mode: missing.length === 0
+        ? ['C04', 'C05'].includes(caseId) ? 'passive_observer' : 'concrete_live'
+        : 'explicit_blocked',
       blocker: missing.length === 0 ? null : {
         code: 'live_case_hook_missing', detail: missing.sort().join(','),
       },
@@ -360,6 +361,28 @@ export function createP158W9ConcreteDriverBundle({
     return { ...body, receiptSha256: canonicalW9ReceiptDigest(body) };
   }
 
+  async function schedulePassiveObservation({ caseId }) {
+    const window = caseWindows?.[caseId];
+    if (!['C04', 'C05'].includes(caseId) || window?.observationMode !== 'passive_segmented' ||
+        window?.completionMode !== 'asynchronous_nonblocking' || window?.environmentId !== 'E3' ||
+        window?.minimumDurationSeconds !== (caseId === 'C04' ? 28_800 : 86_400) ||
+        window?.productionActionsGenerated !== false || window?.blocksInstallationOrRepair !== false) {
+      fail('passive_observation_binding_invalid', `${caseId} lacks its passive nonblocking E3 descriptor`);
+    }
+    const body = {
+      schemaVersion: 'agent-browser.p158-production-observation-descriptor.v1',
+      planId: 'P158', runId: target.runId, caseId, environmentId: 'E3',
+      minimumDurationSeconds: caseId === 'C04' ? 28_800 : 86_400,
+      observationMode: 'passive_segmented', completionMode: 'asynchronous_nonblocking',
+      segmentBoundaryTriggers: ['install', 'repair', 'restart', 'deployment'],
+      interventionAllowed: true, productionActionsGenerated: false,
+      blocksInstallationOrRepair: false, waitPerformed: false,
+      retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false,
+    };
+    const evidence = await writeEvidence(artifactStore, { actionId: `${caseId}:passive-observation` }, body);
+    return { ...body, evidenceArtifactIds: [evidence.artifactId], descriptorSha256: sha256(body) };
+  }
+
   const drivers = {
     enduranceCaseWindowsSha256: sha256({ C04: caseWindows?.C04 ?? null, C05: caseWindows?.C05 ?? null }),
     executeDistributedC01: c01Hook,
@@ -368,6 +391,7 @@ export function createP158W9ConcreteDriverBundle({
     executeExternalHandoffReconnect: executeExternal,
     executeDeclaredBrowserCrash: executeTransition,
     executeDeclaredSupervisorTransition: executeTransition,
+    schedulePassiveObservation,
     executeScheduledTeardown,
     async verifyEvidenceArtifact(artifactId) {
       if (!artifactId.startsWith('w9:')) return false;
@@ -382,6 +406,7 @@ export function createP158W9ConcreteDriverBundle({
       ['executeExternalHandoffReconnect', SOURCE_PATH],
       ['executeDeclaredBrowserCrash', SOURCE_PATH],
       ['executeDeclaredSupervisorTransition', SOURCE_PATH],
+      ['schedulePassiveObservation', SOURCE_PATH],
       ['executeScheduledTeardown', SOURCE_PATH],
       ['verifyEvidenceArtifact', SOURCE_PATH],
     ].map(([method, sourcePath]) => [method, {
@@ -448,7 +473,7 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
     const exactBlocker = classified.blocker === null ? null : Object.freeze({
       ...clone(classified.blocker), sourcePath: bundle.sourcePath, sourceSha256: bundle.sourceSha256,
     });
-    effects[effectId] = async (payload) => {
+    if (effectId) effects[effectId] = async (payload) => {
       const actionIds = payload?.actionIds ?? [];
       const actions = actionIds.map((actionId) => bundle.actions.find((action) => action.actionId === actionId));
       if (actions.some((action) => !action || action.caseId !== caseId)) {
@@ -486,6 +511,16 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
           requestedEffects: [], retryDisposition: 'prohibited_opportunistic_retry', repairAttempted: false, retryAttempted: false,
           garbageCollectionAttempted: false,
         };
+        if (classified.mode === 'passive_observer') {
+          const observation = await bundle.drivers.schedulePassiveObservation({ caseId, attempt: clone(attempt) });
+          return {
+            resultState: 'inconclusive', effectState: 'no_effect',
+            observationState: 'scheduled_async', observationDescriptorSha256: observation.descriptorSha256,
+            evidenceArtifactIds: observation.evidenceArtifactIds,
+            retryDisposition: 'not_applicable', retryAttempted: false, repairAttempted: false,
+            garbageCollectionAttempted: false,
+          };
+        }
         const actionIds = bundle.actions.filter((action) => action.attemptId === attempt.attemptId).map((action) => action.actionId);
         const receipt = await requestEffect(effectId, { actionIds });
         return { ...clone(receipt), actionIds, retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false };
@@ -498,6 +533,7 @@ export function createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookMan
       implementedActionCount: classified.mode === 'concrete_live' ? count : 0,
       blockedActionCount: classified.mode === 'concrete_live' ? 0 : count,
       effectsAllowed: classified.mode === 'concrete_live', blocker: clone(classified.blocker),
+      observationScheduled: classified.mode === 'passive_observer',
     };
     const adapter = {
       ...base, executionMode: classified.mode, providerFree: false,

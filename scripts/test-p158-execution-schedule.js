@@ -87,9 +87,9 @@ const second = compileP158ExecutionSchedule({ registry, seed: 'frozen-seed' });
 assert.deepEqual(first, second);
 assert.deepEqual(registry, originalRegistry, 'compiler mutated the frozen registry');
 assert.equal(first.caseCount, 54);
-assert.equal(first.attemptCount, 1592);
-assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 1592);
-assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 1592);
+assert.equal(first.attemptCount, 894);
+assert.equal(new Set(first.attempts.map((entry) => entry.attemptId)).size, 894);
+assert.equal(new Set(first.attempts.map((entry) => entry.seed)).size, 894);
 assert.deepEqual([...new Set(first.attempts.map((entry) => entry.phaseId))], ['W7', 'W8', 'W9']);
 assert.deepEqual(first.environments.map((entry) => entry.environmentId), ['E0', 'E1', 'E2', 'E3']);
 
@@ -163,7 +163,7 @@ const expandedCases = {
   A02: 20, A05: 6, A13: 25, A14: 5,
   H03: 4, H05: 3, H09: 7, H10: 3, H12: 500,
   X07: 25, X08: 6, X10: 6, D02: 8,
-  C01: 10, C02: 100, C03: 25, C04: 200, C05: 500,
+  C01: 10, C02: 100, C03: 25, C04: 1, C05: 1,
 };
 for (const testCase of registry.cases) {
   assert.equal(testCase.executionContract.expansion.count, expandedCases[testCase.id] ?? 1,
@@ -171,12 +171,13 @@ for (const testCase of registry.cases) {
 }
 for (const [caseId, environmentId, repetitions] of [
   ['A02', 'E0', 20], ['A02', 'E1', 20], ['A13', 'E1', 25],
-  ['H12', 'E2', 500], ['C05', 'E2', 500],
+  ['H12', 'E2', 500], ['C04', 'E3', 1], ['C05', 'E3', 1],
 ]) {
   assert.equal(attemptsFor(first, caseId, environmentId).length, repetitions);
 }
 assert.equal(assignedTotal(attemptsFor(first, 'H12', 'E2'), 'reconnects'), 500);
-assert.equal(assignedTotal(attemptsFor(first, 'C05', 'E2'), 'reconnects'), 500);
+assert.equal(assignedTotal(attemptsFor(first, 'C04', 'E3'), 'observation_segments'), 1);
+assert.equal(assignedTotal(attemptsFor(first, 'C05', 'E3'), 'observation_segments'), 1);
 assert.deepEqual(registryCases.get('H12').executionContract.duration,
   { mode: 'minimum', seconds: 86400 });
 assert.deepEqual(registryCases.get('C05').executionContract.duration,
@@ -184,8 +185,6 @@ assert.deepEqual(registryCases.get('C05').executionContract.duration,
 for (const [caseId, environmentId, lastOffset] of [
   ['H12', 'E2', 86400],
   ['C01', 'E1', 1200],
-  ['C04', 'E2', 28800],
-  ['C05', 'E2', 86400],
 ]) {
   const attempts = attemptsFor(first, caseId, environmentId);
   assert.equal(attempts[0].executionUnit.plannedOffsetSeconds, 0);
@@ -204,7 +203,6 @@ assert.equal(assignedTotal(c01, 'dashboard_actions'), 50);
 assert.equal(assignedTotal(c01, 'reconnects'), 10);
 for (const [caseId, repetitions, totals] of [
   ['C02', 100, { service_commands: 2000, dashboard_actions: 500, reconnects: 100, browser_crashes: 20 }],
-  ['C04', 200, { service_commands: 10000, dashboard_actions: 2000, reconnects: 200, browser_crashes: 50 }],
 ]) {
   const combinedAttempts = first.attempts.filter((attempt) => attempt.caseId === caseId);
   assert.equal(combinedAttempts.length, repetitions);
@@ -213,6 +211,14 @@ for (const [caseId, repetitions, totals] of [
   for (const [cardinalityId, total] of Object.entries(totals)) {
     assert.equal(assignedTotal(combinedAttempts, cardinalityId), total);
   }
+}
+for (const caseId of ['C04', 'C05']) {
+  const [attempt] = first.attempts.filter((entry) => entry.caseId === caseId);
+  assert.equal(attempt.executionMode, 'passive_observer');
+  assert.deepEqual(attempt.environmentIds, ['E3']);
+  assert.deepEqual(attempt.declaredEffectIds, []);
+  assert.deepEqual(attempt.cardinalityAllocations[0].actionIds, []);
+  assert.equal(attempt.executionUnit.plannedOffsetSeconds, 0);
 }
 const a15 = first.attempts.filter((attempt) => attempt.caseId === 'A15');
 assert.equal(a15.length, 1);
@@ -266,13 +272,14 @@ const bridged = compileP158ControllerScheduleInput({
   seed: 'bridge-seed',
   adapters,
 });
-assert.equal(bridged.executionSchedule.attemptCount, 1592);
-assert.equal(bridged.controllerSchedule.length, 1592);
+assert.equal(bridged.executionSchedule.attemptCount, 894);
+assert.equal(bridged.controllerSchedule.length, 894);
 assert.deepEqual(bridged.controllerSchedule[0], {
   caseId: bridged.executionSchedule.attempts[0].caseId,
   attemptId: bridged.executionSchedule.attempts[0].attemptId,
   environmentId: bridged.executionSchedule.attempts[0].environmentId,
   environmentIds: bridged.executionSchedule.attempts[0].environmentIds,
+  executionMode: bridged.executionSchedule.attempts[0].executionMode,
   seed: bridged.executionSchedule.attempts[0].seed,
   dependsOn: bridged.executionSchedule.attempts[0].dependsOnAttemptIds,
   preExecutionBlocker: null,
@@ -291,6 +298,12 @@ for (const [code, mutate] of [
   }],
   ['execution_contract_environment_mode_invalid', (draft) => {
     draft.cases[0].executionContract.environmentMode = 'unknown';
+  }],
+  ['execution_contract_observation_mode_invalid', (draft) => {
+    draft.cases.find((entry) => entry.id === 'C04').executionContract.completionMode = 'synchronous';
+  }],
+  ['passive_observation_contract_invalid', (draft) => {
+    draft.cases.find((entry) => entry.id === 'C04').environmentIds = ['E2'];
   }],
 ]) {
   const draft = structuredClone(registry);

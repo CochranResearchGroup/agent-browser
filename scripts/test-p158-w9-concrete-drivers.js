@@ -16,7 +16,6 @@ import {
   p158W9HookManifestEntries,
   P158_W9_MANIFEST_HOOK_IDS,
 } from './lib/p158-w9-concrete-drivers.js';
-import { buildP158W9EnduranceDispatch } from './lib/p158-w9-endurance.js';
 
 const registry = JSON.parse(await readFile(
   new URL('../docs/dev/contracts/p158-historical-failure-registry.v1.json', import.meta.url), 'utf8',
@@ -61,8 +60,6 @@ function externalReceipt(action, workflowPlanSha256) {
 }
 
 function plans({ omitActionId = null } = {}) {
-  const allExternalActions = actions.filter((action) =>
-    action.caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind));
   const externalActions = actions.filter((action) =>
     action.caseId !== 'C01' && ['dashboard_action', 'handoff_reconnect'].includes(action.kind) &&
     action.actionId !== omitActionId);
@@ -74,80 +71,6 @@ function plans({ omitActionId = null } = {}) {
     repairAllowed: false, retryAllowed: false, garbageCollectionAllowed: false,
     actions: externalActions.map((action) => ({ actionId: action.actionId, receiptPath: `/evidence/${action.actionId}.json` })),
   };
-  const producer = {
-    workflowPath: '.github/workflows/p158-w9-endurance.yml', workflowSha256: '66'.repeat(32),
-    segmentWorkflowPath: '.github/workflows/p158-w9-endurance-segment.yml', segmentWorkflowSha256: '65'.repeat(32),
-    runnerPath: 'scripts/run-p158-w9-endurance.js', runnerSha256: '77'.repeat(32),
-    libraryPath: 'scripts/lib/p158-w9-endurance.js', librarySha256: '88'.repeat(32),
-    preparationWorkflowPath: '.github/workflows/p158-w9-endurance-preparation.yml', preparationWorkflowSha256: '89'.repeat(32),
-    preparationRunnerPath: 'scripts/run-p158-w9-endurance-preparation.js', preparationRunnerSha256: '90'.repeat(32),
-    preparationLibraryPath: 'scripts/lib/p158-w9-endurance-preparation.js', preparationLibrarySha256: '91'.repeat(32),
-  };
-  external.enduranceProducer = {
-    workflowSourceSha256: producer.workflowSha256,
-    segmentWorkflowSourceSha256: producer.segmentWorkflowSha256,
-    runnerSourceSha256: producer.runnerSha256,
-    librarySourceSha256: producer.librarySha256,
-    postconditionPreparationSha256ByCase: {},
-    preparationWorkflowSourceSha256: producer.preparationWorkflowSha256,
-    preparationRunnerSourceSha256: producer.preparationRunnerSha256,
-    preparationLibrarySourceSha256: producer.preparationLibrarySha256,
-  };
-  external.enduranceDispatches = Object.fromEntries(['C04', 'C05'].map((caseId) => {
-    const preparedActions = allExternalActions.filter((action) => action.caseId === caseId).map((action) => ({
-      ...action,
-      ...(action.kind === 'dashboard_action' ? { postcondition: {
-        kind: 'pixel_region_transition', region: { x: 10, y: 10, width: 20, height: 20 },
-        beforeSha256: 'ab'.repeat(32), afterSha256: 'cd'.repeat(32),
-      } } : {}),
-    }));
-    const events = caseId === 'C05' ? {
-      viewer_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '10'.repeat(32),
-        viewerRole: 'viewer', fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
-      controller_expiry: { kind: 'authoritative_lease_expiry', leaseIdSha256: '20'.repeat(32),
-        viewerRole: 'controller', fromState: 'active', toState: 'expired', baselineGeneration: 1, timeoutMs: 60_000 },
-      client_restart: { kind: 'retained_identity_reopen', retainedIdentitySha256: target().retainedIdentitySha256 },
-      scheduled_network_profile: { kind: 'offline_failure_then_unchanged_handoff_recovery' },
-    } : {};
-    const artifactCount = preparedActions.filter((action) => action.kind === 'dashboard_action').length * 2 +
-      (caseId === 'C05' ? 2 : 0);
-    const preparationBody = {
-      schemaVersion: 'agent-browser.p158-w9-endurance-postcondition-preparation.v1', planId: 'P158', caseId,
-      runId: target().runId, sourceCommit: 'a'.repeat(40), candidateSha256: target().candidateSha256,
-      scheduleSha256: schedule.scheduleSha256, handoffUrlSha256: target().handoffUrlSha256,
-      retainedIdentitySha256: target().retainedIdentitySha256, syntheticFixtureAttestationSha256: '41'.repeat(32),
-      externalRunnerIdentitySha256: '43'.repeat(32), preparedAt: '2026-09-03T00:00:00.000Z',
-      workflowRunId: '111111', workflowRunAttempt: 1, workflowJob: 'prepare-postconditions',
-      externalIngress: true, providerFree: false, syntheticOnly: true,
-      dashboardActionCount: preparedActions.filter((action) => action.kind === 'dashboard_action').length,
-      actionPostconditionsSha256: sha256(preparedActions.filter((action) => action.kind === 'dashboard_action')
-        .map((action) => ({ actionId: action.actionId, postcondition: action.postcondition }))),
-      leaseBaselines: [], eventPostconditionsSha256: sha256(events),
-      artifactReceipts: Array.from({ length: artifactCount }, (_, index) => ({
-        artifactId: `preparation-${caseId}-${index}`, relativePath: `preparation-${index}.png`,
-        sha256: 'ef'.repeat(32), byteCount: 1,
-      })), retryAttempted: false, repairAttempted: false, garbageCollectionAttempted: false,
-    };
-    return [caseId, buildP158W9EnduranceDispatch({
-      caseId, runId: target().runId, sourceCommit: 'a'.repeat(40),
-      workflowRunId: target().workflowRunId, workflowRunAttempt: target().workflowRunAttempt,
-      candidateSha256: target().candidateSha256, scheduleSha256: schedule.scheduleSha256,
-      handoffUrlSha256: target().handoffUrlSha256,
-      retainedIdentitySha256: target().retainedIdentitySha256,
-      externalVantageAggregateSha256: target().externalVantageAggregateSha256,
-      externalHandoffOracleSha256: target().externalHandoffOracleSha256,
-      postconditionPreparationSha256: '42'.repeat(32),
-      startAt: caseId === 'C04' ? '2026-09-04T00:00:00.000Z' : '2026-09-05T00:00:00.000Z',
-      actions: preparedActions, eventPostconditions: events,
-      postconditionPreparation: { ...preparationBody, postconditionPreparationSha256: sha256(preparationBody) },
-      producer,
-      receiptRoot: `/evidence/${caseId}`,
-    })];
-  }));
-  external.enduranceProducer.postconditionPreparationSha256ByCase = Object.fromEntries(
-    Object.entries(external.enduranceDispatches).map(([caseId, dispatch]) =>
-      [caseId, dispatch.postconditionPreparationSha256]),
-  );
   external.planSha256 = canonicalW9PlanDigest(external);
   for (let index = 0; index < external.actions.length; index += 1) {
     external.actions[index].receipt = externalReceipt(externalActions[index], external.planSha256);
@@ -190,6 +113,17 @@ function transitionPrimitives() {
   };
 }
 
+function passiveWindows() {
+  return {
+    C04: { environmentId: 'E3', observationMode: 'passive_segmented',
+      completionMode: 'asynchronous_nonblocking', minimumDurationSeconds: 28_800,
+      productionActionsGenerated: false, blocksInstallationOrRepair: false },
+    C05: { environmentId: 'E3', observationMode: 'passive_segmented',
+      completionMode: 'asynchronous_nonblocking', minimumDurationSeconds: 86_400,
+      productionActionsGenerated: false, blocksInstallationOrRepair: false },
+  };
+}
+
 function makeBundle({ testing, omitActionId = null, targetOverride = null, fetchOverride = null,
   caseWindowsOverride = null } = {}) {
   const prepared = plans({ omitActionId });
@@ -197,10 +131,7 @@ function makeBundle({ testing, omitActionId = null, targetOverride = null, fetch
     schedule, target: targetOverride ?? target(), artifactStore: createMemoryArtifactStore(),
     externalWorkflowPlan: prepared.external, declaredTransitionPlan: prepared.transition,
     c01: c01(), testing,
-    caseWindows: caseWindowsOverride ?? {
-      C04: { startAt: '2026-09-04T00:00:00.000Z', endAt: '2026-09-04T08:00:00.000Z' },
-      C05: { startAt: '2026-09-05T00:00:00.000Z', endAt: '2026-09-06T00:00:00.000Z' },
-    },
+    caseWindows: caseWindowsOverride ?? passiveWindows(),
     clock: { wallNow: () => '2026-09-03T12:00:00.000Z', monotonicNow: () => 1_000_000 },
   };
   if (testing) {
@@ -215,15 +146,17 @@ async function runTest(name, body) {
   catch (error) { error.message = `${name}: ${error.message}`; throw error; }
 }
 
-await runTest('classifies complete reviewed C01 through C05 plans as concrete live', async () => {
+await runTest('classifies deterministic cases as concrete and C04/C05 as passive nonblocking observers', async () => {
   const bundle = makeBundle({ testing: false });
   assert.equal(bundle.freezeEligible, true);
   const c01Binding = bundle.drivers.hookBindings.executeDistributedC01;
   assert.equal(c01Binding.sourcePath, 'scripts/run-p158-distributed-calibration-live.js');
   assert.equal(c01Binding.sourceSha256, sha256(await readFile(c01Binding.sourcePath)));
-  assert.deepEqual(Object.fromEntries(bundle.classification), Object.fromEntries(
-    ['C01', 'C02', 'C03', 'C04', 'C05'].map((caseId) => [caseId, { mode: 'concrete_live', blocker: null }])),
-  );
+  assert.deepEqual(Object.fromEntries(bundle.classification), {
+    C01: { mode: 'concrete_live', blocker: null }, C02: { mode: 'concrete_live', blocker: null },
+    C03: { mode: 'concrete_live', blocker: null }, C04: { mode: 'passive_observer', blocker: null },
+    C05: { mode: 'passive_observer', blocker: null },
+  });
   assert.equal(bundle.loggingRequestExpectations.length, bundle.actions.length);
   assert.ok(bundle.loggingRequestExpectations.filter((entry) => entry.requestKind === 'dashboard_action')
     .every((entry) => ['ingress_request', 'immediate_response', 'terminal_event', 'dashboard_projection']
@@ -236,10 +169,21 @@ await runTest('classifies complete reviewed C01 through C05 plans as concrete li
   });
   assert.equal(entries.adapters.length, 5);
   assert.equal(entries.adapterBindings.length, 5);
-  assert.ok(entries.adapterBindings.every((entry) => entry.mode === 'concrete_live' &&
+  assert.ok(entries.adapterBindings.slice(0, 3).every((entry) => entry.mode === 'concrete_live' &&
     entry.effectsAllowed === true && entry.blockedActionCount === 0));
+  assert.ok(entries.adapterBindings.slice(3).every((entry) => entry.mode === 'passive_observer' &&
+    entry.effectsAllowed === false && entry.observationScheduled === true && entry.blockedActionCount === 0));
   assert.deepEqual(entries.adapterBindings.map((entry) => entry.implementedActionCount),
-    [560, 2620, 25, 12250, 500]);
+    [560, 2620, 25, 0, 0]);
+  for (const caseId of ['C04', 'C05']) {
+    const result = await entries.adapters.find((entry) => entry.caseId === caseId).execute({
+      attempt: schedule.attempts.find((attempt) => attempt.caseId === caseId),
+      requestEffect: async () => assert.fail('passive observation must not request a product effect'),
+    });
+    assert.equal(result.resultState, 'inconclusive');
+    assert.equal(result.observationState, 'scheduled_async');
+    assert.equal(result.effectState, 'no_effect');
+  }
   assert.deepEqual(p158W9HookManifestEntries().map((entry) => entry.hookId), P158_W9_MANIFEST_HOOK_IDS);
   assert.ok(p158W9HookManifestEntries().every((entry) =>
     entry.implementationKind === 'concrete_live' && /^[a-f0-9]{64}$/u.test(entry.sourceSha256)));
@@ -291,25 +235,23 @@ await runTest('rejects every unreviewed or non-development E1/E2 target variant'
 });
 
 await runTest('classifies a missing external action as exact zero-effect blocked case', async () => {
-  const missing = actions.find((action) => action.caseId === 'C05' && action.kind === 'handoff_reconnect');
+  const missing = actions.find((action) => action.caseId === 'C02' && action.kind === 'handoff_reconnect');
   const bundle = makeBundle({ testing: false, omitActionId: missing.actionId });
-  assert.equal(bundle.classification.get('C05').mode, 'explicit_blocked');
-  assert.match(bundle.classification.get('C05').blocker.detail, new RegExp(missing.actionId));
+  assert.equal(bundle.classification.get('C02').mode, 'explicit_blocked');
+  assert.match(bundle.classification.get('C02').blocker.detail, new RegExp(missing.actionId));
   const entries = createP158W9FreezeAdapterEntries({ schedule, bundle, liveHookManifestSha256: '66'.repeat(32) });
-  const binding = entries.adapterBindings.find((entry) => entry.caseId === 'C05');
+  const binding = entries.adapterBindings.find((entry) => entry.caseId === 'C02');
   assert.equal(binding.implementedActionCount, 0);
-  assert.equal(binding.blockedActionCount, 500);
+  assert.equal(binding.blockedActionCount, 2620);
   assert.equal(binding.effectsAllowed, false);
 });
 
-await runTest('keeps endurance blocked when its local and external windows differ', async () => {
-  const mismatchedWindows = {
-    C04: { startAt: '2026-09-04T00:00:01.000Z', endAt: '2026-09-04T08:00:01.000Z' },
-    C05: { startAt: '2026-09-05T00:00:00.000Z', endAt: '2026-09-06T00:00:00.000Z' },
-  };
+await runTest('keeps passive observation blocked when it could delay installation or repair', async () => {
+  const mismatchedWindows = passiveWindows();
+  mismatchedWindows.C04.blocksInstallationOrRepair = true;
   const bundle = makeBundle({ testing: true, caseWindowsOverride: mismatchedWindows });
   assert.equal(bundle.classification.get('C04').mode, 'explicit_blocked');
-  assert.match(bundle.classification.get('C04').blocker.detail, /external_endurance_producer/);
+  assert.match(bundle.classification.get('C04').blocker.detail, /passive_production_observation_descriptor/);
 });
 
 await runTest('classifies an unbound C01 live driver as explicit blocked', async () => {

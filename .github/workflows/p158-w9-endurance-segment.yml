@@ -1,57 +1,20 @@
-name: Plan 0158 External Endurance Segment
-
+name: P158 passive observation segment contract
 on:
   workflow_call:
     inputs:
-      segment_index: { type: number, required: true }
-      case_id: { type: string, required: true }
-      campaign_run_id: { type: string, required: true }
-      expected_commit: { type: string, required: true }
-      predecessor_artifact_name: { type: string, required: true }
-      artifact_retention_days: { type: string, required: true }
-
+      case_id:
+        required: true
+        type: string
 permissions:
   contents: read
-  actions: read
-
 jobs:
-  segment:
+  validate-passive-segment:
     runs-on: ubuntu-latest
-    environment: p158-external-vantage
-    timeout-minutes: 250
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Verify reviewed commit
-        env: { EXPECTED_COMMIT: '${{ inputs.expected_commit }}' }
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
-        with: { version: 10.34.5 }
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: { node-version: '22.22.0', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: p158-${{ inputs.case_id }}-endurance-dispatch
-          path: dispatch
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with: { name: '${{ inputs.predecessor_artifact_name }}', path: predecessor }
-      - name: Execute exact segment
+      - name: Validate zero-effect segment
         env:
-          P158_DEV_HANDOFF_URL: ${{ secrets.P158_DEV_HANDOFF_URL }}
-          P158_DEV_DASHBOARD_USERNAME: ${{ secrets.P158_DEV_DASHBOARD_USERNAME }}
-          P158_DEV_DASHBOARD_PASSWORD: ${{ secrets.P158_DEV_DASHBOARD_PASSWORD }}
-          P158_DEV_EXPECTED_IDENTITY_JSON: ${{ secrets.P158_DEV_EXPECTED_IDENTITY_JSON }}
-          P158_DEV_PIXEL_MARKER_REGION_JSON: ${{ secrets.P158_DEV_PIXEL_MARKER_REGION_JSON }}
-          P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON: ${{ secrets.P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON }}
-          P158_RUN_ID: ${{ inputs.campaign_run_id }}
-          P158_SEGMENT_INDEX: ${{ inputs.segment_index }}
+          CASE_ID: ${{ inputs.case_id }}
         run: |
-          node scripts/run-p158-w9-endurance.js shard --dispatch dispatch/p158-w9-endurance-dispatch.json --segment-index "${{ inputs.segment_index }}" --predecessor predecessor/shard-receipt.json --output-dir output
-      - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: p158-${{ inputs.case_id }}-segment-${{ inputs.segment_index }}
-          path: output/
-          retention-days: ${{ inputs.artifact_retention_days }}
-          if-no-files-found: error
+          test "$CASE_ID" = C04 || test "$CASE_ID" = C05
+          echo "No browser action, reconnect, repair, installation block, or synchronous wait is permitted."

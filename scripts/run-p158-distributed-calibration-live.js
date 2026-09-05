@@ -17,6 +17,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PREPARATION_PATH = 'distributed-c01/preparation.json';
 const LOCAL_RUN_PATH = 'distributed-c01/local-run.json';
 const FINAL_RESULT_PATH = 'distributed-c01/final-result.json';
+const MAX_SERVICE_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export const C01_READ_ONLY_ROTATION = Object.freeze([
   Object.freeze({ action: 'service_status', path: '/api/service/status' }),
@@ -229,22 +230,42 @@ export function createDevelopmentC01ServiceTransport({ preparation, fetch: fetch
       const before = clock.monotonicNow();
       let response;
       let body;
+      let httpStatus = null;
+      let responseBodyEvidence = null;
+      let transportStage = 'request_fetch';
       try {
         response = await fetchImpl(url, {
           method: 'GET', redirect: 'error', cache: 'no-store',
           headers: { accept: 'application/json', 'x-agent-browser-client-id': request.clientId },
         });
+        httpStatus = Number.isInteger(response?.status) ? response.status : null;
+        transportStage = 'redirect_validation';
         if (response.redirected || new URL(response.url).href !== new URL(url).href) {
           throw Object.assign(new Error('Service command redirected'), { code: 'service_command_redirected' });
         }
-        body = await response.json();
+        transportStage = 'response_body_read';
+        const rawBody = await readBoundedServiceResponseBytes(response);
+        responseBodyEvidence = classifyServiceResponseBody(rawBody, {
+          httpStatus,
+          contentType: response.headers?.get?.('content-type') ?? null,
+        });
+        if (responseBodyEvidence.bodyClass === 'json') {
+          body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawBody));
+        } else if (response.ok) {
+          transportStage = 'response_body_parse';
+          throw Object.assign(new Error('Successful Service response was not JSON'), {
+            code: 'service_response_non_json',
+          });
+        }
       } catch (error) {
         const observedAt = clock.wallNow();
         const observedMonotonicTimeNanoseconds = clock.monotonicNow();
         const result = {
           state: 'failed', effectClass: 'read_only', attempt: 1,
           retryAttempted: false, repairAttempted: false,
-          httpStatus: response?.status ?? null,
+          httpStatus,
+          transportStage,
+          ...(responseBodyEvidence ? { responseBody: responseBodyEvidence } : {}),
           latencyMs: Math.max(0, Number(observedMonotonicTimeNanoseconds - before) / 1_000_000),
           observedAt,
           transportStartedMonotonicTimeNanoseconds: before.toString(),
@@ -262,11 +283,13 @@ export function createDevelopmentC01ServiceTransport({ preparation, fetch: fetch
         : body?.success === false
           ? { code: body.failure?.code ?? body.error?.code ?? 'service_response_failed', name: 'ServiceResponseError', message: body.failure?.message ?? body.error?.message ?? 'Service response failed' }
           : null;
+      transportStage = failure ? 'response_status' : 'complete';
       const observedAt = clock.wallNow();
       const observedMonotonicTimeNanoseconds = clock.monotonicNow();
       const result = {
         state: failure ? 'failed' : 'passed', effectClass: 'read_only', attempt: 1,
-        retryAttempted: false, repairAttempted: false, httpStatus: response.status,
+        retryAttempted: false, repairAttempted: false, httpStatus,
+        transportStage, responseBody: responseBodyEvidence,
         latencyMs: Math.max(0, Number(observedMonotonicTimeNanoseconds - before) / 1_000_000),
         observedAt,
         transportStartedMonotonicTimeNanoseconds: before.toString(),
@@ -280,6 +303,69 @@ export function createDevelopmentC01ServiceTransport({ preparation, fetch: fetch
       return result;
     },
   });
+}
+
+async function readBoundedServiceResponseBytes(response) {
+  const reader = response?.body?.getReader?.();
+  if (reader) {
+    const chunks = [];
+    let byteCount = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      byteCount += chunk.byteLength;
+      if (byteCount > MAX_SERVICE_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw Object.assign(new Error('Service response exceeded the evidence capture limit'), {
+          code: 'service_response_body_too_large',
+        });
+      }
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, byteCount);
+  }
+  if (typeof response?.arrayBuffer !== 'function') {
+    throw Object.assign(new Error('Service response body reader is unavailable'), {
+      code: 'service_response_body_unavailable',
+    });
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_SERVICE_RESPONSE_BYTES) {
+    throw Object.assign(new Error('Service response exceeded the evidence capture limit'), {
+      code: 'service_response_body_too_large',
+    });
+  }
+  return bytes;
+}
+
+function classifyServiceResponseBody(bytes, { httpStatus, contentType }) {
+  let rawBody = null;
+  try {
+    rawBody = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    // Invalid UTF-8 is retained only as an exact digest and byte count.
+  }
+  let bodyClass = 'non_json';
+  if (rawBody !== null) {
+    try {
+      JSON.parse(rawBody);
+      bodyClass = 'json';
+    } catch {
+    const normalized = rawBody.trim().toLowerCase();
+    const gatewayStatus = httpStatus === 502 || httpStatus === 504;
+    const looksHtml = /^<!doctype\s+html|^<html[\s>]/u.test(normalized) ||
+      String(contentType ?? '').toLowerCase().includes('text/html');
+    const gatewayPhrase = /\b(?:bad gateway|gateway timeout)\b/u.test(normalized);
+    if (gatewayStatus && looksHtml) bodyClass = 'gateway_html';
+    else if (gatewayStatus && gatewayPhrase) bodyClass = 'gateway_text';
+    }
+  }
+  return {
+    bodyClass,
+    sha256: sha256(bytes),
+    byteCount: bytes.byteLength,
+  };
 }
 
 export async function prepareLiveDistributedCalibration({ config, runRoot, fetch: fetchImpl, clock }) {

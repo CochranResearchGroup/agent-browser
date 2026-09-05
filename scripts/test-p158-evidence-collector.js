@@ -386,7 +386,7 @@ await runTest('assembles nineteen byte-bound preparation artifacts including the
     assert.equal(collected.input.artifacts.length, 19);
     assert.equal(new Set(collected.input.artifacts.map((artifact) => artifact.kind)).size, 19);
     assert.equal(collected.input.campaignMode, 'live');
-    assert.equal(collected.input.schedule.length, 1592);
+    assert.equal(collected.input.schedule.length, 894);
     for (const artifact of collected.input.artifacts) {
       const bytes = Buffer.from(artifact.content, 'base64');
       assert.equal(artifact.declaredSha256, sha256(bytes));
@@ -572,7 +572,7 @@ await runTest('persists only prepared and frozen state behind the explicit freez
     ), 'utf8'));
     assert.equal(validateCampaignManifest(manifest), true,
       schemaAjv.errorsText(validateCampaignManifest.errors));
-    assert.equal(manifest.schedule.length, 1592);
+    assert.equal(manifest.schedule.length, 894);
     const blockedAttempts = manifest.schedule.filter((attempt) => attempt.caseId === 'A01');
     assert(blockedAttempts.length > 0);
     assert(blockedAttempts.every((attempt) =>

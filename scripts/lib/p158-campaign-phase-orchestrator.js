@@ -184,13 +184,14 @@ export function buildP158CampaignPhasePreparation({
       ? bundles[attempt.phaseId].bindings.get(attempt.caseId)
       : w9Bindings.get(attempt.caseId) ?? null;
     const blocked = binding?.mode === 'explicit_blocked';
+    const passive = binding?.mode === 'passive_observer' || attempt.executionMode === 'passive_observer';
     const declaredActionIds = attempt.cardinalityAllocations?.flatMap((entry) => entry.actionIds) ?? [];
     const supplied = suppliedByAttempt.get(attempt.attemptId) ?? [];
     const operationGaps = gapsByAttempt.get(attempt.attemptId) ?? [];
-    if (blocked && (supplied.length > 0 || operationGaps.length > 0)) {
+    if ((blocked || passive) && (supplied.length > 0 || operationGaps.length > 0)) {
       fail('logging_request_expectations_incomplete', `${attempt.attemptId} is blocked but has executable request descriptors`);
     }
-    if (!blocked && (supplied.length + operationGaps.length < Math.max(1, declaredActionIds.length) ||
+    if (!blocked && !passive && (supplied.length + operationGaps.length < Math.max(1, declaredActionIds.length) ||
         new Set(supplied.map((entry) => entry.expectationId)).size !== supplied.length ||
         new Set(supplied.map((entry) => entry.operationCorrelationId)).size !== supplied.length ||
         declaredActionIds.some((actionId) => !supplied.some((entry) => entry.actionId === actionId) &&
@@ -203,7 +204,7 @@ export function buildP158CampaignPhasePreparation({
           (declaredActionIds.length > 0 && !declaredActionIds.includes(entry.actionId))))) {
       fail('logging_request_expectations_incomplete', `${attempt.attemptId} lacks exact pre-freeze request/action envelopes`);
     }
-    const descriptors = blocked
+    const descriptors = passive ? [] : blocked
       ? [...attempt.environmentIds].sort().map((environmentId) => ({
           expectationId: `${attempt.attemptId}:${environmentId}:blocked`, environmentId, actionId: null,
           operationCorrelationId: `p158:${runId}:${attempt.attemptId}:${environmentId}:blocked`,

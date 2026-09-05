@@ -213,6 +213,19 @@ assert.equal(sha256(await readFile(path.join(harness.runRoot, P158_FINAL_ANALYSI
 const analysis = await runP158FinalAnalysis({ descriptorPath: finalized.descriptorPath,
   descriptorSha256: finalized.descriptorSha256,
   clock: { wallNow: () => '2026-09-03T03:00:00.000Z' } });
+
+const emptyHarness = await createHarness();
+const emptyGaps = [];
+await addOperationGapArtifact(emptyHarness, emptyGaps);
+const emptyHook = createP158FinalAnalysisDescriptorHook({ runRoot: emptyHarness.runRoot,
+  controller: emptyHarness.controller, artifactStore: emptyHarness.store, authorities: emptyHarness.authorities,
+  loggingOperationGapsSha256: sha256(emptyGaps), loggingOperationGapCount: 0 });
+const emptyPreparation = await emptyHook.prepareBeforeSeal({
+  rawArtifactInventory: emptyHarness.rawArtifactInventory, loggingOperationGaps: emptyGaps });
+await emptyHarness.controller.sealEvidence();
+const emptyFinalized = await emptyHook.finalizeAfterSeal({ preparation: emptyPreparation });
+assert.equal(emptyFinalized.descriptor.files.artifacts.filter((entry) =>
+  entry.analysisRole === 'logging_operation_gaps').length, 1);
 assert.equal(analysis.controllerState, 'analyzed');
 
 const resumed = await hook.finalizeAfterSeal({ preparation });

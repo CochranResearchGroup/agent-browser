@@ -111,6 +111,22 @@ function validateExecutionContract(testCase) {
     fail('execution_contract_environment_mode_invalid',
       `${testCase.id} has an invalid execution environment mode`);
   }
+  const observationMode = contract.observationMode ?? 'active_stimulus';
+  const completionMode = contract.completionMode ?? 'synchronous';
+  if (!['active_stimulus', 'passive_segmented'].includes(observationMode) ||
+      !['synchronous', 'asynchronous_nonblocking'].includes(completionMode) ||
+      (observationMode === 'passive_segmented') !== (completionMode === 'asynchronous_nonblocking')) {
+    fail('execution_contract_observation_mode_invalid',
+      `${testCase.id} has an invalid observation and completion mode pairing`);
+  }
+  if (observationMode === 'passive_segmented' && (
+    testCase.environmentIds?.length !== 1 || testCase.environmentIds[0] !== 'E3' ||
+    contract.expansion.strategy !== 'aggregate' || contract.expansion.count !== 1 ||
+    contract.cardinalities.some((entry) => entry.id !== 'observation_segments')
+  )) {
+    fail('passive_observation_contract_invalid',
+      `${testCase.id} passive production observation must be one asynchronous E3 descriptor with no action cardinality`);
+  }
   const expansion = contract.expansion;
   if (!['aggregate', 'repeat', 'dimension'].includes(expansion?.strategy) ||
       !Number.isInteger(expansion?.count) || expansion.count < 1 ||
@@ -178,7 +194,7 @@ function cardinalityAllocations(contract, ordinal, attemptId) {
       assignedValue = cardinality.value;
       if (cardinality.scope === 'per_attempt') firstActionOrdinal = 1;
     }
-    const actionIds = firstActionOrdinal === null
+    const actionIds = firstActionOrdinal === null || contract.observationMode === 'passive_segmented'
       ? []
       : Array.from({ length: assignedValue }, (_, index) =>
         `${attemptId}:${cardinality.id}:${String(firstActionOrdinal + index).padStart(5, '0')}`);
@@ -342,7 +358,10 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
       environmentIds: [...new Set(testCase.environmentIds)].sort(),
       dependsOnCaseIds: [...new Set(testCase.dependsOn ?? [])].sort(),
       adapterId: adapterId(testCase.id),
-      declaredEffectIds: [effectId(testCase.id)],
+      executionMode: executionContract.observationMode === 'passive_segmented'
+        ? 'passive_observer' : 'active_stimulus',
+      declaredEffectIds: executionContract.observationMode === 'passive_segmented'
+        ? [] : [effectId(testCase.id)],
       reactionaryRepairAllowed: false,
       opportunisticRetryAllowed: false,
       undeclaredEffectsAllowed: false,
@@ -403,6 +422,7 @@ export function compileP158ExecutionSchedule({ registry, seed, adapters }) {
           adapterId: contract.adapterId,
           declaredEffectIds: contract.declaredEffectIds,
           externalIngressRequired: externalIngressRequired(contract, workloadEnvironmentIds),
+          executionMode: contract.executionMode,
           dependsOnCaseIds: contract.dependsOnCaseIds,
         };
       },
@@ -484,6 +504,7 @@ export function compileP158ControllerScheduleInput({ registry, seed, adapters })
       attemptId: attempt.attemptId,
       environmentId: attempt.environmentId,
       environmentIds: [...attempt.environmentIds],
+      executionMode: attempt.executionMode,
       seed: attempt.seed,
       dependsOn: [...attempt.dependsOnAttemptIds],
       preExecutionBlocker: null,
@@ -492,12 +513,13 @@ export function compileP158ControllerScheduleInput({ registry, seed, adapters })
 }
 
 export function createP158CaseAdapter({ caseId, evidenceProfile, executionContract, execute }) {
+  const passive = executionContract?.observationMode === 'passive_segmented';
   return {
     adapterId: adapterId(caseId),
     caseId,
     evidenceProfile,
     executionContractSha256: executionContract === undefined ? null : sha256(executionContract),
-    declaredEffectIds: [effectId(caseId)],
+    declaredEffectIds: passive ? [] : [effectId(caseId)],
     reactionaryRepairAllowed: false,
     opportunisticRetryAllowed: false,
     undeclaredEffectsAllowed: false,
