@@ -70,13 +70,24 @@ function dispatch() {
 
 function clockHarness(initial = START_MS - 60_000) {
   let now = initial;
+  let monotonic = BigInt(initial) * 1_000_000n;
+  const advanceWallTo = (value) => {
+    if (value > now) monotonic += BigInt(value - now) * 1_000_000n;
+    now = value;
+  };
   return {
     clock: {
       wallNow: () => new Date(now).toISOString(),
-      monotonicNow: () => now * 1_000_000,
+      monotonicNow: () => monotonic,
     },
-    scheduler: { waitUntil: async ({ wallTime }) => { now = Math.max(now, Date.parse(wallTime)); } },
-    advanceTo: (value) => { now = value; },
+    scheduler: { waitUntil: async ({ wallTime }) => { advanceWallTo(Math.max(now, Date.parse(wallTime))); } },
+    advanceTo: advanceWallTo,
+    adjustWallBy: (milliseconds) => { now += milliseconds; },
+    elapseBy: (milliseconds) => {
+      now += milliseconds;
+      monotonic += BigInt(milliseconds) * 1_000_000n;
+    },
+    advanceMonotonicBy: (milliseconds) => { monotonic += BigInt(milliseconds) * 1_000_000n; },
   };
 }
 
@@ -150,9 +161,16 @@ function serviceHarness(time) {
     transport: {
       executeReadOnlyCommand: async (request) => {
         calls.push(structuredClone(request));
+        const latencyMs = request.ordinal % 13 + 1;
+        const transportStartedMonotonicTimeNanoseconds = time.clock.monotonicNow();
+        time.elapseBy(latencyMs);
         return {
-          state: 'passed', effectClass: 'read_only', latencyMs: request.ordinal % 13 + 1,
-          observedAt: request.plannedAt, attempt: 1, retryAttempted: false, repairAttempted: false,
+          state: 'passed', effectClass: 'read_only', latencyMs,
+          observedAt: time.clock.wallNow(),
+          transportStartedMonotonicTimeNanoseconds:
+            transportStartedMonotonicTimeNanoseconds.toString(),
+          observedMonotonicTimeNanoseconds: time.clock.monotonicNow().toString(),
+          attempt: 1, retryAttempted: false, repairAttempted: false,
         };
       },
       startExecution: async () => { forbiddenCalls += 1; },
@@ -274,7 +292,127 @@ await runTest('preserves a Service retry claim as one failure and continues with
   const observations = JSON.parse(localRun.localObservationArtifact.content).observations;
   assert.equal(observations[8].state, 'failed');
   assert.equal(observations[8].failure.code, 'service_effect_contract_mismatch');
+  assert.equal(observations[8].observedAt, observations[8].timingEvidence.observedAt);
   assert.equal(service.forbiddenCalls, 0);
+});
+
+await runTest('records a backward wall correction without converting a valid effect into a failure', async () => {
+  const time = clockHarness();
+  const prepared = prepareDistributedC01Calibration(prepareInput(time.clock));
+  const service = serviceHarness(time);
+  const original = service.transport.executeReadOnlyCommand;
+  service.transport.executeReadOnlyCommand = async (request) => {
+    if (request.ordinal === 9) {
+      time.advanceMonotonicBy(200);
+      time.adjustWallBy(-500);
+      return {
+        state: 'passed', effectClass: 'read_only', latencyMs: 200,
+        observedAt: time.clock.wallNow(),
+        transportStartedMonotonicTimeNanoseconds:
+          (time.clock.monotonicNow() - 200_000_000n).toString(),
+        observedMonotonicTimeNanoseconds: time.clock.monotonicNow().toString(),
+        attempt: 1, retryAttempted: false, repairAttempted: false,
+      };
+    }
+    return original(request);
+  };
+  const localRun = await startDistributedC01Calibration({
+    prepared, serviceTransport: service.transport, scheduler: service.scheduler,
+    artifactStore: createMemoryArtifactStore(), clock: time.clock,
+  });
+  const observation = JSON.parse(localRun.localObservationArtifact.content).observations[8];
+  assert.equal(observation.state, 'passed');
+  assert.ok(Date.parse(observation.observedAt) < Date.parse(observation.plannedAt));
+  assert.equal(observation.timingEvidence.clockAdjustment.direction, 'backward');
+  assert.equal(observation.timingEvidence.clockAdjustment.milliseconds, -700);
+  assert.ok(Date.parse(observation.timingEvidence.monotonicProjectedObservedAt) >= Date.parse(observation.plannedAt));
+});
+
+await runTest('rejects a scheduler that releases an action before its wall deadline without an effect', async () => {
+  const time = clockHarness();
+  const prepared = prepareDistributedC01Calibration(prepareInput(time.clock));
+  const service = serviceHarness(time);
+  let waits = 0;
+  const earlyScheduler = {
+    waitUntil: async (request) => {
+      waits += 1;
+      if (waits === 1) await time.scheduler.waitUntil(request);
+    },
+  };
+  await assert.rejects(
+    () => startDistributedC01Calibration({
+      prepared, serviceTransport: service.transport, scheduler: earlyScheduler,
+      artifactStore: createMemoryArtifactStore(), clock: time.clock,
+    }),
+    (error) => error instanceof DistributedCalibrationError && error.code === 'scheduler_released_early',
+  );
+  assert.equal(service.calls.length, 1);
+});
+
+await runTest('keeps a forward wall overrun outside the frozen window actionable', async () => {
+  const time = clockHarness();
+  const prepared = prepareDistributedC01Calibration(prepareInput(time.clock));
+  const service = serviceHarness(time);
+  const original = service.transport.executeReadOnlyCommand;
+  service.transport.executeReadOnlyCommand = async (request) => {
+    if (request.ordinal === 9) {
+      time.advanceMonotonicBy(10);
+      time.advanceTo(END_MS + 1);
+      return {
+        state: 'passed', effectClass: 'read_only', latencyMs: 10,
+        observedAt: time.clock.wallNow(),
+        transportStartedMonotonicTimeNanoseconds:
+          (time.clock.monotonicNow() - 10_000_000n).toString(),
+        observedMonotonicTimeNanoseconds: time.clock.monotonicNow().toString(),
+        attempt: 1, retryAttempted: false, repairAttempted: false,
+      };
+    }
+    return original(request);
+  };
+  const localRun = await startDistributedC01Calibration({
+    prepared, serviceTransport: service.transport, scheduler: service.scheduler,
+    artifactStore: createMemoryArtifactStore(), clock: time.clock,
+  });
+  const observation = JSON.parse(localRun.localObservationArtifact.content).observations[8];
+  assert.equal(observation.state, 'failed');
+  assert.equal(observation.failure.code, 'service_effect_contract_mismatch');
+});
+
+await runTest('rejects forged, uncorrelated, or precision-losing response timing', async () => {
+  for (const defect of ['latency_mismatch', 'before_admission', 'unsafe_number']) {
+    const time = clockHarness();
+    const prepared = prepareDistributedC01Calibration(prepareInput(time.clock));
+    const service = serviceHarness(time);
+    const original = service.transport.executeReadOnlyCommand;
+    service.transport.executeReadOnlyCommand = async (request) => {
+      const response = await original(request);
+      if (request.ordinal !== 9) return response;
+      if (defect === 'latency_mismatch') {
+        const transportStarted = time.clock.monotonicNow();
+        time.advanceMonotonicBy(50);
+        return {
+          ...response,
+          latencyMs: 1,
+          transportStartedMonotonicTimeNanoseconds: transportStarted.toString(),
+          observedMonotonicTimeNanoseconds: time.clock.monotonicNow().toString(),
+        };
+      }
+      if (defect === 'before_admission') {
+        return { ...response, transportStartedMonotonicTimeNanoseconds: '0' };
+      }
+      return {
+        ...response,
+        observedMonotonicTimeNanoseconds: Number(response.observedMonotonicTimeNanoseconds),
+      };
+    };
+    const localRun = await startDistributedC01Calibration({
+      prepared, serviceTransport: service.transport, scheduler: service.scheduler,
+      artifactStore: createMemoryArtifactStore(), clock: time.clock,
+    });
+    const observation = JSON.parse(localRun.localObservationArtifact.content).observations[8];
+    assert.equal(observation.state, 'failed', defect);
+    assert.equal(observation.failure.code, 'service_effect_contract_mismatch', defect);
+  }
 });
 
 await runTest('rejects external evidence defects only during effect-free finalization', async () => {

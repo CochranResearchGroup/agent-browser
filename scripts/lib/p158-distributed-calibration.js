@@ -177,6 +177,76 @@ function normalizeFailure(error) {
   };
 }
 
+async function waitForScheduledWallTime({ scheduler, clock, wallTime, action }) {
+  await scheduler.waitUntil({ wallTime, action: clone(action) });
+  const admittedAt = clock.wallNow();
+  const admittedAtMs = Date.parse(admittedAt);
+  const admittedMonotonicNanoseconds = parseMonotonicNanoseconds(clock.monotonicNow());
+  if (!Number.isFinite(admittedAtMs) || admittedAtMs < Date.parse(wallTime) ||
+      admittedMonotonicNanoseconds === null) {
+    fail('scheduler_released_early', 'Scheduler released before the frozen wall-clock deadline', {
+      wallTime, admittedAt,
+    });
+  }
+  return {
+    admittedAt,
+    admittedAtMs,
+    admittedMonotonicNanoseconds,
+    admittedMonotonicTimeNanoseconds: admittedMonotonicNanoseconds.toString(),
+  };
+}
+
+function parseMonotonicNanoseconds(value) {
+  if (typeof value === 'bigint') return value >= 0n ? value : null;
+  if (typeof value === 'string' && /^\d+$/u.test(value)) return BigInt(value);
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  return null;
+}
+
+function timingEvidence({
+  plannedAt, admission, observedAt, observedMonotonicTimeNanoseconds,
+  transportStartedMonotonicTimeNanoseconds, latencyMs,
+}) {
+  const observedAtMs = Date.parse(observedAt);
+  const observedMonotonicNanoseconds = parseMonotonicNanoseconds(observedMonotonicTimeNanoseconds);
+  const transportStartedMonotonicNanoseconds = parseMonotonicNanoseconds(
+    transportStartedMonotonicTimeNanoseconds,
+  );
+  if (!Number.isFinite(observedAtMs) || observedMonotonicNanoseconds === null ||
+      transportStartedMonotonicNanoseconds === null ||
+      transportStartedMonotonicNanoseconds < admission.admittedMonotonicNanoseconds ||
+      observedMonotonicNanoseconds < transportStartedMonotonicNanoseconds) {
+    return null;
+  }
+  const monotonicElapsedMs = Number(
+    observedMonotonicNanoseconds - admission.admittedMonotonicNanoseconds,
+  ) / 1_000_000;
+  const transportElapsedMs = Number(
+    observedMonotonicNanoseconds - transportStartedMonotonicNanoseconds,
+  ) / 1_000_000;
+  if (!Number.isFinite(monotonicElapsedMs) || !Number.isFinite(transportElapsedMs) ||
+      (latencyMs !== undefined && Math.abs(transportElapsedMs - latencyMs) > 0.000001)) {
+    return null;
+  }
+  const projectedObservedAtMs = admission.admittedAtMs + monotonicElapsedMs;
+  const adjustmentMs = observedAtMs - projectedObservedAtMs;
+  return {
+    plannedAt,
+    admittedAt: admission.admittedAt,
+    admittedMonotonicTimeNanoseconds: admission.admittedMonotonicTimeNanoseconds,
+    observedAt,
+    transportStartedMonotonicTimeNanoseconds: transportStartedMonotonicNanoseconds.toString(),
+    observedMonotonicTimeNanoseconds: observedMonotonicNanoseconds.toString(),
+    monotonicElapsedMs,
+    transportElapsedMs,
+    monotonicProjectedObservedAt: new Date(projectedObservedAtMs).toISOString(),
+    clockAdjustment: {
+      direction: adjustmentMs < 0 ? 'backward' : adjustmentMs > 0 ? 'forward' : 'none',
+      milliseconds: adjustmentMs,
+    },
+  };
+}
+
 export async function startDistributedC01Calibration(input) {
   verifyPrepared(input.prepared);
   if (typeof input.serviceTransport?.executeReadOnlyCommand !== 'function' ||
@@ -192,9 +262,12 @@ export async function startDistributedC01Calibration(input) {
   if (!Number.isFinite(observedBeforeStart) || observedBeforeStart > startMs) {
     fail('late_local_start', 'Local Service calibration cannot start after the shared window begins');
   }
-  await input.scheduler.waitUntil({ wallTime: descriptor.calibrationStartAt, action: null });
-  const startedAt = input.clock.wallNow();
-  const startedMonotonicTimeNanoseconds = input.clock.monotonicNow();
+  const startAdmission = await waitForScheduledWallTime({
+    scheduler: input.scheduler, clock: input.clock,
+    wallTime: descriptor.calibrationStartAt, action: null,
+  });
+  const startedAt = startAdmission.admittedAt;
+  const startedMonotonicTimeNanoseconds = startAdmission.admittedMonotonicTimeNanoseconds;
   const observations = [];
   let activeSafetyStop = null;
   for (let ordinal = 1; ordinal <= SERVICE_COMMAND_COUNT; ordinal += 1) {
@@ -213,18 +286,28 @@ export async function startDistributedC01Calibration(input) {
       observations.push({ ...plan, attempt: 0, state: 'safety_stopped', safetyStop: clone(activeSafetyStop) });
       continue;
     }
-    await input.scheduler.waitUntil({ wallTime: plannedAt, action: clone(plan) });
+    const admission = await waitForScheduledWallTime({
+      scheduler: input.scheduler, clock: input.clock, wallTime: plannedAt, action: plan,
+    });
     const request = {
       ...clone(plan), attempt: 1, action: SERVICE_ACTIONS[(ordinal - 1) % SERVICE_ACTIONS.length],
       effectClass: 'read_only',
     };
+    let evidence = null;
     try {
       const response = await input.serviceTransport.executeReadOnlyCommand(request);
+      evidence = timingEvidence({
+        plannedAt, admission, observedAt: response?.observedAt,
+        observedMonotonicTimeNanoseconds: response?.observedMonotonicTimeNanoseconds,
+        transportStartedMonotonicTimeNanoseconds:
+          response?.transportStartedMonotonicTimeNanoseconds,
+        latencyMs: response?.latencyMs,
+      });
       if (!response || !['read_only', 'harmless'].includes(response.effectClass) ||
           response.attempt !== 1 || response.retryAttempted !== false || response.repairAttempted !== false ||
           !['passed', 'failed'].includes(response.state) || !Number.isFinite(response.latencyMs) ||
-          !Number.isFinite(Date.parse(response.observedAt)) || Date.parse(response.observedAt) < Date.parse(plannedAt) ||
-          Date.parse(response.observedAt) > endMs) {
+          response.latencyMs < 0 || !evidence || Date.parse(response.observedAt) > endMs ||
+          Date.parse(evidence.monotonicProjectedObservedAt) > endMs) {
         const error = new Error('Service response did not prove one harmless attempt');
         error.code = 'service_effect_contract_mismatch';
         throw error;
@@ -234,18 +317,34 @@ export async function startDistributedC01Calibration(input) {
         error.code = response.failure?.code ?? 'service_command_failed';
         throw error;
       }
-      observations.push({ ...plan, attempt: 1, state: 'passed', observedAt: response.observedAt, result: clone(response) });
+      observations.push({
+        ...plan, attempt: 1, state: 'passed', observedAt: response.observedAt,
+        timingEvidence: evidence, result: clone(response),
+      });
     } catch (error) {
-      observations.push({ ...plan, attempt: 1, state: 'failed', observedAt: input.clock.wallNow(), failure: normalizeFailure(error) });
+      const failureObservedAt = evidence?.observedAt ?? input.clock.wallNow();
+      const failureEvidence = evidence ?? timingEvidence({
+        plannedAt, admission, observedAt: failureObservedAt,
+        transportStartedMonotonicTimeNanoseconds: admission.admittedMonotonicTimeNanoseconds,
+        observedMonotonicTimeNanoseconds: input.clock.monotonicNow(),
+      });
+      observations.push({
+        ...plan, attempt: 1, state: 'failed', observedAt: failureObservedAt,
+        ...(failureEvidence ? { timingEvidence: failureEvidence } : {}), failure: normalizeFailure(error),
+      });
     }
   }
-  await input.scheduler.waitUntil({ wallTime: descriptor.calibrationEndAt, action: null });
-  const completedAt = input.clock.wallNow();
+  const endAdmission = await waitForScheduledWallTime({
+    scheduler: input.scheduler, clock: input.clock,
+    wallTime: descriptor.calibrationEndAt, action: null,
+  });
+  const completedAt = endAdmission.admittedAt;
   const localBody = {
     schemaVersion: 'agent-browser.p158-local-calibration-observations.v1',
     preparedSha256: prepared.preparedSha256, startedAt, completedAt,
     startedMonotonicTimeNanoseconds,
-    completedMonotonicTimeNanoseconds: input.clock.monotonicNow(), observations,
+    completedMonotonicTimeNanoseconds: endAdmission.admittedMonotonicTimeNanoseconds,
+    observations,
     safetyStop: activeSafetyStop, retryAttempted: false, repairAttempted: false,
   };
   const content = canonicalJson(localBody);

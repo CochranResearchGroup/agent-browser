@@ -17,6 +17,7 @@ import {
   finalizeLiveDistributedCalibration,
   LiveCalibrationError,
   prepareLiveDistributedCalibration,
+  realScheduler,
   runCli,
   startLiveDistributedCalibration,
 } from './run-p158-distributed-calibration-live.js';
@@ -110,7 +111,7 @@ function clockHarness(initial = START_MS - 60_000) {
   return {
     clock: {
       wallNow: () => new Date(now).toISOString(),
-      monotonicNow: () => now * 1_000_000,
+      monotonicNow: () => BigInt(now) * 1_000_000n,
     },
     scheduler: {
       waitUntil: async ({ wallTime }) => { now = Math.max(now, Date.parse(wallTime)); },
@@ -280,6 +281,12 @@ await runTest('runs the frozen one-shot GET rotation across 25 clients and both 
   assert.equal(failedTransport.attempt, 1);
   assert.equal(failedTransport.retryAttempted, false);
   assert.equal(failedTransport.repairAttempted, false);
+  const failedObservation = observations.find((entry) => entry.state === 'failed');
+  assert.equal(failedObservation.observedAt, failedObservation.timingEvidence.observedAt);
+  assert.equal(
+    failedObservation.timingEvidence.transportElapsedMs,
+    failedTransport.latencyMs,
+  );
   assert.deepEqual(JSON.parse(await readFile(join(runRoot, 'distributed-c01/local-run.json'), 'utf8')), localEnvelope);
 }));
 
@@ -410,6 +417,21 @@ await runTest('supports provider-free prepare, start, and finalize CLI phases', 
   assert.equal(output.lines.length, 3);
   assert.deepEqual(output.lines.map((line) => JSON.parse(line).command), ['prepare', 'start', 'finalize']);
 }));
+
+await runTest('default scheduler measures its deadline against the injected wall clock', async () => {
+  let wall = START_MS - 65_000;
+  const waits = [];
+  const scheduler = realScheduler(
+    { wallNow: () => new Date(wall).toISOString() },
+    async (milliseconds) => {
+      waits.push(milliseconds);
+      wall += milliseconds;
+    },
+  );
+  await scheduler.waitUntil({ wallTime: new Date(START_MS).toISOString() });
+  assert.deepEqual(waits, [30_000, 30_000, 5_000]);
+  assert.equal(wall, START_MS);
+});
 
 await runTest('prepares E2 through an ephemeral auth file without serializing credentials', () => withRunRoot(async (runRoot) => {
   const config = makeConfig();

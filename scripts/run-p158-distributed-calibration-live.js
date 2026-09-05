@@ -239,12 +239,16 @@ export function createDevelopmentC01ServiceTransport({ preparation, fetch: fetch
         }
         body = await response.json();
       } catch (error) {
+        const observedAt = clock.wallNow();
+        const observedMonotonicTimeNanoseconds = clock.monotonicNow();
         const result = {
           state: 'failed', effectClass: 'read_only', attempt: 1,
           retryAttempted: false, repairAttempted: false,
           httpStatus: response?.status ?? null,
-          latencyMs: Math.max(0, Number(clock.monotonicNow() - before) / 1_000_000),
-          observedAt: clock.wallNow(),
+          latencyMs: Math.max(0, Number(observedMonotonicTimeNanoseconds - before) / 1_000_000),
+          observedAt,
+          transportStartedMonotonicTimeNanoseconds: before.toString(),
+          observedMonotonicTimeNanoseconds: observedMonotonicTimeNanoseconds.toString(),
           failure: { code: error?.code ?? 'service_transport_failed', name: error?.name ?? 'Error', message: error?.message ?? String(error) },
         };
         observations.push({
@@ -258,11 +262,16 @@ export function createDevelopmentC01ServiceTransport({ preparation, fetch: fetch
         : body?.success === false
           ? { code: body.failure?.code ?? body.error?.code ?? 'service_response_failed', name: 'ServiceResponseError', message: body.failure?.message ?? body.error?.message ?? 'Service response failed' }
           : null;
+      const observedAt = clock.wallNow();
+      const observedMonotonicTimeNanoseconds = clock.monotonicNow();
       const result = {
         state: failure ? 'failed' : 'passed', effectClass: 'read_only', attempt: 1,
         retryAttempted: false, repairAttempted: false, httpStatus: response.status,
-        latencyMs: Math.max(0, Number(clock.monotonicNow() - before) / 1_000_000),
-        observedAt: clock.wallNow(), ...(failure ? { failure } : { responseSha256: sha256(body) }),
+        latencyMs: Math.max(0, Number(observedMonotonicTimeNanoseconds - before) / 1_000_000),
+        observedAt,
+        transportStartedMonotonicTimeNanoseconds: before.toString(),
+        observedMonotonicTimeNanoseconds: observedMonotonicTimeNanoseconds.toString(),
+        ...(failure ? { failure } : { responseSha256: sha256(body) }),
       };
       observations.push({
         ordinal: request.ordinal, action: request.action, clientId: request.clientId,
@@ -384,16 +393,17 @@ function takeOptionalOption(args, name) {
 }
 
 function realClock() {
-  return { wallNow: () => new Date().toISOString(), monotonicNow: () => Number(process.hrtime.bigint()) };
+  return { wallNow: () => new Date().toISOString(), monotonicNow: () => process.hrtime.bigint() };
 }
 
-function realScheduler() {
+export function realScheduler(clock, wait = (milliseconds) =>
+  new Promise((resolveWait) => setTimeout(resolveWait, milliseconds))) {
   return {
     async waitUntil({ wallTime }) {
-      let remaining = Date.parse(wallTime) - Date.now();
+      let remaining = Date.parse(wallTime) - Date.parse(clock.wallNow());
       while (remaining > 0) {
-        await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(remaining, 30_000)));
-        remaining = Date.parse(wallTime) - Date.now();
+        await wait(Math.min(remaining, 30_000));
+        remaining = Date.parse(wallTime) - Date.parse(clock.wallNow());
       }
     },
   };
@@ -441,7 +451,7 @@ export async function runCli(argv, dependencies = {}) {
     const preparation = await readJson(createFileArtifactStore(assertRunRoot(runRoot)), PREPARATION_PATH);
     result = await startLiveDistributedCalibration({
       runRoot, fetch: authenticatedFetch(preparation.developmentTargets), clock,
-      scheduler: dependencies.scheduler ?? realScheduler(),
+      scheduler: dependencies.scheduler ?? realScheduler(clock),
     });
   } else if (command === 'finalize') {
     const aggregate = await readJsonFile(takeOption(args, '--external-aggregate'), 'external aggregate');
