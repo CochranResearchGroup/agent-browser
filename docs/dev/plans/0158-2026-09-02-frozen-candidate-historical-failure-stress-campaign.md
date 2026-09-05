@@ -5111,3 +5111,30 @@ profile, five live browsers, six synthetic/provider/blank tabs, and zero manual
 browsers. This admits owned scene inspection, not visual attestation or W6
 acceptance. Fresh marker proof, protected secret rebinding, external readiness,
 shared-schedule calibration, actual freeze and W7 through W10 remain pending.
+
+### Fresh visual gate: connection-sharing failure, no capture
+
+The first DOM diagnostic resolved the same public durable handoff successfully,
+with one connected Guacamole frame and matching presentation generation one.
+The later fresh visual attempt, 17:27:17 through 17:28:07 UTC, revalidated exact
+synthetic inventory but received HTTP 500 and timed out waiting for its frame.
+It produced no screenshot, pixel proof, or visual attestation. Its private
+`visual-a/receipt.json` and bounded backend, host, ingress and failure journals
+are retained. No external workflow was dispatched.
+
+Current service job readback reports the 17:27:25 handoff resolver succeeded.
+The durable failure journal then records `guacamole_load` / `http_500` and
+`guacamole_connection_sharing_failed` at 17:27:58, bound to the exact new
+campaign browser/profile/session/route/display. Thus the observed failure is
+the view's connection-sharing load after successful durable resolution, not
+evidence that provisioning failed or that the resolver job failed. Backend
+status reads around the attempt took approximately 5.6 seconds; causation is
+not established. The earlier successful frame does not satisfy this failed
+attempt. Next is bounded connection-sharing diagnosis and repair before any
+new attestation or external readiness epoch. Preserve the retained browser and
+use the same durable handoff rather than opening a replacement.
+
+Graphiti checkpoint ingestion job
+`84e9d84d-1361-471b-8bbf-cdd680605738` failed with `TimeoutError`; no episode
+visibility was claimed and no automatic requeue was attempted. Repo checkpoints
+and the updated Note 0151 remain the verified continuation authorities.

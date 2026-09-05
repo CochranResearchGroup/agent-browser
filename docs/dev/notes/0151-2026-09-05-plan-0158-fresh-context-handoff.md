@@ -37,6 +37,16 @@ The temporary bounded operator scripts are `/tmp/p158-cleanroom-control.mjs`
 and `/tmp/p158-cleanroom-scene.mjs`. Their receipts are exclusive-create;
 never rerun a mutation against an existing receipt or blindly choose a new label.
 
+The latest local visual attempt failed before any screenshot: its durable
+handoff resolver job succeeded, but the view received HTTP 500 and the journal
+recorded `guacamole_connection_sharing_failed` at 17:27:58 UTC. Evidence is in
+`cleanroom-20260905/visual-a/`, with job readback in `scene-jobs-a.json`.
+An earlier successful DOM frame is not acceptance for this failed attempt.
+Next: diagnose the exact connection-sharing load while preserving the retained
+browser and using the same durable handoff. Do not open a replacement or blindly
+repeat capture. The attempted Graphiti checkpoint write timed out; do not assume
+the graph contains this continuation state.
+
 The synthetic scene still needs fresh visual/marker verification and attestation,
 then protected external-workflow secret rebinding, exact-source readiness and
 shared-schedule calibration. Do not use the old default-development handoff or
