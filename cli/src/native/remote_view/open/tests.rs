@@ -1034,6 +1034,45 @@ fn durable_handoff_observation_accepts_reacquired_intent_target() {
 }
 
 #[tokio::test]
+async fn durable_target_reacquisition_uses_live_title_for_the_exact_active_target() {
+    for live_title in [Some("Synthetic fixture"), Some(""), None] {
+        let mut runtime = ScriptedRuntime::new();
+        runtime.observation.browser_present = true;
+        runtime.observation.active_target_id = Some("retained".to_string());
+        runtime.observation.active_title = live_title.map(str::to_string);
+        runtime.observation.pages = vec![PageInfo {
+            target_id: "retained".to_string(),
+            session_id: "page-session".to_string(),
+            url: "https://example.test/fixture".to_string(),
+            title: "example.test/fixture".to_string(),
+            target_type: "page".to_string(),
+        }];
+        let result = route_bound_open_acquire_target(
+            &json!({
+                "durableResolutionMode": "reacquire_only",
+                "preferredTargetId": "retained",
+                "url": "https://example.test/fixture"
+            }),
+            &mut runtime,
+            &RouteBoundOpenSupervisor::system(Some(1_000), None),
+            &ServiceState::default(),
+            "session:test",
+            "test",
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["targetId"], "retained");
+        assert_eq!(
+            result["title"],
+            live_title.unwrap_or("example.test/fixture")
+        );
+        assert_eq!(result["serviceTabHandle"]["title"], result["title"]);
+        assert_eq!(*runtime.events.lock().unwrap(), vec!["refresh_targets"]);
+    }
+}
+
+#[tokio::test]
 async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect() {
     let root = std::env::temp_dir().join(format!(
         "agent-browser-route-open-fallback-{}-{}",

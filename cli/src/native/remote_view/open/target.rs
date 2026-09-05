@@ -169,9 +169,13 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
     });
     let mut tab = if let Some(page) = selected {
         let switch = if observation.active_target_id.as_deref() == Some(page.target_id.as_str()) {
+            // The page list may still carry the title observed during navigation.
+            // The active title is a live document.title read for this exact target;
+            // do not replace it with cached metadata when reconnecting a handoff.
+            let title = observation.active_title.as_deref().unwrap_or(&page.title);
             json!(
                 { "targetId" : page.target_id, "state" : "already_active", "url" : page
-                .url, "title" : page.title, }
+                .url, "title" : title, }
             )
         } else {
             supervisor

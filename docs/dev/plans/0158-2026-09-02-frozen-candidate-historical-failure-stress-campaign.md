@@ -5267,3 +5267,35 @@ ancillary profile-reclaim resumption against namespace isolation, back up
 private state, and revalidate the exact candidate set. Restoring the provider
 and establishing a new synthetic baseline epoch remain separate installed
 gates; source green does not satisfy them.
+
+### Restored isolated runtime and terminal external readiness failure
+
+The governed recovery removed exactly three terminal browser rows after fresh
+ownership and lifecycle-sidecar reconciliation and a private backup. No profiles
+or owner/lifecycle history changed and no profile reclaim resumed. Source
+`836e46ab` was installed as isolated generation `0.28.0-902cc9a7fb74`; provider
+plan, stage, preflight, apply, required doctor and three disposable browser
+smokes passed. The broker selected a new synthetic browser on the existing
+owned profile. This is a new evidence epoch, not preservation of the lost one.
+The installed shared-view 404 repair passed without response substitution.
+
+Manual external readiness run
+[33984650458](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33984650458)
+finished with both clients and the aggregate failed. Both clients matched the
+independently prepared synthetic transport pixel hash, with 41 Guacamole HTTP
+200 responses and no request failures each, then rejected the same page-marker
+mismatch. All failure receipts remain intact. This is blocker reduction through
+runtime restoration and sharper failure evidence, not W6 acceptance. The
+original intermittent forward-auth 500 is not declared repaired.
+
+The same-target live readback reproduces an old resolution title despite the
+correct current document title. A focused regression reproduces cached
+page-list title precedence in retained-target reacquisition. The bounded source
+repair prefers the live title only for the exact active target, without changing
+the prepared identity or weakening acceptance. All 28 focused coordinator tests,
+formatting, workspace Clippy and the optimized candidate build pass. Installed
+proof remains a separate gate.
+Preserve the retained scene while planning guarded
+publication; the earlier publication killed its predecessor. See Note 0151 for
+the current checkpoint and private evidence locators. The full 20-minute
+calibration, W6 freeze, terminal live cases and W10 remain incomplete.

@@ -2,6 +2,68 @@
 
 Date: 2026-09-05
 
+## Restored cleanroom and external readiness checkpoint
+
+This supersedes the quarantined runtime state below. Source `836e46ab` is
+installed in p158 as generation `0.28.0-902cc9a7fb74`. Governed terminal-record
+cleanup removed exactly three browser rows after a fresh preview, sidecar
+ownership proof and private state backup. Profiles and ownership/lifecycle
+history are unchanged, and no profile reclaim resumed. The first preparation
+helper stopped before mutation because it omitted the lifecycle sidecar; its
+failure is retained. Provider plan, stage, preflight and apply then passed.
+Provider-required doctor and three disposable launch smokes passed; production
+and default development remain unchanged.
+
+The fresh access plan explicitly selected a new synthetic browser on the
+existing profile. `scene-open-h.json` contains its ready durable handoff. This
+is a new evidence epoch, not preservation of the lost browser. The installed
+sharing extension passed `sharing-installed-i/receipt.json` without response
+substitution or HTTP errors. The prior diagnostic's frame-navigation race is
+retained separately; no runtime retry or replacement was needed to fix that
+checker.
+
+Scene custody covers eleven owned profiles, five browsers, nine current or
+closed synthetic/provider tabs, and zero manual browsers. The full screenshot
+was visually reviewed. The exact source-RGB check failed and remains recorded:
+the source pixel is `[18,92,142,255]`, while every pixel in the transported
+400-by-100 crop is `[16,94,140,255]`. Guacamole 1.5.5 defaults to
+[16-bit RDP color depth](https://raw.githubusercontent.com/apache/guacamole-server/1.5.5/src/protocols/rdp/settings.h),
+and the provider database has no color-depth override. The prepared transport
+hash was accepted only after independent live source-pixel, fixture identity,
+uniform-crop and full-scene review. External acceptance still requires exact
+PNG hash matching, not an RGB tolerance. Review and source mismatch evidence
+are retained in `visual-preparation-review-h.json` and `visual-h/`.
+
+All six external environment secrets are rebound to this p158 scene. Manual
+readiness run [33984650458](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33984650458)
+is bound to full commit `836e46ab686bb4da2bf9f60696690c4504e4bed8`.
+All three jobs finished with failure. Both clients captured the exact prepared
+pixel hash, recorded 41 Guacamole responses with HTTP 200 and zero request
+failures, then rejected the same page-marker mismatch. The aggregate explicitly
+rejects the two failed receipts; no calibration acceptance follows from matching
+pixels. Private evidence is retained in `external-readiness-h-human/`,
+`external-readiness-h-slow/` and `external-readiness-h-aggregate/`.
+No retries, automatic triggers or local substitutes for hosted-vantage evidence
+were added. The 20-minute calibration, W6 freeze,
+remaining terminal live cases and W10 are not yet complete. The original
+intermittent forward-auth 500 is not declared repaired.
+
+The same-target readback in `title-readback-red-j.json` reproduces a stale
+resolution title while live `document.title` still equals the prepared synthetic
+marker. The reacquisition path reads that live title but gives cached page-list
+metadata precedence when the target is already active. The focused regression
+fails with the same URL-shaped title before the patch. The repair uses the live
+title only in the exact-active-target branch, preserves empty live titles, and
+falls back to the cached title only when the live read is unavailable. It does
+not change the expected marker, oracle, target selection or retry policy.
+All 28 focused route-bound coordinator tests pass, including the red-to-green
+regression and missing/empty live-title cases. Formatting, workspace Clippy and
+the optimized development-candidate build also pass. This latest title repair
+is source-only pending guarded installed
+proof. Do not republish blindly: the previous runtime-host publication lost the
+retained browser. Production/default-development guards still pass in
+`baselines-title-j.json`.
+
 ## Publication failure and quarantine checkpoint
 
 This checkpoint supersedes the installed-state claims below. Source repair
