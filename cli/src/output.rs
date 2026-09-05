@@ -7420,6 +7420,7 @@ Environment:
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
+  AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.
   AGENT_BROWSER_CDP_BOOTSTRAP_MODE Local Chrome CDP bootstrap: eager (default) or experimental navigation_minimal
   AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH
                                  Force an unsafe launch when a runtime profile browserFamily does not match the resolved executable family

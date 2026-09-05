@@ -21,6 +21,15 @@ explicit values fail closed to disabled. Development publication pins disabled
 in its launcher and services and checks attached process environments in its
 doctor. Before synthetic-only capture, also verify retained Service inventory
 and desktop content; disabling discovery alone does not prove that boundary.
+
+Parallel development environments use `AGENT_BROWSER_DEV_NAMESPACE` (1–8
+lowercase letters/digits, starting with a letter) and all seven explicit
+`AGENT_BROWSER_DEV_{DASHBOARD,BACKEND,SHADOW,LANE_STREAM,GUACAMOLE,GUACD,POSTGRES}_PORT`
+bindings. Preserve that environment across install, doctor, provider, and
+maintenance commands. Never point namespaced writable roots at default
+development or production. Require a separate reviewed public ingress binding
+and exact route ownership; a new home alone is not isolation. No namespace
+keeps legacy development behavior.
 The first bootstrap has one `sudo -v` boundary. Every recurring installed
 route-user, XRDP restart, and route-display action then uses the fixed
 root-owned helper through passwordless `sudo -n`. Compatible helper versions

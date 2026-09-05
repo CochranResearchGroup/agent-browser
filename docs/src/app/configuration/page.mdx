@@ -146,6 +146,34 @@ development doctor checks the running process environments. This does not
 sandbox browsers or sanitize retained Service records and desktop content;
 verify those independently before synthetic-only visual capture.
 
+For parallel development publication, set
+<code>AGENT_BROWSER_DEV_NAMESPACE</code> to 1–8 lowercase letters or digits,
+starting with a letter. Namespaced runtime paths, launchers, service units,
+provider containers, route users, and ingress identities are separate from
+default development. Pin every port below before installation, and retain the
+same environment for subsequent status, doctor, provider, and maintenance
+commands. Missing, duplicate, production, or default-development ports fail
+closed. Omitting the namespace preserves default development behavior.
+
+<table>
+  <thead><tr><th>Environment variable</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>AGENT_BROWSER_DEV_DASHBOARD_PORT</code></td><td>Dashboard upstream</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_BACKEND_PORT</code></td><td>Dashboard backend</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_SHADOW_PORT</code></td><td>Reserved shadow port</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_LANE_STREAM_PORT</code></td><td>Runtime lane</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_GUACAMOLE_PORT</code></td><td>Guacamole web application</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_GUACD_PORT</code></td><td>Guacamole transport</td></tr>
+    <tr><td><code>AGENT_BROWSER_DEV_POSTGRES_PORT</code></td><td>Provider database</td></tr>
+  </tbody>
+</table>
+
+Check local port availability before provisioning. Separately review the new
+public HTTPS origin and immutable ingress revision before provider staging;
+namespacing does not publish a route or permit borrowing another environment's
+resources. Installation checks both production and default development
+identity for non-interference. Do not reuse their writable roots.
+
 Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
 the patched Chromium posture. If no explicit default is configured and a ready

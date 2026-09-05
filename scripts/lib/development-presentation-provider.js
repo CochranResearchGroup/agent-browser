@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -12,6 +13,7 @@ import {
 import { homedir } from 'node:os';
 import { isIP } from 'node:net';
 import { dirname, join, relative, resolve } from 'node:path';
+import { developmentRuntimeNamespace, requireNamespacedDevelopmentPorts } from './development-runtime-namespace.js';
 
 export const DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA =
   'agent-browser.development-presentation-provider.v2';
@@ -22,15 +24,19 @@ const PRODUCTION_PORTS = new Set([3389, 3390, 4822, 5432, 4848, 4849, 8092]);
  * Returns the complete development-owned presentation-provider identity.
  * Callers must consume this descriptor as a unit instead of composing ambient
  * production paths, ports, users, or route names into a development runtime.
+ * AGENT_BROWSER_DEV_NAMESPACE gives parallel providers disjoint identities;
+ * namespaced callers must explicitly reserve all seven development ports.
  */
 export function developmentPresentationProviderDescriptor(env = process.env) {
+  const { namespace, suffix, name } = developmentRuntimeNamespace(env);
+  requireNamespacedDevelopmentPorts(env);
   const userHome = resolve(env.AGENT_BROWSER_DEV_USER_HOME || homedir());
   const pseudoHome = resolve(
-    env.AGENT_BROWSER_DEV_HOME || join(userHome, '.local', 'share', 'agent-browser-dev', 'home'),
+    env.AGENT_BROWSER_DEV_HOME || join(userHome, '.local', 'share', name, 'home'),
   );
   const root = resolve(
     env.AGENT_BROWSER_DEV_PRESENTATION_ROOT ||
-      join(userHome, '.local', 'share', 'agent-browser-dev', 'presentation-provider'),
+      join(userHome, '.local', 'share', name, 'presentation-provider'),
   );
   const warmSlots = positiveInteger(env.AGENT_BROWSER_DEV_PRESENTATION_WARM_SLOTS, 4);
   const hardMaxSlots = positiveInteger(env.AGENT_BROWSER_DEV_PRESENTATION_MAX_SLOTS, 6);
@@ -42,18 +48,18 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
   }
   const routes = Array.from({ length: hardMaxSlots }, (_, index) => {
     const ordinal = index + 1;
-    const viewerProfile = `development-presentation-provider-v5-${ordinal}`;
+    const viewerProfile = `development${suffix}-presentation-provider-v5-${ordinal}`;
     return {
       ordinal,
-      routeId: `development-route-${ordinal}`,
-      slotId: `development-slot-${ordinal}`,
-      user: `agent-browser-rdp-dev-${ordinal}`,
-      connectionKey: `agent-browser-dev-connection-${ordinal}`,
+      routeId: `development${suffix}-route-${ordinal}`,
+      slotId: `development${suffix}-slot-${ordinal}`,
+      user: `agent-browser-rdp-dev${suffix}-${ordinal}`,
+      connectionKey: `${name}-connection-${ordinal}`,
       connectionId: null,
-      connectionName: `Agent Browser Dev RDP Route ${ordinal}`,
-      displayReservationId: `development-display-${ordinal}`,
+      connectionName: `Agent Browser Dev${namespace ? ` ${namespace}` : ''} RDP Route ${ordinal}`,
+      displayReservationId: `development${suffix}-display-${ordinal}`,
       displayName: null,
-      viewerSession: `development-presentation-provider-v5-${ordinal}`,
+      viewerSession: viewerProfile,
       viewerProfile,
       viewerProfilePath: join(
         pseudoHome,
@@ -68,6 +74,7 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
   return {
     schemaVersion: DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA,
     environment: 'development',
+    ...(namespace ? { namespace } : {}),
     userHome,
     pseudoHome,
     root,
@@ -76,15 +83,15 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
     stateDir: join(root, 'state'),
     receiptsDir: join(root, 'receipts'),
     inventoryPath: join(root, 'state', 'route-inventory.json'),
-    composeProject: 'agent-browser-dev-presentation',
+    composeProject: `${name}-presentation`,
     services: {
-      guacamole: 'agent-browser-dev-guacamole',
-      guacd: 'agent-browser-dev-guacd',
-      postgres: 'agent-browser-dev-guacamole-postgres',
+      guacamole: `${name}-guacamole`,
+      guacd: `${name}-guacd`,
+      postgres: `${name}-guacamole-postgres`,
     },
     database: {
-      name: 'agent_browser_dev_guacamole',
-      user: 'agent_browser_dev_guacamole',
+      name: `agent_browser_dev${namespace ? `_${namespace}` : ''}_guacamole`,
+      user: `agent_browser_dev${namespace ? `_${namespace}` : ''}_guacamole`,
     },
     ports: {
       guacamole: port(env.AGENT_BROWSER_DEV_GUACAMOLE_PORT, 8093),
@@ -188,6 +195,51 @@ export function validateDevelopmentPresentationProviderIsolation(
   if (descriptor.environment !== 'development') {
     throw new Error('Development presentation provider must declare the development environment');
   }
+  if (descriptor.namespace !== undefined) {
+    const { namespace, suffix, name } = developmentRuntimeNamespace({
+      AGENT_BROWSER_DEV_NAMESPACE: descriptor.namespace,
+    });
+    const defaultRoot = join(descriptor.userHome, '.local', 'share', 'agent-browser-dev');
+    for (const path of [descriptor.pseudoHome, descriptor.root, descriptor.manifest,
+      descriptor.secretsDir, descriptor.stateDir, descriptor.receiptsDir,
+      descriptor.inventoryPath, descriptor.skill.root, descriptor.skill.target,
+      ...descriptor.routes.map((route) => route.viewerProfilePath)]) {
+      if (pathsOverlap(path, defaultRoot)) {
+        throw new Error('Namespaced provider path overlaps default development resources');
+      }
+    }
+    const expected = {
+      composeProject: `${name}-presentation`,
+      services: { guacamole: `${name}-guacamole`, guacd: `${name}-guacd`, postgres: `${name}-guacamole-postgres` },
+      database: { name: `agent_browser_dev_${namespace}_guacamole`, user: `agent_browser_dev_${namespace}_guacamole` },
+    };
+    for (const key of Object.keys(expected)) {
+      if (JSON.stringify(descriptor[key]) !== JSON.stringify(expected[key])) {
+        throw new Error(`Provider ${key} does not match its namespace`);
+      }
+    }
+    for (const route of descriptor.routes) {
+      const ordinal = route.ordinal;
+      const viewer = `development${suffix}-presentation-provider-v5-${ordinal}`;
+      const identities = {
+        routeId: `development${suffix}-route-${ordinal}`,
+        slotId: `development${suffix}-slot-${ordinal}`,
+        user: `agent-browser-rdp-dev${suffix}-${ordinal}`,
+        connectionKey: `${name}-connection-${ordinal}`,
+        connectionName: `Agent Browser Dev ${namespace} RDP Route ${ordinal}`,
+        displayReservationId: `development${suffix}-display-${ordinal}`,
+        viewerSession: viewer, viewerProfile: viewer,
+        viewerProfilePath: join(descriptor.pseudoHome, '.agent-browser', 'runtime-profiles', viewer, 'user-data'),
+      };
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || route.user.length > 32 ||
+          Object.entries(identities).some(([key, value]) => route[key] !== value)) {
+        throw new Error('Provider route identity does not match its namespace');
+      }
+    }
+    if (Object.values(descriptor.ports).some((value) => [8093, 4823, 55433, 4948, 4949, 4950, 4951].includes(value))) {
+      throw new Error('Namespaced provider port overlaps default development resources');
+    }
+  }
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(descriptor.localDiagnosticUrl || '')) {
     throw new Error('Development local diagnostic URL must remain loopback-only');
   }
@@ -268,6 +320,7 @@ export function developmentPresentationProviderManifest(descriptor) {
   return {
     schemaVersion: DEVELOPMENT_PRESENTATION_PROVIDER_SCHEMA,
     environment: descriptor.environment,
+    ...(descriptor.namespace ? { namespace: descriptor.namespace } : {}),
     root: descriptor.root,
     secretsDir: descriptor.secretsDir,
     stateDir: descriptor.stateDir,
@@ -614,9 +667,19 @@ function publicHostname(hostname) {
 }
 
 function pathsOverlap(left, right) {
-  const leftToRight = relative(left, right);
-  const rightToLeft = relative(right, left);
+  const canonicalLeft = canonicalProspectivePath(left);
+  const canonicalRight = canonicalProspectivePath(right);
+  const leftToRight = relative(canonicalLeft, canonicalRight);
+  const rightToLeft = relative(canonicalRight, canonicalLeft);
   return leftToRight === '' || !leftToRight.startsWith('..') || !rightToLeft.startsWith('..');
+}
+
+/** Resolve existing ancestor symlinks even before a provider path is staged. */
+function canonicalProspectivePath(path) {
+  const target = resolve(path);
+  let ancestor = target;
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  return resolve(realpathSync(ancestor), relative(ancestor, target));
 }
 
 function assertUnique(items, field) {

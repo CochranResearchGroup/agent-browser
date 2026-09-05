@@ -8,6 +8,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -15,8 +16,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   assertProductionUnchanged,
+  assertDefaultDevelopmentUnchanged,
   developmentCandidateBinary,
   developmentRuntimeDescriptor,
+  defaultDevelopmentSnapshot,
   developmentExternalDiscoveryChecks,
   observeDevelopmentExternalDiscovery,
   evaluateProtectedLeaseAuthorityStatus,
@@ -125,6 +128,53 @@ try {
     ['socket_path_not_unix_socket'],
   );
   const descriptor = developmentRuntimeDescriptor(env);
+  const namespacedEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p158',
+    AGENT_BROWSER_DEV_RUNTIME_DIR: undefined,
+    XDG_RUNTIME_DIR: join(fixture, 'parallel-run'),
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5948',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5949',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5950',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5951',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '9093',
+    AGENT_BROWSER_DEV_GUACD_PORT: '5823',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '55434',
+  };
+  for (const namespace of ['', '../escape', 'with-dash', 'toolongname', '1number', 'UPPER']) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, AGENT_BROWSER_DEV_NAMESPACE: namespace }),
+      /AGENT_BROWSER_DEV_NAMESPACE/);
+  }
+  for (const changed of [
+    { AGENT_BROWSER_DEV_DASHBOARD_PORT: undefined },
+    { AGENT_BROWSER_DEV_DASHBOARD_PORT: '4948' },
+    { AGENT_BROWSER_DEV_BACKEND_PORT: '5948' },
+    { AGENT_BROWSER_DEV_SHADOW_PORT: 'not-a-port' },
+  ]) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, ...changed }), /unique port/);
+  }
+  const parallelDescriptor = developmentRuntimeDescriptor(namespacedEnv);
+  assert.equal(parallelDescriptor.namespace, 'p158');
+  assert.equal(parallelDescriptor.laneSession, 'development-default-p158');
+  for (const key of ['executable', 'installRoot', 'pseudoHome', 'stateDir', 'authDir', 'socketDir',
+    'laneManifest', 'runtimeHostIngressState', 'localHost', 'ingressService']) {
+    assert.notEqual(parallelDescriptor[key], descriptor[key], `namespace isolates ${key}`);
+  }
+  assert(parallelDescriptor.units.every((name) => !descriptor.units.includes(name)));
+  const parallelUnits = renderDevelopmentUnits(parallelDescriptor, '/candidate/bin/agent-browser');
+  assert.deepEqual(Object.keys(parallelUnits), parallelDescriptor.units);
+  for (const source of Object.values(parallelUnits)) {
+    assert.match(source, /Environment=AGENT_BROWSER_DEV_NAMESPACE=p158/);
+    assert.doesNotMatch(source, /agent-browser-dev-(?:runtime-host|dashboard-backend|dashboard)\.service/);
+  }
+  for (const changed of [
+    { AGENT_BROWSER_DEV_INSTALL_ROOT: descriptor.installRoot },
+    { AGENT_BROWSER_DEV_HOME: descriptor.pseudoHome },
+    { AGENT_BROWSER_DEV_BIN: descriptor.executable },
+    { AGENT_BROWSER_DEV_RUNTIME_DIR: join(namespacedEnv.XDG_RUNTIME_DIR, 'agent-browser-dev') },
+  ]) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, ...changed }), /overlaps/);
+  }
   assert.equal(descriptor.dashboardPort, 4948);
   assert.equal(descriptor.backendPort, 4949);
   assert.equal(descriptor.laneStreamPort, 4951);
@@ -159,6 +209,29 @@ try {
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
   assert.equal(installed.success, true);
   assert.equal(installed.production.unchanged, true);
+  const defaultBefore = defaultDevelopmentSnapshot(namespacedEnv);
+  const parallelInstalled = installDevelopmentRuntime({ binary: fakeBinary, env: namespacedEnv, activate: false });
+  assert.equal(parallelInstalled.defaultDevelopment.unchanged, true);
+  assert.deepEqual(defaultDevelopmentSnapshot(namespacedEnv), defaultBefore);
+  assert.notEqual(parallelInstalled.generation.path, installed.generation.path);
+  assert.equal(JSON.parse(readFileSync(join(parallelInstalled.generation.path, 'generation.json'), 'utf8')).namespace, 'p158');
+  assert.throws(() => assertDefaultDevelopmentUnchanged(defaultBefore,
+    { ...defaultBefore, selectedGeneration: '/different-generation' }), /custody changed/);
+  const collisionLink = join(fixture, 'default-home-alias');
+  symlinkSync(descriptor.pseudoHome, collisionLink);
+  assert.throws(() => developmentRuntimeDescriptor({ ...namespacedEnv, AGENT_BROWSER_DEV_HOME: collisionLink }), /overlaps/);
+  const unknownGeneration = join(parallelDescriptor.generations, 'unknown-generation');
+  const foreignGeneration = join(parallelDescriptor.generations, 'foreign-generation');
+  const ownedGeneration = join(parallelDescriptor.generations, 'old-owned-generation');
+  for (const path of [unknownGeneration, foreignGeneration, ownedGeneration]) mkdirSync(path);
+  writeFileSync(join(foreignGeneration, 'generation.json'), JSON.stringify({ namespace: 'other' }));
+  writeFileSync(join(ownedGeneration, 'generation.json'), JSON.stringify({ namespace: 'p158' }));
+  const namespaceGc = garbageCollectDevelopmentRuntime({ env: namespacedEnv, retain: 0 });
+  assert.deepEqual(namespaceGc.removed, [ownedGeneration]);
+  assert(namespaceGc.retained.includes(unknownGeneration));
+  assert(namespaceGc.retained.includes(foreignGeneration));
+  assert(namespaceGc.retained.includes(parallelInstalled.generation.path));
+  assert.deepEqual(defaultDevelopmentSnapshot(namespacedEnv), defaultBefore);
   assert.equal(installed.generation.version, '0.28.0-fixture');
   assert.equal(readFileSync(installed.generation.binary, 'utf8'), readFileSync(fakeBinary, 'utf8'));
   const generationManifest = JSON.parse(

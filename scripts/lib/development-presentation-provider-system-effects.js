@@ -8,6 +8,7 @@ import {
   statfsSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { developmentRuntimeNamespace } from './development-runtime-namespace.js';
 import {
   developmentPresentationProviderDescriptor,
   developmentPresentationProviderManifest,
@@ -158,20 +159,34 @@ export function createDevelopmentPresentationProviderSystemEffects({
   env = process.env,
   productionSnapshot,
   assertProductionUnchanged,
+  defaultDevelopmentSnapshot,
+  assertDefaultDevelopmentUnchanged,
   publishIngress,
   run = commandResult,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
     throw new Error('Development provider effects require production identity guards');
   }
+  const namespaced = developmentRuntimeNamespace(env).namespace !== null;
+  if (namespaced && (typeof defaultDevelopmentSnapshot !== 'function' ||
+      typeof assertDefaultDevelopmentUnchanged !== 'function')) {
+    throw new Error('Namespaced provider effects require default development identity guards');
+  }
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
   return {
-    snapshotProduction: () => productionSnapshot(env),
-    assertProductionUnchanged,
+    snapshotProduction: () => namespaced ? {
+      production: productionSnapshot(env),
+      defaultDevelopment: defaultDevelopmentSnapshot(env),
+    } : productionSnapshot(env),
+    assertProductionUnchanged: (before, after) => {
+      if (!namespaced) return assertProductionUnchanged(before, after);
+      assertProductionUnchanged(before.production, after.production);
+      assertDefaultDevelopmentUnchanged(before.defaultDevelopment, after.defaultDevelopment);
+    },
     createVolume(descriptor) {
-      const volume = 'agent-browser-dev-guacamole-postgres-data';
+      const volume = `${descriptor.services.postgres}-data`;
       const inspected = run('docker', ['volume', 'inspect', volume]);
       if (inspected.status !== 0) {
         runRequired(run, 'docker', [
@@ -372,7 +387,7 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
           ...env,
           HOME: descriptor.pseudoHome,
           AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev'),
+          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
           AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(routes),
           AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
           AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
@@ -404,7 +419,7 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
       const processText = processes.status === 0 ? processes.stdout : '';
       for (const route of descriptor.routes) {
         if (!processText.includes(route.viewerProfilePath)) continue;
-        run(join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev'), [
+        run(join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`), [
           '--json',
           '--session',
           route.viewerSession,
@@ -501,7 +516,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
           ...env,
           HOME: descriptor.pseudoHome,
           AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev'),
+          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
           AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(inventory),
           AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
           AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
@@ -518,7 +533,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       return { ready: elapsedMs >= requiredMs, elapsedMs, requiredMs };
     },
     referenceCheck(route, descriptor) {
-      const command = join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev');
+      const command = join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`);
       const result = run(command, ['--json', 'service', 'status'], {
         env: {
           ...env,
@@ -547,7 +562,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       if (capability.ready !== true) {
         throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
       }
-      const command = join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev');
+      const command = join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`);
       const close = run(command, [
         '--json',
         '--session', route.viewerSession,

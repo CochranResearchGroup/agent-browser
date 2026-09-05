@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { developmentPresentationProviderDescriptor } from './development-presentation-provider.js';
+import { developmentPresentationProviderDescriptor, validateDevelopmentPresentationProviderIsolation } from './development-presentation-provider.js';
 import { writeProviderAuthority } from './development-presentation-provider-deployment.js';
 
 export function scaleOutDevelopmentPresentation({
@@ -11,6 +11,7 @@ export function scaleOutDevelopmentPresentation({
 } = {}) {
   if (!effects) throw new Error('Development presentation scale-out requires an effect adapter');
   const descriptor = developmentPresentationProviderDescriptor(env);
+  validateDevelopmentPresentationProviderIsolation(descriptor);
   const productionBefore = effects.snapshotProduction();
   const before = effects.observe(descriptor);
   const beforeRoutes = readyRoutes(descriptor, before);
@@ -105,6 +106,7 @@ export function scaleInDevelopmentPresentation({
 } = {}) {
   if (!effects) throw new Error('Development presentation scale-in requires an effect adapter');
   const descriptor = developmentPresentationProviderDescriptor(env);
+  validateDevelopmentPresentationProviderIsolation(descriptor);
   const productionBefore = effects.snapshotProduction();
   const before = effects.observe(descriptor);
   const beforeRoutes = readyRoutes(descriptor, before);

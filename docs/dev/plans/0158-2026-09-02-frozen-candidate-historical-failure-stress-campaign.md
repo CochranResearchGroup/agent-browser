@@ -4948,3 +4948,50 @@ Progress classification: `blocker_reduction`, through excluding an unsafe
 configuration-only shortcut. Provisioning remains pending operator direction
 on a separately namespaced campaign runtime and reviewed ingress binding.
 No non-campaign state was modified and the visual capture stop remains active.
+
+### Elevated Authority: Separately Namespaced Campaign Environment
+
+The user authorized continuation with elevated authority after the explicit
+request to provision a separately namespaced synthetic-only campaign runtime
+and reviewed ingress while preserving existing development resources. This
+supersedes the provisioning approval wait, not the synthetic-only capture,
+production non-interference, shared-XRDP no-restart, or frozen-epoch boundaries.
+
+The primary owns integration, new ingress, private configuration, and runtime
+effects. Two bounded reused specialist lanes own disjoint implementation:
+`/root/anchor_adapter` owns runtime descriptor/publication/readback/tests;
+`/root/live_case_ledger` owns provider descriptor/effect-name propagation/tests.
+Each has a 15-minute implementation bound with partial-evidence return. This is
+remediation of the demonstrated namespace collision, not a new broad review.
+
+The candidate namespace is `p158`. All seven ports are explicitly pinned and
+were observed unbound before preparation: dashboard 5148, backend 5149,
+shadow 5150, lane 5151, Guacamole 8193, guacd 4923, PostgreSQL 56433.
+Resource names, home, sockets, units, executable, provider database, containers,
+route users, and ingress must all be disjoint from default development and
+production. The original four-warm/six-maximum provider shape remains the
+intended per-environment campaign capacity; existing displays are not borrowed.
+No namespace may activate on default-lane or production ports.
+
+Before capture: validate namespace regressions, publish the exact candidate,
+prove both existing environments unchanged, complete provider readiness before
+publishing ingress, verify fresh authenticated inventory and synthetic desktop
+content, then seal a new visual attestation and candidate identity. Previous
+failed artifacts remain unchanged. W6 and later acceptance are still unproven.
+
+The two specialist lanes completed the namespaced runtime and provider source.
+Primary reconciliation inspected resource identities and non-interference
+guards. Default launcher and unit bytes remain unchanged, namespaced runtime
+and provider roots are disjoint, and fixture tests cover missing/duplicate/
+baseline ports plus direct and symlink aliases into protected roots. One
+accepted closed-world gap in provider symlink resolution received a red-green
+repair before any live effect. Namespace provider effects require both
+production and default-development identity guards, including lifecycle paths.
+Shared XRDP and privileged-helper constraints are unchanged.
+
+Primary-run runtime and provider fixtures, Guacamole asset validation,
+remote-view docs checks, docs build, Rust format and strict clippy passed.
+The optimized candidate built successfully. One requested lifecycle package
+script name did not exist; lifecycle fixtures are part of the passing provider
+suite, not a separate successful command. The new environment has not yet
+been installed or exposed at this checkpoint.

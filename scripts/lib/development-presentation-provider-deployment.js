@@ -95,7 +95,7 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
     routeUser: route.user,
   }));
   const ingress = {
-    service: 'agent-browser-dev',
+    service: `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`,
     pathPrefix: '/guacamole',
     upstream: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole`,
     localDiagnosticUrl: descriptor.localDiagnosticUrl,
@@ -614,7 +614,7 @@ function renderEnvironment(descriptor) {
 }
 
 function renderCompose(descriptor) {
-  const volume = 'agent-browser-dev-guacamole-postgres-data';
+  const volume = `${descriptor.services.postgres}-data`;
   const postgresDb = '${POSTGRES_DB:?set POSTGRES_DB in .env}';
   const postgresUser = '${POSTGRES_USER:?set POSTGRES_USER in .env}';
   const postgresPassword =

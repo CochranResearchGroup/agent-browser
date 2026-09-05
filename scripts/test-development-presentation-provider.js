@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -27,6 +27,7 @@ import {
   stageDevelopmentPresentationProviderBundle,
 } from './lib/development-presentation-provider-deployment.js';
 import {
+  createDevelopmentPresentationProviderSystemEffects,
   createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
 } from './lib/development-presentation-provider-system-effects.js';
@@ -63,6 +64,92 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as archive:
 
 try {
   const descriptor = developmentPresentationProviderDescriptor(env);
+  const namespaceEnv = {
+    ...env,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p158',
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5148',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5149',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5150',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5151',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '8193',
+    AGENT_BROWSER_DEV_GUACD_PORT: '4923',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '56433',
+  };
+  const namespaced = developmentPresentationProviderDescriptor(namespaceEnv);
+  assert.notEqual(namespaced.root, descriptor.root);
+  assert.notEqual(namespaced.pseudoHome, descriptor.pseudoHome);
+  assert.equal(namespaced.routes[0].routeId, 'development-p158-route-1');
+  assert.equal(namespaced.routes[0].user, 'agent-browser-rdp-dev-p158-1');
+  assert.equal(namespaced.routes[0].viewerSession, 'development-p158-presentation-provider-v5-1');
+  assert.equal(namespaced.composeProject, 'agent-browser-dev-p158-presentation');
+  validateDevelopmentPresentationProviderIsolation(namespaced);
+  for (const field of ['root', 'pseudoHome', 'composeProject', 'services', 'database', 'routes']) {
+    assert.throws(() => validateDevelopmentPresentationProviderIsolation({
+      ...namespaced, [field]: descriptor[field],
+    }), /default development|namespace/);
+  }
+  assert.throws(() => developmentPresentationProviderDescriptor({
+    ...namespaceEnv, AGENT_BROWSER_DEV_POSTGRES_PORT: '55433',
+  }), /outside production/);
+  const namespacedBundle = renderDevelopmentPresentationProviderBundle(namespaced);
+  assert.ok(JSON.stringify(namespacedBundle).includes('agent-browser-dev-p158-guacamole-postgres-data'));
+  stageDevelopmentPresentationProviderBundle({ env: namespaceEnv });
+  assert.equal(existsSync(namespaced.root), true);
+  assert.equal(existsSync(descriptor.root), false);
+  const defaultDevelopmentRoot = join(userHome, '.local', 'share', 'agent-browser-dev');
+  mkdirSync(defaultDevelopmentRoot, { recursive: true });
+  const defaultAlias = join(fixture, 'default-development-alias');
+  symlinkSync(defaultDevelopmentRoot, defaultAlias, 'dir');
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: join(defaultAlias, 'not-created', 'provider'),
+  } }), /default development/);
+  assert.equal(existsSync(join(defaultDevelopmentRoot, 'not-created')), false);
+  const productionRoot = join(userHome, '.agent-browser');
+  mkdirSync(productionRoot, { recursive: true });
+  const productionAlias = join(fixture, 'production-alias');
+  symlinkSync(productionRoot, productionAlias, 'dir');
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: join(productionAlias, 'not-created', 'provider'),
+  } }), /production path/);
+  assert.equal(existsSync(join(productionRoot, 'not-created')), false);
+  assert.throws(() => stageDevelopmentPresentationProviderBundle({ env: {
+    ...namespaceEnv, AGENT_BROWSER_DEV_PRESENTATION_ROOT: descriptor.root,
+  } }), /default development/);
+  assert.equal(existsSync(descriptor.root), false);
+  const secondProvider = developmentPresentationProviderDescriptor({ ...namespaceEnv,
+    AGENT_BROWSER_DEV_NAMESPACE: 'p159',
+    AGENT_BROWSER_DEV_DASHBOARD_PORT: '5248',
+    AGENT_BROWSER_DEV_BACKEND_PORT: '5249',
+    AGENT_BROWSER_DEV_SHADOW_PORT: '5250',
+    AGENT_BROWSER_DEV_LANE_STREAM_PORT: '5251',
+    AGENT_BROWSER_DEV_GUACAMOLE_PORT: '8293',
+    AGENT_BROWSER_DEV_GUACD_PORT: '5023',
+    AGENT_BROWSER_DEV_POSTGRES_PORT: '57433',
+  });
+  assert.notEqual(secondProvider.root, namespaced.root);
+  validateDevelopmentPresentationProviderIsolation(secondProvider);
+  assert.ok(Object.values(secondProvider.ports).every((port) => !Object.values(namespaced.ports).includes(port)));
+  assert.equal(developmentPresentationProviderDeploymentPlan(namespaced).providerRoot, namespaced.root);
+  assert.equal(namespaced.warmSlots, 4);
+  assert.equal(namespaced.hardMaxSlots, 6);
+  for (const key of ['routeId', 'slotId', 'user', 'connectionKey', 'displayReservationId', 'viewerProfilePath']) {
+    assert.ok(secondProvider.routes.every((route) => !namespaced.routes.some((other) => other[key] === route[key])));
+  }
+  assert.throws(() => createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv, productionSnapshot: () => ({}), assertProductionUnchanged: () => {},
+  }), /default development identity guards/);
+  const guardedEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({ production: true }),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({ defaultDevelopment: true }),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+  });
+  const guardedBefore = guardedEffects.snapshotProduction();
+  guardedEffects.assertProductionUnchanged(guardedBefore, guardedEffects.snapshotProduction());
+  assert.throws(() => guardedEffects.assertProductionUnchanged(guardedBefore, {
+    ...guardedBefore, defaultDevelopment: { changed: true },
+  }));
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'set'/);
   assert.match(routeOpenerSource, /'--profile',\s*profile,\s*'open'/);
