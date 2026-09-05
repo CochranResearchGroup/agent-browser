@@ -42,7 +42,11 @@ import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
 import { reportDashboardFailure } from "@/lib/failure-observation";
-import { resolveGuacamoleViewerFrame } from "@/lib/guacamole-connection-sharing";
+import {
+  GUACAMOLE_SHARE_FRAME_NAME_PREFIX,
+  classifyGuacamoleShareAuthMessage,
+  resolveGuacamoleViewerFrame,
+} from "@/lib/guacamole-connection-sharing";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
@@ -168,6 +172,12 @@ type CdpStreamState = {
   frameReceived: boolean;
   httpFallback: boolean;
   message: string;
+};
+
+type GuacamoleShareFrameAttempt = {
+  attemptId: string;
+  expectedOrigin: string;
+  primaryActiveConnectionId: string;
 };
 
 type GuacamoleMouseState = {
@@ -1342,6 +1352,7 @@ export function WorkspaceRemoteViewport({
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
+  const [viewerShareAttempt, setViewerShareAttempt] = useState<GuacamoleShareFrameAttempt | null>(null);
   const [sharingResolutionNonce, setSharingResolutionNonce] = useState(0);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
@@ -1356,6 +1367,7 @@ export function WorkspaceRemoteViewport({
   const focusedKeyRef = useRef("");
   const streamFrameRetryRef = useRef(0);
   const sharingRecoveryRetryRef = useRef(0);
+  const viewerShareAttemptRef = useRef<GuacamoleShareFrameAttempt | null>(null);
   const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -1654,11 +1666,15 @@ export function WorkspaceRemoteViewport({
 
   useEffect(() => {
     if (!streamUrl || !guacamoleSharingStream) {
+      viewerShareAttemptRef.current = null;
+      setViewerShareAttempt(null);
       setViewerFrameUrl(null);
       return;
     }
     const controller = new AbortController();
     const targetToken = viewportTargetToken;
+    viewerShareAttemptRef.current = null;
+    setViewerShareAttempt(null);
     setViewerFrameUrl(null);
     if (targetToken) {
       dispatchViewportController({
@@ -1673,7 +1689,17 @@ export function WorkspaceRemoteViewport({
       signal: controller.signal,
       stream: guacamoleSharingStream,
     }).then((resolution) => {
-      if (!controller.signal.aborted) setViewerFrameUrl(resolution.url);
+      if (controller.signal.aborted) return;
+      const shareAttempt = resolution.mode === "shared"
+        ? {
+          attemptId: resolution.attemptId,
+          expectedOrigin: new URL(resolution.url).origin,
+          primaryActiveConnectionId: resolution.primaryActiveConnectionId,
+        }
+        : null;
+      viewerShareAttemptRef.current = shareAttempt;
+      setViewerShareAttempt(shareAttempt);
+      setViewerFrameUrl(resolution.url);
     }).catch((cause) => {
       if (controller.signal.aborted) return;
       const message = cause instanceof Error ? cause.message : "Guacamole connection sharing failed.";
@@ -1833,6 +1859,62 @@ export function WorkspaceRemoteViewport({
         ? "Guacamole reported that the remote desktop connection closed."
         : "The embedded remote stream failed to load. Refresh the workspace viewport or open the stream externally.",
     });
+  }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
+
+  useEffect(() => {
+    const onGuacamoleShareAuthMessage = (event: MessageEvent) => {
+      const attempt = viewerShareAttemptRef.current;
+      if (!attempt) return;
+      const outcome = classifyGuacamoleShareAuthMessage({
+        attemptId: attempt.attemptId,
+        data: event.data,
+        eventOrigin: event.origin,
+        eventSource: event.source,
+        expectedOrigin: attempt.expectedOrigin,
+        expectedSource: viewportFrameRef.current?.contentWindow,
+      });
+      if (!outcome) return;
+      if (outcome === "ready") {
+        if (viewportTargetToken) {
+          dispatchViewportController({ type: "preflight_succeeded", targetToken: viewportTargetToken });
+        }
+        return;
+      }
+
+      viewerShareAttemptRef.current = null;
+      setViewerShareAttempt(null);
+      setViewerFrameUrl(null);
+      void reportDashboardFailure({
+        category: "guacamole_load",
+        stage: "connection_sharing_redemption",
+        code: "guacamole_share_key_rejected",
+        summary: "The restricted Guacamole sharing key was rejected before the viewer became usable.",
+        action: "remote_view_load",
+        browserId: browser?.id,
+        profileId: browser?.profileId,
+        sessionId: viewportSelection?.selection.sessionId,
+        routeId: stream?.routeId,
+        displayId: stream?.displayAllocationId,
+        streamProvider: stream?.provider,
+      });
+      if (sharingRecoveryRetryRef.current < 3) {
+        sharingRecoveryRetryRef.current += 1;
+        setFrameIssue(null);
+        setFocusMessage("The restricted viewer key expired; electing or joining the current Guacamole primary.");
+        setSharingResolutionNonce((current) => current + 1);
+        return;
+      }
+      if (viewportTargetToken) {
+        dispatchViewportController({
+          type: "preflight_failed",
+          targetToken: viewportTargetToken,
+          status: "error",
+          message: "Guacamole rejected three fresh restricted viewer keys. The browser remains active, but this viewer could not reconnect.",
+        });
+      }
+    };
+    window.addEventListener("message", onGuacamoleShareAuthMessage);
+    return () => window.removeEventListener("message", onGuacamoleShareAuthMessage);
   }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
 
   const onFrameLoad = useCallback(() => {
@@ -2761,8 +2843,9 @@ export function WorkspaceRemoteViewport({
           />
         ) : stream && canRenderFrame ? (
           <iframe
-            key={`${streamUrl ?? ""}:${streamRefreshNonce}`}
+            key={`${streamUrl ?? ""}:${streamRefreshNonce}:${viewerShareAttempt?.attemptId ?? "direct"}`}
             ref={viewportFrameRef}
+            name={viewerShareAttempt ? `${GUACAMOLE_SHARE_FRAME_NAME_PREFIX}${viewerShareAttempt.attemptId}` : undefined}
             title={`${viewStreamLabel(stream)} ${stream.id ?? ""}`.trim()}
             src={frameUrl ?? undefined}
             className="workspace-remote-viewport-frame"

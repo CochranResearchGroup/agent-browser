@@ -2871,7 +2871,11 @@ The Chat tab is always visible in the dashboard. Set `AI_GATEWAY_API_KEY` to ena
 When a managed Guacamole route declares `providerMode="simultaneous_view"`,
 the dashboard joins the existing Guacamole tunnel through a transient
 connection-sharing URL instead of opening another RDP login. Never expose
-that transient share key as an operator handoff or persist it in evidence.
+that transient share key as an operator handoff or persist it in evidence. A
+rejected sibling-origin key is reported to the parent only as an opaque attempt
+ID plus `ready` or `share_key_rejected`. The dashboard must discard the iframe,
+record the failure, and run a fresh bounded election. It must never reload the
+rejected key.
 
 ## Ready-to-Use Templates
 

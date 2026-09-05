@@ -30,11 +30,52 @@ type GuacamolePrimaryClaim = {
 type GuacamoleActiveCandidate = readonly [string, GuacamoleActiveConnection];
 
 const GUACAMOLE_PRIMARY_MINIMUM_AGE_MS = 3_000;
+export const GUACAMOLE_SHARE_FRAME_NAME_PREFIX = "agent-browser-guacamole-share:";
 
-export type GuacamoleViewerFrameResolution = {
-  mode: "direct" | "shared";
-  url: string;
-};
+export type GuacamoleShareAuthOutcome = "ready" | "share_key_rejected";
+
+export type GuacamoleViewerFrameResolution =
+  | { mode: "direct"; url: string }
+  | {
+    mode: "shared";
+    url: string;
+    primaryActiveConnectionId: string;
+    attemptId: string;
+  };
+
+export function classifyGuacamoleShareAuthMessage({
+  attemptId,
+  data,
+  eventOrigin,
+  eventSource,
+  expectedOrigin,
+  expectedSource,
+}: {
+  attemptId: string;
+  data: unknown;
+  eventOrigin: string;
+  eventSource: unknown;
+  expectedOrigin: string;
+  expectedSource: unknown;
+}): GuacamoleShareAuthOutcome | null {
+  if (!attemptId || eventOrigin !== expectedOrigin || !expectedSource || eventSource !== expectedSource) return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const record = data as Record<string, unknown>;
+  if (record.type !== "agent-browser-guacamole-share-auth" || record.attemptId !== attemptId) return null;
+  return record.outcome === "ready" || record.outcome === "share_key_rejected"
+    ? record.outcome
+    : null;
+}
+
+function newShareAttemptId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  if (typeof globalThis.crypto?.getRandomValues !== "function") {
+    throw new Error("Guacamole connection-sharing attempt identity cannot be generated securely");
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
 
 function guacamoleRoot(frameUrl: string, dashboardHref: string): URL | null {
   try {
@@ -147,6 +188,7 @@ function hasExactConnectableCandidate(
  * by the Agent Browser service API or persisted as an operator handoff.
  */
 export async function resolveGuacamoleViewerFrame({
+  attemptIdImpl = newShareAttemptId,
   dashboardHref,
   fetchImpl = globalThis.fetch,
   frameUrl,
@@ -155,6 +197,7 @@ export async function resolveGuacamoleViewerFrame({
   waitImpl = waitForElection,
   nowImpl = Date.now,
 }: {
+  attemptIdImpl?: () => string;
   dashboardHref: string;
   fetchImpl?: typeof globalThis.fetch;
   frameUrl: string;
@@ -242,6 +285,16 @@ export async function resolveGuacamoleViewerFrame({
     }
     consecutiveEmptySnapshots = 0;
 
+    // A just-created direct primary is visible before it is old enough to
+    // donate a reliable sharing key. Wait for maturity rather than electing a
+    // second unrestricted primary.
+    if (activeCandidates.length === 0) {
+      if (!await waitWithinDeadline({
+        deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
+      })) break;
+      continue;
+    }
+
     const sharingProfiles = await authenticatedFetch<Record<string, GuacamoleSharingProfile>>(
       `api/session/data/postgresql/connections/${encodeURIComponent(connectionId)}/sharingProfiles`,
       "Guacamole sharing-profile discovery",
@@ -300,7 +353,14 @@ export async function resolveGuacamoleViewerFrame({
 
       const shared = guacamoleSharingRoot(root);
       shared.hash = `/?key=${encodeURIComponent(key)}`;
-      return { mode: "shared", url: shared.toString() };
+      const attemptId = attemptIdImpl().trim();
+      if (!attemptId) throw new Error("Guacamole connection-sharing attempt identity is unavailable");
+      return {
+        mode: "shared",
+        url: shared.toString(),
+        primaryActiveConnectionId: activeConnectionId,
+        attemptId,
+      };
     }
     if (!await waitWithinDeadline({
       deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,

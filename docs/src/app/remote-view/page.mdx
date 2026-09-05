@@ -59,6 +59,13 @@ or run runtime cleanup to free a route. Add route capacity only after measured
 demand shows that the configured pool cannot serve the required number of
 simultaneous non-preemptible operator desktops.
 
+For a route with `providerMode="simultaneous_view"`, additional viewers use a
+restricted transient Guacamole sharing key. If the sibling-origin frame
+rejects the key before it becomes usable, it reports only an opaque attempt ID
+and bounded outcome to the exact dashboard origin. The dashboard removes that
+frame, records the failure, and performs a fresh bounded election. It never
+reloads a rejected key. Operators continue using the same durable handoff URL.
+
 ## Open the browser and copy the durable link
 
 Follow these steps to create one operator-visible browser handoff:

@@ -3065,7 +3065,11 @@ For a Guacamole route that declares `providerMode="simultaneous_view"`, the
 dashboard joins the route's existing Guacamole tunnel through its managed
 sharing profile. It does not open another RDP login that would disconnect an
 existing viewer. The transient sharing key stays inside the iframe URL and is
-never used as an operator handoff.
+never used as an operator handoff. If the sibling-origin Guacamole frame
+rejects that key before becoming usable, the installed extension reports only
+an opaque attempt ID and bounded outcome to the exact dashboard origin. The
+dashboard removes the failed frame, records the failure, and performs a fresh
+bounded election. It never reloads the rejected key.
 Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
 selected-browser inspector or embedded remote-control dialog; it drives the
 real dashboard UI with `agent-browser`, selects the remote-headed browser row,

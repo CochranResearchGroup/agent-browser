@@ -53,7 +53,9 @@ const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
 const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
-const GUACAMOLE_PRIMARY_CLAIM_TTL: Duration = Duration::from_secs(10);
+// The lease must outlive the dashboard resolver's complete 15-second election
+// window so a delayed provider row cannot admit a second direct primary.
+const GUACAMOLE_PRIMARY_CLAIM_TTL: Duration = Duration::from_secs(30);
 const DASHBOARD_SLOW_PROXY_THRESHOLD: Duration = Duration::from_secs(1);
 
 static DASHBOARD_PROXY_INFLIGHT: AtomicUsize = AtomicUsize::new(0);
@@ -3717,7 +3719,7 @@ mod tests {
         );
         let (granted, remaining) = registry.claim(key.clone(), start + Duration::from_secs(1));
         assert!(!granted);
-        assert_eq!(remaining, Duration::from_secs(9));
+        assert_eq!(remaining, Duration::from_secs(29));
         assert_eq!(
             registry.claim(key, start + GUACAMOLE_PRIMARY_CLAIM_TTL),
             (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
