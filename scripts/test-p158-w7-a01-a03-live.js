@@ -35,7 +35,11 @@ function json(response, status, value) {
 async function requestBody(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const bytes = Buffer.concat(chunks);
+  // Native Service ingress frames request bodies by Content-Length.
+  assert.equal(Number(request.headers['content-length']), bytes.length,
+    'live transport must frame its JSON body for native Service ingress');
+  return JSON.parse(bytes.toString('utf8'));
 }
 
 async function startFakeService({

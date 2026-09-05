@@ -147,10 +147,13 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Follow Plan 0158's September 5 priority reconciliation: diagnose authorized
-Profile/lease usability first and audit the same requests for postmortem-quality
-logging, then prove ordinary durable remote-view entry and recovery. Start with
-read-only evidence and current isolated ownership/identity reconciliation.
+Follow Plan 0158's September 5 priority diagnosis: reconcile the W7 request
+contract with native normalization before another authorized Profile/lease
+probe, and repair the measured pre-dispatch response/journal correlation and
+effect-certainty gaps. The two client attempts stopped before acquisition;
+startup and HTTP body-framing repairs have focused validation but no installed
+P158 recovery or Profile acceptance. Then prove shared Profile use and ordinary
+durable remote-view entry and recovery.
 Do not automatically resume calibration, reinstall, restart, or the prior
 harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
 freeze gate, and full acceptance criteria are retained. Anchored readiness does

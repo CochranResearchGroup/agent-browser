@@ -539,6 +539,7 @@ function fetchResponse(status, headers, bytes) {
  * Create one keep-alive HTTP transport per frozen client action. Durable
  * ownership remains bound to clientSubjectId; connectionInstanceId is retained
  * as per-request transport provenance and is never promoted to durable identity.
+ * Frame JSON by byte length because native Service ingress requires Content-Length.
  */
 export function createP158W7PinnedDevelopmentTransports() {
   const transports = new Map();
@@ -556,7 +557,10 @@ export function createP158W7PinnedDevelopmentTransports() {
         const request = httpRequest(url, {
           agent,
           method: init.method ?? 'GET',
-          headers: init.headers,
+          headers: {
+            ...init.headers,
+            ...(body !== null ? { 'content-length': String(body.length) } : {}),
+          },
           signal: init.signal,
         }, (response) => {
           const chunks = [];

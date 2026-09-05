@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_reconciled_execution_not_started`
+Execution state: `priority_diagnosis_request_contract_blocked`
 
 Lane: P157
 
@@ -5560,3 +5560,79 @@ Next is the full shared 20-minute C01 calibration with 25 logical agents,
 reconnects. E1's local endpoints and E2's external ingress bind the same
 isolated installation and auth store, with separate vantage requirements.
 All case execution and W10 remain outstanding.
+
+### Priority Diagnosis: Startup, Request Framing, And Logging Gaps
+
+The September 5 priority reconciliation now governs execution. Read-only
+systemd observation confirms the isolated host failed and both dashboard units
+are inactive. The selected isolated binary remains `0.28.0-8884c5fa8980`.
+No installed service was restarted or replaced in this slice.
+
+The reboot removed the isolated volatile socket directory. Direct supervisor
+startup wrote its auth token before creating that directory, unlike the normal
+daemon startup path. The existing supervisor smoke had precreated it and hid
+the defect. Removing that fixture setup reproduces the exact installed error
+in under a second. Token writing now ensures the private socket directory
+exists. The optimized candidate passes initial startup and a restart after
+deleting only the stopped fixture's socket directory, including directory and
+token permission checks. This is source/built-binary repair evidence, not
+installed P158 recovery or Profile acceptance.
+
+Two separate synthetic client diagnostics used the original installed candidate
+with independent pinned HTTP clients, isolated homes and socket namespaces,
+and external browser discovery disabled. Every request and response was
+fsynced as observed. Both stopped before browser acquisition:
+
+1. The pinned W7 transport omitted Content-Length; native ingress therefore
+   read no action. Its Node test server accepted chunked requests and masked
+   this incompatibility. A regression that requires native-compatible framing
+   fails before the repair and passes after sending the exact body byte count.
+2. With framing repaired, native normalization rejects the driver's
+   `runtimeEnvironmentId` field. This field is not in the Service request
+   schema. The driver also expects an E1 provenance value that has not been
+   reconciled with server-derived runtime identity. Do not add client-selected
+   environment authority to make that oracle pass.
+
+The two-attempt bound is exhausted for this acquisition probe. No third live
+acquisition attempt follows automatically. Zero browser records were created;
+both exact synthetic host children exited. The supported request contract must
+be reconciled at a no-launch normalization seam before another acquisition
+probe is declared. This is a closed-world reframe of an observed blocker, not
+a calibration restart or a new broad repair campaign.
+
+Logging evidence distinguishes old production records from current synthetic
+failures. The retained production 200-job snapshot contains four identity-
+unproven failures, three for remote-view open and one for tab listing. All four
+lack structured failure and provenance fields; exact retained event, incident,
+and failure-journal joins are zero. Effect-time client authority cannot be
+reconstructed from this snapshot. Original responses, traces, dashboard
+projection, incident applicability, and retention losses remain unmeasured.
+These facts do not establish that an authorized client was wrongly denied.
+
+The two synthetic pre-dispatch failures have two durable journal occurrences,
+zero duplicates, and zero jobs/events/incidents. Journal codes are
+`missing_action` and `unknown_field`, but both immediate responses report
+`service_operation_failed` and `effect_uncertain`, without the journal request
+ID. Retention worked for these two failures; response/journal correlation and
+effect certainty remain explicit product logging gaps. This does not prove
+interruption or reboot durability, complete causal logging, or ACL behavior.
+
+Private evidence is retained under the P158 campaign's
+`priority-diagnosis-20260905T225521Z` directory: `readonly-diagnosis.json`,
+both append-only client attempt ledgers, terminal synthetic state/journal
+copies, and `checkpoint.json` with seven artifact hashes and built-candidate
+identity. Temporary synthetic runtime roots are diagnostic residues, not
+operator links or production resources.
+
+Validation: optimized candidate build, strengthened supervisor smoke, Rust
+format and workspace clippy with warnings denied, docs production build,
+remote-view handoff docs check, W7 A01–A03 provider-free regression, and logging
+auditor self-tests pass. The 670 provider-free client terminals are tooling
+validation only. No shared installed skill was overwritten.
+
+Classification: `blocker_reduction` for startup and request framing; priority
+acceptance remains incomplete. Next: reconcile W7 requests and provenance
+expectations with native normalization, then repair the demonstrated
+pre-dispatch response/journal mismatch at its actual ingress seam. Retain the
+remaining A-family producers and ordinary external handoff evidence as unmet.
+Calibration, W6 freeze, W7–W10 acceptance, and production mutation remain absent.
