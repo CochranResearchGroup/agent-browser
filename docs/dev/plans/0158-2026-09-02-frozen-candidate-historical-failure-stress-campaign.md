@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_retained_handoff_false_convergence_diagnosed`
+Execution state: `priority_reconciled_before_further_execution`
 
 Lane: P157
 
@@ -31,6 +31,68 @@ Dependencies: [P46, P97, P101, P125, P134, P142, P147, P148, P150, P155,
 P156, P157]
 
 Overlaps: [P144]
+
+## Renewed Priority Reconciliation At fa78aa99
+
+The operator again requested reconciliation before execution using
+`/tmp/plan-0158-priority-handoff-2026-09-05.md`. That handoff's clean baseline
+4481d8f1 and failed-runtime snapshot are historical: subsequent committed
+checkpoints record focused repairs, verification, and isolated recovery.
+This reconciliation reads those records; it makes no fresh runtime-health or
+production-reliability claim. The earlier reconciliation and all failed epochs
+below remain history. This section controls the next sequence.
+
+| Operator outcome | Evidence now recorded | Still required for acceptance |
+| --- | --- | --- |
+| Usable leases and ACLs | Two independent self-declared clients acquired distinct tabs in a shared synthetic Profile; own release preserved the peer. A foreign release was denied with exact cause and recourse after repair. | Authenticated authorized and unauthorized clients, their own Profiles, actual identity-unproven/inconsistent paths, policy revision, revocation, reconnect, and restart. Self-declared client proof is not authenticated ACL proof. A04/A06/A12 producers remain incomplete. |
+| Postmortem-quality logging | Five pre-dispatch HTTP/MCP rejection joins; child-denial agreement across response, job, event, trace, and journal with zero recorded duplicates/conflicts. | Dashboard and applicable incident projections, timeout/crash/external failure coverage, exact completeness counts, and interruption/reboot durability. Asynchronous journal delivery leaves an unproven crash window. Calibration W's lost local observations remain a separate harness custody defect. |
+| Ordinary durable remote-view links | Isolated stack recovery was recorded. The retained handoff still rejected an unbound browser identity but returned successful retryable convergence, a succeeded job, and no matching failure journal entry. | Same supported URL from an external authenticated client, ready state, matching synthetic pixels, input, reopening, concurrent viewers/controller ownership, and truthful recovery. P/Q frame failures remain unresolved; anchored readiness and host login HTTP 200 do not establish this outcome or production acceptance. |
+
+### Execution Path After Reconciliation
+
+1. **One product and logging repair:** use the existing retained-handoff finding
+   and a red-capable coordinator regression. Preserve the identity guard; make
+   the explicit rejection a failed resolution with safe recovery inspection.
+   Do not infer permanent loss from an absent record or relaunch a replacement.
+   Preserve transient adoption and presentation-receipt convergence separately.
+   Verify once against the same retained handoff with durable response, job,
+   event, trace, and journal joins. Reconcile exact installed ownership before
+   any necessary isolated publication. This is failure-handling acceptance,
+   not working-link acceptance.
+2. **Close the two independent priority gaps:** run a bounded authenticated
+   Profile authorization/revocation/reconnect/restart slice with logging
+   attached; separately prove the response-to-journal interruption boundary
+   with a disposable process. Define expected/observed/missing/duplicate/
+   conflicting counts before either run. Build only missing producers needed
+   for these outcomes. Neither depends on calibration or a successful viewer.
+3. **Prove ordinary links:** use a bounded external synthetic same-URL test
+   through the existing manual protected lane, with current identity/capture
+   bindings and frame-lifecycle evidence that addresses P/Q. Require pixels
+   and interaction, not merely an iframe or ready infrastructure. Preserve a
+   failed attempt and disposition it rather than opening another anchor loop.
+
+The existing two-diagnostic-attempt and one-repair/verification bounds carry
+forward; this revision does not reset them. Checkpoint each outcome/blocker and
+within 60 minutes. Distinguish product repair, logging repair, infrastructure
+recovery, and measurement tooling in every disposition. Infrastructure and
+calibration harness repairs are prerequisites only when the selected outcome
+actually requires them, never an automatic queue.
+
+W1–W5 retain tooling-only completion. W6 and W7–W10, all original acceptance
+criteria, missing producers, frozen-epoch rules, and the full C01 workload
+remain outstanding. Calibration is deferred and requires a later explicit
+sequencing decision. Production mutation, eviction, credential entry, and
+private capture remain outside scope.
+
+Readback found four pre-existing modified files: README.md,
+cli/src/native/remote_view/open/tests.rs, docs/src/app/remote-view/page.mdx,
+and skills/agent-browser/SKILL.md. These are unfinished regression/guidance
+work, not an implemented or verified retained-handoff fix. They are preserved
+without continuation in this reconciliation. No build, runtime restart,
+installation, external dispatch, or calibration is initiated by this revision.
+Graphiti returned only unrelated older-plan facts; current repo checkpoints
+supply the reconciliation evidence. Classification: no new outcome acceptance;
+planning alignment only. Next is the single product/logging slice above.
 
 ## September 5 Priority Reconciliation
 

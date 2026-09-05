@@ -147,17 +147,23 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Plan 0158's recovered runtime exposed false convergence on the latest retained
-synthetic handoff: exact browser identity is unbound, yet resolution returns
-retryable converging and records a succeeded job without a failure-journal
-match. Next distinguish confirmed lost identity from transient adoption at the
-coordinator seam, with truthful unavailability and causal logging. Preserve the
-same durable URL and no-relaunch contract. Ordinary external pixels, frame
-lifecycle, authenticated ACLs, and interruption durability remain unaccepted.
-Do not automatically resume calibration, reinstall, restart, or the prior
-harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
-freeze gate, and full acceptance criteria are retained. Anchored readiness does
-not prove ordinary anchor-free links or production reliability.
+Plan 0158 is reconciled around usable authenticated Profile leases/ACLs,
+postmortem-quality logging, and ordinary durable remote-view links. Current
+proof is partial: shared self-declared clients and actionable child denials
+pass focused checks; authenticated ACL lifecycle and interruption durability
+remain unproven; ordinary links still lack external pixel/input acceptance.
+
+Next is one bounded repair/verification of the recorded retained-handoff
+identity rejection: preserve authority and the same URL, report truthful
+failure and recovery recourse, and join the failure evidence. An absent record
+does not prove permanent loss. This slice cannot establish working links.
+Then address authenticated ACL lifecycle and logging interruption independently,
+and run the ordinary external same-URL proof with current synthetic bindings.
+The latest reconciliation in Plan 0158 governs; unfinished test/guidance edits
+are not an implemented repair. Calibration remains deferred. Do not
+implicitly restart, reinstall, or resume the harness queue. W6 and W7–W10,
+the original workload, freeze gate, and full acceptance criteria remain open.
+Anchored readiness does not prove ordinary links or production reliability.
 
 ## P156 | Full Runtime Shutdown Replacement
 
