@@ -2,6 +2,42 @@
 
 Date: 2026-09-05
 
+## Resumption checkpoint
+
+This section supersedes the repository and runtime snapshot below, which is
+preserved as history. The Plan's final checkpoints contain the current causal
+record. Repair commits `f953fc45` and `0829d9a0` are pushed. Development
+generation `0.28.0-f472f3bc9cbe` is installed; provider-required doctor and all
+three disposable launch smokes passed with production unchanged. Discovery
+readback now contains three owned socket rows and zero foreign rows, compared
+with seven foreign rows before repair. All three attached service processes
+prove external discovery disabled.
+
+Readiness C, workflow `33971756471`, failed both external clients. Its retained
+artifacts exposed unsafe keyboard focus, blocked Guacamole textarea autofocus,
+and a full-frame visual-boundary failure. Download and anchor-shutdown defects
+were also repaired. Full campaign harness, focused regressions, disposable DOM
+tests, Rust format/clippy, and docs build passed. W6 calibration and freeze are
+still incomplete; no W7 through W10 live completion is claimed.
+
+Do not dispatch another visual workflow using the existing attestation. The
+current development inventory retains non-campaign profiles and an older
+local tab. Disabling foreign discovery does not make that state synthetic-only.
+No such records were deleted, masked, or silently adopted into the campaign.
+A clean campaign-only runtime/presentation and reviewed ingress binding is the
+proposed next isolation boundary; changing that environment requires resolving
+the new binding and resource ownership before capture. Preserve the existing
+development state and prior failed evidence.
+
+Current private receipts live under
+`/home/ecochran76/.local/state/agent-browser/campaigns/p158/resume-20260905`.
+Use `doctor-discovery-isolated.json`, `status-discovery-isolated.json`, and
+`inventory-after-isolation.json` for the installed checkpoint. External
+artifacts were recovered under `readiness-c-recovered-artifacts`; their visual
+boundary is failed evidence, not a valid synthetic-only receipt.
+
+## Original handoff
+
 Status: Goal active; campaign acceptance incomplete. This note records a
 handoff and drift review, not acceptance or authorization for production work.
 

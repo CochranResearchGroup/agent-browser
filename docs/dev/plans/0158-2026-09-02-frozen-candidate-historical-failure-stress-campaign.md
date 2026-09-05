@@ -4905,3 +4905,22 @@ local tab outside the declared fixture origin. Those remain untouched. Their
 ownership and possible appearance during full-frame recording require
 separate reconciliation. No external capture or calibration has resumed, and
 the prior protected visual attestation must not be treated as current proof.
+
+The source-bound isolation repair was published as `0829d9a0` and installed
+as development generation `0.28.0-f472f3bc9cbe`. Provider-required doctor and
+all three disposable browser-launch smokes passed; production was unchanged.
+All three attached MainPID environments prove discovery disabled. A fresh
+authenticated session-inventory readback returned three owned socket rows and
+zero foreign rows. The doctor receipt hashes to
+`97fe25c5c39da3e45df4e08a4d3238a1a2b3ff3c46086a228a57c7bd47710fa9`;
+the status receipt hashes to
+`73374edb6737e9d9c4005447137cbb724a21a284d454901eea66548c0c2f2bb0`.
+
+The remaining gate is not a failing build or discovery leak: full-frame
+capture cannot be attested synthetic-only while retained non-campaign
+inventory and presentation may enter the scene. The proposed next boundary
+is a clean campaign-only runtime and presentation with a reviewed ingress
+binding, leaving current development state intact. Do not infer permission to
+delete or rehome non-campaign records, borrow their routes, or weaken the
+capture contract. Resolve that environment and resource boundary before the
+next external run. Plan acceptance remains incomplete.
