@@ -5386,3 +5386,15 @@ gate rather than claiming a complete reconnect repair or another clean epoch.
 Production/default-development isolation remains intact. Classification remains
 `hardening` with installed reservation proof, not W6 or live-case acceptance.
 No external dispatch, calibration, freeze or final analysis occurred.
+
+### Resume admitted stable-primary calibration fixture
+
+The earlier September 5 Anchor Disposition remains authoritative. The failed
+anchor-free P/Q diagnostics do not revoke the admitted stable-primary anchor
+fixture and must remain explicit limitations in W10. Continue through the
+existing retained-anchor coordinator rather than expanding the repair loop.
+Fresh title/isolation checks and independent synthetic pixel/source review
+pass; the R preparation binds the current P scene in all six protected
+environment secrets. Focused anchor, coordinator, adapter and external-runner
+checks pass. One anchored readiness attempt is next, with all five evidence
+units required and no retry, timeout relaxation or substituted acceptance.

@@ -2,6 +2,25 @@
 
 Date: 2026-09-05
 
+## Resume the admitted anchored calibration lane
+
+The current Plan's September 5 Anchor Disposition explicitly admits the
+retained authenticated anchor as a stable-primary calibration fixture. The
+failed anchor-free P/Q diagnostics therefore remain limitations and evidence,
+not a requirement to continue an unbounded repair loop before using that
+fixture. This does not declare ordinary reconnect reliable or relax W6.
+
+Fresh same-target title and isolation readbacks pass. The current synthetic
+scene's initial capture has been reviewed, independently pixel-decoded and
+matched to the live source fixture. `visual-preparation-review-r.json` explicitly
+retains failed anchor-free reconnect. The six protected secrets now bind this
+current P scene through `external-secret-binding-r.json`, superseding the old K
+binding. Anchor, coordinator, live-adapter and external-runner focused checks
+pass on the current tree. Next is one existing-coordinator anchored readiness
+attempt, requiring both external clients, aggregate, anchor-ready and
+anchor-final evidence. Preserve every failure and do not push the dispatch
+branch while any workflow job is active.
+
 ## Reconnect startup-reservation repair checkpoint
 
 Source `ad4269c2` is now installed as `0.28.0-379320bc82d5` in p158 only.
