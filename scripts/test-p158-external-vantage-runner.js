@@ -919,6 +919,44 @@ const abortedSharingProfileObservation = normalizeExternalDashboardEvidence({
 assert.equal(abortedSharingProfileObservation.classification.disposition, 'expected_lifecycle_noise');
 assert.equal(abortedSharingProfileObservation.classification.code, 'page_or_reconnect_request_cancelled');
 
+const abortedTunnelProtocolObservation = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-guac-protocol-aborted',
+    url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/protocol',
+    urlSha256: '8'.repeat(64),
+    method: 'GET',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 0,
+    failureTextSha256: createHash('sha256').update('net::ERR_ABORTED').digest('hex'),
+    startedAt: '2026-09-04T00:00:04.035Z',
+    completedAt: '2026-09-04T00:00:04.040Z',
+    durationMs: 5,
+  }],
+}).networkEntries[0];
+assert.equal(abortedTunnelProtocolObservation.classification.disposition, 'expected_lifecycle_noise');
+assert.equal(abortedTunnelProtocolObservation.classification.code, 'page_or_reconnect_request_cancelled');
+
+const failedTunnelProtocolObservation = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-guac-protocol-failed',
+    url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/protocol',
+    urlSha256: '9'.repeat(64),
+    method: 'GET',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 0,
+    failureTextSha256: createHash('sha256').update('net::ERR_FAILED').digest('hex'),
+    startedAt: '2026-09-04T00:00:04.040Z',
+    completedAt: '2026-09-04T00:00:04.045Z',
+    durationMs: 5,
+  }],
+}).networkEntries[0];
+assert.equal(failedTunnelProtocolObservation.classification.disposition, 'actionable_failure');
+assert.equal(failedTunnelProtocolObservation.classification.code, 'unexplained_transport_failure');
+
 const failedSharingProfileObservation = normalizeExternalDashboardEvidence({
   networkEntries: [{
     entryId: 'network-guac-sharing-failed',

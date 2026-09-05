@@ -51,6 +51,8 @@ const INTERNAL_HOST = /(^|\.)(localhost|[^.]+\.local)$|^(127\.|10\.|192\.168\.|1
 const ABORTED_REQUEST_FAILURE_SHA256 = createHash('sha256').update('net::ERR_ABORTED').digest('hex');
 const GUACAMOLE_ACTIVE_SHARING_PROFILES =
   /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i;
+const GUACAMOLE_TUNNEL_PROTOCOL =
+  /\/guacamole\/api\/session\/tunnels\/[^/]+\/protocol$/i;
 const REQUIRED_IDENTITY_FIELDS = [
   'browserId',
   'profileId',
@@ -306,7 +308,7 @@ function classifyExternalNetworkEntry(entry, entries) {
   }
   if (status === 0 &&
       (/\/guacamole\/tunnel$/i.test(url) || pathClass === 'dashboard_auth_status' ||
-        (GUACAMOLE_ACTIVE_SHARING_PROFILES.test(url) &&
+        ((GUACAMOLE_ACTIVE_SHARING_PROFILES.test(url) || GUACAMOLE_TUNNEL_PROTOCOL.test(url)) &&
           entry.failureTextSha256 === ABORTED_REQUEST_FAILURE_SHA256) ||
         (pathClass === 'guacamole_transport' && recoveredBy.length > 0))) {
     return {

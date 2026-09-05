@@ -4409,3 +4409,53 @@ Revised next action: publish the exact oracle repair and rerun the two-client
 external readiness workflow without reinstalling the unchanged product
 candidate. If all three readiness results pass, freeze the installed identity
 and dispatch synchronized C01.
+
+### External Readiness Exposes Selective Cooper Bridge Blackholes
+
+State transition: `c01_stale_service_lane_repair_ready_for_publication ->
+c01_external_ingress_bridge_diagnosis_active`.
+
+The oracle-only repair was published as `fd28ca23`; the unchanged installed
+product candidate remained generation `0.28.0-6a28e573b3a5`. External readiness
+workflow `33943421780` preserved a second failed epoch. The human client reached
+the expected identity and visual state but retained one additional exact
+Guacamole tunnel-protocol observation canceled with Chromium's
+`net::ERR_ABORTED` page-transition signal. The delayed client failed on two
+dashboard JavaScript responses and one `/api/sessions` response that each
+returned HTTP 504 after approximately 27.6 seconds. It performed no retry or
+repair.
+
+Cross-layer reconciliation disproved a process crash and a dashboard-wide
+event-loop stall. Bastion access records prove that the 504 responses originated
+from Cooper's local Traefik. Cooper access records prove that exactly those
+three requests spent approximately 27.6 seconds waiting on
+`host.docker.internal:4948`. Other static assets and dashboard API requests to
+the same listener completed before, during, and after the three failures. The
+development dashboard ingress, backend, and runtime host remained active with
+zero restarts. A fresh 1,000-request, 50-way probe from the Traefik container to
+the same upstream completed without a failure. The defect is therefore an
+intermittent selective connection blackhole across the Docker Desktop host
+bridge, not a fixed URL, browser, handoff, or application routing error.
+
+The same investigation exposed a separate logging defect. Bastion Traefik's
+container-local access log had reached 62.7 GiB without rotation and retained
+request metadata broader than the campaign's privacy-bounded evidence model.
+Bastion filesystem use remained 36 percent, but the unbounded sink and rich
+metadata are not acceptable post-mortem design. The Cooper repository already
+contains unrelated active edits in the Docker Desktop WSL proxy lane, so this
+campaign must not overwrite that worktree. Preserve this finding for coordinated
+ingress repair and keep private access records outside the product repository.
+
+The external oracle now recognizes only the exact tunnel-specific `/protocol`
+endpoint with the exact SHA-256 of `net::ERR_ABORTED` as page-transition
+lifecycle noise, matching the already bounded sharing-profile rule. Generic
+transport errors, HTTP failures, and every other endpoint remain actionable.
+Positive and negative provider-free regressions cover both dispositions.
+
+Revised next action: validate the narrowed Guacamole classification, then add
+privacy-bounded acceptance-stage telemetry to the stable dashboard ingress so a
+future bridge failure proves whether the request reached the Agent Browser
+listener. Do not weaken the external 504 gate and do not add an implicit retry.
+Coordinate any Docker bridge or bastion log-retention repair with the active
+Cooper worktree before another readiness epoch. Synchronized C01 remains gated
+on a clean human, delayed, and aggregate readiness result.
