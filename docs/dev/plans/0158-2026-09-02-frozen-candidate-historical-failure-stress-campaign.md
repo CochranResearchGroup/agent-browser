@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_safe_reconnect_repair_active`
+Execution state: `w6_candidate_publication_active`
 
 Lane: P157
 
@@ -4051,3 +4051,30 @@ sharing resolver, commit both coherent repair slices, publish a new development
 candidate, and rerun exact-candidate doctor, three-launch smoke, and both
 external readiness clients. Proceed to synchronized C01 only if both external
 oracles are clean.
+
+### Safe Multi-Candidate Reconnect Validated
+
+State transition: `w6_safe_reconnect_repair_active ->
+w6_candidate_publication_active`.
+
+The dashboard resolver now enumerates every active Guacamole row for the exact
+connection and tries the configured restricted sharing profile in deterministic
+newest-start-time and identifier order. A 404 skips only that candidate. The
+first valid restricted key wins; authentication errors, provider errors, and
+malformed successful responses remain terminal. When matching rows persist but
+all credentials return 404, the resolver relists until its bounded deadline and
+never asks for direct-primary ownership. Direct election requires two
+consecutive provider snapshots containing no matching row.
+
+Focused regression coverage proves stale-former-primary followed by a live
+shared child, shared-child-only reconnect, deterministic ordering, persistent
+all-404 fail-closed behavior, terminal error handling, vanished-row recovery,
+two-empty-snapshot election, and concurrent one-direct plus one-restricted-share
+behavior. The focused test and production dashboard build pass. A separate
+closed-world safety review found no split-brain or sharing-policy bypass in the
+two-file repair.
+
+Revised next action: commit and publish the repair, build and install the exact
+development candidate, run provider doctor and the three-launch smoke, reopen
+the sealed handoff if candidate activation closes its target, refresh only its
+candidate-bound expected identity, and dispatch both external readiness clients.

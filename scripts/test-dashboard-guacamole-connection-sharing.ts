@@ -55,11 +55,13 @@ const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
     return response({
       "shared-child-uuid": {
         connectionIdentifier: "17",
-        sharingProfileIdentifier: "29",
+        connectable: true,
+        startDate: 100,
       },
       "active-uuid": {
         connectionIdentifier: "17",
-        sharingProfileIdentifier: null,
+        connectable: true,
+        startDate: 200,
       },
     });
   }
@@ -104,17 +106,168 @@ const sharedOnly = await resolveGuacamoleViewerFrame({
         return response({
           "shared-child-uuid": {
             connectionIdentifier: "17",
-            sharingProfileIdentifier: "29",
+            connectable: true,
+            startDate: 100,
           },
         });
       }
-      if (url.endsWith("/api/guacamole-primary-claim")) {
-        return response({ success: true, granted: true, retryAfterMs: 10_000 });
+      if (url.endsWith("/connections/17/sharingProfiles")) {
+        return response({
+          "29": {
+            identifier: "29",
+            name: "Agent Browser Shared Session route-1",
+            primaryConnectionIdentifier: "17",
+          },
+        });
+      }
+      if (url.endsWith("/activeConnections/shared-child-uuid/sharingCredentials/29")) {
+        return response({
+          expected: [{ name: "key", type: "QUERY_PARAMETER" }],
+          values: { key: "shared-child-secret" },
+        });
       }
       throw new Error(`Unexpected request: ${url}`);
     }) as typeof globalThis.fetch,
   });
-assert.deepEqual(sharedOnly, { mode: "direct", url: direct });
+assert.deepEqual(sharedOnly, {
+  mode: "shared",
+  url: "https://dashboard-share.example.test/guacamole/#/?key=shared-child-secret",
+});
+
+const profileResponse = () => response({
+  "29": {
+    identifier: "29",
+    name: "Agent Browser Shared Session route-1",
+    primaryConnectionIdentifier: "17",
+  },
+});
+const credentialResponse = (key: string) => response({
+  expected: [{ name: "key", type: "QUERY_PARAMETER" }],
+  values: { key },
+});
+
+const staleCandidateRequests: string[] = [];
+let staleCandidateClaimed = false;
+const staleCandidateRecovery = await resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct,
+  stream,
+  fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+    if (url.endsWith("/activeConnections")) {
+      return response({
+        "stale-former-primary": { connectionIdentifier: "17", connectable: true, startDate: 300 },
+        "live-shared-child": { connectionIdentifier: "17", connectable: true, startDate: 200 },
+      });
+    }
+    if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+    if (url.includes("/sharingCredentials/29")) {
+      staleCandidateRequests.push(url);
+      if (url.includes("/stale-former-primary/")) return new Response("not found", { status: 404 });
+      if (url.includes("/live-shared-child/")) return credentialResponse("surviving-child-secret");
+    }
+    if (url.endsWith("/api/guacamole-primary-claim")) {
+      staleCandidateClaimed = true;
+      return response({ success: true, granted: true, retryAfterMs: 10_000 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof globalThis.fetch,
+});
+assert.deepEqual(staleCandidateRecovery, {
+  mode: "shared",
+  url: "https://dashboard-share.example.test/guacamole/#/?key=surviving-child-secret",
+});
+assert.deepEqual(staleCandidateRequests.map((url) =>
+  url.match(/activeConnections\/([^/]+)/)?.[1]), ["stale-former-primary", "live-shared-child"]);
+assert.equal(staleCandidateClaimed, false);
+
+const deterministicCandidateRequests: string[] = [];
+await resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct,
+  stream,
+  fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+    if (url.endsWith("/activeConnections")) {
+      return response({
+        "inserted-first-but-older": { connectionIdentifier: "17", startDate: 100 },
+        "z-newer": { connectionIdentifier: "17", startDate: 200 },
+        "a-newer": { connectionIdentifier: "17", startDate: 200 },
+      });
+    }
+    if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+    if (url.includes("/sharingCredentials/29")) {
+      deterministicCandidateRequests.push(url);
+      return credentialResponse("newest-secret");
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof globalThis.fetch,
+});
+assert.match(deterministicCandidateRequests[0], /a-newer/);
+
+let allStaleNow = 0;
+let allStaleClaimCount = 0;
+let allStaleCredentialCount = 0;
+await assert.rejects(() => resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct,
+  stream,
+  nowImpl: () => allStaleNow,
+  waitImpl: async (delayMs) => { allStaleNow += delayMs; },
+  fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+    if (url.endsWith("/activeConnections")) {
+      return response({
+        "stale-a": { connectionIdentifier: "17", startDate: 200 },
+        "stale-b": { connectionIdentifier: "17", startDate: 100 },
+      });
+    }
+    if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+    if (url.includes("/sharingCredentials/29")) {
+      allStaleCredentialCount += 1;
+      return new Response("not found", { status: 404 });
+    }
+    if (url.endsWith("/api/guacamole-primary-claim")) {
+      allStaleClaimCount += 1;
+      return response({ success: true, granted: true, retryAfterMs: 10_000 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof globalThis.fetch,
+}), /Guacamole primary election timed out/);
+assert.ok(allStaleCredentialCount > 2);
+assert.equal(allStaleClaimCount, 0);
+
+for (const [label, terminalResponse, expected] of [
+  ["401", new Response("unauthorized", { status: 401 }), /returned HTTP 401/],
+  ["403", new Response("forbidden", { status: 403 }), /returned HTTP 403/],
+  ["500", new Response("failed", { status: 500 }), /returned HTTP 500/],
+  ["malformed", response({ expected: [], values: {} }), /returned no usable key/],
+] as const) {
+  let claimCount = 0;
+  await assert.rejects(() => resolveGuacamoleViewerFrame({
+    dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+    frameUrl: direct,
+    stream,
+    fetchImpl: (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+      if (url.endsWith("/activeConnections")) {
+        return response({ "live-row": { connectionIdentifier: "17", startDate: 100 } });
+      }
+      if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+      if (url.includes("/sharingCredentials/29")) return terminalResponse;
+      if (url.endsWith("/api/guacamole-primary-claim")) {
+        claimCount += 1;
+        return response({ success: true, granted: true, retryAfterMs: 10_000 });
+      }
+      throw new Error(`Unexpected request in ${label} case: ${url}`);
+    }) as typeof globalThis.fetch,
+  }), expected);
+  assert.equal(claimCount, 0, `${label} must remain terminal without primary election`);
+}
 
 let vanishedDiscoveryCount = 0;
 const vanishedPrimary = await resolveGuacamoleViewerFrame({
@@ -130,7 +283,8 @@ const vanishedPrimary = await resolveGuacamoleViewerFrame({
       return response({
         "active-uuid": {
           connectionIdentifier: "17",
-          sharingProfileIdentifier: null,
+          connectable: true,
+          startDate: 100,
         },
       });
     }
@@ -155,6 +309,8 @@ const vanishedPrimary = await resolveGuacamoleViewerFrame({
 });
 assert.deepEqual(vanishedPrimary, { mode: "direct", url: direct });
 
+let noActiveDiscoveryCount = 0;
+let noActiveClaimCount = 0;
 const noActive = await resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/",
   frameUrl: direct,
@@ -162,14 +318,21 @@ const noActive = await resolveGuacamoleViewerFrame({
   fetchImpl: (async (input: string | URL | Request) => {
     const url = String(input);
     if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
-    if (url.endsWith("/activeConnections")) return response({});
+    if (url.endsWith("/activeConnections")) {
+      noActiveDiscoveryCount += 1;
+      return response({});
+    }
     if (url.endsWith("/api/guacamole-primary-claim")) {
+      noActiveClaimCount += 1;
       return response({ success: true, granted: true, retryAfterMs: 10_000 });
     }
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof globalThis.fetch,
+  waitImpl: async () => {},
 });
 assert.deepEqual(noActive, { mode: "direct", url: direct });
+assert.equal(noActiveDiscoveryCount, 2);
+assert.equal(noActiveClaimCount, 1);
 
 let discoveryCount = 0;
 let claimHeld = false;
@@ -182,7 +345,8 @@ const concurrentFetch = async (input: string | URL | Request) => {
     return response({
       "elected-primary": {
         connectionIdentifier: "17",
-        sharingProfileIdentifier: null,
+        connectable: true,
+        startDate: 100,
       },
     });
   }

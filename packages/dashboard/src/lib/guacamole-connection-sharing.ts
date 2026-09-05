@@ -6,7 +6,8 @@ type GuacamoleAuthToken = {
 
 type GuacamoleActiveConnection = {
   connectionIdentifier?: string;
-  sharingProfileIdentifier?: string | null;
+  connectable?: boolean;
+  startDate?: number;
 };
 
 type GuacamoleSharingProfile = {
@@ -90,6 +91,7 @@ export async function resolveGuacamoleViewerFrame({
   signal,
   stream,
   waitImpl = waitForElection,
+  nowImpl = Date.now,
 }: {
   dashboardHref: string;
   fetchImpl?: typeof globalThis.fetch;
@@ -97,6 +99,7 @@ export async function resolveGuacamoleViewerFrame({
   signal?: AbortSignal;
   stream: ServiceViewStream;
   waitImpl?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+  nowImpl?: () => number;
 }): Promise<GuacamoleViewerFrameResolution> {
   const root = guacamoleRoot(frameUrl, dashboardHref);
   const connectionId = stream.connectionId?.trim();
@@ -136,22 +139,36 @@ export async function resolveGuacamoleViewerFrame({
     "Guacamole primary election",
   );
 
-  const electionDeadline = Date.now() + 15_000;
-  while (Date.now() < electionDeadline) {
+  const electionDeadline = nowImpl() + 15_000;
+  let consecutiveEmptySnapshots = 0;
+  while (nowImpl() < electionDeadline) {
     const activeConnections = await authenticatedFetch<Record<string, GuacamoleActiveConnection>>(
       "api/session/data/postgresql/activeConnections",
       "Guacamole active-connection discovery",
     );
-    const activeConnectionId = Object.entries(activeConnections).find(
-      ([, active]) => active.connectionIdentifier === connectionId && !active.sharingProfileIdentifier,
-    )?.[0];
-    if (!activeConnectionId) {
+    // Guacamole 1.5.5 does not identify which REST rows are primary versus
+    // shared children. Probe every matching row through the restricted
+    // sharing-profile endpoint instead of guessing from row shape.
+    const activeCandidates = Object.entries(activeConnections)
+      .filter(([, active]) => active.connectionIdentifier === connectionId)
+      .sort(([leftId, left], [rightId, right]) => {
+        const leftStart = Number.isFinite(left.startDate) ? left.startDate! : Number.NEGATIVE_INFINITY;
+        const rightStart = Number.isFinite(right.startDate) ? right.startDate! : Number.NEGATIVE_INFINITY;
+        return rightStart - leftStart || leftId.localeCompare(rightId);
+      });
+    if (activeCandidates.length === 0) {
+      consecutiveEmptySnapshots += 1;
+      if (consecutiveEmptySnapshots < 2) {
+        await waitImpl(100, signal);
+        continue;
+      }
       const claim = await claimPrimary();
       if (claim.granted) return { mode: "direct", url: frameUrl };
       const retryAfterMs = Number.isFinite(claim.retryAfterMs) ? claim.retryAfterMs! : 250;
       await waitImpl(Math.max(50, Math.min(250, retryAfterMs)), signal);
       continue;
     }
+    consecutiveEmptySnapshots = 0;
 
     const sharingProfiles = await authenticatedFetch<Record<string, GuacamoleSharingProfile>>(
       `api/session/data/postgresql/connections/${encodeURIComponent(connectionId)}/sharingProfiles`,
@@ -165,32 +182,35 @@ export async function resolveGuacamoleViewerFrame({
       throw new Error("Guacamole simultaneous-view sharing profile is unavailable");
     }
 
-    const credentialsResponse = await fetchImpl(new URL(
-      `api/session/data/postgresql/activeConnections/${encodeURIComponent(activeConnectionId)}/sharingCredentials/${encodeURIComponent(sharingProfile.identifier)}`,
-      root,
-    ), {
-      credentials: "include",
-      headers: { "Guacamole-Token": token.authToken },
-      cache: "no-store",
-      signal,
-    });
-    if (credentialsResponse.status === 404) {
-      await waitImpl(100, signal);
-      continue;
-    }
-    const credentials = await readJson<GuacamoleSharingCredentials>(
-      credentialsResponse,
-      "Guacamole connection-sharing credential creation",
-    );
-    const keyExpected = credentials.expected?.some(
-      (field) => field.name === "key" && field.type === "QUERY_PARAMETER",
-    );
-    const key = credentials.values?.key;
-    if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
+    for (const [activeConnectionId] of activeCandidates) {
+      const credentialsResponse = await fetchImpl(new URL(
+        `api/session/data/postgresql/activeConnections/${encodeURIComponent(activeConnectionId)}/sharingCredentials/${encodeURIComponent(sharingProfile.identifier)}`,
+        root,
+      ), {
+        credentials: "include",
+        headers: { "Guacamole-Token": token.authToken },
+        cache: "no-store",
+        signal,
+      });
+      // A 404 invalidates only this active-row candidate. It is not evidence
+      // that every matching provider connection disappeared or that direct
+      // primary election is safe.
+      if (credentialsResponse.status === 404) continue;
+      const credentials = await readJson<GuacamoleSharingCredentials>(
+        credentialsResponse,
+        "Guacamole connection-sharing credential creation",
+      );
+      const keyExpected = credentials.expected?.some(
+        (field) => field.name === "key" && field.type === "QUERY_PARAMETER",
+      );
+      const key = credentials.values?.key;
+      if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
 
-    const shared = guacamoleSharingRoot(root);
-    shared.hash = `/?key=${encodeURIComponent(key)}`;
-    return { mode: "shared", url: shared.toString() };
+      const shared = guacamoleSharingRoot(root);
+      shared.hash = `/?key=${encodeURIComponent(key)}`;
+      return { mode: "shared", url: shared.toString() };
+    }
+    await waitImpl(100, signal);
   }
   throw new Error("Guacamole primary election timed out");
 }
