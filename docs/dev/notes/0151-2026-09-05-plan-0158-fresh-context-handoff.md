@@ -2,6 +2,44 @@
 
 Date: 2026-09-05
 
+## Controlled title-candidate publication window
+
+The next in-envelope publication intentionally ends the unfrozen synthetic
+baseline epoch. The development installer restarts its runtime-host unit, whose
+current `KillMode=control-group` would kill retained children even after a
+daemon handoff. Do not claim continuity through that operation or introduce an
+unreviewed systemd exception. Fresh inventory identifies exactly the four
+campaign provider viewers and one synthetic browser. Close those five through
+their exact owned sessions before publication; preserve profiles and all failed
+evidence. Then use the existing isolated publisher and provider plan/stage/
+preflight/apply sequence, establish a fresh broker-selected synthetic baseline,
+and verify the installed title repair. One controlled publication attempt is
+in scope here. No production or default-development mutation, broad cleanup,
+external retry, or W6 freeze is authorized by this checkpoint.
+
+That controlled close and publication succeeded. `controlled-close-k.json`
+records five exact closes, preserved profile directories and a private backup.
+`install-title-k.json` selects `0.28.0-296b61993e8b`; provider plan, stage,
+preflight, apply, required doctor and three disposable smokes pass. The new
+broker-selected `scene-open-k.json` is ready. `title-readback-green-k.json`
+proves that its same-target resolution title and live document title now match.
+Production and default-development guards pass in `baselines-scene-k.json`.
+
+Visual preparation initially failed with a 504 and no iframe (`visual-k/`).
+Three extra sharing diagnostics failed on frame-role or replacement observation;
+they are not current sharing acceptance and that checker loop is stopped.
+The current served extension matches the previously verified exact asset.
+The fresh `visual-l/` capture has no HTTP failures, console errors or page
+errors, and shows the owned synthetic scene. Its source-RGB comparison remains
+false, as expected from the independently reviewed transport-color distinction
+below. The exact transported marker hash matches after fresh full-scene, source
+pixel and uniform-crop review. `visual-preparation-review-k.json` explicitly
+retains the failed current sharing-checker status. Its visual attestation is
+synthetic custody evidence, not a claim that those diagnostics passed.
+The six protected environment secrets are bound to this new scene for one
+manual external readiness attempt. The earlier 504 and original intermittent
+forward-auth 500 remain unresolved failures, not erased by preparation.
+
 ## Restored cleanroom and external readiness checkpoint
 
 This supersedes the quarantined runtime state below. Source `836e46ab` is

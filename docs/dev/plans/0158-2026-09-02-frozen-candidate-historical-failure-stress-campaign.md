@@ -5299,3 +5299,22 @@ Preserve the retained scene while planning guarded
 publication; the earlier publication killed its predecessor. See Note 0151 for
 the current checkpoint and private evidence locators. The full 20-minute
 calibration, W6 freeze, terminal live cases and W10 remain incomplete.
+
+### Installed title repair and controlled new preparation epoch
+
+Source `5b0257c3` is installed as `0.28.0-296b61993e8b`. Before publication,
+the exact five campaign-owned browsers were deliberately closed through their
+sessions, with profiles and evidence preserved. This unfrozen epoch ended
+intentionally; no continuity claim is made. The publisher's control-group
+restart is not a browser-preserving hot-handoff path. Provider restoration,
+required doctor and three disposable smokes passed. The fresh broker-selected
+synthetic target now returns the correct title through both live document
+readback and durable resolution. Isolation guards pass.
+
+Preparation retains a 504/no-iframe failure and failed extra frame-role
+diagnostics. Their loop is stopped. A fresh owned-scene capture has zero HTTP,
+console and page errors and the exact independently reviewed transport-pixel
+hash. The visual custody attestation explicitly does not claim current sharing
+checker acceptance. Next is one manual two-client external readiness attempt
+against the newly bound scene. This is blocker reduction through installed
+title proof, not external acceptance, calibration, freeze or final analysis.
