@@ -4227,3 +4227,73 @@ and move blocking inventory/reconciliation work off async workers or onto
 maintained snapshots. A provider-free two-page plus 500-read stress test must
 prove bounded requests, bytes, event-loop lag, complete failure logging, and no
 timeouts before another exact-candidate readiness and synchronized C01 attempt.
+
+### C01 Capacity, Logging, And Campaign-Sequencing Repair
+
+State transition: `c01_starvation_repair_active ->
+c01_repaired_candidate_ready_for_publication`.
+
+The C01 failure surface was repaired as one bounded cross-layer slice. The
+ordinary service-status contract remains lossless. The dashboard now requests
+an additive summary projection that caps growth-prone collections, retains
+current identity and actionability fields, reports omitted counts and detail
+routes, and fails closed above 2 MiB. Status and resource preparation move
+blocking state, process, authority, and serialization work off async workers.
+Dashboard consumers share completion-driven reads, suppress hidden-page
+polling, retain bounded monotonic caches, invalidate generation-scoped static
+data, and fetch session tabs in a selected-first bounded round robin instead of
+one request per session on every cycle.
+
+The failure journal now uses a dedicated bounded writer. Accepted writes
+backpressure instead of disappearing under queue pressure; readback exposes
+distinct overload, worker, and sink failures and flushes pending writes before
+inspection. Exactly one backend-flight occurrence is recorded for a failed
+shared request, while each affected client retains its own logical failure.
+The dashboard records privacy-bounded failures from status, resources,
+session-tabs, and runtime-health reads without retrying them, retains up to
+4,096 occurrences per document, and submits them after a later valid response.
+Overflow becomes an explicit delivery-gap occurrence. The C01 transport hashes
+and counts the exact response bytes before decoding, classifies non-JSON
+gateway responses without retaining raw bodies, and fails closed above an
+8 MiB response cap.
+
+A real two-worker Tokio stress oracle now serves dense projected state through
+the actual proxy, cache, and single-flight path to two independent clients. It
+performs exactly 500 reads, requires exactly two backend requests, enforces the
+summary byte ceiling and a 250 millisecond heartbeat ceiling, and performs no
+retry or repair. Its fault half injects one shared JSON 502 and one non-JSON
+504 and requires exactly two backend-flight records, four logical-client
+records, six journal records, complete correlation, and redaction. Both stress
+tests pass.
+
+The campaign sequence was also corrected before another live dispatch. C04 and
+C05 are passive asynchronous observations and cannot delay installation or
+repair. Dependency loss is checked before a dependent action adapter can run;
+blocked work records `skipped_blocked`, `not_started`, exact prerequisite IDs,
+and zero actions or effects. W10 preparation now receives hash and byte-count
+verified manifest, freeze, schedule, registry, logging-gap, and terminal
+artifact inputs from the live assembly. It prepares only after execution is
+terminal, evidence seals next, and finalization runs only after sealing. An
+empty logging-gap inventory produces an explicit sealed zero-entry artifact.
+
+Integrated provider-free evidence is green: the complete Plan 0158 harness
+passes through all 54 cases, 894 scheduled attempts, five logging surfaces,
+Last30Days shared-profile regressions, external handoff and dashboard oracles,
+W7, W8, W9, teardown, and W10 analysis. The dashboard build and documentation
+build pass. Workspace clippy passes with warnings denied. The broad Rust main
+partition passes 1,973 tests. It first exposed two stale Plan 0137 expectations
+that still required a capability for a shared-local terminal replacement; the
+tests now preserve the intended frictionless shared-local admission while
+requiring a fresh isolated route. A later serial control-plane test exposed an
+empty-object versus missing-state sentinel regression. The daemon now uses
+`null` as the sole repository-reload sentinel, while an explicit empty snapshot
+remains read-only. The complete 47-test control-plane partition passes after
+that repair.
+
+Revised next action: commit and publish the reviewed source slices, build and
+install one exact development candidate while production remains untouched,
+run provider-required doctor and the three disposable launch smokes, calibrate
+all five journal surfaces, refresh only candidate-bound sealed handoff identity
+if activation changes it, and require both external readiness clients plus
+their aggregate to pass. Only then dispatch one fresh synchronized C01 against
+that exact installed commit.
