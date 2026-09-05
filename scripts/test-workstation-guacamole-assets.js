@@ -156,6 +156,7 @@ function runEmbeddedTextInputTemplate({ embedded, migrated = false }) {
       setItem() {},
     },
     angular: { module(name) {
+      if (name === 'textInput') return { config() {} }
       assert.equal(name, 'templates-main')
       return { run(injected) {
         assert.equal(injected[0], '$templateCache')
@@ -178,6 +179,51 @@ for (const migrated of [false, true]) {
 const standalone = runEmbeddedTextInputTemplate({ embedded: false })
 assert.equal(standalone.cache.get(textInputTemplateKey), textInputTemplate)
 assert.deepEqual(standalone.calls, ['upstream-template-cache'])
+
+// Guacamole 1.5.5 also calls target.focus() synchronously in its text-input
+// controller. Removing only the template attribute does not preserve host focus.
+for (const embedded of [true, false]) {
+  for (const throws of [false, true]) {
+    let decorator
+    let focusCalls = 0
+    const nativeFocus = function () { focusCalls += 1 }
+    const target = Object.create({ focus: nativeFocus })
+    const scope = {}
+    const element = { find: () => [target] }
+    const failure = new Error('controller failure')
+    const controller = ['$scope', '$element', function ($scope, $element) {
+      assert.equal($scope, scope)
+      assert.equal($element, element)
+      $scope.focusExplicitly = () => target.focus()
+      target.focus()
+      if (throws) throw failure
+      return 'controller result'
+    }]
+    const directive = { controller }
+    const window = { parent: {}, angular: { module(name) {
+      if (name === 'templates-main') return { run() {} }
+      assert.equal(name, 'textInput')
+      return { config(injected) { injected.at(-1)({ decorator(name, injected) {
+        assert.equal(name, 'guacTextInputDirective')
+        decorator = injected.at(-1)
+      } }) } }
+    } } }
+    if (!embedded) window.parent = window
+    const injector = { invoke(injected, receiver, locals) {
+      return injected.at(-1).apply(receiver, injected.slice(0, -1).map(name => locals[name]))
+    } }
+    vm.runInNewContext(defaultsScript, { window })
+    if (decorator) decorator([directive], injector)
+    const initialize = () => injector.invoke(directive.controller, {}, { $scope: scope, $element: element })
+    if (throws) assert.throws(initialize, error => error === failure)
+    else assert.equal(initialize(), 'controller result')
+    assert.equal(focusCalls, embedded ? 0 : 1, 'embedded controller startup must not steal dashboard focus')
+    assert.equal(Object.hasOwn(target, 'focus'), false, 'restore inherited focus even on controller failure')
+    assert.equal(target.focus, nativeFocus)
+    scope.focusExplicitly()
+    assert.equal(focusCalls, embedded ? 1 : 2, 'explicit input focus must remain functional')
+  }
+}
 
 function createShareAuthSignalHarness({
   frameName = 'agent-browser-guacamole-share:attempt-safe-123',
@@ -386,6 +432,7 @@ async function checkSharedViewerCapabilities({
     location: { hostname, protocol: 'https:', port: '' },
     angular: { module(name) {
       if (name === 'templates-main') return { run() {} }
+      if (name === 'textInput') return { config() {} }
       assert.equal(name, 'rest')
       return { config(injected) {
         assert.equal(injected[0], '$provide')

@@ -151,7 +151,8 @@ they do not require a checkout or an ambient script-root override.
 The packaged Guacamole defaults extension migrates each browser origin once to
 the `text` input method. Text input is therefore selected for existing and new
 connections, while a later user-selected override remains persistent.
-Embedded viewers do not autofocus the text-input field. Establish remote input
+Embedded viewers suppress declarative and controller-startup text-input
+autofocus. Establish remote input
 focus explicitly when authorized; dashboard keyboard checks must retain
 dashboard focus. Standalone Guacamole autofocus is unchanged.
 Reruns first stop the managed dashboard, runtime interlock, and backup

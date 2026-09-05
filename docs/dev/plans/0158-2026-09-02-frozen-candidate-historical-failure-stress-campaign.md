@@ -5398,3 +5398,44 @@ pass; the R preparation binds the current P scene in all six protected
 environment secrets. Focused anchor, coordinator, adapter and external-runner
 checks pass. One anchored readiness attempt is next, with all five evidence
 units required and no retry, timeout relaxation or substituted acceptance.
+
+### Anchored R failure and embedded text-input focus repair
+
+Run `33988373995` is terminal failed: anchor-ready, human and anchor-final pass,
+but slow-client keyboard focus escapes the toolbar. Its 41 Guacamole responses
+are HTTP 200 and no request fails. Independent verification accepts eight human
+and three slow artifact hashes/byte counts, not the aggregate outcome.
+
+The local replay captures correct Advanced and next-button focus followed by
+iframe focus during the 900 ms observation. The installed Guacamole 1.5.5
+controller's synchronous `target.focus()` remains active despite template
+autofocus removal. The bounded repair suppresses only that embedded controller
+initialization call and restores the original per-element focus property even
+on failure. It does not refocus the dashboard after input escapes, weaken the
+oracle, extend a timeout, or change standalone/explicit remote input.
+
+Private `focus-upstream-red-green-u.json` binds the actual installed-image
+controller and old/new extension hashes. Network-blocked browser replay fails
+with the old extension and passes with the repair; explicit input remains
+functional. Asset regression, external-runner, anchor, Rust format/clippy, docs
+build and optimized candidate checks pass. The other live focus replay has
+gateway errors and is preserved, not accepted as a clean outcome.
+
+Classification is `blocker_reduction` with installed proof. Controlled closure
+of the one verified synthetic browser preserves its profile and backup before
+p158-only publication as `0.28.0-8884c5fa8980`. Candidate U binds digest
+`d7bf569412961c4e405cccf6e3b277141990ebf5b957e731694ef4670a9cccea`.
+Provider-required doctor, three disposable launch smokes, isolated skill sync
+and production/default-development guards pass. Exact Guacamole recreation
+loads the repaired extension while guacd and PostgreSQL remain unchanged; the
+initial command's missing protected environment file fails before mutation and
+its receipt is preserved.
+
+`focus-installed-u/receipt.json` proves all eight toolbar assertions, exact
+synthetic pixels, the actual served extension and clean ready/final anchor
+samples. The synthetic-only screenshot retains runtime-convergence/inventory
+advisories; this focused proof is not whole-dashboard acceptance. Workstation,
+host-provision, fresh-VM, durability, route-user and handoff-doc fixtures pass.
+New external preparation remains required: the prior P scene's protected
+binding is no longer valid for dispatch. No external workflow, W6 freeze,
+live-case acceptance, retry or final analysis is claimed in this repair slice.

@@ -384,7 +384,8 @@ user services only after the final doctors pass.
 The pinned Guacamole web app loads an agent-browser defaults extension. It
 migrates each browser origin once to the `text` input method so existing and
 new connections default to text input, then preserves later user-selected
-input-method changes. Embedded viewers do not autofocus the text-input field;
+input-method changes. Embedded viewers suppress both declarative autofocus and
+the text-input controller's initialization focus call;
 focus it explicitly when entering remote text. Standalone Guacamole keeps its
 normal autofocus behavior.
 The packaged container entrypoint copies the sealed extension template into

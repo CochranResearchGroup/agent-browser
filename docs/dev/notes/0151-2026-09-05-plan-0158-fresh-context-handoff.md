@@ -2,6 +2,61 @@
 
 Date: 2026-09-05
 
+## Embedded focus repair after anchored readiness R
+
+Manual run [33988373995](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33988373995)
+is terminal failed. Anchor-ready, human client and anchor-final pass; the slow
+client fails `external_dashboard_keyboard_focus_invalid`. All 41 Guacamole
+responses are HTTP 200, with zero failed requests. Eight human and three slow
+artifacts pass independent byte-count and SHA-256 verification. This is not an
+aggregate pass or W6 acceptance.
+
+The local `focus-diagnostic-s2/receipt.json` reproduces the exact transition:
+Advanced focus passes, Tab reaches the external toolbar button, then the iframe
+takes focus during the 900 ms pause. Both anchor samples pass. A second
+instrumented replay does not reproduce the timing-dependent focus loss and
+records separate gateway/console errors; preserve it as mixed evidence.
+
+The installed Guacamole 1.5.5 text-input controller calls `target.focus()`
+synchronously, independently of the already-removed HTML autofocus attribute.
+The extension now suppresses only the embedded instance's controller-startup
+call and restores the exact focus property in `finally`. Explicit input focus,
+standalone behavior and the campaign keyboard assertion remain unchanged.
+`focus-upstream-red-green-u.json` runs that actual installed-image controller
+in a network-blocked browser: old extension fails the exact assertion, new
+extension passes, and explicit input works in both. Permanent asset tests cover
+normal and exceptional initialization and focus restoration. Focused asset,
+external-runner and anchor tests, Rust format/clippy, docs build and the optimized
+candidate build pass.
+
+The user requested this repair. One exact synthetic browser was closed with
+its profile and private Service State backup preserved in `controlled-close-u.json`.
+The p158-only installation completed as `0.28.0-8884c5fa8980`.
+`candidate-u.json` binds candidate digest
+`d7bf569412961c4e405cccf6e3b277141990ebf5b957e731694ef4670a9cccea`.
+Provider plan/stage/preflight/apply, required doctor, three disposable smokes and
+isolated skill sync pass. Provider recreation was required to serve the new
+extension; `provider-focus-reconcile-u2.json` verifies exact bytes and unchanged
+guacd/PostgreSQL containers. The first reconciliation command omitted the
+protected provider environment file and stopped before mutation; its failed
+receipt remains preserved.
+
+`focus-installed-u/receipt.json` passes all eight focus checks on the fresh
+broker-selected scene, before and after exact synthetic pixels appear. The
+observer actually loads the repaired extension, and both anchor samples pass
+without findings. The source/served extension SHA-256 is
+`7c16a40a89ff84f1f8ef10dd3a0d41a2b5e6405e7f57d80a21fe85b035ba670c`.
+The full screenshot is synthetic-only; it still shows runtime-convergence and
+inventory advisories. Focus proof does not erase those or establish complete
+dashboard truth acceptance. Source-free workstation, host-provision, fresh-VM,
+PostgreSQL durability, route-user sync and handoff-doc checks also pass.
+
+Production/default-development guards pass after publication. The current
+scene is `scene-open-u.json`; the old P scene and protected R secret binding
+must not be used for another dispatch. Next is fresh external preparation and
+the admitted anchored lane, not another focus repair loop. No external workflow
+was dispatched for this repair. Plan 0158 remains open.
+
 ## Resume the admitted anchored calibration lane
 
 The current Plan's September 5 Anchor Disposition explicitly admits the

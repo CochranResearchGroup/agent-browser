@@ -87,6 +87,49 @@
 }());
 
 /*
+ * Guacamole 1.5.5 also focuses its text target from the synchronous directive
+ * controller, independently of the template's autofocus attribute. Suppress
+ * only that embedded instance's initialization call. Restore its exact focus
+ * property before returning (including exceptions), so subsequent pointer,
+ * keyboard and IME interaction uses Guacamole's unmodified handlers. Do not
+ * patch HTMLElement globally or move focus back after a remote key can escape.
+ */
+(function installAgentBrowserEmbeddedTextInputFocus() {
+    'use strict';
+
+    if (window.parent === window || !window.angular)
+        return;
+
+    window.angular.module('textInput').config(['$provide', function ($provide) {
+        $provide.decorator('guacTextInputDirective', ['$delegate', '$injector', function ($delegate, $injector) {
+            $delegate.forEach(function (directive) {
+                var controller = directive.controller;
+                if (!controller)
+                    return;
+                directive.controller = ['$scope', '$element', function ($scope, $element) {
+                    var target = $element.find('.target')[0];
+                    var descriptor = target && Object.getOwnPropertyDescriptor(target, 'focus');
+                    if (target)
+                        Object.defineProperty(target, 'focus', { configurable: true, value: function () {} });
+                    try {
+                        return $injector.invoke(controller, this, { $scope: $scope, $element: $element });
+                    }
+                    finally {
+                        if (target) {
+                            if (descriptor)
+                                Object.defineProperty(target, 'focus', descriptor);
+                            else
+                                delete target.focus;
+                        }
+                    }
+                }];
+            });
+            return $delegate;
+        }]);
+    }]);
+}());
+
+/*
  * A restricted sharing key is redeemed inside the sibling Guacamole origin,
  * which the dashboard cannot inspect. Report only the attempt identity and
  * bounded outcome so the parent can discard a rejected key and run a fresh
