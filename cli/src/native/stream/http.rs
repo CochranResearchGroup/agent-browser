@@ -1472,19 +1472,32 @@ async fn stream_api_send_input(port: u16, body: &str) -> Value {
     json!({"success": true})
 }
 
-fn service_status_command(query: Option<&str>) -> Value {
+async fn service_status_command(query: Option<&str>) -> Value {
+    let query = query.map(str::to_string);
+    tokio::task::spawn_blocking(move || service_status_command_blocking(query.as_deref()))
+        .await
+        .unwrap_or_else(|_| json!({ "action": "service_status" }))
+}
+
+fn service_status_command_blocking(query: Option<&str>) -> Value {
     let _ = refresh_persisted_profile_seeding_handoffs();
-    let args = vec!["service".to_string(), "status".to_string()];
-    let flags = parse_flags(&args);
-    let full_tab_history = query_params(query).into_iter().any(|(key, value)| {
+    let query = query_params(query);
+    let full_tab_history = query.iter().any(|(key, value)| {
         matches!(key.as_str(), "full-tab-history" | "fullTabHistory")
             && matches!(value.as_str(), "1" | "true" | "yes")
     });
+    let status_projection = query
+        .iter()
+        .find(|(key, _)| key == "projection")
+        .and_then(|(_, value)| (value == "dashboard-summary").then_some("dashboard_summary"));
     json!({
         "action": "service_status",
-        "serviceState": flags.service_state.clone(),
-        "launchConfig": launch_config_status(&flags),
+        "launchConfig": launch_config_status(&parse_flags(&[
+            "service".to_string(),
+            "status".to_string(),
+        ])),
         "fullTabHistory": full_tab_history,
+        "statusProjection": status_projection,
     })
 }
 
@@ -1497,7 +1510,11 @@ where
     F: FnOnce(String, Value) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
-    relay(session_name.to_string(), service_status_command(query)).await
+    relay(
+        session_name.to_string(),
+        service_status_command(query).await,
+    )
+    .await
 }
 
 fn service_reconcile_command() -> Value {
@@ -1508,11 +1525,8 @@ fn service_reconcile_command() -> Value {
 }
 
 fn service_resources_command() -> Value {
-    let args = vec!["service".to_string(), "resources".to_string()];
-    let flags = parse_flags(&args);
     json!({
         "action": "service_resources",
-        "serviceState": flags.service_state.clone(),
     })
 }
 
@@ -4259,13 +4273,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn service_status_command_maps_full_tab_history_query() {
-        let ordinary = service_status_command(None);
-        let full = service_status_command(Some("full-tab-history=true"));
+    #[tokio::test]
+    async fn service_status_command_maps_full_tab_history_query() {
+        let ordinary = service_status_command(None).await;
+        let full = service_status_command(Some("full-tab-history=true")).await;
+        let dashboard = service_status_command(Some("projection=dashboard-summary")).await;
 
         assert_eq!(ordinary["fullTabHistory"], false);
         assert_eq!(full["fullTabHistory"], true);
+        assert_eq!(ordinary["statusProjection"], Value::Null);
+        assert_eq!(dashboard["statusProjection"], "dashboard_summary");
+        assert!(ordinary.get("serviceState").is_none());
     }
 
     #[test]
@@ -4273,7 +4291,7 @@ mod tests {
         let cmd = service_resources_command();
 
         assert_eq!(cmd["action"], "service_resources");
-        assert!(cmd["serviceState"].is_object());
+        assert!(cmd.get("serviceState").is_none());
     }
 
     #[test]

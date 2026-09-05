@@ -15,6 +15,7 @@ use std::sync::Arc;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 use super::browser_session_authority::BrowserSessionAuthoritySnapshot;
 use super::service_model::{ControlPlaneSnapshot, ServiceProfileAllocation, ServiceState};
@@ -56,6 +57,38 @@ pub(crate) struct StatusAuthorityInput {
     pub(crate) launch_config: StatusLaunchConfiguration,
     pub(crate) full_tab_history: bool,
     pub(crate) runtime_lifecycle: Value,
+    pub(crate) service_state_projection: ServiceStateProjectionMode,
+}
+
+const DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES: usize = 1024 * 1024;
+const DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+const DASHBOARD_SUMMARY_MAX_RECORD_BYTES: usize = 8 * 1024;
+const DASHBOARD_SUMMARY_PROFILE_ALLOCATION_LIMIT: usize = 128;
+const DASHBOARD_SUMMARY_MANUAL_BROWSER_LIMIT: usize = 64;
+const DASHBOARD_SUMMARY_BROWSER_VERDICT_LIMIT: usize = 64;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ServiceStateProjectionMode {
+    #[default]
+    Full,
+    DashboardSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStateProjectionMetadata {
+    pub(crate) schema_version: u8,
+    pub(crate) mode: ServiceStateProjectionMode,
+    pub(crate) complete: bool,
+    pub(crate) included_collections: Vec<&'static str>,
+    pub(crate) omitted_collection_counts: BTreeMap<String, usize>,
+    pub(crate) detail_routes: BTreeMap<&'static str, &'static str>,
+    pub(crate) historical_limits: BTreeMap<&'static str, usize>,
+    pub(crate) max_service_state_bytes: Option<usize>,
+    pub(crate) max_serialized_response_bytes: Option<usize>,
+    pub(crate) serialized_service_state_bytes: usize,
+    pub(crate) truncated_record_count: usize,
 }
 
 pub(crate) struct ServiceStatusProjectionDependencies<'a, Repository, Preparer, BrowserAuthority> {
@@ -290,6 +323,8 @@ pub struct ClosedTabProjectionMetadata {
 pub(crate) struct ServiceStatusResponse {
     pub(crate) control_plane: StatusControlPlaneAuthority,
     pub(crate) service_state: Value,
+    #[serde(rename = "serviceStateProjection")]
+    pub(crate) service_state_projection: ServiceStateProjectionMetadata,
     #[serde(rename = "profileAllocations")]
     pub(crate) profile_allocations: Vec<ServiceProfileAllocation>,
     #[serde(rename = "manualBrowsers")]
@@ -380,16 +415,23 @@ impl ServiceStatusAuthorityPreparer for ReconcileServiceStatusAuthority {
     }
 }
 
+#[async_trait::async_trait]
 pub(crate) trait ServiceStatusBrowserAuthorityProvider: Send + Sync {
-    fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot;
+    async fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot;
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct ReconciledBrowserSessionAuthority;
 
+#[async_trait::async_trait]
 impl ServiceStatusBrowserAuthorityProvider for ReconciledBrowserSessionAuthority {
-    fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot {
-        super::browser_session_authority::browser_session_authority_snapshot(service_state)
+    async fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot {
+        let service_state = service_state.clone();
+        tokio::task::spawn_blocking(move || {
+            super::browser_session_authority::browser_session_authority_snapshot(&service_state)
+        })
+        .await
+        .unwrap_or_default()
     }
 }
 
@@ -453,7 +495,7 @@ impl ServiceStatusProjector {
             .map_err(ServiceStatusProjectionError::InvalidObservation)?;
         let projected_at = format_timestamp(self.clock.now());
 
-        let manual_browsers = compatibility::join_manual_browsers(
+        let mut manual_browsers = compatibility::join_manual_browsers(
             &authority_state,
             observations.manual_browsers.clone(),
         );
@@ -461,6 +503,44 @@ impl ServiceStatusProjector {
             authority::project_closed_tabs(&authority_state, input.full_tab_history);
         let response_state =
             compatibility::apply_legacy_observation_mirrors(&response_state, &observations)?;
+        let (response_state, mut service_state_projection) =
+            project_service_state_for_delivery(response_state, input.service_state_projection);
+        let mut profile_allocations =
+            super::service_model::service_profile_allocations(&authority_state);
+        let mut browser_session_authority = input.browser_session_authority;
+        if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
+            profile_allocations.sort_by(|left, right| {
+                let left_active = left.holder_count > 0
+                    || left.waiting_job_count > 0
+                    || !left.browser_ids.is_empty()
+                    || !left.tab_ids.is_empty();
+                let right_active = right.holder_count > 0
+                    || right.waiting_job_count > 0
+                    || !right.browser_ids.is_empty()
+                    || !right.tab_ids.is_empty();
+                right_active
+                    .cmp(&left_active)
+                    .then_with(|| left.profile_id.cmp(&right.profile_id))
+            });
+            truncate_vec_with_metadata(
+                &mut profile_allocations,
+                DASHBOARD_SUMMARY_PROFILE_ALLOCATION_LIMIT,
+                "profileAllocations",
+                &mut service_state_projection.omitted_collection_counts,
+            );
+            truncate_vec_with_metadata(
+                &mut manual_browsers,
+                DASHBOARD_SUMMARY_MANUAL_BROWSER_LIMIT,
+                "manualBrowsers",
+                &mut service_state_projection.omitted_collection_counts,
+            );
+            truncate_vec_with_metadata(
+                &mut browser_session_authority.browser_verdicts,
+                DASHBOARD_SUMMARY_BROWSER_VERDICT_LIMIT,
+                "browserSessionAuthority.browserVerdicts",
+                &mut service_state_projection.omitted_collection_counts,
+            );
+        }
 
         let presentation_capacity =
             authority_state
@@ -476,9 +556,7 @@ impl ServiceStatusProjector {
                 });
         let response = ServiceStatusResponse {
             control_plane: input.control_plane,
-            profile_allocations: super::service_model::service_profile_allocations(
-                &authority_state,
-            ),
+            profile_allocations,
             manual_browsers,
             retained_display_allocations: super::service_model::retained_display_allocation_summary(
                 &authority_state,
@@ -486,10 +564,11 @@ impl ServiceStatusProjector {
             presentation_capacity,
             desktop_evidence_policy:
                 super::desktop_evidence::DesktopEvidenceCoordinator::policy_projection(),
-            browser_session_authority: input.browser_session_authority,
+            browser_session_authority,
             closed_tab_projection,
             launch_config: input.launch_config,
             service_state: response_state,
+            service_state_projection,
             status_projection: StatusProjection {
                 schema_version: 1,
                 authority: StatusProjectionAuthority {
@@ -505,8 +584,17 @@ impl ServiceStatusProjector {
                     &authority_state.crash_regeneration_transactions,
                 ),
         };
-        serde_json::to_value(&response)
-            .map_err(|error| ServiceStatusProjectionError::Serialization(error.to_string()))?;
+        if input.service_state_projection == ServiceStateProjectionMode::DashboardSummary {
+            let serialized_bytes = serde_json::to_vec(&response)
+                .map_err(|error| ServiceStatusProjectionError::Serialization(error.to_string()))?
+                .len();
+            if serialized_bytes > DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES {
+                return Err(ServiceStatusProjectionError::Serialization(format!(
+                    "dashboard summary exceeded {} byte response ceiling",
+                    DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES
+                )));
+            }
+        }
         Ok(response)
     }
 }
@@ -518,6 +606,7 @@ pub(crate) async fn project_status_with_launch_configuration(
     browser_session_authority: BrowserSessionAuthoritySnapshot,
     launch_config: Value,
     full_tab_history: bool,
+    service_state_projection: ServiceStateProjectionMode,
 ) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
     let launch_config = StatusLaunchConfiguration::try_from(launch_config)?;
     let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_registry(
@@ -531,8 +620,491 @@ pub(crate) async fn project_status_with_launch_configuration(
             launch_config,
             full_tab_history,
             runtime_lifecycle,
+            service_state_projection,
         })
         .await
+}
+
+pub(crate) fn service_state_projection_from_status_command(
+    command: &Value,
+) -> ServiceStateProjectionMode {
+    match command.get("statusProjection").and_then(Value::as_str) {
+        Some("dashboard_summary") => ServiceStateProjectionMode::DashboardSummary,
+        _ => ServiceStateProjectionMode::Full,
+    }
+}
+
+fn project_service_state_for_delivery(
+    service_state: Value,
+    mode: ServiceStateProjectionMode,
+) -> (Value, ServiceStateProjectionMetadata) {
+    const SCALAR_FIELDS: &[&str] = &[
+        "browserCapabilityRegistry",
+        "controlPlane",
+        "profilePolicyMigration",
+        "reconciliation",
+    ];
+    const COLLECTION_LIMITS: &[(&str, usize)] = &[
+        ("browsers", 32),
+        ("displayAllocations", 32),
+        ("events", 32),
+        ("incidents", 32),
+        ("jobs", 64),
+        ("profiles", 128),
+        ("providers", 64),
+        ("remoteViewRoutes", 32),
+        ("routePool", 32),
+        ("sessions", 64),
+        ("sitePolicies", 64),
+        ("tabs", 128),
+    ];
+    let detail_routes = BTreeMap::from([
+        ("events", "/api/service/events"),
+        ("jobs", "/api/service/jobs"),
+        ("profiles", "/api/service/profiles"),
+        ("remoteViewRoutes", "/api/service/remote-view-routes"),
+        ("viewerLeases", "/api/service/viewer-leases"),
+    ]);
+    if mode == ServiceStateProjectionMode::Full {
+        let included_collections = service_state.as_object().map_or_else(Vec::new, |state| {
+            state
+                .keys()
+                .filter_map(|key| {
+                    SCALAR_FIELDS
+                        .iter()
+                        .copied()
+                        .chain(COLLECTION_LIMITS.iter().map(|(name, _)| *name))
+                        .find(|name| *name == key)
+                })
+                .collect()
+        });
+        let serialized_service_state_bytes =
+            serde_json::to_vec(&service_state).map_or(0, |bytes| bytes.len());
+        return (
+            service_state,
+            ServiceStateProjectionMetadata {
+                schema_version: 1,
+                mode,
+                complete: true,
+                included_collections,
+                omitted_collection_counts: BTreeMap::new(),
+                detail_routes,
+                historical_limits: BTreeMap::new(),
+                max_service_state_bytes: None,
+                max_serialized_response_bytes: None,
+                serialized_service_state_bytes,
+                truncated_record_count: 0,
+            },
+        );
+    }
+
+    let Some(source) = service_state.as_object() else {
+        return (
+            service_state,
+            ServiceStateProjectionMetadata {
+                schema_version: 1,
+                mode,
+                complete: false,
+                included_collections: Vec::new(),
+                omitted_collection_counts: BTreeMap::new(),
+                detail_routes,
+                historical_limits: COLLECTION_LIMITS.iter().copied().collect(),
+                max_service_state_bytes: Some(DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES),
+                max_serialized_response_bytes: Some(DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES),
+                serialized_service_state_bytes: 0,
+                truncated_record_count: 0,
+            },
+        );
+    };
+    let mut projected = Map::new();
+    let mut omitted_collection_counts = BTreeMap::new();
+    let mut truncated_record_count = 0;
+    for &name in SCALAR_FIELDS {
+        let Some(value) = source.get(name) else {
+            continue;
+        };
+        projected.insert(
+            name.to_string(),
+            compact_summary_value(value, &mut truncated_record_count),
+        );
+    }
+    for &(name, limit) in COLLECTION_LIMITS {
+        let Some(original) = source.get(name) else {
+            continue;
+        };
+        let value = bounded_collection(name, original, limit, &mut truncated_record_count);
+        let original_count = collection_len(source.get(name));
+        let projected_count = collection_len(Some(&value));
+        if original_count > projected_count {
+            omitted_collection_counts.insert(name.to_string(), original_count - projected_count);
+        }
+        projected.insert(name.to_string(), value);
+    }
+    for (name, value) in source {
+        if !SCALAR_FIELDS.contains(&name.as_str())
+            && !COLLECTION_LIMITS
+                .iter()
+                .any(|(included, _)| included == name)
+        {
+            let count = collection_len(Some(value));
+            if count > 0 {
+                omitted_collection_counts.insert(name.clone(), count);
+            }
+        }
+    }
+    enforce_dashboard_summary_byte_ceiling(&mut projected, &mut omitted_collection_counts);
+    let serialized_service_state_bytes =
+        serde_json::to_vec(&projected).map_or(0, |bytes| bytes.len());
+    let included_collections = projected
+        .keys()
+        .filter_map(|key| {
+            SCALAR_FIELDS
+                .iter()
+                .copied()
+                .chain(COLLECTION_LIMITS.iter().map(|(name, _)| *name))
+                .find(|name| *name == key)
+        })
+        .collect();
+    (
+        Value::Object(projected),
+        ServiceStateProjectionMetadata {
+            schema_version: 1,
+            mode,
+            complete: false,
+            included_collections,
+            omitted_collection_counts,
+            detail_routes,
+            historical_limits: COLLECTION_LIMITS.iter().copied().collect(),
+            max_service_state_bytes: Some(DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES),
+            max_serialized_response_bytes: Some(DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES),
+            serialized_service_state_bytes,
+            truncated_record_count,
+        },
+    )
+}
+
+fn truncate_vec_with_metadata<T>(
+    values: &mut Vec<T>,
+    limit: usize,
+    name: &str,
+    omitted: &mut BTreeMap<String, usize>,
+) {
+    if values.len() <= limit {
+        return;
+    }
+    let omitted_count = values.len() - limit;
+    values.truncate(limit);
+    omitted.insert(name.to_string(), omitted_count);
+}
+
+fn collection_len(value: Option<&Value>) -> usize {
+    match value {
+        Some(Value::Array(values)) => values.len(),
+        Some(Value::Object(values)) => values.len(),
+        Some(Value::Null) | None => 0,
+        Some(_) => 1,
+    }
+}
+
+fn bounded_collection(
+    name: &str,
+    value: &Value,
+    limit: usize,
+    truncated_record_count: &mut usize,
+) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(
+            values
+                .iter()
+                .rev()
+                .take(limit)
+                .rev()
+                .map(|value| compact_summary_record(name, value, truncated_record_count))
+                .collect(),
+        ),
+        Value::Object(values) => {
+            let mut ranked = values.iter().collect::<Vec<_>>();
+            ranked.sort_by(|(left_id, left), (right_id, right)| {
+                summary_record_is_active(name, right)
+                    .cmp(&summary_record_is_active(name, left))
+                    .then_with(|| right_id.cmp(left_id))
+            });
+            ranked.truncate(limit);
+            ranked.sort_by(|(left, _), (right, _)| left.cmp(right));
+            Value::Object(
+                ranked
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (
+                            key.clone(),
+                            compact_summary_record(name, value, truncated_record_count),
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        _ => compact_summary_record(name, value, truncated_record_count),
+    }
+}
+
+fn summary_record_is_active(collection: &str, value: &Value) -> bool {
+    let state = value
+        .get("state")
+        .or_else(|| value.get("lifecycle"))
+        .or_else(|| value.get("health"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match collection {
+        "jobs" => matches!(state, "queued" | "running" | "waiting_profile_lease"),
+        "tabs" => matches!(state, "ready" | "loading" | "active"),
+        "sessions" => {
+            matches!(state, "active" | "human_takeover")
+                || value
+                    .get("browserIds")
+                    .and_then(Value::as_array)
+                    .is_some_and(|v| !v.is_empty())
+                || value
+                    .get("tabIds")
+                    .and_then(Value::as_array)
+                    .is_some_and(|v| !v.is_empty())
+        }
+        "browsers" => !matches!(
+            state,
+            "process_exited"
+                | "closed"
+                | "stopped"
+                | "retired"
+                | "completed"
+                | "succeeded"
+                | "failed"
+                | "timed_out"
+                | "disconnected"
+        ),
+        "incidents" => value.get("resolvedAt").is_none_or(Value::is_null),
+        "remoteViewRoutes" => matches!(state, "ready" | "connecting" | "checked_out"),
+        _ => matches!(state, "ready" | "active" | "observing" | "checked_out"),
+    }
+}
+
+fn compact_summary_record(
+    collection: &str,
+    value: &Value,
+    truncated_record_count: &mut usize,
+) -> Value {
+    let compacted = compact_summary_value(value, truncated_record_count);
+    if serde_json::to_vec(&compacted).map_or(0, |bytes| bytes.len())
+        <= DASHBOARD_SUMMARY_MAX_RECORD_BYTES
+    {
+        return compacted;
+    }
+    *truncated_record_count += 1;
+    let Some(record) = compacted.as_object() else {
+        return Value::Null;
+    };
+    const IDENTITY_FIELDS: &[&str] = &[
+        "id",
+        "name",
+        "state",
+        "health",
+        "lifecycle",
+        "profileId",
+        "browserId",
+        "sessionId",
+        "routeId",
+        "displayAllocationId",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "createdAt",
+        "updatedAt",
+        "completedAt",
+        "lastObservedAt",
+    ];
+    const PROFILE_ACTIONABILITY_FIELDS: &[&str] = &[
+        "profileOrigin",
+        "profileClass",
+        "accessPolicy",
+        "userDataDir",
+        "sitePolicyIds",
+        "targetServiceIds",
+        "authenticatedServiceIds",
+        "accountIds",
+        "defaultBrowserHost",
+        "browserBuild",
+        "allocation",
+        "keyring",
+        "sharedServiceIds",
+        "credentialProviderIds",
+        "manualLoginPreferred",
+        "targetReadiness",
+        "persistent",
+        "tags",
+    ];
+    const BROWSER_ACTIONABILITY_FIELDS: &[&str] = &[
+        "host",
+        "pid",
+        "cdpEndpoint",
+        "displayName",
+        "displayAllocationId",
+        "processStats",
+        "viewStreams",
+        "attachability",
+        "activeSessionIds",
+        "lastError",
+        "inventoryClass",
+        "inventoryPlacement",
+        "lifecycleState",
+        "routeBoundOwnership",
+        "operatorVisibleProof",
+        "lifecycleActions",
+        "presentationActionCeilings",
+        "diagnostics",
+    ];
+    const SESSION_ACTIONABILITY_FIELDS: &[&str] = &[
+        "owner",
+        "lease",
+        "browserIds",
+        "tabIds",
+        "cleanup",
+        "profileLeaseDisposition",
+        "profileLeaseConflictSessionIds",
+        "lastLeaseObservedAt",
+        "expiresAt",
+    ];
+    const TAB_ACTIONABILITY_FIELDS: &[&str] = &[
+        "targetId",
+        "ownerSessionId",
+        "url",
+        "title",
+        "latestSnapshotId",
+        "latestScreenshotId",
+        "challengeId",
+        "serviceTabHandle",
+    ];
+    const ROUTE_ACTIONABILITY_FIELDS: &[&str] = &[
+        "provider",
+        "url",
+        "frameUrl",
+        "externalUrl",
+        "routePoolEntryId",
+        "connectionId",
+        "connectionName",
+        "routeSource",
+        "providerMode",
+        "viewerLeaseIds",
+        "controllerLeaseId",
+        "readiness",
+        "remoteReadiness",
+        "attachability",
+        "displayContent",
+        "readOnly",
+        "controlInput",
+        "routeBoundOwnership",
+    ];
+    let actionability_fields = match collection {
+        "profiles" => PROFILE_ACTIONABILITY_FIELDS,
+        "browsers" => BROWSER_ACTIONABILITY_FIELDS,
+        "sessions" => SESSION_ACTIONABILITY_FIELDS,
+        "tabs" => TAB_ACTIONABILITY_FIELDS,
+        "remoteViewRoutes" => ROUTE_ACTIONABILITY_FIELDS,
+        _ => &[],
+    };
+    Value::Object(
+        IDENTITY_FIELDS
+            .iter()
+            .chain(actionability_fields)
+            .filter_map(|field| {
+                record
+                    .get(*field)
+                    .cloned()
+                    .map(|value| ((*field).to_string(), value))
+            })
+            .collect(),
+    )
+}
+
+fn compact_summary_value(value: &Value, truncated_record_count: &mut usize) -> Value {
+    match value {
+        Value::String(value) if value.len() > 1024 => {
+            *truncated_record_count += 1;
+            Value::String(value.chars().take(1024).collect())
+        }
+        Value::Array(values) if values.len() > 64 => {
+            *truncated_record_count += 1;
+            Value::Array(
+                values[values.len() - 64..]
+                    .iter()
+                    .map(|value| compact_summary_value(value, truncated_record_count))
+                    .collect(),
+            )
+        }
+        Value::Array(values) => Value::Array(
+            values
+                .iter()
+                .map(|value| compact_summary_value(value, truncated_record_count))
+                .collect(),
+        ),
+        Value::Object(values) => Value::Object(
+            values
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        key.clone(),
+                        compact_summary_value(value, truncated_record_count),
+                    )
+                })
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+fn enforce_dashboard_summary_byte_ceiling(
+    state: &mut Map<String, Value>,
+    omitted: &mut BTreeMap<String, usize>,
+) {
+    const TRIM_ORDER: &[&str] = &[
+        "events",
+        "jobs",
+        "profiles",
+        "providers",
+        "sitePolicies",
+        "tabs",
+        "sessions",
+        "displayAllocations",
+        "routePool",
+        "remoteViewRoutes",
+        "browsers",
+        "incidents",
+    ];
+    while serde_json::to_vec(state).map_or(usize::MAX, |bytes| bytes.len())
+        > DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES
+    {
+        let mut removed = false;
+        for name in TRIM_ORDER {
+            let Some(value) = state.get_mut(*name) else {
+                continue;
+            };
+            let did_remove = match value {
+                Value::Array(values) => (!values.is_empty()).then(|| values.pop()).is_some(),
+                Value::Object(values) => values
+                    .keys()
+                    .next_back()
+                    .cloned()
+                    .and_then(|key| values.remove(&key))
+                    .is_some(),
+                _ => false,
+            };
+            if did_remove {
+                *omitted.entry((*name).to_string()).or_default() += 1;
+                removed = true;
+                break;
+            }
+        }
+        if !removed {
+            break;
+        }
+    }
 }
 
 fn format_timestamp(value: DateTime<Utc>) -> String {
@@ -640,7 +1212,10 @@ pub(crate) mod action_commands {
         }
         dependencies.preparer.prepare(&mut service_state).await;
         project_browser_record_provenance(&mut service_state, caller_projection);
-        let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
+        let browser_session_authority = dependencies
+            .browser_authority
+            .snapshot(&service_state)
+            .await;
         let control_plane = service_state
             .control_plane
             .as_ref()
@@ -656,6 +1231,10 @@ pub(crate) mod action_commands {
             .get("fullTabHistory")
             .and_then(Value::as_bool)
             .unwrap_or(false);
+        let service_state_projection =
+            super::super::service_status_projection::service_state_projection_from_status_command(
+                cmd,
+            );
         let response =
             super::super::service_status_projection::project_status_with_launch_configuration(
                 dependencies.projector,
@@ -664,6 +1243,7 @@ pub(crate) mod action_commands {
                 browser_session_authority,
                 launch_config,
                 full_tab_history,
+                service_state_projection,
             )
             .await
             .map_err(|error| error.to_string())?;

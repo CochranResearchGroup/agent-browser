@@ -778,6 +778,13 @@ rejects raw URLs and handoff IDs. Failure records contain causal identifiers,
 runtime and boot epochs, typed codes, bounded redacted summaries, and no page
 content, credentials, headers, bearer material, or query strings.
 
+Journal writes use a dedicated bounded writer. Queue pressure backpressures
+instead of dropping accepted records, and failure readback reports delivery
+pressure and delivery failure counters. The dashboard retains up to 4,096
+privacy-bounded same-origin status, resource, tab, and runtime-health read
+failures per document and submits them after a later valid recovery response.
+Any overflow is represented by an explicit delivery-gap occurrence.
+
 `close --all` is intentionally global and cannot be combined with an explicit
 `--session`. Use `agent-browser --session <name> close` for one session. If a
 daemon is unreachable, global close signals it only when its recorded process
@@ -3433,6 +3440,14 @@ total, retained, omitted, and deterministic ordering. Use
 `GET /api/service/status?full-tab-history=true` for the complete response-only
 diagnostic projection. Status projection never deletes or rewrites persisted
 service state, so routing and stale-handle classification remain authoritative.
+
+The dashboard requests
+`GET /api/service/status?projection=dashboard-summary`. This additive HTTP-only
+projection caps growth-prone collections, preserves current identity and
+actionability fields, reports omitted counts and focused detail routes, and
+fails closed above its declared 2 MiB response ceiling. The ordinary CLI, MCP,
+client, and HTTP status surfaces remain complete. Do not use the dashboard
+summary as proof that omitted historical records do not exist.
 
 Current Service Status responses also include additive `runtimeLifecycle`
 readback across CLI JSON, HTTP `GET /api/service/status`, typed MCP

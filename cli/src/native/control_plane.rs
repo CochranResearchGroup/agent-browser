@@ -246,7 +246,29 @@ impl ControlPlaneHandle {
         service_state: Value,
         launch_config: Value,
         full_tab_history: bool,
+        service_state_projection: super::service_status_projection::ServiceStateProjectionMode,
     ) -> Value {
+        let service_state = if service_state.is_null() {
+            match tokio::task::spawn_blocking(|| {
+                LockedServiceStateRepository::default_json()?.load_snapshot()
+            })
+            .await
+            {
+                Ok(Ok(state)) => serde_json::to_value(state).unwrap_or_else(|_| json!({})),
+                Ok(Err(error)) => {
+                    return json!({ "id": id, "success": false, "error": error });
+                }
+                Err(error) => {
+                    return json!({
+                        "id": id,
+                        "success": false,
+                        "error": format!("Service status snapshot task failed: {error}"),
+                    });
+                }
+            }
+        } else {
+            service_state
+        };
         let repository = match LockedServiceStateRepository::default_json() {
             Ok(repository) => repository,
             Err(error) => return json!({ "id": id, "success": false, "error": error }),
@@ -257,6 +279,7 @@ impl ControlPlaneHandle {
             service_state,
             launch_config,
             full_tab_history,
+            service_state_projection,
             super::service_status_projection::ServiceStatusProjectionDependencies::new(
                 &repository,
                 &super::service_status_projection::ReconcileServiceStatusAuthority,
@@ -277,6 +300,7 @@ impl ControlPlaneHandle {
         service_state: Value,
         launch_config: Value,
         full_tab_history: bool,
+        service_state_projection: super::service_status_projection::ServiceStateProjectionMode,
         dependencies: super::service_status_projection::ServiceStatusProjectionDependencies<
             '_,
             Repository,
@@ -289,18 +313,31 @@ impl ControlPlaneHandle {
         Preparer: super::service_status_projection::ServiceStatusAuthorityPreparer,
         BrowserAuthority: super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
     {
-        let Ok(mut service_state) = serde_json::from_value::<ServiceState>(service_state) else {
-            return json!({
-                "id": id,
-                "success": false,
-                "error": "Invalid serviceState",
-            });
+        let mut service_state = if service_state.is_null() {
+            match dependencies.repository.load_snapshot() {
+                Ok(state) => state,
+                Err(error) => {
+                    return json!({ "id": id, "success": false, "error": error });
+                }
+            }
+        } else {
+            let Ok(service_state) = serde_json::from_value::<ServiceState>(service_state) else {
+                return json!({
+                    "id": id,
+                    "success": false,
+                    "error": "Invalid serviceState",
+                });
+            };
+            service_state
         };
         let waiting_profile_lease_job_count =
             service_state_waiting_profile_lease_job_count(&service_state);
         service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
         dependencies.preparer.prepare(&mut service_state).await;
-        let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
+        let browser_session_authority = dependencies
+            .browser_authority
+            .snapshot(&service_state)
+            .await;
         let control_plane = service_state
             .control_plane
             .as_ref()
@@ -321,6 +358,7 @@ impl ControlPlaneHandle {
             browser_session_authority,
             launch_config,
             full_tab_history,
+            service_state_projection,
         )
         .await;
         service_status_result_envelope(id, result)
@@ -2565,10 +2603,11 @@ mod tests {
     #[derive(Debug)]
     struct FixedBrowserAuthority;
 
+    #[async_trait::async_trait]
     impl super::super::service_status_projection::ServiceStatusBrowserAuthorityProvider
         for FixedBrowserAuthority
     {
-        fn snapshot(
+        async fn snapshot(
             &self,
             _service_state: &ServiceState,
         ) -> super::super::browser_session_authority::BrowserSessionAuthoritySnapshot {
@@ -3226,6 +3265,7 @@ mod tests {
                     "warnings": []
                 }),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
             )
             .await;
 
@@ -3362,6 +3402,7 @@ mod tests {
                 json!({}),
                 fixed_launch_configuration(),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
             )
             .await;
 
@@ -3427,6 +3468,7 @@ mod tests {
                 json!({}),
                 fixed_launch_configuration(),
                 false,
+                super::super::service_status_projection::ServiceStateProjectionMode::Full,
                 super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
                     &repository,
                     &preparer,

@@ -42,6 +42,8 @@ assert(validateReadback({
   records: [record],
   malformedLineCount: 1,
   writeFailureCount: 0,
+  deliveryOverloadCount: 0,
+  deliveryFailureCount: 0,
 }), JSON.stringify(validateReadback.errors));
 
 for (const category of ['guacamole_load', 'handoff_link', 'cdp_stream', 'dashboard_action']) {

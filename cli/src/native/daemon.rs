@@ -959,7 +959,7 @@ async fn handle_connection<S>(
                     let service_state = cmd
                         .get("serviceState")
                         .cloned()
-                        .unwrap_or_else(|| serde_json::json!({}));
+                        .unwrap_or(serde_json::Value::Null);
                     let launch_config =
                         super::service_status_projection::launch_configuration_from_status_command(
                             &cmd,
@@ -968,8 +968,18 @@ async fn handle_connection<S>(
                         .get("fullTabHistory")
                         .and_then(|value| value.as_bool())
                         .unwrap_or(false);
+                    let service_state_projection =
+                        super::service_status_projection::service_state_projection_from_status_command(
+                            &cmd,
+                        );
                     control_plane
-                        .service_status_response(id, service_state, launch_config, full_tab_history)
+                        .service_status_response(
+                            id,
+                            service_state,
+                            launch_config,
+                            full_tab_history,
+                            service_state_projection,
+                        )
                         .await
                 } else {
                     control_plane
@@ -977,7 +987,7 @@ async fn handle_connection<S>(
                         .await
                 };
 
-                let mut resp = serde_json::to_string(&response).unwrap_or_default();
+                let mut resp = serialize_daemon_response(response).await;
                 resp.push('\n');
                 if writer.write_all(resp.as_bytes()).await.is_err() {
                     break;
@@ -1001,6 +1011,16 @@ async fn handle_connection<S>(
             Err(_) => break,
         }
     }
+}
+
+async fn serialize_daemon_response(response: Value) -> String {
+    tokio::task::spawn_blocking(move || serde_json::to_string(&response))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_else(|| {
+            r#"{"success":false,"error":"Daemon response serialization failed"}"#.to_string()
+        })
 }
 
 struct ProfileConnectionDisconnectGuard<'a>(&'a str);
@@ -1320,5 +1340,48 @@ mod tests {
                 other
             ),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn daemon_serializes_two_clients_and_500_large_reads_without_starving_runtime() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let running = Arc::new(AtomicBool::new(true));
+        let heartbeat_count = Arc::new(AtomicUsize::new(0));
+        let heartbeat_running = running.clone();
+        let heartbeat_observations = heartbeat_count.clone();
+        let heartbeat = tokio::spawn(async move {
+            while heartbeat_running.load(Ordering::Relaxed) {
+                heartbeat_observations.fetch_add(1, Ordering::Relaxed);
+                tokio::task::yield_now().await;
+            }
+        });
+
+        let client = |client_id: usize| async move {
+            for ordinal in 0..250 {
+                let response = serde_json::json!({
+                    "success": true,
+                    "clientId": client_id,
+                    "ordinal": ordinal,
+                    "data": "x".repeat(32 * 1024),
+                });
+                let serialized = serialize_daemon_response(response).await;
+                assert!(serialized.starts_with("{\"clientId\":"));
+                assert!(serialized.len() > 32 * 1024);
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(15), async {
+            tokio::join!(client(1), client(2));
+        })
+        .await
+        .expect("two constrained-runtime clients must finish all 500 serializations");
+        running.store(false, Ordering::Relaxed);
+        heartbeat.await.unwrap();
+
+        assert!(
+            heartbeat_count.load(Ordering::Relaxed) > 100,
+            "the two-worker runtime must continue scheduling unrelated work"
+        );
     }
 }

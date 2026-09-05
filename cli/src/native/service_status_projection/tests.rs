@@ -116,6 +116,7 @@ fn input(state: ServiceState, full_tab_history: bool) -> StatusAuthorityInput {
         .unwrap(),
         launch_config: StatusLaunchConfiguration::try_from(valid_launch_config()).unwrap(),
         full_tab_history,
+        service_state_projection: ServiceStateProjectionMode::Full,
         runtime_lifecycle: json!({
             "schemaVersion": "agent-browser.runtime-lifecycle-status.v1",
             "ready": true,
@@ -125,15 +126,121 @@ fn input(state: ServiceState, full_tab_history: bool) -> StatusAuthorityInput {
 }
 
 async fn project(state: ServiceState, full_tab_history: bool) -> ServiceStatusResponse {
+    project_mode(state, full_tab_history, ServiceStateProjectionMode::Full).await
+}
+
+async fn project_mode(
+    state: ServiceState,
+    full_tab_history: bool,
+    service_state_projection: ServiceStateProjectionMode,
+) -> ServiceStatusResponse {
+    let mut authority_input = input(state, full_tab_history);
+    authority_input.service_state_projection = service_state_projection;
     ServiceStatusProjector::new(
         Arc::new(InMemoryStatusObservationAdapter::new(
             unavailable_observation(),
         )),
         Arc::new(FixedClock),
     )
-    .project(input(state, full_tab_history))
+    .project(authority_input)
     .await
     .unwrap()
+}
+
+#[test]
+fn dashboard_summary_is_explicit_bounded_and_default_full_is_lossless() {
+    let oversized = "x".repeat(64 * 1024);
+    let records = (0..1_000)
+        .map(|index| {
+            (
+                format!("record-{index:04}"),
+                json!({
+                    "id": format!("record-{index:04}"),
+                    "state": if index == 0 { "ready" } else { "completed" },
+                    "detail": oversized,
+                }),
+            )
+        })
+        .collect::<Map<String, Value>>();
+    let source = json!({
+        "browsers": records,
+        "profiles": (0..1_000).map(|index| (
+            format!("profile-{index:04}"),
+            json!({
+                "id": format!("profile-{index:04}"),
+                "state": if index == 0 { "ready" } else { "retained" },
+                "description": oversized,
+                "accessPolicy": { "mode": "shared-local", "revision": 7 },
+                "targetServiceIds": ["research.gov"],
+                "targetReadiness": [{ "targetServiceId": "research.gov", "state": "fresh" }],
+            }),
+        )).collect::<Map<String, Value>>(),
+        "jobs": (0..1_000).map(|index| (
+            format!("job-{index:04}"),
+            json!({
+                "id": format!("job-{index:04}"),
+                "state": if index == 0 { "running" } else { "succeeded" },
+                "response": oversized,
+            }),
+        )).collect::<Map<String, Value>>(),
+        "events": (0..1_000).map(|index| json!({
+            "id": format!("event-{index:04}"),
+            "message": oversized,
+        })).collect::<Vec<_>>(),
+        "remoteViewAcquisitionLeases": (0..1_000).map(|index| (
+            format!("lease-{index:04}"),
+            json!({ "id": format!("lease-{index:04}"), "state": "completed", "detail": oversized }),
+        )).collect::<Map<String, Value>>(),
+    });
+
+    let (full, full_metadata) =
+        project_service_state_for_delivery(source.clone(), ServiceStateProjectionMode::Full);
+    assert_eq!(full, source);
+    assert!(full_metadata.complete);
+    assert_eq!(full_metadata.max_service_state_bytes, None);
+    assert_eq!(full_metadata.max_serialized_response_bytes, None);
+
+    let (summary, summary_metadata) =
+        project_service_state_for_delivery(source, ServiceStateProjectionMode::DashboardSummary);
+    let serialized = serde_json::to_vec(&summary).unwrap();
+    assert!(serialized.len() <= DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES);
+    assert_eq!(
+        summary_metadata.serialized_service_state_bytes,
+        serialized.len()
+    );
+    assert_eq!(
+        summary_metadata.max_service_state_bytes,
+        Some(DASHBOARD_SUMMARY_MAX_SERVICE_STATE_BYTES)
+    );
+    assert_eq!(
+        summary_metadata.max_serialized_response_bytes,
+        Some(DASHBOARD_SUMMARY_MAX_RESPONSE_BYTES)
+    );
+    assert!(!summary_metadata.complete);
+    assert!(summary_metadata.truncated_record_count > 0);
+    assert_eq!(
+        summary_metadata.omitted_collection_counts["remoteViewAcquisitionLeases"],
+        1_000
+    );
+    assert!(
+        summary["browsers"].get("record-0000").is_some(),
+        "summary bytes={} browser keys={:?}",
+        serialized.len(),
+        summary["browsers"]
+            .as_object()
+            .map(|values| values.keys().collect::<Vec<_>>())
+    );
+    assert!(summary["jobs"].get("job-0000").is_some());
+    assert!(summary["profiles"].get("profile-0000").is_some());
+    assert_eq!(
+        summary["profiles"]["profile-0000"]["accessPolicy"]["mode"],
+        "shared-local"
+    );
+    assert_eq!(
+        summary["profiles"]["profile-0000"]["targetServiceIds"][0],
+        "research.gov"
+    );
+    assert!(summary["events"].as_array().unwrap().len() <= 32);
 }
 
 #[tokio::test]
@@ -557,6 +664,7 @@ async fn invalid_launch_configuration_fails_before_observation() {
         browser_session_authority_snapshot(&ServiceState::default()),
         invalid_launch,
         false,
+        ServiceStateProjectionMode::Full,
     )
     .await
     .unwrap_err();

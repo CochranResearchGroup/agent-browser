@@ -1559,6 +1559,9 @@ agent-browser mcp read agent-browser://events
 # For postmortems, inspect the durable privacy-bounded failure journal.
 # GET /api/service/failures?limit=100 reads recent records.
 # POST /api/service/failure-observation accepts authenticated client-only failures.
+# Readback includes journal delivery pressure and delivery failure counters.
+# Dashboard status, resource, tab, and runtime-health read failures are queued
+# without retry and delivered after recovery; overflow is an explicit gap.
 
 # Clipboard
 agent-browser clipboard read                      # Read text from clipboard
@@ -1778,6 +1781,13 @@ unreferenced closed-tab rows. Inspect `closedTabProjection` for the cap and
 omitted count. Use `service status --full-tab-history` or HTTP
 `GET /api/service/status?full-tab-history=true` for the complete response-only
 diagnostic view. Status reads never compact persisted service state.
+
+The dashboard uses the additive HTTP-only
+`GET /api/service/status?projection=dashboard-summary` projection. It bounds
+growth-prone collections and the complete response, retains current identity
+and actionability fields, and reports omitted counts plus focused detail
+routes. Use ordinary status or a focused collection route when exhaustive
+evidence is required.
 
 Launch-shaping options such as `--args` or `AGENT_BROWSER_ARGS` apply only to commands that can launch a browser. Service inspection commands such as `service status`, `service sessions`, and `mcp read` must remain read-only and must not start Chrome just because launch defaults are configured.
 

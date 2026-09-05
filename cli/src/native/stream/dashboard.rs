@@ -1,8 +1,11 @@
 use futures_util::{FutureExt, SinkExt, StreamExt};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::OnceLock;
+use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -12,6 +15,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
+#[cfg(test)]
+use crate::native::service_failure_journal::{append_service_failure_at, read_service_failures_at};
 use crate::native::service_failure_journal::{
     append_service_failure_best_effort, opaque_identifier_hash, read_service_failures,
     record_client_failure_observation, ServiceFailureCategory, ServiceFailureRecord,
@@ -49,6 +54,82 @@ const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
 const GUACAMOLE_PRIMARY_CLAIM_TTL: Duration = Duration::from_secs(10);
+const DASHBOARD_SLOW_PROXY_THRESHOLD: Duration = Duration::from_secs(1);
+
+static DASHBOARD_PROXY_INFLIGHT: AtomicUsize = AtomicUsize::new(0);
+static DASHBOARD_LOGICAL_REQUEST_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
+}
+
+#[cfg(test)]
+#[path = "dashboard_stress_tests.rs"]
+mod dashboard_stress_tests;
+
+/// Privacy-bounded terminal telemetry for a dashboard backend request.
+///
+/// Route, method, body, and error values are closed classifications. Raw request
+/// URLs, query strings, headers, bodies, backend messages, and secrets never enter
+/// this record or its service-failure-journal projection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardHttpTelemetry {
+    event: &'static str,
+    route_class: &'static str,
+    method: &'static str,
+    status: Option<u16>,
+    status_class: &'static str,
+    body_class: &'static str,
+    stage: &'static str,
+    timing_scope: &'static str,
+    elapsed_ms: u64,
+    inflight_count: usize,
+    response_bytes: Option<usize>,
+    backend_error_class: Option<&'static str>,
+}
+
+type DashboardHttpObserver = Arc<dyn Fn(DashboardHttpTelemetry) + Send + Sync + 'static>;
+type DashboardLogicalFailureObserver = Arc<dyn Fn(ServiceFailureRecord) + Send + Sync + 'static>;
+
+fn production_dashboard_http_observer() -> DashboardHttpObserver {
+    static OBSERVER: OnceLock<DashboardHttpObserver> = OnceLock::new();
+    OBSERVER
+        .get_or_init(|| Arc::new(emit_dashboard_http_telemetry))
+        .clone()
+}
+
+fn production_dashboard_logical_failure_observer() -> DashboardLogicalFailureObserver {
+    Arc::new(|record| {
+        #[cfg(not(test))]
+        append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+    })
+}
+
+impl DashboardHttpTelemetry {
+    fn failed(&self) -> bool {
+        self.status.is_some_and(|status| status >= 500) || self.backend_error_class.is_some()
+    }
+}
+
+struct DashboardProxyInflightGuard;
+
+impl DashboardProxyInflightGuard {
+    fn enter() -> (Self, usize) {
+        let inflight = DASHBOARD_PROXY_INFLIGHT.fetch_add(1, Ordering::Relaxed) + 1;
+        (Self, inflight)
+    }
+}
+
+impl Drop for DashboardProxyInflightGuard {
+    fn drop(&mut self) {
+        DASHBOARD_PROXY_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GuacamolePrimaryClaimKey {
@@ -663,21 +744,25 @@ async fn handle_service_api_request(
                 .await
                 {
                     Ok(response) => {
-                        let response =
-                            match require_json_backend_response(response, port, "/api/command") {
-                                Ok(response) => response,
-                                Err(err) => {
-                                    write_json_error_with_code(
-                                        stream,
-                                        "502 Bad Gateway",
-                                        &format!("View focus proxy failed: {}", err),
-                                        Some(err.code),
-                                        err.details.clone(),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                            };
+                        let response = match require_json_backend_response(
+                            response,
+                            port,
+                            "POST",
+                            "/api/command",
+                        ) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                write_json_error_with_code(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    &format!("View focus proxy failed: {}", err),
+                                    Some(err.code),
+                                    err.details.clone(),
+                                )
+                                .await;
+                                return;
+                            }
+                        };
                         let _ = stream.write_all(&response).await;
                         return;
                     }
@@ -1417,6 +1502,48 @@ async fn proxy_local_http_api_request_with_timeout(
     body: &str,
     request_timeout: Duration,
 ) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_local_http_api_request_with_timeout_observed(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        emit_dashboard_http_telemetry,
+    )
+    .await
+}
+
+async fn proxy_local_http_api_request_with_timeout_observed(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: impl Fn(DashboardHttpTelemetry),
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let started_at = Instant::now();
+    let (_inflight_guard, inflight_count) = DashboardProxyInflightGuard::enter();
+    let result =
+        proxy_local_http_api_request_unobserved(port, method, path, body, request_timeout).await;
+    if let Some(telemetry) = dashboard_http_terminal_telemetry(
+        method,
+        path,
+        started_at.elapsed(),
+        inflight_count,
+        &result,
+    ) {
+        observer(telemetry);
+    }
+    result
+}
+
+async fn proxy_local_http_api_request_unobserved(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+) -> Result<Vec<u8>, DashboardReadinessError> {
     let mut backend = run_dashboard_backend_io_phase(
         DashboardBackendIoPhase {
             timeout_code: "backend_connect_timeout",
@@ -1448,6 +1575,153 @@ async fn proxy_local_http_api_request_with_timeout(
     )
     .await?;
     read_local_http_response(&mut backend, port, path, request_timeout).await
+}
+
+fn dashboard_http_terminal_telemetry(
+    method: &str,
+    path: &str,
+    elapsed: Duration,
+    inflight_count: usize,
+    result: &Result<Vec<u8>, DashboardReadinessError>,
+) -> Option<DashboardHttpTelemetry> {
+    let (status, body_class, stage, response_bytes, backend_error_class) = match result {
+        Ok(response) => {
+            let status = http_response_status(response);
+            (
+                status,
+                dashboard_http_body_class(response),
+                "response",
+                Some(response.len()),
+                status
+                    .is_some_and(|status| status >= 500)
+                    .then_some("backend_http_5xx"),
+            )
+        }
+        Err(error) => (
+            None,
+            "none",
+            dashboard_backend_error_stage(error),
+            None,
+            Some(error.code),
+        ),
+    };
+    let failed = status.is_some_and(|status| status >= 500) || backend_error_class.is_some();
+    if !failed && elapsed < DASHBOARD_SLOW_PROXY_THRESHOLD {
+        return None;
+    }
+    Some(DashboardHttpTelemetry {
+        event: if failed {
+            "dashboard_http_failed"
+        } else {
+            "dashboard_http_slow"
+        },
+        route_class: dashboard_http_route_class(path),
+        method: dashboard_http_method_class(method),
+        status,
+        status_class: dashboard_http_status_class(status),
+        body_class,
+        stage,
+        timing_scope: "local_backend_round_trip",
+        elapsed_ms: elapsed.as_millis().min(u128::from(u64::MAX)) as u64,
+        inflight_count,
+        response_bytes,
+        backend_error_class,
+    })
+}
+
+fn dashboard_http_route_class(path: &str) -> &'static str {
+    match split_path_query(path).0 {
+        "/api/command" => "service_command",
+        "/api/browser/console" => "browser_console",
+        "/json/list" => "cdp_target_list",
+        "/api/service/status" => "service_status",
+        "/api/service/resources" => "service_resources",
+        "/api/service/contracts" => "service_contracts",
+        "/api/service/browser-capability-registry" => "browser_capability_registry",
+        "/api/service/request" => "service_request",
+        path if path.starts_with("/api/service/") => "service_api",
+        path if path.starts_with("/api/stream/") => "stream_api",
+        path if path.starts_with("/api/") => "dashboard_api",
+        _ => "other",
+    }
+}
+
+fn dashboard_http_method_class(method: &str) -> &'static str {
+    match method {
+        "GET" => "GET",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "PATCH" => "PATCH",
+        "DELETE" => "DELETE",
+        "OPTIONS" => "OPTIONS",
+        _ => "OTHER",
+    }
+}
+
+fn dashboard_http_status_class(status: Option<u16>) -> &'static str {
+    match status {
+        Some(100..=199) => "1xx",
+        Some(200..=299) => "2xx",
+        Some(300..=399) => "3xx",
+        Some(400..=499) => "4xx",
+        Some(500..=599) => "5xx",
+        Some(_) => "other",
+        None => "none",
+    }
+}
+
+fn dashboard_http_body_class(response: &[u8]) -> &'static str {
+    match http_response_body(response) {
+        None => "missing",
+        Some([]) => "empty",
+        Some(body) if serde_json::from_slice::<Value>(body).is_ok() => "json",
+        Some(_) => "non_json",
+    }
+}
+
+fn dashboard_backend_error_stage(error: &DashboardReadinessError) -> &'static str {
+    match error
+        .details
+        .as_ref()
+        .and_then(|details| details.get("stage"))
+        .and_then(Value::as_str)
+    {
+        Some("connect") => "connect",
+        Some("write") => "write",
+        Some("read") => "read",
+        Some("response") => "response",
+        Some("request") => "request",
+        Some("owner_panic") => "owner_panic",
+        Some("owner_cancelled") => "owner_cancelled",
+        _ => "proxy",
+    }
+}
+
+fn dashboard_http_failure_record(telemetry: &DashboardHttpTelemetry) -> ServiceFailureRecord {
+    ServiceFailureRecord::new(
+        ServiceFailureCategory::DashboardAction,
+        "dashboard_http_gateway",
+        telemetry.stage,
+        telemetry.backend_error_class.unwrap_or("backend_http_5xx"),
+        "Dashboard HTTP gateway request failed.",
+    )
+    .with_action("dashboard_http_proxy")
+    .with_details(serde_json::to_value(telemetry).unwrap_or_else(|_| json!({})))
+}
+
+fn emit_dashboard_http_telemetry(telemetry: DashboardHttpTelemetry) {
+    let encoded = serde_json::to_string(&telemetry)
+        .unwrap_or_else(|_| r#"{"event":"dashboard_http_telemetry_encode_failed"}"#.to_string());
+    eprintln!("agent_browser_dashboard_http_telemetry {encoded}");
+    if telemetry.failed() {
+        let record = dashboard_http_failure_record(&telemetry);
+        // Unit tests inject observers and validate the record directly. Never let a
+        // provider-free test append synthetic failures to the operator's live journal.
+        #[cfg(not(test))]
+        append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+    }
 }
 
 struct DashboardBackendIoPhase<'a> {
@@ -1507,7 +1781,7 @@ fn service_api_handler_backend_response(
     if dashboard_service_status_cacheable(method, path) {
         return Ok(response);
     }
-    require_json_backend_response(response, port, path)
+    require_json_backend_response(response, port, method, path)
 }
 
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
@@ -1564,15 +1838,58 @@ async fn proxy_dashboard_service_api_request(
     body: &str,
     request_timeout: Duration,
 ) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_dashboard_service_api_request_observed(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        production_dashboard_http_observer(),
+    )
+    .await
+}
+
+async fn proxy_dashboard_service_api_request_observed(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: DashboardHttpObserver,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_dashboard_service_api_request_with_observers(
+        port,
+        method,
+        path,
+        body,
+        request_timeout,
+        observer,
+        production_dashboard_logical_failure_observer(),
+    )
+    .await
+}
+
+async fn proxy_dashboard_service_api_request_with_observers(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+    observer: DashboardHttpObserver,
+    logical_failure_observer: DashboardLogicalFailureObserver,
+) -> Result<Vec<u8>, DashboardReadinessError> {
     if !dashboard_service_status_cacheable(method, path) {
-        return proxy_local_http_api_request_with_timeout(
+        let result = proxy_local_http_api_request_with_timeout_observed(
             port,
             method,
             path,
             body,
             request_timeout,
+            move |telemetry| observer(telemetry),
         )
         .await;
+        observe_dashboard_logical_failure(method, path, None, &result, &logical_failure_observer);
+        return result;
     }
 
     let key = DashboardServiceStatusCacheKey {
@@ -1587,10 +1904,21 @@ async fn proxy_dashboard_service_api_request(
             DashboardServiceStatusCacheEntry::Ready { response, .. } => {
                 return Ok(response.clone());
             }
-            DashboardServiceStatusCacheEntry::InFlight { result, .. } => {
+            DashboardServiceStatusCacheEntry::InFlight {
+                request_id, result, ..
+            } => {
+                let request_id = *request_id;
                 let result = result.clone();
                 drop(cache);
-                return await_dashboard_status_flight(result, port, path).await;
+                let result = await_dashboard_status_flight(result, port, path).await;
+                observe_dashboard_logical_failure(
+                    method,
+                    path,
+                    Some(request_id),
+                    &result,
+                    &logical_failure_observer,
+                );
+                return result;
             }
         }
     }
@@ -1598,24 +1926,28 @@ async fn proxy_dashboard_service_api_request(
     evict_oldest_ready_dashboard_status_entry(&mut cache);
     if cache.entries.len() >= DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
         drop(cache);
-        return proxy_local_http_api_request_with_timeout(
+        let result = proxy_local_http_api_request_with_timeout_observed(
             port,
             method,
             path,
             body,
             request_timeout,
+            move |telemetry| observer(telemetry),
         )
         .await;
+        observe_dashboard_logical_failure(method, path, None, &result, &logical_failure_observer);
+        return result;
     }
 
     cache.next_request_id = cache.next_request_id.wrapping_add(1).max(1);
     let request_id = cache.next_request_id;
     let (result_tx, result_rx) = watch::channel(None);
+    let registered_at = Instant::now();
     cache.entries.insert(
         key.clone(),
         DashboardServiceStatusCacheEntry::InFlight {
             request_id,
-            registered_at: Instant::now(),
+            registered_at,
             result: result_rx.clone(),
             owner_abort: None,
         },
@@ -1626,42 +1958,29 @@ async fn proxy_dashboard_service_api_request(
     let owned_path = path.to_string();
     let owned_body = body.to_string();
     let owner = tokio::spawn(async move {
-        let mut cleanup = DashboardStatusFlightCleanup::new(
-            key.clone(),
+        let cleanup = DashboardStatusFlightCleanup::new(DashboardStatusFlightContext {
+            key: key.clone(),
             request_id,
             port,
-            owned_path.clone(),
-            result_tx,
-        );
-        let request = std::panic::AssertUnwindSafe(proxy_local_http_api_request_with_timeout(
-            port,
-            &owned_method,
-            &owned_path,
-            &owned_body,
-            request_timeout,
-        ))
-        .catch_unwind()
-        .await;
-        let result = match request {
-            Ok(result) => result,
-            Err(_) => Err(DashboardReadinessError::local_backend(
-                "backend_unavailable",
-                format!("service status backend task panicked for 127.0.0.1:{port}{owned_path}"),
-                port,
-                &owned_path,
-                "request",
-            )),
-        };
-        cleanup.publish(result.clone());
-        let mut cache = dashboard_service_status_cache().lock().await;
-        apply_dashboard_status_flight_completion(
-            &mut cache,
+            method: owned_method.clone(),
+            path: owned_path.clone(),
+            result: result_tx,
+            observer,
+            started_at: registered_at,
+        });
+        run_dashboard_status_flight_owner(
+            cleanup,
             key,
             request_id,
-            &result,
-            Instant::now(),
-        );
-        cleanup.disarm();
+            proxy_local_http_api_request_unobserved(
+                port,
+                &owned_method,
+                &owned_path,
+                &owned_body,
+                request_timeout,
+            ),
+        )
+        .await;
     });
     let owner_abort = owner.abort_handle();
     let mut cache = dashboard_service_status_cache().lock().await;
@@ -1680,46 +1999,169 @@ async fn proxy_dashboard_service_api_request(
     }
     drop(cache);
 
-    await_dashboard_status_flight(result_rx, port, path).await
+    let result = await_dashboard_status_flight(result_rx, port, path).await;
+    observe_dashboard_logical_failure(
+        method,
+        path,
+        Some(request_id),
+        &result,
+        &logical_failure_observer,
+    );
+    result
+}
+
+fn observe_dashboard_logical_failure(
+    method: &str,
+    path: &str,
+    flight_request_id: Option<u64>,
+    result: &Result<Vec<u8>, DashboardReadinessError>,
+    observer: &DashboardLogicalFailureObserver,
+) {
+    let status = result
+        .as_ref()
+        .ok()
+        .and_then(|response| http_response_status(response));
+    let backend_error_class = result.as_ref().err().map(|error| error.code);
+    if status.is_none_or(|value| value < 500) && backend_error_class.is_none() {
+        return;
+    }
+    let logical_sequence = DASHBOARD_LOGICAL_REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let flight_id = opaque_identifier_hash(&format!(
+        "dashboard-flight:{flight_request_id:?}:{}:{}",
+        dashboard_http_method_class(method),
+        dashboard_http_route_class(path)
+    ));
+    let logical_request_id = opaque_identifier_hash(&format!(
+        "dashboard-logical-request:{logical_sequence}:{flight_id}"
+    ));
+    observer(
+        ServiceFailureRecord::new(
+            ServiceFailureCategory::DashboardAction,
+            "dashboard_http_logical_request",
+            "response",
+            backend_error_class.unwrap_or("backend_http_5xx"),
+            "Dashboard HTTP logical request failed.",
+        )
+        .with_action("dashboard_http_proxy")
+        .with_references(ServiceFailureReferences {
+            trace_id: Some(flight_id),
+            ..ServiceFailureReferences::default()
+        })
+        .with_details(json!({
+            "event": "dashboard_http_logical_request_failed",
+            "logicalRequestId": logical_request_id,
+            "routeClass": dashboard_http_route_class(path),
+            "method": dashboard_http_method_class(method),
+            "status": status,
+            "statusClass": dashboard_http_status_class(status),
+            "bodyClass": result
+                .as_ref()
+                .ok()
+                .map_or("none", |response| dashboard_http_body_class(response)),
+        })),
+    );
 }
 
 struct DashboardStatusFlightCleanup {
     key: DashboardServiceStatusCacheKey,
     request_id: u64,
     port: u16,
+    method: String,
     path: String,
     result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    observer: DashboardHttpObserver,
+    started_at: Instant,
+    inflight_count: usize,
+    _inflight_guard: DashboardProxyInflightGuard,
     published: bool,
+    observed: bool,
     armed: bool,
 }
 
+struct DashboardStatusFlightContext {
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    port: u16,
+    method: String,
+    path: String,
+    result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    observer: DashboardHttpObserver,
+    started_at: Instant,
+}
+
 impl DashboardStatusFlightCleanup {
-    fn new(
-        key: DashboardServiceStatusCacheKey,
-        request_id: u64,
-        port: u16,
-        path: String,
-        result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
-    ) -> Self {
+    fn new(context: DashboardStatusFlightContext) -> Self {
+        let (inflight_guard, inflight_count) = DashboardProxyInflightGuard::enter();
         Self {
-            key,
-            request_id,
-            port,
-            path,
-            result,
+            key: context.key,
+            request_id: context.request_id,
+            port: context.port,
+            method: context.method,
+            path: context.path,
+            result: context.result,
+            observer: context.observer,
+            started_at: context.started_at,
+            inflight_count,
+            _inflight_guard: inflight_guard,
             published: false,
+            observed: false,
             armed: true,
         }
     }
 
     fn publish(&mut self, result: Result<Vec<u8>, DashboardReadinessError>) {
-        let _ = self.result.send(Some(result));
+        let _ = self.result.send(Some(result.clone()));
         self.published = true;
+        self.observe(&result);
+    }
+
+    fn observe(&mut self, result: &Result<Vec<u8>, DashboardReadinessError>) {
+        if self.observed {
+            return;
+        }
+        self.observed = true;
+        if let Some(telemetry) = dashboard_http_terminal_telemetry(
+            &self.method,
+            &self.path,
+            self.started_at.elapsed(),
+            self.inflight_count,
+            result,
+        ) {
+            (self.observer)(telemetry);
+        }
     }
 
     fn disarm(&mut self) {
         self.armed = false;
     }
+}
+
+async fn run_dashboard_status_flight_owner<F>(
+    mut cleanup: DashboardStatusFlightCleanup,
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    request: F,
+) where
+    F: Future<Output = Result<Vec<u8>, DashboardReadinessError>>,
+{
+    let request = std::panic::AssertUnwindSafe(request).catch_unwind().await;
+    let result = match request {
+        Ok(result) => result,
+        Err(_) => Err(DashboardReadinessError::local_backend(
+            "backend_unavailable",
+            format!(
+                "service status backend task panicked for 127.0.0.1:{}{}",
+                cleanup.port, cleanup.path
+            ),
+            cleanup.port,
+            &cleanup.path,
+            "owner_panic",
+        )),
+    };
+    cleanup.publish(result.clone());
+    let mut cache = dashboard_service_status_cache().lock().await;
+    apply_dashboard_status_flight_completion(&mut cache, key, request_id, &result, Instant::now());
+    cleanup.disarm();
 }
 
 impl Drop for DashboardStatusFlightCleanup {
@@ -1736,9 +2178,11 @@ impl Drop for DashboardStatusFlightCleanup {
                 ),
                 self.port,
                 &self.path,
-                "request",
+                "owner_cancelled",
             );
-            let _ = self.result.send(Some(Err(error)));
+            let result = Err(error);
+            let _ = self.result.send(Some(result.clone()));
+            self.observe(&result);
         }
         let key = self.key.clone();
         let request_id = self.request_id;
@@ -1960,6 +2404,53 @@ fn strip_dashboard_handoff_provider_urls(value: &mut Value) {
 }
 
 fn require_json_backend_response(
+    response: Vec<u8>,
+    port: u16,
+    method: &str,
+    path: &str,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    require_json_backend_response_observed(
+        response,
+        port,
+        method,
+        path,
+        emit_dashboard_http_telemetry,
+    )
+}
+
+fn require_json_backend_response_observed(
+    response: Vec<u8>,
+    port: u16,
+    method: &str,
+    path: &str,
+    observer: impl Fn(DashboardHttpTelemetry),
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let status = http_response_status(&response);
+    let body_class = dashboard_http_body_class(&response);
+    let response_bytes = response.len();
+    let result = require_json_backend_response_unobserved(response, port, path);
+    if let Err(error) = &result {
+        if status.is_none_or(|status| status < 500) {
+            observer(DashboardHttpTelemetry {
+                event: "dashboard_http_failed",
+                route_class: dashboard_http_route_class(path),
+                method: dashboard_http_method_class(method),
+                status,
+                status_class: dashboard_http_status_class(status),
+                body_class,
+                stage: "response",
+                timing_scope: "response_validation",
+                elapsed_ms: 0,
+                inflight_count: DASHBOARD_PROXY_INFLIGHT.load(Ordering::Relaxed),
+                response_bytes: Some(response_bytes),
+                backend_error_class: Some(error.code),
+            });
+        }
+    }
+    result
+}
+
+fn require_json_backend_response_unobserved(
     response: Vec<u8>,
     port: u16,
     path: &str,
@@ -3233,11 +3724,6 @@ mod tests {
         );
     }
 
-    async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
-        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
-    }
-
     #[tokio::test]
     async fn dashboard_service_backend_bootstrap_retries_after_runtime_host_convergence() {
         let attempts = Arc::new(AtomicUsize::new(0));
@@ -3479,14 +3965,32 @@ mod tests {
             retry.write_all(&server_response).await.unwrap();
         });
         let path = format!("/api/service/status?owned-cancellation-port={port}");
+        let journal_root = std::env::temp_dir().join(format!(
+            "agent-browser-dashboard-owner-cancel-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let journal_path = journal_root.join("journal.jsonl");
+        let observer_journal_path = journal_path.clone();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let observer: DashboardHttpObserver = Arc::new(move |telemetry| {
+            append_service_failure_at(
+                &observer_journal_path,
+                &dashboard_http_failure_record(&telemetry),
+            )
+            .unwrap();
+            captured.lock().unwrap().push(telemetry);
+        });
         let request_path = path.clone();
+        let request_observer = observer.clone();
         let first = tokio::spawn(async move {
-            proxy_dashboard_service_api_request(
+            proxy_dashboard_service_api_request_observed(
                 port,
                 "GET",
                 &request_path,
                 "",
                 Duration::from_secs(2),
+                request_observer,
             )
             .await
         });
@@ -3523,12 +4027,113 @@ mod tests {
             .await
             .entries
             .contains_key(&key));
+        {
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].stage, "owner_cancelled");
+            assert_eq!(events[0].timing_scope, "local_backend_round_trip");
+            assert_eq!(events[0].backend_error_class, Some("backend_unavailable"));
+        }
+        let readback = read_service_failures_at(&journal_path, 10).unwrap();
+        assert_eq!(readback.records.len(), 1);
+        assert_eq!(readback.records[0].stage, "owner_cancelled");
 
-        let retry =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(2))
-                .await
-                .unwrap();
+        let retry = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(2),
+            observer,
+        )
+        .await
+        .unwrap();
         assert_eq!(retry, expected);
+        assert_eq!(observed.lock().unwrap().len(), 1);
+        assert_eq!(
+            read_service_failures_at(&journal_path, 10)
+                .unwrap()
+                .records
+                .len(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(journal_root);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_owner_panic_is_observed_exactly_once() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let path = "/api/service/status?panic-fixture=true".to_string();
+        let key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port: 9222,
+            path: path.clone(),
+        };
+        let request_id = 77;
+        let (result_tx, result_rx) = watch::channel(None);
+        dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .insert(
+                key.clone(),
+                DashboardServiceStatusCacheEntry::InFlight {
+                    request_id,
+                    registered_at: Instant::now(),
+                    result: result_rx.clone(),
+                    owner_abort: None,
+                },
+            );
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let journal_root = std::env::temp_dir().join(format!(
+            "agent-browser-dashboard-owner-panic-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let journal_path = journal_root.join("journal.jsonl");
+        let observer_journal_path = journal_path.clone();
+        let cleanup = DashboardStatusFlightCleanup::new(DashboardStatusFlightContext {
+            key: key.clone(),
+            request_id,
+            port: 9222,
+            method: "GET".to_string(),
+            path,
+            result: result_tx,
+            observer: Arc::new(move |telemetry| {
+                append_service_failure_at(
+                    &observer_journal_path,
+                    &dashboard_http_failure_record(&telemetry),
+                )
+                .unwrap();
+                captured.lock().unwrap().push(telemetry);
+            }),
+            started_at: Instant::now(),
+        });
+
+        run_dashboard_status_flight_owner(cleanup, key.clone(), request_id, async {
+            panic!("injected owner panic");
+            #[allow(unreachable_code)]
+            Ok(Vec::new())
+        })
+        .await;
+
+        let error = result_rx.borrow().clone().unwrap().unwrap_err();
+        assert_eq!(error.code, "backend_unavailable");
+        {
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].stage, "owner_panic");
+            assert_eq!(events[0].backend_error_class, Some("backend_unavailable"));
+        }
+        let readback = read_service_failures_at(&journal_path, 10).unwrap();
+        assert_eq!(readback.records.len(), 1);
+        assert_eq!(readback.records[0].stage, "owner_panic");
+        assert!(!dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .contains_key(&key));
+        let _ = std::fs::remove_dir_all(journal_root);
     }
 
     #[tokio::test]
@@ -3557,14 +4162,31 @@ mod tests {
             }
         });
         let path = format!("/api/service/status?shared-failure-port={port}");
-        let first =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
-        let second =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+        let observer: DashboardHttpObserver =
+            Arc::new(move |telemetry| captured.lock().unwrap().push(telemetry));
+        let first = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer.clone(),
+        );
+        let second = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer.clone(),
+        );
         let (first, second) = tokio::join!(first, second);
         assert_eq!(first.unwrap(), response);
         assert_eq!(second.unwrap(), response);
         assert_eq!(request_count.load(Ordering::SeqCst), 1);
+        assert_eq!(observed.lock().unwrap().len(), 1);
 
         let key = DashboardServiceStatusCacheKey {
             backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
@@ -3582,13 +4204,20 @@ mod tests {
             }
             tokio::task::yield_now().await;
         }
-        let retry =
-            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1))
-                .await
-                .unwrap();
+        let retry = proxy_dashboard_service_api_request_observed(
+            port,
+            "GET",
+            &path,
+            "",
+            Duration::from_secs(1),
+            observer,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(retry, response);
         assert_eq!(request_count.load(Ordering::SeqCst), 2);
+        assert_eq!(observed.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -4461,12 +5090,13 @@ mod tests {
             let _ = socket.read(&mut buffer).await;
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/empty",
             "",
             Duration::from_secs(1),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -4495,12 +5125,13 @@ mod tests {
             let _ = socket.write_all(b"not an http response");
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/invalid",
             "",
             Duration::from_millis(100),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -4524,12 +5155,13 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(200)).await;
         });
 
-        let err = proxy_local_http_api_request_with_timeout(
+        let err = proxy_local_http_api_request_with_timeout_observed(
             port,
             "GET",
             "/api/slow",
             "",
             Duration::from_millis(20),
+            |_| {},
         )
         .await
         .unwrap_err();
@@ -4604,13 +5236,166 @@ mod tests {
         )
         .into_bytes();
 
-        let err = require_json_backend_response(response, 9222, "/api/service/status").unwrap_err();
+        let err = require_json_backend_response_observed(
+            response,
+            9222,
+            "GET",
+            "/api/service/status",
+            |_| {},
+        )
+        .unwrap_err();
 
         assert_eq!(err.code, "invalid_backend_payload");
         assert_eq!(
             err.details.unwrap()["readinessState"],
             json!("invalid_payload")
         );
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_observes_injected_502_and_504_once_each() {
+        for (status, expected_status) in [
+            ("502 Bad Gateway", 502_u16),
+            ("504 Gateway Timeout", 504_u16),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 17\r\n\r\n{{\"success\":false}}"
+            )
+            .into_bytes();
+            let backend_response = response.clone();
+            tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 1024];
+                let _ = socket.read(&mut request).await.unwrap();
+                socket.write_all(&backend_response).await.unwrap();
+            });
+            let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+            let captured = observed.clone();
+
+            let actual = proxy_local_http_api_request_with_timeout_observed(
+                port,
+                "GET",
+                "/api/service/status?token=must-not-appear",
+                "",
+                Duration::from_secs(1),
+                move |telemetry| captured.lock().unwrap().push(telemetry),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(actual, response);
+            let events = observed.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].status, Some(expected_status));
+            assert_eq!(events[0].status_class, "5xx");
+            assert_eq!(events[0].route_class, "service_status");
+            assert_eq!(events[0].body_class, "json");
+            assert_eq!(events[0].response_bytes, Some(actual.len()));
+        }
+    }
+
+    #[test]
+    fn dashboard_gateway_non_json_failure_is_redacted_and_has_journal_parity() {
+        let body = b"not-json-secret";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            std::str::from_utf8(body).unwrap()
+        )
+        .into_bytes();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = observed.clone();
+
+        let error = require_json_backend_response_observed(
+            response,
+            9222,
+            "GET",
+            "/api/service/jobs?token=raw-secret&url=https://private.test",
+            move |telemetry| captured.lock().unwrap().push(telemetry),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "invalid_backend_payload");
+        let events = observed.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        let telemetry = &events[0];
+        assert_eq!(telemetry.route_class, "service_api");
+        assert_eq!(telemetry.method, "GET");
+        assert_eq!(telemetry.status, Some(200));
+        assert_eq!(telemetry.body_class, "non_json");
+        assert_eq!(
+            telemetry.backend_error_class,
+            Some("invalid_backend_payload")
+        );
+        let encoded = serde_json::to_string(telemetry).unwrap();
+        assert!(!encoded.contains("raw-secret"));
+        assert!(!encoded.contains("private.test"));
+        assert!(!encoded.contains("not-json-secret"));
+
+        let record = dashboard_http_failure_record(telemetry);
+        assert_eq!(
+            record.details,
+            Some(serde_json::to_value(telemetry).unwrap())
+        );
+        assert_eq!(record.code, "invalid_backend_payload");
+        assert_eq!(record.stage, "response");
+    }
+
+    #[test]
+    fn dashboard_gateway_does_not_duplicate_http_5xx_during_json_validation() {
+        let response = b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\nnot-json".to_vec();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let terminal = dashboard_http_terminal_telemetry(
+            "POST",
+            "/api/command?secret=value",
+            Duration::from_millis(5),
+            1,
+            &Ok(response.clone()),
+        )
+        .unwrap();
+        observed.lock().unwrap().push(terminal);
+        let captured = observed.clone();
+
+        let error = require_json_backend_response_observed(
+            response,
+            9222,
+            "POST",
+            "/api/command?secret=value",
+            move |telemetry| captured.lock().unwrap().push(telemetry),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "invalid_backend_payload");
+        let events = observed.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].status, Some(502));
+        assert_eq!(events[0].backend_error_class, Some("backend_http_5xx"));
+    }
+
+    #[test]
+    fn dashboard_gateway_omits_fast_success_but_records_slow_success() {
+        let response = Ok(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec());
+        assert!(dashboard_http_terminal_telemetry(
+            "GET",
+            "/api/service/status",
+            Duration::from_millis(10),
+            1,
+            &response,
+        )
+        .is_none());
+        let slow = dashboard_http_terminal_telemetry(
+            "GET",
+            "/api/service/status",
+            DASHBOARD_SLOW_PROXY_THRESHOLD,
+            3,
+            &response,
+        )
+        .unwrap();
+        assert_eq!(slow.event, "dashboard_http_slow");
+        assert_eq!(slow.inflight_count, 3);
+        assert!(!slow.failed());
     }
 
     #[test]

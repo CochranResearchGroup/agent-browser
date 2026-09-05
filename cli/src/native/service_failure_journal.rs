@@ -10,7 +10,9 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -20,7 +22,151 @@ use sha2::{Digest, Sha256};
 const FAILURE_JOURNAL_FILENAME: &str = "failure-journal.jsonl";
 const MAX_TEXT_BYTES: usize = 1_024;
 const MAX_DETAILS_BYTES: usize = 8_192;
-static JOURNAL_WRITE_FAILURES: AtomicU64 = AtomicU64::new(0);
+const FAILURE_JOURNAL_QUEUE_CAPACITY: usize = 256;
+
+#[derive(Default)]
+struct FailureJournalDeliveryCounters {
+    write_failures: AtomicU64,
+    queue_overloads: AtomicU64,
+    delivery_failures: AtomicU64,
+}
+
+type FailureJournalSink =
+    Arc<dyn Fn(&ServiceFailureRecord) -> Result<(), String> + Send + Sync + 'static>;
+
+enum FailureJournalCommand {
+    Append(Box<ServiceFailureRecord>),
+    Flush(SyncSender<()>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FailureJournalEnqueueResult {
+    Accepted,
+    Backpressured,
+    Unavailable,
+}
+
+#[derive(Clone)]
+struct FailureJournalDispatcher {
+    sender: SyncSender<FailureJournalCommand>,
+    counters: Arc<FailureJournalDeliveryCounters>,
+}
+
+impl FailureJournalDispatcher {
+    fn start(
+        capacity: usize,
+        sink: FailureJournalSink,
+        counters: Arc<FailureJournalDeliveryCounters>,
+    ) -> Result<Self, String> {
+        let (sender, receiver) = sync_channel::<FailureJournalCommand>(capacity.max(1));
+        let worker_counters = counters.clone();
+        thread::Builder::new()
+            .name("agent-browser-failure-journal".to_string())
+            .spawn(move || {
+                while let Ok(command) = receiver.recv() {
+                    match command {
+                        FailureJournalCommand::Append(record) => {
+                            let delivered =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    sink(&record)
+                                }));
+                            if !matches!(delivered, Ok(Ok(()))) {
+                                worker_counters
+                                    .write_failures
+                                    .fetch_add(1, Ordering::Relaxed);
+                                worker_counters
+                                    .delivery_failures
+                                    .fetch_add(1, Ordering::Relaxed);
+                                eprintln!(
+                                    "agent_browser_failure_journal_delivery event=write_failed"
+                                );
+                            }
+                        }
+                        FailureJournalCommand::Flush(acknowledge) => {
+                            let _ = acknowledge.send(());
+                        }
+                    }
+                }
+            })
+            .map_err(|error| format!("failed to start service failure journal worker: {error}"))?;
+        Ok(Self { sender, counters })
+    }
+
+    fn enqueue(&self, record: &ServiceFailureRecord) -> FailureJournalEnqueueResult {
+        match self
+            .sender
+            .try_send(FailureJournalCommand::Append(Box::new(record.clone())))
+        {
+            Ok(()) => FailureJournalEnqueueResult::Accepted,
+            Err(TrySendError::Full(FailureJournalCommand::Append(record))) => {
+                self.counters
+                    .queue_overloads
+                    .fetch_add(1, Ordering::Relaxed);
+                eprintln!("agent_browser_failure_journal_delivery event=queue_backpressure");
+                match self.sender.send(FailureJournalCommand::Append(record)) {
+                    Ok(()) => FailureJournalEnqueueResult::Backpressured,
+                    Err(_) => {
+                        self.counters.write_failures.fetch_add(1, Ordering::Relaxed);
+                        self.counters
+                            .delivery_failures
+                            .fetch_add(1, Ordering::Relaxed);
+                        eprintln!(
+                            "agent_browser_failure_journal_delivery event=worker_unavailable"
+                        );
+                        FailureJournalEnqueueResult::Unavailable
+                    }
+                }
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                self.counters.write_failures.fetch_add(1, Ordering::Relaxed);
+                self.counters
+                    .delivery_failures
+                    .fetch_add(1, Ordering::Relaxed);
+                eprintln!("agent_browser_failure_journal_delivery event=worker_unavailable");
+                FailureJournalEnqueueResult::Unavailable
+            }
+            Err(TrySendError::Full(FailureJournalCommand::Flush(_))) => unreachable!(),
+        }
+    }
+
+    fn flush(&self) -> Result<(), String> {
+        let (acknowledge, acknowledged) = sync_channel(0);
+        self.sender
+            .send(FailureJournalCommand::Flush(acknowledge))
+            .map_err(|_| "service failure journal worker is unavailable".to_string())?;
+        acknowledged
+            .recv()
+            .map_err(|_| "service failure journal worker stopped before flush".to_string())
+    }
+}
+
+fn flush_failure_journal_best_effort() {
+    if let Ok(dispatcher) = failure_journal_dispatcher() {
+        if dispatcher.flush().is_err() {
+            let counters = failure_journal_delivery_counters();
+            counters.write_failures.fetch_add(1, Ordering::Relaxed);
+            counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
+            eprintln!("agent_browser_failure_journal_delivery event=flush_failed");
+        }
+    }
+}
+
+fn failure_journal_delivery_counters() -> &'static Arc<FailureJournalDeliveryCounters> {
+    static COUNTERS: OnceLock<Arc<FailureJournalDeliveryCounters>> = OnceLock::new();
+    COUNTERS.get_or_init(|| Arc::new(FailureJournalDeliveryCounters::default()))
+}
+
+fn failure_journal_dispatcher() -> &'static Result<FailureJournalDispatcher, String> {
+    static DISPATCHER: OnceLock<Result<FailureJournalDispatcher, String>> = OnceLock::new();
+    DISPATCHER.get_or_init(|| {
+        let counters = failure_journal_delivery_counters().clone();
+        FailureJournalDispatcher::start(
+            FAILURE_JOURNAL_QUEUE_CAPACITY,
+            Arc::new(|record| append_service_failure(record).map(|_| ())),
+            counters,
+        )
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -109,6 +255,8 @@ pub struct ServiceFailureJournalReadback {
     pub records: Vec<ServiceFailureRecord>,
     pub malformed_line_count: u64,
     pub write_failure_count: u64,
+    pub delivery_overload_count: u64,
+    pub delivery_failure_count: u64,
 }
 
 impl ServiceFailureRecord {
@@ -184,17 +332,45 @@ pub fn append_service_failure(record: &ServiceFailureRecord) -> Result<PathBuf, 
 }
 
 pub fn append_service_failure_best_effort(record: &ServiceFailureRecord) {
-    if let Err(error) = append_service_failure(record) {
-        JOURNAL_WRITE_FAILURES.fetch_add(1, Ordering::Relaxed);
-        eprintln!("agent-browser failure journal write failed: {error}");
+    let occurrence_id = serde_json::to_string(&record.occurrence_id)
+        .unwrap_or_else(|_| "\"unavailable\"".to_string());
+    eprintln!(
+        "agent_browser_service_failure event=observed occurrence_id={} category={:?}",
+        occurrence_id, record.category
+    );
+    match failure_journal_dispatcher() {
+        Ok(dispatcher) => {
+            let _ = dispatcher.enqueue(record);
+        }
+        Err(_) => {
+            let counters = failure_journal_delivery_counters();
+            counters.write_failures.fetch_add(1, Ordering::Relaxed);
+            counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
+            eprintln!("agent_browser_failure_journal_delivery event=worker_start_failed");
+        }
     }
 }
 
 pub fn failure_journal_write_failure_count() -> u64 {
-    JOURNAL_WRITE_FAILURES.load(Ordering::Relaxed)
+    failure_journal_delivery_counters()
+        .write_failures
+        .load(Ordering::Relaxed)
+}
+
+pub fn failure_journal_delivery_overload_count() -> u64 {
+    failure_journal_delivery_counters()
+        .queue_overloads
+        .load(Ordering::Relaxed)
+}
+
+pub fn failure_journal_delivery_failure_count() -> u64 {
+    failure_journal_delivery_counters()
+        .delivery_failures
+        .load(Ordering::Relaxed)
 }
 
 pub fn read_service_failures(limit: usize) -> Result<ServiceFailureJournalReadback, String> {
+    flush_failure_journal_best_effort();
     let path = default_failure_journal_path()?;
     read_service_failures_at(&path, limit)
 }
@@ -210,6 +386,8 @@ pub fn read_service_failures_at(
             records: Vec::new(),
             malformed_line_count: 0,
             write_failure_count: failure_journal_write_failure_count(),
+            delivery_overload_count: failure_journal_delivery_overload_count(),
+            delivery_failure_count: failure_journal_delivery_failure_count(),
         });
     }
     let file = OpenOptions::new().read(true).open(path).map_err(|error| {
@@ -249,6 +427,8 @@ pub fn read_service_failures_at(
         records: records.into(),
         malformed_line_count,
         write_failure_count: failure_journal_write_failure_count(),
+        delivery_overload_count: failure_journal_delivery_overload_count(),
+        delivery_failure_count: failure_journal_delivery_failure_count(),
     })
 }
 
@@ -454,6 +634,172 @@ fn redact_summary(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_record(code: &str) -> ServiceFailureRecord {
+        ServiceFailureRecord::new(
+            ServiceFailureCategory::DashboardAction,
+            "dashboard_http_gateway",
+            "response",
+            code,
+            "failed https://private.test/path?token=secret password=also-secret",
+        )
+    }
+
+    #[test]
+    fn injected_dispatcher_durably_appends_redacted_record_to_temp_journal() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-failure-dispatcher-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path = root.join("journal.jsonl");
+        let sink_path = path.clone();
+        let (written_tx, written_rx) = std::sync::mpsc::channel();
+        let counters = Arc::new(FailureJournalDeliveryCounters::default());
+        let dispatcher = FailureJournalDispatcher::start(
+            4,
+            Arc::new(move |record| {
+                append_service_failure_at(&sink_path, record)?;
+                let _ = written_tx.send(());
+                Ok(())
+            }),
+            counters.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dispatcher.enqueue(&test_record("gateway_timeout")),
+            FailureJournalEnqueueResult::Accepted
+        );
+        written_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        let readback = read_service_failures_at(&path, 10).unwrap();
+        assert_eq!(readback.records.len(), 1);
+        assert_eq!(readback.records[0].code, "gateway_timeout");
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(!raw.contains("private.test"));
+        assert!(!raw.contains("secret"));
+        assert_eq!(counters.write_failures.load(Ordering::Relaxed), 0);
+        drop(dispatcher);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn injected_dispatcher_backpressures_without_losing_records() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-failure-backpressure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path = root.join("journal.jsonl");
+        let sink_path = path.clone();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (written_tx, written_rx) = std::sync::mpsc::channel();
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let first = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let counters = Arc::new(FailureJournalDeliveryCounters::default());
+        let dispatcher = FailureJournalDispatcher::start(
+            1,
+            Arc::new(move |record| {
+                if first.swap(false, Ordering::SeqCst) {
+                    let _ = entered_tx.send(());
+                    let _ = release_rx.lock().unwrap().recv();
+                }
+                append_service_failure_at(&sink_path, record)?;
+                let _ = written_tx.send(());
+                Ok(())
+            }),
+            counters.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dispatcher.enqueue(&test_record("first")),
+            FailureJournalEnqueueResult::Accepted
+        );
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(
+            dispatcher.enqueue(&test_record("second")),
+            FailureJournalEnqueueResult::Accepted
+        );
+        let third_dispatcher = dispatcher.clone();
+        let (third_tx, third_rx) = std::sync::mpsc::channel();
+        let third = thread::spawn(move || {
+            let result = third_dispatcher.enqueue(&test_record("third"));
+            let _ = third_tx.send(result);
+        });
+        for _ in 0..10_000 {
+            if counters.queue_overloads.load(Ordering::Relaxed) == 1 {
+                break;
+            }
+            thread::yield_now();
+        }
+        assert_eq!(counters.queue_overloads.load(Ordering::Relaxed), 1);
+        assert!(matches!(
+            third_rx.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+        assert_eq!(counters.delivery_failures.load(Ordering::Relaxed), 0);
+        let _ = release_tx.send(());
+        assert_eq!(
+            third_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap(),
+            FailureJournalEnqueueResult::Backpressured
+        );
+        third.join().unwrap();
+        for _ in 0..3 {
+            written_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        }
+        let readback = read_service_failures_at(&path, 10).unwrap();
+        assert_eq!(
+            readback
+                .records
+                .iter()
+                .map(|record| record.code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second", "third"]
+        );
+        assert_eq!(counters.write_failures.load(Ordering::Relaxed), 0);
+        drop(dispatcher);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn injected_dispatcher_accounts_for_sink_write_failure() {
+        let (attempted_tx, attempted_rx) = std::sync::mpsc::channel();
+        let counters = Arc::new(FailureJournalDeliveryCounters::default());
+        let dispatcher = FailureJournalDispatcher::start(
+            1,
+            Arc::new(move |_| {
+                let _ = attempted_tx.send(());
+                Err("injected sink failure with private path".to_string())
+            }),
+            counters.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dispatcher.enqueue(&test_record("write-failure")),
+            FailureJournalEnqueueResult::Accepted
+        );
+        attempted_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        for _ in 0..10_000 {
+            if counters.delivery_failures.load(Ordering::Relaxed) == 1 {
+                break;
+            }
+            thread::yield_now();
+        }
+        assert_eq!(counters.write_failures.load(Ordering::Relaxed), 1);
+        assert_eq!(counters.delivery_failures.load(Ordering::Relaxed), 1);
+        assert_eq!(counters.queue_overloads.load(Ordering::Relaxed), 0);
+    }
 
     #[test]
     fn appends_distinct_jsonl_occurrences_without_raw_urls() {

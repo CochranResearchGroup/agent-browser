@@ -13,6 +13,8 @@
       "items": { "$ref": "service-failure-record.v1.schema.json" }
     },
     "malformedLineCount": { "type": "integer", "minimum": 0 },
-    "writeFailureCount": { "type": "integer", "minimum": 0 }
+    "writeFailureCount": { "type": "integer", "minimum": 0 },
+    "deliveryOverloadCount": { "type": "integer", "minimum": 0 },
+    "deliveryFailureCount": { "type": "integer", "minimum": 0 }
   }
 }

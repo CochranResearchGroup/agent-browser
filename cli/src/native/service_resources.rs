@@ -2630,8 +2630,13 @@ pub(crate) mod service_commands {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
     pub(crate) async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
-        let service_state = load_service_state_for_maintenance(cmd)?;
-        Ok(service_resources_response(&service_state))
+        let cmd = cmd.clone();
+        tokio::task::spawn_blocking(move || {
+            let service_state = load_service_state_for_maintenance(&cmd)?;
+            Ok(service_resources_response(&service_state))
+        })
+        .await
+        .map_err(|error| format!("Service resource inventory task failed: {error}"))?
     }
     pub(crate) async fn handle_service_resources_monitor_summary() -> Result<Value, String> {
         service_resources_monitor_summary_response()

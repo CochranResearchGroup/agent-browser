@@ -16,11 +16,18 @@ handoff IDs, and query strings.
 Authenticated operators and software clients can read recent records with
 <code>GET /api/service/failures?limit=100</code>. The reader skips malformed
 lines and reports their count so one damaged occurrence does not hide later
-evidence. The authenticated dashboard uses
+evidence. Journal writes use a dedicated bounded writer. Queue pressure
+backpressures instead of silently dropping accepted records, and readback
+reports separate overload, worker, and sink failure counters. The authenticated
+dashboard uses
 <code>POST /api/service/failure-observation</code> for failures visible only in
 the client, including Guacamole iframe failures, unusable handoffs, CDP streams
 that deliver no frames, and dashboard transport failures. That intake accepts
-only a strict allowlist and requires durable handoff identity to be hashed.
+only a strict allowlist and requires durable handoff identity to be hashed. The
+dashboard retains up to 4,096 privacy-bounded same-origin status, resource, tab,
+and runtime-health read failures per document and submits them after a later
+valid recovery response. Any overflow is represented by an explicit delivery
+gap occurrence.
 
 The model is intentionally broader than the CLI. Agents usually interact through MCP, software projects usually interact through the HTTP API, and operators can inspect or intervene through the CLI and dashboard.
 
