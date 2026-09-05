@@ -4924,3 +4924,27 @@ binding, leaving current development state intact. Do not infer permission to
 delete or rehome non-campaign records, borrow their routes, or weaken the
 capture contract. Resolve that environment and resource boundary before the
 next external run. Plan acceptance remains incomplete.
+
+### Clean-Room Namespace Readiness Check
+
+The next read-only check evaluated the current descriptor factories with
+separate proposed home, install, socket, provider paths, and non-default ports.
+It performed no installation, provider effect, browser launch, or capture.
+The proposed descriptor still collided with the current stable executable,
+all three development service-unit names, local ingress service and host,
+Compose project, all three container names, six route IDs, and six RDP users.
+Therefore a different home and port set alone is not a parallel isolated
+runtime. Applying that descriptor would risk changing existing development
+resources rather than preserving them.
+
+Graphiti discovery in `agent_browser_main` returned three older isolation and
+route facts, not a current clean-room decision. The cited Plan 0125 acceptance
+note confirms one dedicated development lane; it does not authorize treating
+that lane's resource names as independently owned by a second environment.
+Current descriptor source and the no-effect collision calculation are the
+authority for this checkpoint.
+
+Progress classification: `blocker_reduction`, through excluding an unsafe
+configuration-only shortcut. Provisioning remains pending operator direction
+on a separately namespaced campaign runtime and reviewed ingress binding.
+No non-campaign state was modified and the visual capture stop remains active.
