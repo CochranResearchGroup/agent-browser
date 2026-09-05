@@ -3730,6 +3730,12 @@ Top-level `browserId` and `sessionName` on `POST /api/service/request` or MCP `s
 
 HTTP and MCP normalization rejections include machine-readable failure recourse. Route conflicts preserve their exact code in the immediate response and append-only failure journal, report `effectState: "no_effect"`, and direct the client to refresh the access plan and submit its exact route.
 
+Pre-dispatch validation failures preserve their typed journal code, report
+`phase: "ingress_validation"` and `effectState: "no_effect"`, and return the
+journal request ID as HTTP `id` or MCP error `data.requestId`. Correct invalid
+requests before resubmitting. Runtime provenance uses the server's deployment
+environment; clients cannot submit `runtimeEnvironmentId`.
+
 The guarded service read surface has MCP parity: contracts, access-plan, profile lookup, per-profile readiness, allocation, seeding handoff, service collections, incidents, events, jobs, and incident activity all have matching HTTP and MCP read paths. Agents should usually start with MCP `service_access_plan` or `agent-browser://access-plan{?...}` because it returns the service-owned profile decision, readiness, policy, providers, retained challenges, monitor findings, and copyable queued request before browser control is requested. Use narrower resources such as profile lookup, readiness, allocation, or seeding handoff only when the caller already knows it does not need the full recommendation.
 
 MCP `agent-browser://profiles/{profile_id}/allocation` mirrors `GET /api/service/profiles/<id>/allocation` for agents that need one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.

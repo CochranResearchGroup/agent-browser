@@ -86,7 +86,14 @@ impl ServiceRequestProvenance {
             client_subject_id: optional_string(command, "clientSubjectId"),
             identity_assurance,
             connection_instance_id: nonempty(connection_instance_id),
-            runtime_environment_id: optional_string(command, "runtimeEnvironmentId"),
+            // Environment identity is deployment-owned, never supplied by a client.
+            runtime_environment_id: Some(
+                match std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() {
+                    Ok("development") => "development",
+                    _ => "production",
+                }
+                .to_string(),
+            ),
             runtime_lane_id: nonempty(runtime_lane_id),
             profile_id,
             profile_resource_key,
@@ -155,7 +162,7 @@ mod tests {
                 "clientSubjectId": "client:fieldwork",
                 "identityAssurance": "self-declared",
                 "connectionInstanceId": "connection-3",
-                "runtimeEnvironmentId": "production",
+                "runtimeEnvironmentId": "forged-client-environment",
                 "profileId": "research-gov",
                 "sessionName": "selector-that-will-be-consumed",
                 "serviceName": "research-fieldwork",
@@ -169,6 +176,10 @@ mod tests {
             "runtime-lane-2",
         );
 
+        assert!(matches!(
+            provenance.runtime_environment_id.as_deref(),
+            Some("development" | "production")
+        ));
         assert_eq!(provenance.request_id, "request-7");
         assert_eq!(provenance.job_id, "job-7");
         assert_eq!(

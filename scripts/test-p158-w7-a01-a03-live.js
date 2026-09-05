@@ -21,6 +21,8 @@ import {
 const registry = JSON.parse(fs.readFileSync(new URL(
   '../docs/dev/contracts/p158-historical-failure-registry.v1.json', import.meta.url,
 ), 'utf8'));
+const requestSchema = JSON.parse(fs.readFileSync(new URL(
+  '../docs/dev/contracts/service-request.v1.schema.json', import.meta.url), 'utf8'));
 const schedule = compileP158ExecutionSchedule({ registry, seed: 'p158-w7-a01-a03-live' });
 
 function json(response, status, value) {
@@ -102,6 +104,9 @@ async function startFakeService({
       return json(response, 404, { success: false, error: { code: 'not_found' } });
     }
     const command = await requestBody(request);
+    for (const field of Object.keys(command)) {
+      assert(Object.hasOwn(requestSchema.properties, field), `unsupported native request field: ${field}`);
+    }
     const operationId = `p158-a01-a03-run:${command.taskName}:${command.action === 'tab_new' ? 'open' :
       command.action === 'tab_handle_release' ? 'release' : 'foreign-probe'}`;
     const requestId = `service-request-${jobs.length + 1}`;
@@ -120,7 +125,7 @@ async function startFakeService({
       clientSubjectId: command.clientSubjectId,
       identityAssurance: command.identityAssurance,
       connectionInstanceId,
-      runtimeEnvironmentId: command.runtimeEnvironmentId,
+      runtimeEnvironmentId: 'development',
       runtimeLaneId: 'development',
       profileId: command.profileId,
       browserId: command.browserId ?? null,
@@ -381,7 +386,9 @@ try {
     assert.equal(new Set(a03.map((row) => row.clientSubjectId)).size, 10);
     assert.equal(new Set(a03.map((row) => row.connectionInstanceId)).size, 10);
     const a03Jobs = service.jobs().filter((job) =>
-      job.provenance.runtimeEnvironmentId === environmentId && job.provenance.serviceName === 'p158-a03');
+      job.provenance.runtimeEnvironmentId === 'development' &&
+      job.provenance.profileId === frozenManifest.fixtures.A03[environmentId].profileId &&
+      job.provenance.serviceName === 'p158-a03');
     assert.equal(new Set(a03Jobs.map((job) => job.provenance.taskName)).size, 1,
       'same-label clients did not retain one shared task label');
   }

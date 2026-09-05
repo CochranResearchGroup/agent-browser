@@ -26,11 +26,11 @@
     },
     "axis": {
       "type": "string",
-      "enum": ["service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"]
+      "enum": ["request", "service_state", "lifecycle_owner", "profile_lease", "presentation", "unknown"]
     },
     "phase": {
       "type": "string",
-      "enum": ["process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"]
+      "enum": ["ingress_validation", "process_mutex_wait", "file_lock_wait", "launch_admission", "commit", "finalize", "unknown"]
     },
     "effectState": {
       "type": "string",

@@ -46,7 +46,8 @@ use crate::native::service_profile_lease::{
 };
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+    ServiceRequestIssue, ServiceRequestIssueKind, ServiceRequestNormalization,
+    ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_trace::service_commands::service_now_timestamp;
 
@@ -440,12 +441,7 @@ pub(super) async fn handle_http_request(
             ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
-                    write_json_value(
-                        &mut stream,
-                        "400 Bad Request",
-                        service_request_rejection_response(&err),
-                    )
-                    .await;
+                    write_json_value(&mut stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
@@ -1912,12 +1908,6 @@ fn service_request_command(body: &str) -> Result<Value, String> {
     service_request_command_with_state(body, None)
 }
 
-fn service_request_rejection_response(error: &str) -> Value {
-    let mut response = json!({"success": false, "error": error});
-    crate::native::service_failure::attach_service_failure_recourse(&mut response);
-    response
-}
-
 fn service_request_command_with_state(
     body: &str,
     service_state: Option<&ServiceState>,
@@ -1943,6 +1933,7 @@ fn service_request_command_with_state_and_principal(
         effective_session,
         None,
     )
+    .map_err(|rejection| rejection.to_string())
 }
 
 fn service_request_command_with_state_and_authority(
@@ -1951,11 +1942,24 @@ fn service_request_command_with_state_and_authority(
     authenticated_dashboard_user: Option<&str>,
     effective_session: &str,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
-) -> Result<Value, String> {
+) -> Result<Value, ServiceRequestRejection> {
+    let request_nonce = uuid::Uuid::new_v4();
+    let request_id = format!("http-service-request-unknown-{request_nonce}");
     let mut request = if body.trim().is_empty() {
         json!({})
     } else {
-        serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid JSON: {}", err))?
+        serde_json::from_str::<Value>(body).map_err(|err| {
+            ServiceRequestRejection::record(
+                "http_service_request",
+                None,
+                &request_id,
+                effective_session,
+                ServiceRequestIssue::new(
+                    ServiceRequestIssueKind::InvalidRequest,
+                    format!("Invalid JSON: {err}"),
+                ),
+            )
+        })?
     };
     // Top-level args predates the canonical cross-transport contract. Keep its
     // raw HTTP precedence without teaching the shared normalizer about it.
@@ -1966,10 +1970,7 @@ fn service_request_command_with_state_and_authority(
         .get("action")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
-    let request_id = format!(
-        "http-service-request-{action_hint}-{}",
-        uuid::Uuid::new_v4()
-    );
+    let request_id = format!("http-service-request-{action_hint}-{request_nonce}");
     let dashboard_principal =
         authenticated_dashboard_user.map(|username| format!("dashboard:{}", username.trim()));
     let fallback_principal =
@@ -1988,17 +1989,13 @@ fn service_request_command_with_state_and_authority(
         effective_session: Some(effective_session),
     })
     .map_err(|issue| {
-        #[cfg(not(test))]
-        crate::native::service_failure_journal::append_service_failure_best_effort(
-            &crate::native::service_request::service_request_rejection_failure_record(
-                "http_service_request",
-                request.get("action").and_then(Value::as_str),
-                &request_id,
-                effective_session,
-                &issue,
-            ),
-        );
-        issue.message().to_string()
+        ServiceRequestRejection::record(
+            "http_service_request",
+            request.get("action").and_then(Value::as_str),
+            &request_id,
+            effective_session,
+            issue,
+        )
     })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
@@ -2023,12 +2020,13 @@ pub(super) fn service_request_command_with_dashboard_generation(
     authenticated_dashboard_user: &str,
     effective_session: &str,
     dashboard_deployment_generation: Option<&str>,
-) -> Result<Value, String> {
-    let mut command = service_request_command_with_state_and_principal(
+) -> Result<Value, ServiceRequestRejection> {
+    let mut command = service_request_command_with_state_and_authority(
         body,
         service_state,
         Some(authenticated_dashboard_user),
         effective_session,
+        None,
     )?;
     apply_dashboard_deployment_generation(&mut command, dashboard_deployment_generation);
     Ok(command)
@@ -2050,16 +2048,17 @@ pub(crate) fn service_request_adapter_fixture_for_session(
     body: &str,
     effective_session: &str,
 ) -> Result<Value, Value> {
-    match service_request_command_with_state_and_principal(
+    match service_request_command_with_state_and_authority(
         body,
         None,
         Some("test-adapter"),
         effective_session,
+        None,
     ) {
         Ok(command) => Ok(command),
         Err(message) => Err(json!({
             "status": "400 Bad Request",
-            "body": service_request_rejection_response(&message),
+            "body": message.response(),
         })),
     }
 }
@@ -5505,8 +5504,17 @@ mod tests {
 
     #[test]
     fn service_request_rejection_response_exposes_route_conflict_recourse() {
-        let response =
-            service_request_rejection_response("service_access_plan_route_browser_conflict");
+        let response = ServiceRequestRejection::record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-route-conflict",
+            "session",
+            ServiceRequestIssue::new(
+                ServiceRequestIssueKind::RouteHintFailure,
+                "service_access_plan_route_browser_conflict",
+            ),
+        )
+        .response();
 
         assert_eq!(response["success"], false);
         assert_eq!(
@@ -5680,16 +5688,18 @@ mod tests {
 
     #[test]
     fn service_request_error_uses_http_400_envelope() {
-        let expected_body =
-            service_request_rejection_response("jobTimeoutMs must be a positive integer");
-        assert_eq!(
+        let error =
             service_request_adapter_fixture(r##"{"action":"navigate","jobTimeoutMs":"1000"}"##)
-                .unwrap_err(),
-            json!({
-                "status": "400 Bad Request",
-                "body": expected_body
-            })
+                .unwrap_err();
+        assert_eq!(error["status"], "400 Bad Request");
+        assert_eq!(
+            error["body"]["error"],
+            "jobTimeoutMs must be a positive integer"
         );
+        assert_eq!(error["body"]["failure"]["code"], "invalid_field_type");
+        assert_eq!(error["body"]["failure"]["phase"], "ingress_validation");
+        assert_eq!(error["body"]["failure"]["effectState"], "no_effect");
+        assert!(error["body"]["id"].is_string());
     }
 
     #[test]

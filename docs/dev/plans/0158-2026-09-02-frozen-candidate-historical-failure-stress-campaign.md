@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_diagnosis_request_contract_blocked`
+Execution state: `priority_request_repair_validated`
 
 Lane: P157
 
@@ -5636,3 +5636,44 @@ expectations with native normalization, then repair the demonstrated
 pre-dispatch response/journal mismatch at its actual ingress seam. Retain the
 remaining A-family producers and ordinary external handoff evidence as unmet.
 Calibration, W6 freeze, W7–W10 acceptance, and production mutation remain absent.
+
+### Priority Repair: Native Rejection Correlation
+
+The request-contract blocker now has a source repair. W7 omits the unsupported
+client-authored runtimeEnvironmentId field, and its mock server checks request
+fields against the canonical schema. Provenance takes runtime environment from
+deployment configuration. Campaign E0/E1 identifiers remain campaign metadata,
+not client-selected deployment authority.
+
+Native HTTP and MCP rejection responses now preserve the typed issue code,
+ingress_validation phase, no_effect certainty, and journal request identity.
+Dashboard normalization uses the same rejection representation. Malformed HTTP
+JSON now reaches the journal instead of returning before evidence creation.
+The new actual-process no-launch smoke reproduces the original generic HTTP
+error before repair and verifies five HTTP/MCP rejection-to-journal joins on
+the built candidate after repair, without jobs or browsers.
+
+An immediate MCP journal read initially found zero matching records. Source
+inspection established asynchronous delivery; bounded observation then joined
+all five responses exactly once. This proves normal-operation correlation,
+not interruption durability. The response can precede durable journal delivery;
+that crash window remains an explicit logging acceptance gap. Do not hide it
+behind the passing correlation smoke or claim reboot durability.
+
+The focused Rust request selection initially passed 59 of 60 checks. The one
+failure expected the old effect_uncertain envelope for rejected MCP input; its
+expectation now requires no_effect. All 60 focused request/provenance checks
+pass on repeat. Generated client checks, API/MCP parity, docs build, handoff
+documentation checks, logging auditor self-tests, Rust format, and workspace
+clippy with warnings denied pass. The optimized development candidate builds
+and the actual-process rejection smoke passes. These are focused checks, not
+the comprehensive or live campaign. No installed runtime was replaced, no acquisition was retried, and no
+calibration was dispatched.
+
+Classification: blocker_reduction at request normalization and response/journal
+correlation; all three priority outcomes remain incomplete. Focused validation
+is complete. Next record the disposition
+of the exhausted acquisition probe and run one isolated verification of the
+repaired client request path, with durable observations and explicit failure
+exit. Preserve the async-delivery crash window for the interruption oracle and
+ordinary anchor-free remote-view evidence as separate unmet requirements.

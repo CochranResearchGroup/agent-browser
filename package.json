@@ -59,6 +59,7 @@
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:cross-seam-interlocks": "node --no-warnings --experimental-strip-types scripts/test-cross-seam-interlocks.js",
     "test:runtime-host-no-launch": "node scripts/smoke-runtime-host-no-launch.js",
+    "test:service-request-rejection-no-launch": "node scripts/smoke-service-request-rejection-no-launch.js",
     "test:runtime-host-supervisor-no-launch": "node scripts/smoke-runtime-host-supervisor-no-launch.js",
     "test:runtime-host-supervisor-takeover-no-launch": "node scripts/smoke-runtime-host-supervisor-takeover-no-launch.js",
     "test:runtime-host-multi-lane": "node scripts/smoke-runtime-host-multi-lane.js",

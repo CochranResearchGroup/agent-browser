@@ -9,6 +9,7 @@ pub const SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION: &str =
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceFailureAxis {
+    Request,
     ServiceState,
     LifecycleOwner,
     ProfileLease,
@@ -20,6 +21,7 @@ pub enum ServiceFailureAxis {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceFailurePhase {
+    IngressValidation,
     ProcessMutexWait,
     FileLockWait,
     LaunchAdmission,

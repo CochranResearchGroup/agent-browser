@@ -147,13 +147,13 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Follow Plan 0158's September 5 priority diagnosis: reconcile the W7 request
-contract with native normalization before another authorized Profile/lease
-probe, and repair the measured pre-dispatch response/journal correlation and
-effect-certainty gaps. The two client attempts stopped before acquisition;
-startup and HTTP body-framing repairs have focused validation but no installed
-P158 recovery or Profile acceptance. Then prove shared Profile use and ordinary
-durable remote-view entry and recovery.
+Follow Plan 0158's validated priority repair checkpoint: typed pre-dispatch
+rejection correlation and deployment-owned environment provenance pass the
+60 focused Rust request checks, format, clippy, and client validation. Actual HTTP/MCP no-launch checks join five rejection responses to
+journal records; asynchronous delivery still leaves interruption durability
+unproven. After a disposition of the exhausted acquisition probe, verify the repaired request path once with independent synthetic
+clients. Profile/ACL usability and ordinary durable remote-view entry remain
+unaccepted; source repair is not installed P158 recovery.
 Do not automatically resume calibration, reinstall, restart, or the prior
 harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
 freeze gate, and full acceptance criteria are retained. Anchored readiness does

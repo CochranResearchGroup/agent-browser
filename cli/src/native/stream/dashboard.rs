@@ -858,7 +858,7 @@ async fn handle_service_api_request(
             let (session_name, command_body) = match command {
                 Ok(command) => command,
                 Err(err) => {
-                    write_json_error(stream, "400 Bad Request", &err).await;
+                    write_json_value(stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
@@ -969,7 +969,7 @@ async fn handle_service_api_request(
             ) {
                 Ok(command) => command,
                 Err(err) => {
-                    write_json_error(stream, "400 Bad Request", &err).await;
+                    write_json_value(stream, "400 Bad Request", err.response()).await;
                     return;
                 }
             };
@@ -1365,7 +1365,7 @@ fn service_request_handoff_proxy_command_body(
     path: &str,
     body: &str,
     authenticated_dashboard_user: &str,
-) -> Option<Result<(String, String), String>> {
+) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
     let state_path = JsonServiceStateStore::default_path().ok()?;
     let state = JsonServiceStateStore::new(state_path).load().ok()?;
     service_request_handoff_proxy_command_body_from_state(
@@ -1385,7 +1385,7 @@ fn service_request_handoff_proxy_command_body_from_state(
     authenticated_dashboard_user: &str,
     state: &ServiceState,
     dashboard_deployment_generation: Option<&str>,
-) -> Option<Result<(String, String), String>> {
+) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
     let session_name = service_request_handoff_target_session_name_from_state(path, body, state)?;
     Some(
         service_request_command_with_dashboard_generation(
@@ -1395,11 +1395,7 @@ fn service_request_handoff_proxy_command_body_from_state(
             &session_name,
             dashboard_deployment_generation,
         )
-        .and_then(|command| {
-            serde_json::to_string(&command)
-                .map(|command_body| (session_name, command_body))
-                .map_err(|err| format!("Failed to serialize service request command: {err}"))
-        }),
+        .map(|command| (session_name, command.to_string())),
     )
 }
 

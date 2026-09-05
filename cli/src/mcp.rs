@@ -37,7 +37,7 @@ use crate::native::service_profile_lease::{
 };
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -6425,17 +6425,14 @@ fn service_request_command_with_state_and_authority(
         effective_session: Some(effective_session),
     })
     .map_err(|issue| {
-        #[cfg(not(test))]
-        crate::native::service_failure_journal::append_service_failure_best_effort(
-            &crate::native::service_request::service_request_rejection_failure_record(
-                "mcp_service_request",
-                request.get("action").and_then(Value::as_str),
-                &request_id,
-                effective_session,
-                &issue,
-            ),
+        let rejection = ServiceRequestRejection::record(
+            "mcp_service_request",
+            request.get("action").and_then(Value::as_str),
+            &request_id,
+            effective_session,
+            issue,
         );
-        JsonRpcError::invalid_service_request(issue.message())
+        JsonRpcError::invalid_service_request(&rejection)
     })?;
     let mut command = normalized.command;
     command["id"] = json!(request_id);
@@ -11252,14 +11249,14 @@ impl JsonRpcError {
         }
     }
 
-    fn invalid_service_request(message: &str) -> Self {
-        let mut response = json!({"success": false, "error": message});
-        crate::native::service_failure::attach_service_failure_recourse(&mut response);
+    fn invalid_service_request(rejection: &ServiceRequestRejection) -> Self {
+        let response = rejection.response();
         Self {
             code: -32602,
             message: "Invalid params",
             data: Some(json!({
-                "message": message,
+                "message": response["error"],
+                "requestId": response["id"],
                 "failure": response["failure"],
             })),
         }
@@ -14048,7 +14045,7 @@ mod tests {
         );
         assert_eq!(
             error["error"]["data"]["failure"]["effectState"],
-            "effect_uncertain"
+            "no_effect"
         );
         assert_eq!(
             error["error"]["data"]["failure"]["hardStops"],

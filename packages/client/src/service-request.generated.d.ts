@@ -1607,8 +1607,8 @@ export interface ServiceRequestActionDataMap {
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =
   TAction extends keyof ServiceRequestActionDataMap ? ServiceRequestActionDataMap[TAction] : unknown;
 
-export type ServiceFailureAxis = 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
-export type ServiceFailurePhase = 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
+export type ServiceFailureAxis = 'request' | 'service_state' | 'lifecycle_owner' | 'profile_lease' | 'presentation' | 'unknown';
+export type ServiceFailurePhase = 'ingress_validation' | 'process_mutex_wait' | 'file_lock_wait' | 'launch_admission' | 'commit' | 'finalize' | 'unknown';
 export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_effect';
 export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
 

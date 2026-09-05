@@ -162,18 +162,18 @@ function findJob(trace, requestId, predicate) {
   return jobs.length === 1 ? jobs[0] : null;
 }
 
-function assertOpenOracle({ tabs, trace, events, handle, requestId, subjectId, environmentId }) {
+function assertOpenOracle({ tabs, trace, events, handle, requestId, subjectId, runtimeEnvironment }) {
   const tab = findTab(tabs, handle);
   const job = findJob(trace, requestId, (candidate) =>
     candidate.provenance?.clientSubjectId === subjectId &&
-    candidate.provenance?.runtimeEnvironmentId === environmentId);
+    candidate.provenance?.runtimeEnvironmentId === runtimeEnvironment);
   if (!tab || !['opening', 'loading', 'ready'].includes(tab.lifecycle) ||
       tab.browserId !== handle.browserId || tab.sessionId !== (handle.sessionName ?? handle.ownerSessionId) ||
       tab.serviceTabHandle?.profileAccess?.subjectId !== subjectId) {
     fail('open_state_oracle_failed', `${requestId} returned HTTP success without the owned tab state`);
   }
   if (!job || job.provenance?.clientSubjectId !== subjectId ||
-      job.provenance?.runtimeEnvironmentId !== environmentId ||
+      job.provenance?.runtimeEnvironmentId !== runtimeEnvironment ||
       typeof job.provenance?.connectionInstanceId !== 'string' ||
       job.provenance.connectionInstanceId.length === 0) {
     fail('trace_provenance_oracle_failed', `${requestId} lacks exact client and connection provenance`);
@@ -212,7 +212,6 @@ function commonRequest(context, action, subjectId, requestId) {
     taskName: context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId,
     clientSubjectId: subjectId,
     identityAssurance: 'self-declared',
-    runtimeEnvironmentId: context.environmentId,
     runtimeProfile: context.fixture.profileId,
     profileId: context.fixture.profileId,
     sessionName: context.fixture.sessionName,
@@ -260,7 +259,7 @@ async function openClient(context, action, subjectId, fetch) {
     const evidence = await observe(context.environment.serviceOrigin,
       context.caseId === 'A03' ? context.fixture.sharedLabel : action.actionId, fetch);
     connectionInstanceId = assertOpenOracle({
-      ...evidence, handle, requestId, subjectId, environmentId: context.environmentId,
+      ...evidence, handle, requestId, subjectId, runtimeEnvironment: context.environment.runtimeLane,
     });
   } catch (error) {
     error.effectState ??= 'effect_uncertain';

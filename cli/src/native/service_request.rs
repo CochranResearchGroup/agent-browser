@@ -403,7 +403,7 @@ pub(crate) struct ServiceRequestIssue {
 }
 
 impl ServiceRequestIssue {
-    fn new(kind: ServiceRequestIssueKind, message: impl Into<String>) -> Self {
+    pub(crate) fn new(kind: ServiceRequestIssueKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -434,6 +434,61 @@ impl ServiceRequestIssue {
             },
             ServiceRequestIssueKind::MissingAccountablePrincipal => "missing_accountable_principal",
         }
+    }
+}
+
+/// Retains the typed pre-dispatch failure and its journal correlation across
+/// transport adapters. No browser effect or job exists at this boundary.
+#[derive(Debug)]
+pub(crate) struct ServiceRequestRejection {
+    issue: ServiceRequestIssue,
+    request_id: String,
+}
+
+impl ServiceRequestRejection {
+    pub(crate) fn record(
+        source: &str,
+        action: Option<&str>,
+        request_id: &str,
+        session_id: &str,
+        issue: ServiceRequestIssue,
+    ) -> Self {
+        let record = service_request_rejection_failure_record(
+            source, action, request_id, session_id, &issue,
+        );
+        #[cfg(not(test))]
+        crate::native::service_failure_journal::append_service_failure_best_effort(&record);
+        #[cfg(test)]
+        let _ = record;
+        Self {
+            issue,
+            request_id: request_id.to_string(),
+        }
+    }
+
+    pub(crate) fn response(&self) -> Value {
+        use crate::native::service_failure::{
+            classify_service_failure, ServiceEffectState, ServiceFailureAxis, ServiceFailurePhase,
+            ServiceRetryDisposition,
+        };
+        let mut failure = classify_service_failure(self.issue.message());
+        if failure.axis == ServiceFailureAxis::Unknown {
+            failure.axis = ServiceFailureAxis::Request;
+            failure.recommended_action = "correct_service_request".to_string();
+            failure.safe_next_actions = vec!["inspect_service_request_schema".to_string()];
+            failure.retry_disposition = ServiceRetryDisposition::DoNotRetry;
+        }
+        failure.code = self.issue.code().to_string();
+        failure.phase = ServiceFailurePhase::IngressValidation;
+        failure.effect_state = ServiceEffectState::NoEffect;
+        json!({ "success": false, "id": self.request_id,
+            "error": self.issue.message(), "failure": failure })
+    }
+}
+
+impl fmt::Display for ServiceRequestRejection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.issue.message())
     }
 }
 
@@ -3437,36 +3492,28 @@ mod tests {
             json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
         ];
         for request in invalid {
-            let message = normalize(request.clone())
-                .unwrap_err()
-                .message()
-                .to_string();
+            let issue = normalize(request.clone()).unwrap_err();
             let body = serde_json::to_string(&request).unwrap();
-            let mut expected_body = json!({"success": false, "error": message});
-            crate::native::service_failure::attach_service_failure_recourse(&mut expected_body);
-            let expected_mcp_data = json!({
-                "message": message,
-                "failure": crate::native::service_failure::classify_service_failure(&message)
-            });
-            assert_eq!(
-                crate::native::stream::service_request_adapter_fixture(&body).unwrap_err(),
-                json!({
-                    "status": "400 Bad Request",
-                    "body": expected_body
-                })
-            );
-            assert_eq!(
-                crate::mcp::service_request_adapter_fixture(&request).unwrap_err(),
-                json!({
-                    "jsonrpc": "2.0",
-                    "id": "fixture",
-                    "error": {
-                        "code": -32602,
-                        "message": "Invalid params",
-                        "data": expected_mcp_data
-                    }
-                })
-            );
+            let http = crate::native::stream::service_request_adapter_fixture(&body).unwrap_err();
+            let mcp = crate::mcp::service_request_adapter_fixture(&request).unwrap_err();
+            assert_eq!(http["status"], "400 Bad Request");
+            assert_eq!(http["body"]["success"], false);
+            assert_eq!(http["body"]["error"], issue.message());
+            assert_eq!(http["body"]["failure"]["code"], issue.code());
+            assert_eq!(http["body"]["failure"]["phase"], "ingress_validation");
+            assert_eq!(http["body"]["failure"]["effectState"], "no_effect");
+            assert!(http["body"]["id"]
+                .as_str()
+                .unwrap()
+                .starts_with("http-service-request-"));
+            assert_eq!(mcp["error"]["code"], -32602);
+            assert_eq!(mcp["error"]["message"], "Invalid params");
+            assert_eq!(mcp["error"]["data"]["message"], issue.message());
+            assert_eq!(mcp["error"]["data"]["failure"], http["body"]["failure"]);
+            assert!(mcp["error"]["data"]["requestId"]
+                .as_str()
+                .unwrap()
+                .starts_with("mcp-service-request-"));
         }
     }
 
