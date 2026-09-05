@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `w6_oracle_candidate_publication_active`
+Execution state: `c01_starvation_repair_active`
 
 Lane: P157
 
@@ -4122,3 +4122,108 @@ candidate checkpoint, rerun development doctor and the three-launch smoke,
 reopen and refresh the sealed handoff identity if activation changes it, and
 repeat external readiness under a distinct attempt. Proceed to synchronized
 C01 only after both external jobs and their aggregate are clean.
+
+### Clean Readiness And First Full C01 Findings
+
+State transition: `w6_oracle_candidate_publication_active ->
+c01_starvation_repair_active`.
+
+The oracle repair was committed as `73348c6e` and installed as development
+generation `0.28.0-79ea57179d52`. Provider-required development doctor and all
+three disposable launch-smoke iterations passed. After explicitly reopening
+the existing sealed handoff and refreshing its candidate-bound identity, both
+off-host readiness clients and their aggregate passed in workflow
+`33933314994`. The accepted receipts recorded zero retries, zero repairs, zero
+duplicate server browser launches, and zero internal URL leaks.
+
+A fresh distributed C01 was then prepared against the exact E1 loopback lane,
+E2 public ingress, candidate commit `73348c6e`, installed generation, and a
+shared start at `2026-09-05T01:15:14Z`. Workflow `33933739849` and the original
+local controller remained attached through the barrier. No campaign action,
+retry, or repair occurred before the shared start.
+
+The attempt completed as an honest diagnostic failure:
+
+- the local half spanned exactly `01:15:14.025Z` through `01:35:14.000Z` and
+  retained all 500 one-shot observations with no retry or repair;
+- 497 live transport results passed, while three E2 reads retained plain
+  non-JSON Gateway Timeout responses around 30 seconds, including two observed
+  HTTP 504 statuses;
+- the original calibration validator additionally mislabeled ten successful
+  HTTP 200 responses as `service_effect_contract_mismatch` after backward wall
+  clock corrections placed their completion timestamps 147 to 1,687
+  milliseconds before the nominal plan while monotonic durations remained
+  valid;
+- the human external client rendered the initial fixture but its first
+  reconnect displayed the Apache Guacamole login page. Two iframe token
+  exchanges returned HTTP 403 after the resolver minted a key from the newest,
+  asynchronously closing active row;
+- the slow external client rendered the initial, concurrent, and all five
+  reconnect fixtures, then its strict oracle rejected 63 captured HTTP 504s,
+  two HTTP 502s, one Guacamole HTTP 500, and their console projections; and
+- the aggregate retained both failed client identities, zero retries, zero
+  repairs, and refused to claim calibration success.
+
+Every declared downloaded artifact passed byte-count and SHA-256 validation:
+eight human-client artifacts and 24 slow-client artifacts. The aggregate and
+local run envelopes remain outside the product repository under the governed
+temporary campaign root. Raw URLs, credentials, profile paths, and browser
+artifacts remain outside tracked source.
+
+The reconnect root cause is a fresh-key closing-row race, not key reuse. A new
+page requests a fresh restricted sharing key. The old resolver preferred the
+newest row and returned immediately after minting; Guacamole can then
+invalidate the key when asynchronous closure of that row completes. The
+bounded repair considers only connectable candidates, prefers the oldest
+stable row, requires two exact no-store post-mint liveness snapshots, discards
+keys from changed or vanished rows, and preserves the existing no-split-brain
+election rules. A provider-free fake token endpoint made the old behavior red
+with an actual 403 redemption before the repair. A residual non-atomic interval
+between the final liveness read and cross-origin iframe redemption remains an
+explicit architectural risk; eliminating it requires a server/provider-bound
+redemption seam.
+
+The local clock defect was in the harness. It scheduled with an unrelated
+global wall clock, measured request duration monotonically, then treated a
+fresh wall timestamp as monotonic. The repair couples the scheduler to the
+evidence clock, keeps nanoseconds lossless, correlates transport start,
+completion, and claimed latency exactly, and records signed clock-adjustment
+evidence. True early release, precision loss, forged latency, pre-admission
+transport, forward end-window overrun, and real transport failure remain
+actionable.
+
+The broad external failure is dashboard-origin starvation amplified by
+polling, not an ingress outage. Across both mounted pages and the local window,
+the wire evidence contains 89 matching 504s, two session-tabs 502s, and one
+Guacamole 500. During the full mounted-page interval, session-tabs made 7,045
+requests. Service status made 638 requests, transferred about 3.42 GB, and
+returned payloads as large as 5.45 MB. Resources made 1,216 requests and
+transferred about 584 MB. Each local 30-second failure aligns with a multi-route
+external timeout burst. Traefik continued serving thousands of fast responses
+through the same route, while failed upstream requests expired uniformly near
+27.6 seconds. Independent page consumers, N+1 tab reads, repeated large
+status/resource bundles, synchronous inventory and reconciliation work, and
+incomplete cache coverage amplify backend scheduler, CPU, I/O, cloning, and
+serialization pressure.
+
+The same attempt proved a logging gap. The runtime host, dashboard backend,
+and stable dashboard ingress wrote zero systemd journal lines during the
+failure window. Read-only GET failures are excluded from the current client
+failure observer, the backend lacks request-stage and starvation timings, and
+the live C01 transport attempted JSON decoding before safely preserving an
+upstream non-JSON status/body class. The external HAR made this attempt
+diagnosable, but runtime-native postmortem coverage remains insufficient.
+
+Revised next action: finish integrated validation and commit the reconnect and
+dual-clock repairs as separate reviewable slices. Before tuning capacity, add
+redacted request-stage spans, inflight/response-byte/event-loop and expensive
+projection timings, failure journaling for HTTP 5xx/proxy failures, bounded
+post-recovery delivery for same-origin read failures, and non-JSON gateway
+status/body-class retention in the C01 harness. Then consolidate dashboard
+polling across consumers and pages, suspend hidden-page reads, batch or limit
+session-tab projection, make static contracts and registry conditional, replace
+the multi-megabyte status feed with a bounded summary plus on-demand detail,
+and move blocking inventory/reconciliation work off async workers or onto
+maintained snapshots. A provider-free two-page plus 500-read stress test must
+prove bounded requests, bytes, event-loop lag, complete failure logging, and no
+timeouts before another exact-candidate readiness and synchronized C01 attempt.
