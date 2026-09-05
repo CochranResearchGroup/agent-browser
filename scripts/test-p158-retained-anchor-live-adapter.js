@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -262,6 +262,25 @@ try {
     (error) => error.code === 'anchor_exit_timeout',
   );
   assert.deepEqual(forcedSignals, ['SIGKILL']);
+
+  const fakeBin = join(root, 'fake-gh-bin');
+  mkdirSync(fakeBin);
+  writeFileSync(join(fakeBin, 'gh'), '#!/bin/sh\nexit 0\n');
+  chmodSync(join(fakeBin, 'gh'), 0o755);
+  const priorPath = process.env.PATH;
+  try {
+    process.env.PATH = `${fakeBin}:${priorPath}`;
+    assert.equal(await forcedProvider.downloadArtifact({
+      workflowRunId: '123', artifactName: 'fixture', role: 'null-signal', signal: null,
+    }), join(forcedRoot, 'downloads', 'null-signal'));
+    const aborted = new AbortController();
+    aborted.abort();
+    await assert.rejects(() => forcedProvider.downloadArtifact({
+      workflowRunId: '123', artifactName: 'fixture', role: 'aborted-signal', signal: aborted.signal,
+    }), (error) => error.name === 'AbortError');
+  } finally {
+    process.env.PATH = priorPath;
+  }
 
   const signaledChild = new EventEmitter();
   signaledChild.exitCode = null;

@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -261,6 +262,57 @@ await assert.rejects(
 );
 await cookieProofAdapter.close();
 assert.equal(navigationCount, 1, 'failed cookie proof must not add a handoff navigation');
+
+for (const signalName of ['SIGTERM', 'SIGINT']) {
+  dashboardAuthenticated = true;
+  dashboardSessionCookiePresent = true;
+  const signalEvents = new EventEmitter();
+  const sequence = [];
+  let closed = false;
+  const explicitStop = new Promise((resolveStop) => {
+    signalEvents.once(signalName, () => resolveStop(signalName.toLowerCase()));
+  });
+  const signalAdapter = createPlaywrightRetainedAnchorAdapter({
+    chromium: {
+      async launch(options) {
+        // Playwright enables automatic process-signal close unless explicitly disabled.
+        if (options[signalName === 'SIGTERM' ? 'handleSIGTERM' : 'handleSIGINT'] !== false) {
+          signalEvents.once(signalName, () => { closed = true; sequence.push('automatic-close'); });
+        }
+        return {
+          newContext: async () => ({
+            ...fakeContext,
+            newPage: async () => ({
+              ...fakePage,
+              screenshot: async () => {
+                if (closed) throw new Error('Browser was already closed');
+                sequence.push('sample');
+                return markerBytes;
+              },
+            }),
+            close: async () => { closed = true; sequence.push('context-close'); },
+          }),
+          close: async () => sequence.push('browser-close'),
+        };
+      },
+    },
+  });
+  await runRetainedAuthenticatedAnchor({
+    config: { ...config, expectedMarkerSha256: markerDigest },
+    adapter: signalAdapter,
+    waitForStop: () => {
+      sequence.push(signalName);
+      signalEvents.emit(signalName);
+      return explicitStop;
+    },
+    emitReceipt: async (receipt) => {
+      assert.equal(receipt.result, 'passed');
+      sequence.push(`${receipt.phase}-receipt`);
+    },
+  });
+  assert.deepEqual(sequence, ['sample', 'ready-receipt', signalName, 'sample',
+    'final-receipt', 'context-close', 'browser-close']);
+}
 
 const runnerSource = readFileSync('scripts/run-p158-retained-authenticated-anchor.js', 'utf8');
 const adapterSource = readFileSync('scripts/lib/p158-retained-authenticated-anchor-playwright.js', 'utf8');

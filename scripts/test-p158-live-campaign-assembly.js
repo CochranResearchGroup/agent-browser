@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { canonicalJson, createMemoryArtifactStore, sha256 } from './lib/p158-campaign-controller.js';
 import {
   constructP158LiveCampaignBundles,
+  constructP158W7SpecializedBundles,
   createP158LiveCampaignDescriptor,
   P158_RUNTIME_IDENTITY_PROJECTION_AXES,
   P158LiveCampaignAssemblyError,
@@ -17,6 +18,9 @@ import {
   sealP158RuntimeIdentityProbe,
   sealP158LiveBundleAssemblyConfiguration,
 } from './lib/p158-live-campaign-assembly.js';
+import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
+import { createP158W7A01A03OwnershipManifest } from './lib/p158-w7-a01-a03-live.js';
+import { createP158W7LiveDevelopmentAdapterBundle } from './lib/p158-w7-development-adapters.js';
 
 const RUN_ID = 'p158-assembly-test';
 const CANDIDATE = '11'.repeat(32);
@@ -233,6 +237,87 @@ await runTest('fails closed before bundle construction when a concrete receipt i
     liveHookManifest: { manifestSha256: '33'.repeat(32) }, runtimeIdentity: { runId: RUN_ID },
     configuration, artifactStore: createMemoryArtifactStore(), clock: { wallNow: () => new Date().toISOString() },
   }), (error) => error.code === 'assembly_artifact_changed');
+}));
+
+await runTest('omitted W7 ownership keeps its cases blocked without suppressing supplied live cases', () => withRoot(async (runRoot) => {
+  const registry = JSON.parse(await readFile('docs/dev/contracts/p158-historical-failure-registry.v1.json', 'utf8'));
+  const schedule = compileP158ExecutionSchedule({ registry, seed: RUN_ID });
+  const hookSha256 = '33'.repeat(32);
+  const ownership = createP158W7A01A03OwnershipManifest({
+    schemaVersion: 'agent-browser.p158-w7-a01-a03-ownership.v1',
+    campaignRunId: RUN_ID, candidateSha256: CANDIDATE, liveHookManifestSha256: hookSha256,
+    environmentSealSha256s: { E0: '44'.repeat(32), E1: '55'.repeat(32) },
+    environments: Object.fromEntries(['E0', 'E1'].map((environmentId) => [environmentId, {
+      serviceOrigin: 'http://127.0.0.1:43158', runtimeLane: 'development', production: false,
+      runtimeEnvironmentId: environmentId, targetId: `target-${environmentId}`,
+      ownershipStatus: { runtimeEnvironment: 'development' },
+    }])),
+    fixtures: Object.fromEntries(['A01', 'A02', 'A03'].map((caseId) => [caseId,
+      Object.fromEntries(['E0', 'E1'].map((environmentId) => [environmentId, {
+        profileId: `${caseId}-${environmentId}`, sessionName: `p158-${caseId}-${environmentId}`,
+        url: 'http://127.0.0.1:43158/synthetic', browserId: `browser-${caseId}-${environmentId}`,
+        sharedLabel: 'same-label',
+      }])),
+    ])),
+  });
+  const configuration = { w7: {
+    a01A03Ownership: await bound(join(runRoot, 'a01-a03.json'), ownership),
+  } };
+  const input = { descriptor: { runId: RUN_ID, runRoot }, schedule, configuration,
+    artifactStore: createMemoryArtifactStore(), clock: { wallNow: () => '2026-09-05T00:00:00Z' } };
+  const before = structuredClone(configuration);
+  const specialized = await constructP158W7SpecializedBundles(input);
+  assert.deepEqual(configuration, before);
+  assert.deepEqual(specialized.a01A03LiveBundle.concreteCaseIds, ['A01', 'A02', 'A03']);
+  for (const field of ['a04A06LiveBundle', 'a07A13LiveBundle', 'a08LiveBundle']) {
+    assert.equal(specialized[field], null);
+  }
+  const bundle = createP158W7LiveDevelopmentAdapterBundle({ schedule, ...specialized,
+    target: { targetId: 'p158-target', campaignRunId: RUN_ID, candidateSha256: CANDIDATE,
+      runtimeLane: 'development', isolationState: 'isolated', ownership: 'p158_campaign',
+      production: false, foreign: false, tenantDataPresent: false },
+    primitives: Object.fromEntries(['captureEvidence', 'captureLogs', 'runCliCommand', 'runBrowserAction',
+      'signalProcess', 'runSystemdAction', 'runDisplayAction', 'runShutdownAction']
+      .map((name) => [name, async () => { assert.fail(`Unexpected effect ${name}`); }])),
+    liveHookManifestSha256: hookSha256,
+  });
+  assert.deepEqual(bundle.adapterBindings.filter((entry) => entry.mode === 'concrete_live')
+    .map((entry) => entry.caseId), ['A01', 'A02', 'A03']);
+  for (const caseId of ['A05', 'A07', 'A08', 'A13', 'X06']) {
+    const binding = bundle.adapterBindings.find((entry) => entry.caseId === caseId);
+    assert.equal(binding.mode, 'explicit_blocked');
+    assert.equal(binding.effectsAllowed, false);
+    assert.equal(binding.blocker.code, 'live_case_hook_missing');
+    assert.equal(binding.implementedActionCount, 0);
+    const result = await bundle.w7Adapters.find((adapter) => adapter.caseId === caseId).execute({});
+    assert.equal(result.resultState, 'skipped_blocked');
+    assert.equal(result.effectState, 'not_started');
+  }
+  assert.deepEqual(Object.keys(bundle.effects), []);
+  assert.equal(bundle.reviewedLiveDispatcher, null);
+  assert.equal(bundle.executedActionIds.size, 0);
+  const empty = await constructP158W7SpecializedBundles({ ...input, configuration: { w7: {} } });
+  assert.ok(Object.values(empty).every((value) => value === null));
+}));
+
+await runTest('supplied optional W7 references retain file, digest and manifest validation', () => withRoot(async (runRoot) => {
+  const input = { descriptor: { runId: RUN_ID, runRoot }, schedule: {},
+    artifactStore: createMemoryArtifactStore(), clock: { wallNow: () => '2026-09-05T00:00:00Z' } };
+  for (const field of ['a01A03Ownership', 'a04A06Ownership', 'a07A13Ownership', 'a08ReplayManifest']) {
+    const reference = { path: join(runRoot, `${field}.json`), sha256: '44'.repeat(32) };
+    const construct = (ref) => constructP158W7SpecializedBundles({ ...input,
+      configuration: { w7: { [field]: ref } } });
+    await assert.rejects(() => construct(reference), (error) => error.code === 'assembly_artifact_missing');
+    await writeFile(reference.path, 'null\n');
+    await assert.rejects(() => construct(reference), (error) => error.code === 'assembly_artifact_changed');
+    await assert.rejects(() => construct(null), (error) => error.code === 'assembly_path_invalid');
+    const exact = { ...reference, sha256: sha256(await readFile(reference.path)) };
+    await assert.rejects(() => construct(exact), 'A supplied null JSON manifest must not become an omission');
+    await writeFile(reference.path, '{}\n');
+    const malformed = { ...reference, sha256: sha256(await readFile(reference.path)) };
+    await assert.rejects(() => construct(malformed),
+      'A malformed supplied ownership manifest must not become an omission');
+  }
 }));
 
 await runTest('assembles the W10 hook with sealed authorities and terminal artifact inventory', async () => {

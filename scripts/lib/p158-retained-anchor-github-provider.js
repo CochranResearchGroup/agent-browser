@@ -28,7 +28,8 @@ async function poll({ observe, accept, timeoutMs, intervalMs = 1000, signal }) {
 
 async function gh(args, { signal, cwd } = {}) {
   const result = await execFile('gh', args, {
-    encoding: 'utf8', signal, cwd, timeout: 60_000, maxBuffer: 10 * 1024 * 1024,
+    encoding: 'utf8', ...(signal == null ? {} : { signal }), cwd,
+    timeout: 60_000, maxBuffer: 10 * 1024 * 1024,
   });
   return result.stdout;
 }

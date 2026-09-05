@@ -29,6 +29,32 @@
 }());
 
 /*
+ * Embedded Guacamole must leave initial keyboard focus with its host dashboard.
+ * Chromium blocks declarative autofocus in a cross-origin frame. Register after
+ * templates.js on its existing module so this runs after the upstream cache
+ * population, before any text-input directive links during Angular bootstrap.
+ * Only that template's autofocus attribute changes; explicit focus and input
+ * handlers remain available, and standalone Guacamole keeps its own default.
+ */
+(function installAgentBrowserEmbeddedTextInputTemplate() {
+    'use strict';
+
+    if (window.parent === window || !window.angular)
+        return;
+
+    window.angular.module('templates-main').run(['$templateCache', function ($templateCache) {
+        var key = 'app/textInput/templates/guacTextInput.html';
+        var template = $templateCache.get(key);
+        if (typeof template !== 'string')
+            return;
+        $templateCache.put(key, template.replace(
+            /(<textarea\b[^>]*?)\sautofocus(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?(?=\s|>)/g,
+            '$1'
+        ));
+    }]);
+}());
+
+/*
  * A restricted sharing key is redeemed inside the sibling Guacamole origin,
  * which the dashboard cannot inspect. Report only the attempt identity and
  * bounded outcome so the parent can discard a rejected key and run a fresh

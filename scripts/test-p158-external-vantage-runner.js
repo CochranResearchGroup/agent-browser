@@ -29,6 +29,7 @@ import {
   handoffResolutionReadinessGaps,
   humanPacedObservation,
   observerPacedObservation,
+  observeDashboardKeyboardTraversal,
   auditExternalDashboardEvidence,
   normalizeExternalDashboardEvidence,
   projectHandoffResolution,
@@ -70,7 +71,7 @@ assert.doesNotMatch(
 );
 assert.match(workflow, /probe_mode:[\s\S]*default: calibration/);
 assert.match(workflow, /calibration_start_at:[\s\S]*RFC3339 UTC start/);
-assert.match(workflow, /calibration_start_at:[\s\S]*at least 2 minutes in the future/);
+assert.match(workflow, /calibration_start_at:[\s\S]*at least 30 minutes in the future/);
 assert.equal((workflow.match(/P158_CALIBRATION_START_AT:/g) || []).length, 2);
 assert.equal((workflow.match(/timeout-minutes: 75/g) || []).length, 2);
 assert.match(workflow, /aggregate:[\s\S]*timeout-minutes: 10/);
@@ -281,17 +282,49 @@ assert.throws(
   /does not fit the rendered remote-view iframe/,
 );
 const pacedInputEvents = [];
+function dashboardFocusFixture(events, { escapeAfterTab = false, loseFocusDuringDelay = false } = {}) {
+  const document = { activeElement: { tagName: 'IFRAME' } };
+  const next = { tagName: 'BUTTON' };
+  const outside = { tagName: 'BUTTON' };
+  const header = { contains: (element) => element === button || element === next };
+  const button = { tagName: 'BUTTON', ownerDocument: document, closest: () => header };
+  return {
+    keyboard: {
+      async press(key) {
+        assert(header.contains(document.activeElement), 'keyboard input must never begin in the iframe');
+        events.push(`keyboard:${key}`);
+        document.activeElement = key === 'Tab' ? (escapeAfterTab ? outside : next) : button;
+      },
+    },
+    async waitForTimeout() {
+      if (loseFocusDuringDelay) document.activeElement = { tagName: 'IFRAME' };
+    },
+    locator(selector) {
+      assert.equal(selector, '.workspace-remote-viewport-header');
+      return {
+        getByRole(role, options) {
+          assert.equal(role, 'button');
+          assert.deepEqual(options, { name: 'Advanced connection controls', exact: true });
+          return {
+            async focus() { document.activeElement = button; events.push('dashboard:focus'); },
+            async evaluate(callback, argument) { return callback(button, argument); },
+          };
+        },
+      };
+    },
+  };
+}
+const pacedFocus = dashboardFocusFixture(pacedInputEvents);
 await humanPacedObservation({
   mouse: {
     async move() { pacedInputEvents.push('mouse:move'); },
     async wheel(_x, y) { pacedInputEvents.push(`mouse:wheel:${y}`); },
     async click() { pacedInputEvents.push('mouse:click'); },
   },
-  keyboard: {
-    async press(key) { pacedInputEvents.push(`keyboard:${key}`); },
-  },
+  keyboard: pacedFocus.keyboard,
   async waitForTimeout() {},
-  locator() {
+  locator(selector) {
+    if (selector === '.workspace-remote-viewport-header') return pacedFocus.locator(selector);
     return {
       first() {
         return {
@@ -309,6 +342,7 @@ assert.deepEqual(
   pacedInputEvents,
   [
     'mouse:move',
+    'dashboard:focus',
     'keyboard:Tab',
     'keyboard:Shift+Tab',
     'mouse:move',
@@ -357,16 +391,59 @@ await waitForGuacamoleIframe({
 });
 assert.equal(iframeWaitCount, 1);
 const observerEvents = [];
+const observerFocus = dashboardFocusFixture(observerEvents);
 await observerPacedObservation({
+  ...observerFocus,
   mouse: {
     async move() { observerEvents.push('mouse:move'); },
   },
-  keyboard: {
-    async press(key) { observerEvents.push(`keyboard:${key}`); },
-  },
   async waitForTimeout() {},
 }, 'slow_concurrency');
-assert.deepEqual(observerEvents, ['mouse:move', 'keyboard:Tab', 'keyboard:Shift+Tab']);
+assert.deepEqual(observerEvents, ['mouse:move', 'dashboard:focus', 'keyboard:Tab', 'keyboard:Shift+Tab']);
+for (const options of [{ escapeAfterTab: true }, { loseFocusDuringDelay: true }]) {
+  const events = [];
+  await assert.rejects(() => observeDashboardKeyboardTraversal(dashboardFocusFixture(events, options), 1),
+    (error) => error.code === 'external_dashboard_keyboard_focus_invalid');
+  assert.deepEqual(events, ['dashboard:focus', 'keyboard:Tab'], 'focus escape must stop before reverse input');
+}
+// Opt in explicitly: the ordinary harness remains browser-free.
+if (process.argv.includes('--local-dom')) {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true, executablePath: chromium.executablePath() });
+  try {
+    const context = await browser.newContext();
+    await context.route('**/*', (route) => route.abort());
+    const page = await context.newPage();
+    await page.setContent(`<header class="workspace-remote-viewport-header">
+      <button aria-label="Advanced connection controls">Advanced</button>
+      <button aria-label="Open workspace stream externally">External</button><button>Fullscreen</button>
+      </header><iframe srcdoc="<input id='remote'>"></iframe>`);
+    const input = page.frameLocator('iframe').locator('input');
+    await input.focus();
+    const frame = page.frames()[1];
+    await frame.evaluate(() => {
+      window.keys = [];
+      document.addEventListener('keydown', (event) => window.keys.push(event.key));
+    });
+    await page.keyboard.press('Tab');
+    assert((await frame.evaluate(() => window.keys)).includes('Tab'), 'unscoped Tab reaches the iframe');
+    await frame.evaluate(() => { window.keys = []; });
+    await input.focus();
+    await observeDashboardKeyboardTraversal(page, 1);
+    assert.deepEqual(await frame.evaluate(() => window.keys), []);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')),
+      'Advanced connection controls');
+    await page.evaluate(() => document.addEventListener('keyup', (event) => {
+      if (event.key === 'Tab') document.querySelector('iframe').contentDocument.querySelector('input').focus();
+    }, { once: true }));
+    await assert.rejects(() => observeDashboardKeyboardTraversal(page, 1),
+      (error) => error.code === 'external_dashboard_keyboard_focus_invalid');
+    assert.deepEqual(await frame.evaluate(() => window.keys), []);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
 assert.equal(
   remoteViewIframeClipObservation(
     { coordinateSpace: 'remote-view-iframe', x: 100, y: 200, width: 80, height: 40 },

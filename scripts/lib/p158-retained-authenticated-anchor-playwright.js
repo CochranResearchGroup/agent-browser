@@ -90,7 +90,10 @@ export function createPlaywrightRetainedAnchorAdapter({ chromium, convergenceTim
     async open({ handoffUrl, username, password, markerRegion: region, expectedMarkerSha256: digest }) {
       markerRegion = region;
       expectedMarkerSha256 = digest;
-      browser = await chromium.launch({ headless: true, args: [...LAUNCH_ARGS] });
+      // The anchor owns stop signals: sample and seal its final receipt before closing.
+      browser = await chromium.launch({
+        headless: true, args: [...LAUNCH_ARGS], handleSIGTERM: false, handleSIGINT: false,
+      });
       context = await browser.newContext({
         viewport: { width: 1440, height: 1000 },
         reducedMotion: 'reduce',

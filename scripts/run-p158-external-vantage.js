@@ -1885,13 +1885,38 @@ export function projectHandoffResolution(data) {
   };
 }
 
+/** Traverse actual dashboard buttons while preventing inherited iframe focus from receiving keys. */
+export async function observeDashboardKeyboardTraversal(page, delay) {
+  const advanced = page.locator('.workspace-remote-viewport-header')
+    .getByRole('button', { name: 'Advanced connection controls', exact: true });
+  const requireFocus = async (position) => {
+    const valid = await advanced.evaluate((button, expected) => {
+      const active = button.ownerDocument.activeElement;
+      const header = button.closest('.workspace-remote-viewport-header');
+      return Boolean(header && active?.tagName === 'BUTTON' && header.contains(active) &&
+        (expected === 'advanced' ? active === button : active !== button));
+    }, position);
+    if (!valid) {
+      const error = new Error('Dashboard keyboard focus escaped the expected toolbar traversal');
+      error.code = 'external_dashboard_keyboard_focus_invalid';
+      throw error;
+    }
+  };
+  await advanced.focus();
+  await requireFocus('advanced');
+  await page.keyboard.press('Tab');
+  await requireFocus('next');
+  await page.waitForTimeout(delay);
+  await requireFocus('next');
+  await page.keyboard.press('Shift+Tab');
+  await requireFocus('advanced');
+}
+
 export async function humanPacedObservation(page, profile, _pixelMarkerRegion) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
   await page.waitForTimeout(delay);
-  await page.keyboard.press('Tab');
-  await page.waitForTimeout(delay);
-  await page.keyboard.press('Shift+Tab');
+  await observeDashboardKeyboardTraversal(page, delay);
   const remoteFrame = page.locator('iframe').first();
   if (await remoteFrame.count()) {
     const box = await remoteFrame.boundingBox();
@@ -1953,9 +1978,7 @@ export async function observerPacedObservation(page, profile) {
   const delay = profile === 'slow_concurrency' ? 900 : 300;
   await page.mouse.move(220, 180, { steps: 8 });
   await page.waitForTimeout(delay);
-  await page.keyboard.press('Tab');
-  await page.waitForTimeout(delay);
-  await page.keyboard.press('Shift+Tab');
+  await observeDashboardKeyboardTraversal(page, delay);
 }
 
 export function syntheticRemoteInteractionPoint(region, iframeBox) {

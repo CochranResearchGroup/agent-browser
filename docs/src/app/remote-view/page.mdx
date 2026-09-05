@@ -23,6 +23,12 @@ Browser does not rewrite a provider or Guacamole origin into the dashboard-only
 
 ## Before you begin
 
+The packaged Guacamole extension preserves text-input preferences but removes
+automatic text-field focus in embedded viewers. Focus the remote text field
+explicitly before typing. This avoids blocked cross-origin autofocus and
+keeps dashboard keyboard navigation separate from remote input. Standalone
+Guacamole retains its normal autofocus behavior.
+
 You need a configured runtime profile and a ready RDP route. Check the intended
 subject without changing it:
 

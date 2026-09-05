@@ -5747,7 +5747,8 @@ doctor reports managed Chrome sandbox-policy readiness separately. Standalone
 doctor runs discover the versioned installed support-script root without a
 checkout. Guacamole performs a one-time browser-origin migration that makes
 text input the default for existing and new connections while preserving later
-user overrides.
+user overrides. Embedded viewers require explicit text-input focus; standalone
+Guacamole autofocus is unchanged.
 
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)

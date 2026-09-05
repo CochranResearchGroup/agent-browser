@@ -878,30 +878,11 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   if (!/^[a-f0-9]{64}$/u.test(liveHookManifestSha256 ?? '')) {
     fail('live_hook_manifest_unproven', 'W7 live adapters require the exact frozen live-hook manifest digest');
   }
-  const reviewed = assessP158W7ReviewedLiveDispatcher({ schedule, target });
-  const liveBindings = new Map(reviewed.bindings
-    .filter((binding) => P158_W7_REVIEWED_LIVE_CASE_IDS.includes(binding.caseId))
-    .map((binding) => [binding.actionId, binding]));
-  const concrete = createP158W7DevelopmentAdapterBundle({
-    schedule,
-    target,
-    primitives,
-    caseIds: P158_W7_REVIEWED_LIVE_CASE_IDS,
-    planAction: ({ caseId, attempt, action }) => {
-      const binding = liveBindings.get(action.actionId);
-      if (!binding || binding.caseId !== caseId || binding.attemptId !== attempt.attemptId) {
-        fail('reviewed_live_binding_missing', action.actionId);
-      }
-      const {
-        caseId: _caseId,
-        attemptId: _attemptId,
-        environmentIds: _environmentIds,
-        dimensionAssignments: _dimensionAssignments,
-        ...plan
-      } = binding;
-      return structuredClone(plan);
-    },
-  });
+  assertDevelopmentTarget(target);
+  // Reviewed command shapes cannot promote a live case. Only supplied,
+  // ownership-bound specialized or agent bundles may expose effects here.
+  // Keep the strict reviewed dispatcher available to callers auditing those
+  // shapes, without demanding PIDs or displays for blocked campaign cases.
   const agentOrchestration = agentWorkflowManifest === null
     ? null
     : compileP158W7AgentOrchestration({
@@ -981,13 +962,18 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   const concreteCaseIds = new Set([...agentConcreteCaseIds, ...specializedCaseIds]);
   const contracts = new Map(schedule.caseContracts.map((contract) => [contract.caseId, contract]));
   const sourceSha256 = w7SourceSha256();
-  const explicitBlockedAdapters = Object.entries(P158_W7_LIVE_HOOK_GAPS)
-    .filter(([caseId]) => !concreteCaseIds.has(caseId))
-    .map(([caseId, missingHook]) => {
+  const missingHookFor = (caseId) => P158_W7_LIVE_HOOK_GAPS[caseId] ?? {
+    A07: 'browser_crash_effect_time_ownership_bundle_missing',
+    A13: 'retained_generation_ownership_bundle_missing',
+    X06: 'desktop_locator_effect_time_ownership_bundle_missing',
+  }[caseId];
+  const explicitBlockedAdapters = P158_W7_CASE_IDS
+    .filter((caseId) => !concreteCaseIds.has(caseId))
+    .map((caseId) => {
       const contract = contracts.get(caseId);
       const blocker = deepFreeze({
         code: 'live_case_hook_missing',
-        detail: missingHook,
+        detail: missingHookFor(caseId),
         sourcePath: W7_SOURCE_PATH,
         sourceSha256,
       });
@@ -1016,7 +1002,6 @@ export function createP158W7LiveDevelopmentAdapterBundle({
     const agentConcrete = agentConcreteCaseIds.has(caseId);
     const specialized = specializedCaseIds.has(caseId);
     const specializedBundle = specializedByCase.get(caseId);
-    const partial = ['A09', 'A15'].includes(caseId);
     return deepFreeze({
       caseId,
       mode: concreteLive ? 'concrete_live' : 'explicit_blocked',
@@ -1030,27 +1015,18 @@ export function createP158W7LiveDevelopmentAdapterBundle({
       hookIds: concreteLive
         ? (specialized
             ? [...specializedBundle.liveHookIds]
-            : (agentConcrete
-            ? ['w7.agent_existing_seam_workflow']
-            : (caseId === 'A07'
-            ? ['w7.evidence', 'w7.logs', 'w7.process']
-            : (caseId === 'A13'
-                ? ['w7.evidence', 'w7.logs', 'w7.systemd']
-                : ['w7.display', 'w7.evidence', 'w7.logs']))))
-        : (partial ? ['w7.browser', 'w7.evidence', 'w7.logs'] : []),
-      implementedActionCount: concreteLive
-        ? actionCounts.get(caseId)
-        : reviewed.bindings.filter((binding) => binding.caseId === caseId).length,
+            : ['w7.agent_existing_seam_workflow'])
+        : [],
+      implementedActionCount: concreteLive ? actionCounts.get(caseId) : 0,
       blockedActionCount: concreteLive ? 0 : actionCounts.get(caseId),
       effectsAllowed: concreteLive,
       blocker: concreteLive ? null : {
         code: 'live_case_hook_missing',
-        detail: P158_W7_LIVE_HOOK_GAPS[caseId],
+        detail: missingHookFor(caseId),
       },
     });
   });
   const undecoratedW7ByCase = new Map([
-    ...concrete.w7Adapters,
     ...(agentOrchestration?.adapters ?? []),
     ...(a01A03LiveBundle?.adapters ?? []),
     ...(a04A06LiveBundle?.adapters ?? []),
@@ -1083,10 +1059,10 @@ export function createP158W7LiveDevelopmentAdapterBundle({
   return {
     adapters,
     w7Adapters,
-    effects: { ...concrete.effects, ...(agentOrchestration?.effects ?? {}) },
-    executedActionIds: concrete.executedActionIds,
+    effects: { ...(agentOrchestration?.effects ?? {}) },
+    executedActionIds: new Set(),
     adapterBindings: deepFreeze(adapterBindings),
-    reviewedLiveDispatcher: reviewed,
+    reviewedLiveDispatcher: null,
     agentOrchestration,
     ready: true,
   };

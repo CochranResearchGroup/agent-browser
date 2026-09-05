@@ -451,6 +451,38 @@ export async function readP158LiveCampaignRuntimeIdentity({ descriptor, manifest
     .map((entry) => observed.get(entry.environmentId)) };
 }
 
+/**
+ * Construct supplied W7 manifests only. An omitted reference leaves the existing
+ * case adapter explicitly blocked; a supplied reference must pass every byte,
+ * ownership and candidate check. Construction performs no browser effect.
+ */
+export async function constructP158W7SpecializedBundles({ descriptor, schedule, configuration, artifactStore, clock }) {
+  const readOptional = (field) => Object.hasOwn(configuration.w7, field)
+    ? readBoundJson(configuration.w7[field], descriptor.runRoot, `w7.${field}`)
+    : undefined;
+  const [a01Ownership, a04Ownership, a13Ownership, a08ReplayManifest] = await Promise.all([
+    readOptional('a01A03Ownership'), readOptional('a04A06Ownership'),
+    readOptional('a07A13Ownership'), readOptional('a08ReplayManifest'),
+  ]);
+  const receiptStore = { append: (receipt) => appendReceipt(artifactStore, descriptor.runId, receipt) };
+  return {
+    a01A03LiveBundle: a01Ownership === undefined ? null : createP158W7A01A03LiveBundle({
+      schedule, ownershipManifest: a01Ownership, receiptStore, clock: clock.wallNow,
+    }),
+    a04A06LiveBundle: a04Ownership === undefined ? null : createP158W7A04A06LiveBundle({
+      schedule, ownershipManifest: a04Ownership, receiptStore, clock: clock.wallNow,
+    }),
+    a07A13LiveBundle: a13Ownership === undefined ? null : createP158W7A07A13LiveBundle({
+      schedule, ownershipManifest: a13Ownership,
+      receiptStore: createA13ReceiptStore(artifactStore, descriptor.runId), clock: clock.wallNow,
+    }),
+    a08LiveBundle: a08ReplayManifest === undefined ? null : createP158W7A08LiveBundle({
+      schedule, replayManifest: a08ReplayManifest,
+      receiptStore: createA08ReceiptStore(artifactStore, descriptor.runId), clock: clock.wallNow,
+    }),
+  };
+}
+
 /** Constructs only source-bound live adapters. It performs no browser or provider effect. */
 export async function constructP158LiveCampaignBundles({
   descriptor, manifest, schedule, phasePreparation, liveHookManifest, runtimeIdentity,
@@ -470,28 +502,12 @@ export async function constructP158LiveCampaignBundles({
   }
   const registry = await readBoundJson(configuration.registry, descriptor.runRoot, 'registry');
   if (sha256(registry) !== schedule.registrySha256) fail('registry_identity_drift', 'Assembly registry differs from the frozen schedule');
-  const [a01Ownership, a04Ownership, a13Ownership, a08ReplayManifest,
-    externalWorkflowPlan, declaredTransitionPlan] = await Promise.all([
-    readBoundJson(configuration.w7.a01A03Ownership, descriptor.runRoot, 'w7.a01A03Ownership'),
-    readBoundJson(configuration.w7.a04A06Ownership, descriptor.runRoot, 'w7.a04A06Ownership'),
-    readBoundJson(configuration.w7.a07A13Ownership, descriptor.runRoot, 'w7.a07A13Ownership'),
-    readBoundJson(configuration.w7.a08ReplayManifest, descriptor.runRoot, 'w7.a08ReplayManifest'),
+  const [specializedBundles, externalWorkflowPlan, declaredTransitionPlan] = await Promise.all([
+    constructP158W7SpecializedBundles({ descriptor, schedule, configuration, artifactStore, clock }),
     readBoundJson(configuration.w9.externalWorkflowPlan, descriptor.runRoot, 'w9.externalWorkflowPlan'),
     readBoundJson(configuration.w9.declaredTransitionPlan, descriptor.runRoot, 'w9.declaredTransitionPlan'),
   ]);
-  const receiptStore = { append: (receipt) => appendReceipt(artifactStore, descriptor.runId, receipt) };
-  const a01A03LiveBundle = createP158W7A01A03LiveBundle({
-    schedule, ownershipManifest: a01Ownership, receiptStore, clock: clock.wallNow,
-  });
-  const a04A06LiveBundle = createP158W7A04A06LiveBundle({
-    schedule, ownershipManifest: a04Ownership, receiptStore, clock: clock.wallNow,
-  });
-  const a07A13LiveBundle = createP158W7A07A13LiveBundle({
-    schedule, ownershipManifest: a13Ownership,
-    receiptStore: createA13ReceiptStore(artifactStore, descriptor.runId), clock: clock.wallNow,
-  });
-  const a08LiveBundle = createP158W7A08LiveBundle({ schedule, replayManifest: a08ReplayManifest,
-    receiptStore: createA08ReceiptStore(artifactStore, descriptor.runId), clock: clock.wallNow });
+  const { a01A03LiveBundle, a04A06LiveBundle, a07A13LiveBundle, a08LiveBundle } = specializedBundles;
   const environmentSealSha256s = Object.fromEntries(manifest.environmentSeals
     .map((entry) => [entry.environmentId, entry.sealSha256]));
   const w7Readiness = auditP158W7LiveHookReadiness({
@@ -541,14 +557,14 @@ export async function constructP158LiveCampaignBundles({
         expectedSurfaceRoles: ['ingress_request', 'immediate_response', 'terminal_event', 'dashboard_projection'],
       })));
   const exactLoggingRequestExpectations = [
-    ...a01A03LiveBundle.loggingRequestExpectations,
-    ...a04A06LiveBundle.loggingRequestExpectations,
+    ...(a01A03LiveBundle?.loggingRequestExpectations ?? []),
+    ...(a04A06LiveBundle?.loggingRequestExpectations ?? []),
     ...w8Logging,
     ...w9Bundle.loggingRequestExpectations,
   ];
   const exactLoggingOperationGaps = clone([
-    ...a07A13LiveBundle.loggingOperationDescriptors,
-    ...a08LiveBundle.loggingOperationDescriptors,
+    ...(a07A13LiveBundle?.loggingOperationDescriptors ?? []),
+    ...(a08LiveBundle?.loggingOperationDescriptors ?? []),
   ]);
   if (sha256(configuration.loggingRequestExpectations) !== sha256(exactLoggingRequestExpectations)) {
     fail('logging_request_expectations_incomplete',

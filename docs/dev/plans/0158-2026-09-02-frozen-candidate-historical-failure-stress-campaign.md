@@ -4775,3 +4775,96 @@ at 14:20:34 UTC. This is the first verified activation in this resumption.
 The next attempt must bind this provider revision and preserve the two earlier
 admission failures. No external workflow has yet been dispatched during this
 resumption, and W6 remains incomplete.
+
+### Resumed External Readiness C And Bounded Harness Repairs
+
+Readiness C at source `2b1990184a694ec7c0fae42cb98f4a50077484cf`
+passed retained-anchor admission and dispatched manual workflow
+`33971756471`. Both external jobs failed and the aggregate failed. The human
+client retained the expected marker before and after reconnect, but the
+dashboard oracle rejected two console errors. The slow client retained the
+initial and concurrent markers, then failed its reconnect marker. These are
+actual external observations, not provider-free execution.
+
+The coordinator also failed artifact download and final anchor observation.
+Artifacts existed in GitHub and were recovered separately, without replacing
+the failed coordinator aggregate
+`c4a4d22be72d6ba4ed22e000551b3c5a1410d7bdd0e4b79e88b0bc44f0bb2b29`.
+Node rejected `signal: null` before starting the download subprocess. The
+adapter now omits absent signals while preserving real cancellation signals.
+Playwright's default signal handlers could close the anchor browser before
+its owned final observation; the anchor disables those handlers and retains
+explicit sample, receipt, and cleanup ordering. Focused red-green regressions
+and primary-run adapter and anchor suites passed.
+
+The slow-client marker crop contains the synthetic fixture's controls rather
+than the solid marker. It is a marker mismatch, not proof of an error page.
+Both pacing helpers sent Tab and Shift+Tab without establishing dashboard
+focus. A disposable Chromium DOM regression reproduced delivery into a
+focused iframe. The repaired helper selects the actual dashboard toolbar,
+verifies each focus transition, and fails before further input if focus
+escapes. The same regression proves zero iframe keys and detects forced focus
+escape. Attribution of the particular external scroll remains an inference.
+The primary ran both the provider-free runner suite and its optional local
+DOM regression successfully. The stale test description was corrected to the
+existing 30-minute dispatch minimum; the workflow requirement was not lowered.
+
+A bounded two-viewer local diagnostic reproduced the exact external console
+digest `a7f769c222a04040bdb3a82b03a50ada0798d7e5cee1ebae17d5a9d164463d66`:
+Chromium blocked textarea autofocus in a cross-origin subframe. The served
+Guacamole text-input template contains declarative autofocus. This finding is
+not waived by the marker success; an embedded-input repair is in progress.
+The diagnostic helper reused its earlier standalone marker image path, so that
+diagnostic image is not immutable prior-epoch evidence. The downloaded external
+artifacts and failed campaign aggregates were not overwritten.
+
+W7 assembly no longer requires missing specialized ownership manifests.
+Omission retains explicit blocked cases; supplied references still require
+exact bytes and valid ownership. It also no longer constructs unpromoted
+reviewed A07, A13, or X06 effects merely to declare them blocked. Unsupported
+cases expose zero implemented actions, zero effects, and named missing
+prerequisites. The standalone reviewed dispatcher remains strict. Focused
+assembly and entrypoint tests passed, including a target without fabricated
+PIDs or displays. These changed source identities and classifications belong
+in the next freeze and cannot be substituted into an existing one.
+
+Progress is `blocker_reduction`, not W6 acceptance. No calibration or new
+external attempt followed Readiness C during this diagnostic slice. The next
+gate is a validated embedded-input repair, exact development publication and
+provider readback, then a distinct readiness identity before synchronized C01.
+
+### Embedded Input Validation And Visual Scope Stop
+
+The embedded-input repair now changes only the existing Guacamole text-input
+template after its template-cache population and before Angular compiles it.
+Standalone autofocus, manual focus and typing, and persisted input-method
+preferences remain unchanged. A disposable cross-origin Chromium test using
+the actual served Angular source observed one blocked-autofocus diagnostic
+with the original template, zero with the repaired embedded template, and
+working manual input in all variants. The packaged asset digest and all five
+documentation surfaces were updated. Primary-run asset and provider-packaging
+tests passed, the full campaign harness passed, and the optimized development
+candidate built. These are repair-validation results, not live acceptance.
+
+A further concrete failure prevents another visual dispatch: Readiness C's
+full dashboard capture includes detected non-owned host browser rows outside
+the synthetic fixture. The runner starts full-viewport video before scene
+validation and captures full viewport screenshots on success and timeout.
+Its declared synthetic-only attestation did not enforce that boundary. No new
+external capture is permitted on the unchanged path. Existing external
+artifacts remain preserved with this defect explicit; their visual boundary
+cannot be accepted. No private row content is copied into this plan.
+
+The bounded privacy review confirmed that deferred dashboard filtering is not
+an ownership boundary. Masking rows or cropping after recording cannot repair
+the original capture. Full-frame acceptance needs a genuinely synthetic-only
+inventory and presentation source. A region-only lane would need an explicit
+capture contract and would retain full-frame and video evidence gaps; it is
+not silently equivalent. The next read-only check is whether current isolated
+runtime configuration can exclude foreign inventory at the source.
+
+Before any new epoch, an exact synthetic-identity-checked evaluation restored
+the retained fixture's scroll position from y=454 to y=0 and blurred its
+active element. The receipt is separate from Readiness C. This confirms the
+displaced scroll state but does not identify which client caused it. No
+production browser or profile was changed.

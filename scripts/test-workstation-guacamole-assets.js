@@ -139,6 +139,46 @@ const migratedOverride = runDefaultsMigration({
 })
 assert.equal(JSON.parse(migratedOverride.get('GUAC_PREFERENCES')).inputMethod, 'none')
 
+const textInputTemplateKey = 'app/textInput/templates/guacTextInput.html'
+const textInputTemplate = '<div><textarea rows="1" class="target" autocorrect="off" autocapitalize="off" autofocus></textarea></div>'
+function runEmbeddedTextInputTemplate({ embedded, migrated = false }) {
+  const cache = new Map()
+  const calls = []
+  const templateCache = { get: (key) => cache.get(key), put: (key, value) => cache.set(key, value) }
+  const runBlocks = [() => {
+    calls.push('upstream-template-cache')
+    templateCache.put(textInputTemplateKey, textInputTemplate)
+    templateCache.put('unrelated.html', '<textarea autofocus></textarea>')
+  }]
+  const window = {
+    localStorage: {
+      getItem: (key) => migrated && key === 'AGENT_BROWSER_GUAC_DEFAULTS_VERSION' ? '1' : null,
+      setItem() {},
+    },
+    angular: { module(name) {
+      assert.equal(name, 'templates-main')
+      return { run(injected) {
+        assert.equal(injected[0], '$templateCache')
+        runBlocks.push(() => { calls.push('extension-template-hook'); injected[1](templateCache) })
+      } }
+    } },
+  }
+  window.parent = embedded ? {} : window
+  vm.runInNewContext(defaultsScript, { window })
+  assert.equal(cache.size, 0, 'extension registration must precede Angular bootstrap')
+  for (const run of runBlocks) run()
+  return { cache, calls }
+}
+for (const migrated of [false, true]) {
+  const embedded = runEmbeddedTextInputTemplate({ embedded: true, migrated })
+  assert.equal(embedded.cache.get(textInputTemplateKey), textInputTemplate.replace(' autofocus', ''))
+  assert.equal(embedded.cache.get('unrelated.html'), '<textarea autofocus></textarea>')
+  assert.deepEqual(embedded.calls, ['upstream-template-cache', 'extension-template-hook'])
+}
+const standalone = runEmbeddedTextInputTemplate({ embedded: false })
+assert.equal(standalone.cache.get(textInputTemplateKey), textInputTemplate)
+assert.deepEqual(standalone.calls, ['upstream-template-cache'])
+
 function createShareAuthSignalHarness({
   frameName = 'agent-browser-guacamole-share:attempt-safe-123',
   href = 'https://agent-browser-dev-share.example.test:8443/guacamole/',
