@@ -5366,3 +5366,23 @@ Classification is `hardening` pending installed proof. Next is guarded isolated
 publication with controlled synthetic-browser closure and a fresh unfrozen
 scene, followed by installed reconnect verification. The admitted anchor remains
 a separate calibration fixture, not proof of ordinary reconnect reliability.
+
+### Installed reservation confirmation, remaining frame-lifecycle gate
+
+Source `ad4269c2` is installed in p158 as `0.28.0-379320bc82d5` after one
+controlled synthetic-browser close with preserved profile and private backup.
+Provider restoration, required doctor, three disposable smokes and isolated
+skill sync pass. Candidate and exact public asset receipts bind the revision
+fence and current generation. The new broker-selected scene is unfrozen;
+external protected secrets still bind the old K scene and must not be reused.
+
+The installed diagnostic confirms exact primary-reservation retirement and
+matches the prepared pixels on primary and shared views. Its reconnect obtains
+an iframe but does not reach managed `CONNECTED` within the unchanged check.
+A second, tighter instrumented diagnostic stops at initial frame detachment.
+Private `reconnect-installed-p/` and `reconnect-installed-q/` preserve both
+failures. Stop that bounded loop and adjudicate the remaining frame-lifecycle
+gate rather than claiming a complete reconnect repair or another clean epoch.
+Production/default-development isolation remains intact. Classification remains
+`hardening` with installed reservation proof, not W6 or live-case acceptance.
+No external dispatch, calibration, freeze or final analysis occurred.

@@ -4,6 +4,32 @@ Date: 2026-09-05
 
 ## Reconnect startup-reservation repair checkpoint
 
+Source `ad4269c2` is now installed as `0.28.0-379320bc82d5` in p158 only.
+Controlled closure preserved the old synthetic profile and private backup;
+provider plan/stage/preflight/apply, required doctor, three disposable launch
+smokes and isolated skill sync pass. `candidate-p.json` and
+`reservation-installed-asset-p.json` bind the executable and exactly served
+dashboard asset, including the post-denial snapshot reset. The broker-selected
+`scene-open-p.json` is a new unfrozen scene. Protected external secrets still
+refer to the previous K scene: do not dispatch before new preparation/binding.
+
+Installed diagnostic `reconnect-installed-p/receipt.json` proves the primary
+sent a successful exact reservation confirmation, and primary/shared views
+both rendered the prepared pixel hash. Reconnect obtained an iframe but failed
+the stronger managed-connected-state wait. A tighter instrumented diagnostic,
+`reconnect-installed-q/receipt.json`, stopped on initial frame detachment and
+preserves its failure screenshot. Neither is a passing reconnect receipt.
+This bounded diagnostic loop is stopped; do not describe the whole reconnect
+path as fixed, relax timing, or erase these failures. The repair is installed
+and its reservation confirmation is observed, but remaining frame lifecycle
+behavior needs adjudication. Production/default-development guards pass in
+`baselines-after-reservation-p.json`. No external workflow was dispatched.
+Final `title-readback-green-p.json` confirms the same current target, live title
+and synthetic fixture; `scene-after-reservation-p.json` confirms the retained
+browser and four-slot capacity. No diagnostic viewer process remains. Next is
+adjudication of the frame lifecycle and observation seam, not another unchanged
+probe or a claim that reservation confirmation proves visible reconnect.
+
 The local instrumented replay `reconnect-diagnostic-o/receipt.json` reproduces
 Stream unavailable after the primary closes: provider snapshots are empty,
 but the previous startup reservation keeps denying admission beyond the
@@ -24,8 +50,9 @@ extra anchor is needed for this repair.
 Focused Rust reservation tests and dashboard sharing, viewport, view-stream,
 navigator and handoff checks pass. Removing the post-denial snapshot reset made
 the new regression fail; restoring it passes. Dashboard and docs builds and the
-optimized candidate build pass. Publication and same-scene installed reconnect
-proof remain the next gate. Before publication, the exact single retained
+optimized candidate build pass. At the source checkpoint, publication and
+same-scene installed reconnect proof were the next gate. Before publication,
+the exact single retained
 synthetic browser must be deliberately closed with its profile and evidence
 preserved, then a new unfrozen scene established. This is not continuity through
 the installer's control-group restart. Production and default-development guards
