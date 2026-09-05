@@ -4459,3 +4459,61 @@ listener. Do not weaken the external 504 gate and do not add an implicit retry.
 Coordinate any Docker bridge or bastion log-retention repair with the active
 Cooper worktree before another readiness epoch. Synchronized C01 remains gated
 on a clean human, delayed, and aggregate readiness result.
+
+### Simultaneous Viewer Setup Exposes Ephemeral Guacamole Share Keys
+
+State transition: `c01_external_ingress_bridge_diagnosis_active ->
+c01_simultaneous_viewer_repair_ready_for_external_acceptance`.
+
+The narrowed oracle repair was published as `7a270c53`. External readiness
+workflow `33944315936` then passed on that exact commit. Both off-host clients
+used the same durable handoff, preserved exact retained identity, leaked no
+internal URL, caused zero additional physical browser launches, and attempted
+no retry or repair. The aggregate proved all ingress, identity, and
+single-browser checks.
+
+The first synchronized C01 dispatch, workflow `33944758681`, exposed a new
+blocking setup defect before the declared calibration epoch. The slow client
+successfully created a Guacamole sharing credential from a connectable active
+row and observed that exact row survive two post-mint relists. The sibling
+viewer origin rejected the key twice with HTTP 403 less than one second later
+and rendered Guacamole's login form. There was no request-level transport
+failure, campaign action, repair, or retry. The local 20-minute leg was never
+started. The invalid human leg was cancelled before the epoch, while the slow
+client screenshot, redacted network record, transport diagnostics, and failure
+receipt were retained.
+
+The readiness workflow's deliberate 45-second second-client delay had hidden
+this simultaneous setup race. The installed Guacamole 1.5.5 API reports new
+active rows as connectable before their credential-donating lifetime is proven.
+It may also omit `sharingProfileIdentifier` from both direct and shared active
+rows, so role discrimination alone cannot close the defect. A bounded live
+two-viewer diagnostic confirmed that a key minted from a stable primary
+rendered successfully; its shared child was non-connectable. The product must
+therefore combine all available evidence: connectable state, exclusion of an
+explicit shared-child role, a three-second minimum primary age when `startDate`
+is present, and two exact post-mint identity and role relists. It waits inside
+the existing 15-second election deadline and never reloads a rejected key.
+
+Provider-free regressions now prove that an identifiable shared child never
+donates another key, a just-created primary cannot donate before the maturity
+window, a row that becomes a shared child during validation is rejected, and a
+stable direct row remains usable. The external failure collector now inspects
+the cross-origin iframe through Playwright and classifies the concrete Apache
+Guacamole username and password form as `external_stream_auth_failed`; it
+retains only the boolean observation and never the iframe text or credential.
+The focused connection-sharing suite, external-runner suite, complete Plan 158
+dashboard oracle, dashboard production build, and diff checks pass.
+
+The repaired dashboard was embedded in development generation
+`0.28.0-4ccc6f42a631` with executable digest prefix `4ccc6f42a631` and dashboard
+digest prefix `9a9d453d0d0c`. Development doctor, authenticated dashboard smoke, and
+three disposable browser launch iterations pass. The installer reports
+production unchanged.
+
+Revised next action: publish this exact source revision, run one short
+simultaneous-start external acceptance against the installed generation, and
+require both clients plus the aggregate to pass without retry or repair. Then
+dispatch one fresh synchronized C01 using a new run ID, workflow identity, and
+shared epoch. Preserve the failed pre-epoch attempt as diagnostic evidence and
+do not reuse its descriptor.

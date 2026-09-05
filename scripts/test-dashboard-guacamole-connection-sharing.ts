@@ -56,6 +56,7 @@ const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
       "shared-child-uuid": {
         connectionIdentifier: "17",
         connectable: true,
+        sharingProfileIdentifier: "29",
         startDate: 200,
       },
       "active-uuid": {
@@ -98,10 +99,14 @@ const activeConnectionSnapshots = requests.filter(({ url }) => url.endsWith("/ac
 assert.equal(activeConnectionSnapshots.length, 3);
 assert.ok(activeConnectionSnapshots.every(({ init }) => init?.cache === "no-store"));
 
-const sharedOnly = await resolveGuacamoleViewerFrame({
+let sharedOnlyNow = 0;
+let sharedOnlyMintCount = 0;
+await assert.rejects(() => resolveGuacamoleViewerFrame({
     dashboardHref: "https://dashboard.example.test/",
     frameUrl: direct,
     stream,
+    nowImpl: () => sharedOnlyNow,
+    waitImpl: async (delayMs) => { sharedOnlyNow += delayMs; },
     fetchImpl: (async (input: string | URL | Request) => {
       const url = String(input);
       if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
@@ -110,6 +115,7 @@ const sharedOnly = await resolveGuacamoleViewerFrame({
           "shared-child-uuid": {
             connectionIdentifier: "17",
             connectable: true,
+            sharingProfileIdentifier: "29",
             startDate: 100,
           },
         });
@@ -124,6 +130,7 @@ const sharedOnly = await resolveGuacamoleViewerFrame({
         });
       }
       if (url.endsWith("/activeConnections/shared-child-uuid/sharingCredentials/29")) {
+        sharedOnlyMintCount += 1;
         return response({
           expected: [{ name: "key", type: "QUERY_PARAMETER" }],
           values: { key: "shared-child-secret" },
@@ -131,11 +138,8 @@ const sharedOnly = await resolveGuacamoleViewerFrame({
       }
       throw new Error(`Unexpected request: ${url}`);
     }) as typeof globalThis.fetch,
-  });
-assert.deepEqual(sharedOnly, {
-  mode: "shared",
-  url: "https://dashboard-share.example.test/guacamole/#/?key=shared-child-secret",
-});
+  }), /Guacamole primary election timed out/);
+assert.equal(sharedOnlyMintCount, 0, "a shared child must never donate another sharing key");
 
 const profileResponse = () => response({
   "29": {
@@ -236,7 +240,8 @@ const changedRepresentationRecovery = await resolveGuacamoleViewerFrame({
         "changing-row": {
           connectionIdentifier: "17",
           connectable: true,
-          startDate: changedRepresentationDiscoveryCount === 1 ? 100 : "100",
+          sharingProfileIdentifier: changedRepresentationDiscoveryCount === 1 ? undefined : "29",
+          startDate: 100,
         },
         "stable-row": { connectionIdentifier: "17", connectable: true, startDate: 200 },
       });
@@ -345,7 +350,81 @@ await assert.rejects(() => resolveGuacamoleViewerFrame({
 assert.equal(nonConnectableMintCount, 0);
 assert.equal(nonConnectableClaimCount, 0);
 
-let deadlineNow = 0;
+const primaryRoleCredentialRequests: string[] = [];
+const primaryRoleRecovery = await resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct,
+  stream,
+  fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+    if (url.endsWith("/activeConnections")) {
+      return response({
+        "older-shared-child": {
+          connectionIdentifier: "17",
+          connectable: true,
+          sharingProfileIdentifier: "29",
+          startDate: 100,
+        },
+        "direct-primary": { connectionIdentifier: "17", connectable: true, startDate: 200 },
+      });
+    }
+    if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+    if (url.includes("/sharingCredentials/29")) {
+      const candidateId = url.match(/activeConnections\/([^/]+)/)?.[1];
+      assert.ok(candidateId);
+      primaryRoleCredentialRequests.push(candidateId);
+      return credentialResponse(`${candidateId}-secret`);
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof globalThis.fetch,
+});
+assert.deepEqual(primaryRoleRecovery, {
+  mode: "shared",
+  url: "https://dashboard-share.example.test/guacamole/#/?key=direct-primary-secret",
+});
+assert.deepEqual(primaryRoleCredentialRequests, ["direct-primary"]);
+
+let youngPrimaryNow = 100_000;
+let youngPrimaryMintedAt: number | null = null;
+const youngPrimaryStartDate = youngPrimaryNow - 100;
+const maturePrimaryRecovery = await resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct,
+  stream,
+  nowImpl: () => youngPrimaryNow,
+  waitImpl: async (delayMs) => { youngPrimaryNow += delayMs; },
+  fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "auth-secret" });
+    if (url.endsWith("/activeConnections")) {
+      return response({
+        "starting-primary": {
+          connectionIdentifier: "17",
+          connectable: true,
+          startDate: youngPrimaryStartDate,
+        },
+      });
+    }
+    if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
+    if (url.endsWith("/activeConnections/starting-primary/sharingCredentials/29")) {
+      youngPrimaryMintedAt = youngPrimaryNow;
+      return credentialResponse("mature-primary-secret");
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof globalThis.fetch,
+});
+assert.deepEqual(maturePrimaryRecovery, {
+  mode: "shared",
+  url: "https://dashboard-share.example.test/guacamole/#/?key=mature-primary-secret",
+});
+assert.ok(youngPrimaryMintedAt !== null);
+assert.ok(
+  youngPrimaryMintedAt - youngPrimaryStartDate >= 3_000,
+  "a newly connectable primary must survive its startup window before donating a share key",
+);
+
+let deadlineNow = 4_000;
 let deadlineValidationCount = 0;
 await assert.rejects(() => resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/remote-view/opaque",
@@ -364,14 +443,14 @@ await assert.rejects(() => resolveGuacamoleViewerFrame({
     }
     if (url.endsWith("/connections/17/sharingProfiles")) return profileResponse();
     if (url.includes("/sharingCredentials/29")) {
-      deadlineNow = 14_950;
+      deadlineNow = 18_950;
       return credentialResponse("too-late-secret");
     }
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof globalThis.fetch,
 }), /Guacamole primary election timed out/);
 assert.equal(deadlineValidationCount, 1, "post-mint waits must not start a snapshot after the deadline");
-assert.equal(deadlineNow, 15_000);
+assert.equal(deadlineNow, 19_000);
 
 const deterministicCandidateRequests: string[] = [];
 await resolveGuacamoleViewerFrame({
@@ -398,7 +477,7 @@ await resolveGuacamoleViewerFrame({
 });
 assert.match(deterministicCandidateRequests[0], /inserted-first-but-older/);
 
-let allStaleNow = 0;
+let allStaleNow = 4_000;
 let allStaleClaimCount = 0;
 let allStaleCredentialCount = 0;
 await assert.rejects(() => resolveGuacamoleViewerFrame({

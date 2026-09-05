@@ -7,6 +7,7 @@ type GuacamoleAuthToken = {
 type GuacamoleActiveConnection = {
   connectionIdentifier?: string;
   connectable?: boolean;
+  sharingProfileIdentifier?: string | null;
   startDate?: number;
 };
 
@@ -27,6 +28,8 @@ type GuacamolePrimaryClaim = {
 };
 
 type GuacamoleActiveCandidate = readonly [string, GuacamoleActiveConnection];
+
+const GUACAMOLE_PRIMARY_MINIMUM_AGE_MS = 3_000;
 
 export type GuacamoleViewerFrameResolution = {
   mode: "direct" | "shared";
@@ -111,9 +114,13 @@ function matchingActiveConnections(
 function connectableCandidates(
   activeConnections: Record<string, GuacamoleActiveConnection>,
   connectionId: string,
+  nowMs: number,
 ): GuacamoleActiveCandidate[] {
   return matchingActiveConnections(activeConnections, connectionId)
-    .filter(([, active]) => active.connectable === true)
+    .filter(([, active]) => active.connectable === true
+      && active.sharingProfileIdentifier == null
+      && (!Number.isFinite(active.startDate)
+        || nowMs - active.startDate! >= GUACAMOLE_PRIMARY_MINIMUM_AGE_MS))
     .sort(([leftId, left], [rightId, right]) => {
       const leftStart = Number.isFinite(left.startDate) ? left.startDate! : Number.POSITIVE_INFINITY;
       const rightStart = Number.isFinite(right.startDate) ? right.startDate! : Number.POSITIVE_INFINITY;
@@ -129,6 +136,8 @@ function hasExactConnectableCandidate(
   const observed = activeConnections[candidateId];
   return observed?.connectionIdentifier === expected.connectionIdentifier
     && observed.connectable === true
+    && observed.sharingProfileIdentifier == null
+    && expected.sharingProfileIdentifier == null
     && observed.startDate === expected.startDate;
 }
 
@@ -203,7 +212,14 @@ export async function resolveGuacamoleViewerFrame({
     // shared children. Prefer the oldest connectable row, then prove it remains
     // stable after key creation so a closing viewer cannot donate a dead key.
     const matchingRows = matchingActiveConnections(activeConnections, connectionId);
-    const activeCandidates = connectableCandidates(activeConnections, connectionId);
+    // Guacamole includes shared child sessions in activeConnections. A key
+    // minted from one of those rows dies with that viewer and strands the next
+    // viewer on Guacamole's login screen. Only a direct primary may donate a
+    // sharing credential. Some Guacamole APIs expose
+    // sharingProfileIdentifier for shared children, while the installed 1.5.5
+    // projection may omit it. The connectable, role, age, and post-mint
+    // identity checks therefore act together rather than trusting one field.
+    const activeCandidates = connectableCandidates(activeConnections, connectionId, nowImpl());
     if (matchingRows.length === 0) {
       consecutiveEmptySnapshots += 1;
       if (consecutiveEmptySnapshots < 2) {

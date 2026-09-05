@@ -1494,6 +1494,8 @@ export function pixelMarkerClipForIframe(region, iframeBox) {
 
 async function renderedStreamDiagnostic(page, observedPixelHash) {
   const bodyText = (await page.locator('body').innerText().catch(() => '')).slice(0, 20_000);
+  const frameBodyTexts = await Promise.all(page.frames().slice(1).map(async (frame) =>
+    (await frame.locator('body').innerText({ timeout: 1_000 }).catch(() => '')).slice(0, 2_000)));
   const iframePaths = await page.locator('iframe').evaluateAll((frames) => frames.map((frame) => {
     try {
       const url = new URL(frame.src);
@@ -1502,14 +1504,21 @@ async function renderedStreamDiagnostic(page, observedPixelHash) {
       return 'invalid';
     }
   }));
-  return classifyRenderedStreamFailure({ bodyText, iframePaths, observedPixelHash });
+  return classifyRenderedStreamFailure({ bodyText, frameBodyTexts, iframePaths, observedPixelHash });
 }
 
-export function classifyRenderedStreamFailure({ bodyText, iframePaths, observedPixelHash }) {
+export function classifyRenderedStreamFailure({ bodyText, frameBodyTexts = [], iframePaths, observedPixelHash }) {
   const normalizedText = String(bodyText || '').toLowerCase();
+  const normalizedFrameText = Array.isArray(frameBodyTexts)
+    ? frameBodyTexts.map((text) => String(text || '').toLowerCase()).join('\n')
+    : '';
   const paths = Array.isArray(iframePaths) ? iframePaths : [];
+  const guacamoleLoginVisible = normalizedFrameText.includes('apache guacamole')
+    && normalizedFrameText.includes('username')
+    && normalizedFrameText.includes('password')
+    && normalizedFrameText.includes('login');
   let code = 'external_stream_identity_marker_missing';
-  if (normalizedText.includes('stream sign-in expired')) {
+  if (normalizedText.includes('stream sign-in expired') || guacamoleLoginVisible) {
     code = 'external_stream_auth_failed';
   } else if (normalizedText.includes('connecting to cdp stream')) {
     code = 'external_stream_not_rendered';
@@ -1527,6 +1536,7 @@ export function classifyRenderedStreamFailure({ bodyText, iframePaths, observedP
       )),
       observedPixelHash,
       streamSignInExpired: normalizedText.includes('stream sign-in expired'),
+      guacamoleLoginVisible,
       cdpStreamConnecting: normalizedText.includes('connecting to cdp stream'),
     },
   };
@@ -2380,7 +2390,7 @@ function safeExternalFailureDetails(value) {
   if (typeof value.observedPixelHash === 'string' && /^[a-f0-9]{64}$/.test(value.observedPixelHash)) {
     details.observedPixelHash = value.observedPixelHash;
   }
-  for (const key of ['streamSignInExpired', 'cdpStreamConnecting']) {
+  for (const key of ['streamSignInExpired', 'guacamoleLoginVisible', 'cdpStreamConnecting']) {
     if (typeof value[key] === 'boolean') details[key] = value[key];
   }
   if (['closed', 'not_found', 'blocked', 'failed', 'unavailable'].includes(value.resolutionStatus)) {

@@ -230,6 +230,14 @@ assert.equal(classifyRenderedStreamFailure({
   iframePaths: ['/'],
   observedPixelHash: 'a'.repeat(64),
 }).code, 'external_stream_auth_failed');
+const guacamoleLoginFailure = classifyRenderedStreamFailure({
+  bodyText: 'Workspace ready',
+  frameBodyTexts: ['APACHE GUACAMOLE Username Password Login'],
+  iframePaths: ['/guacamole/'],
+  observedPixelHash: 'a'.repeat(64),
+});
+assert.equal(guacamoleLoginFailure.code, 'external_stream_auth_failed');
+assert.equal(guacamoleLoginFailure.details.guacamoleLoginVisible, true);
 assert.equal(classifyRenderedStreamFailure({
   bodyText: 'Connecting to CDP stream',
   iframePaths: [],
