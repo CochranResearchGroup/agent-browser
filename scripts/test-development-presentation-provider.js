@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -47,6 +47,19 @@ const env = {
   AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test/',
   AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
 };
+
+function readExtensionArchive(path) {
+  const result = spawnSync('python3', ['-c', `
+import base64, io, json, sys, zipfile
+with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as archive:
+    assert archive.testzip() is None
+    assert len(archive.namelist()) == len(set(archive.namelist()))
+    print(json.dumps({name: base64.b64encode(archive.read(name)).decode() for name in archive.namelist()}))
+`], { input: readFileSync(path), encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return Object.fromEntries(Object.entries(JSON.parse(result.stdout))
+    .map(([name, content]) => [name, Buffer.from(content, 'base64')]));
+}
 
 try {
   const descriptor = developmentPresentationProviderDescriptor(env);
@@ -341,6 +354,14 @@ try {
   assert.equal(statSync(join(descriptor.root, 'init')).mode & 0o777, 0o755);
   assert.equal(existsSync(join(descriptor.root, 'init', '001-initdb.sql')), true);
   assert.equal(existsSync(join(descriptor.root, 'extensions', 'guac-manifest.json')), true);
+  const extensionPath = join(descriptor.root, 'extensions', 'agent-browser-defaults.jar');
+  const extensionEntries = readExtensionArchive(extensionPath);
+  assert.deepEqual(Object.keys(extensionEntries), ['guac-manifest.json', 'agent-browser-defaults.js']);
+  for (const [name, content] of Object.entries(extensionEntries)) {
+    assert.deepEqual(content, readFileSync(join('cli/assets/workstation/guacamole/extensions', name)));
+  }
+  assert.equal(statSync(extensionPath).mode & 0o777, 0o644);
+  assert.match(staged.files['extensions/agent-browser-defaults.jar'], /^[a-f0-9]{64}$/);
   assert.equal(existsSync(join(descriptor.root, 'secrets', 'provider.env')), false);
   assert.equal(existsSync(descriptor.manifest), false);
   const preflight = developmentPresentationProviderSystemPreflight({
@@ -675,6 +696,23 @@ try {
   const restaged = stageDevelopmentPresentationProviderBundle({ env });
   assert.equal(restaged.success, true);
   assert.equal(restaged.state, 'refreshed_configured');
+  assert.equal(restaged.files['extensions/agent-browser-defaults.jar'],
+    staged.files['extensions/agent-browser-defaults.jar'], 'identical inputs produce identical JAR bytes');
+  const updatedAssetRoot = join(fixture, 'updated-guacamole-assets');
+  cpSync('cli/assets/workstation/guacamole', updatedAssetRoot, { recursive: true });
+  const updatedScript = Buffer.concat([extensionEntries['agent-browser-defaults.js'],
+    Buffer.from('\n// provider staging refresh fixture\n')]);
+  writeFileSync(join(updatedAssetRoot, 'extensions', 'agent-browser-defaults.js'), updatedScript);
+  const refreshedBundle = stageDevelopmentPresentationProviderBundle({
+    env: { ...env, AGENT_BROWSER_DEV_GUACAMOLE_ASSET_SOURCE: updatedAssetRoot },
+  });
+  assert.equal(refreshedBundle.state, 'refreshed_configured');
+  assert.notEqual(refreshedBundle.files['extensions/agent-browser-defaults.jar'],
+    staged.files['extensions/agent-browser-defaults.jar']);
+  assert.deepEqual(readExtensionArchive(extensionPath), {
+    'guac-manifest.json': extensionEntries['guac-manifest.json'],
+    'agent-browser-defaults.js': updatedScript,
+  });
   assert.equal(existsSync(descriptor.manifest), true);
   const reconcilePreflight = developmentPresentationProviderSystemPreflight({
     env,

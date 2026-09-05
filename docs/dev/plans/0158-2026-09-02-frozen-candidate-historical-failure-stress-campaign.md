@@ -4738,3 +4738,40 @@ requires a retained legacy per-session daemon, while the current CLI rejects
 new legacy daemon launches. Its source bundle alone is not proof of current
 executability. If no positively owned legacy daemon exists, retain that exact
 blocker rather than substituting a shared runtime-host session.
+
+### Resumed Readiness Prerequisites And Actual Extension Loading
+
+The campaign infrastructure checkpoint was published as `317f8c2b`. Two local
+anchor admission attempts ended before external dispatch. Attempt A could not
+launch the pinned Playwright browser because its binary was absent; the exact
+pinned browser was subsequently installed. Attempt B authenticated and reached
+the iframe but retained a marker mismatch plus gateway/console observations.
+Both failed aggregates remain immutable under the user-scoped campaign root.
+
+Bounded follow-up isolated the marker mismatch: the declared synthetic fixture
+server was absent, and the retained browser displayed its connection-refused
+page. The existing reviewed fixture executable was started as a user service,
+its health endpoint returned ready, and the exact retained synthetic tab
+reloaded successfully. A no-effect journal invocation with an overlong time
+window was rejected; the corrected bounded invocation passed. The fresh
+malformed-line artifact and five-surface journal artifact hashes are
+`602ee950ae8265992ad2c9803c7256424321f5f137941d1dc32b41533012d7cb`
+and `b73f1bf0ad3dd13a0e9cb30f9797481cce9a61873582d44669eb48d39d57c1ea`.
+
+The earlier startup-copy digest check did not establish extension activation.
+Guacamole's loader log showed only the header and PostgreSQL extensions.
+Development staging copied the source manifest and JavaScript without the JAR
+that the workstation installer already produces. The bounded
+`/root/anchor_adapter` remediation added deterministic two-entry JAR packaging
+and its stage-receipt hash. The new archive-content regression first failed on
+the missing JAR, then passed archive integrity, exact source bytes,
+reproducibility, and changed-source refresh checks. Primary-run development
+provider and workstation asset tests passed.
+
+After fresh provider plan, stage, preflight, apply, and exact development
+Guacamole recreation, its loader explicitly reported
+`Extension "agent-browser workstation defaults" (agent-browser-defaults) loaded`
+at 14:20:34 UTC. This is the first verified activation in this resumption.
+The next attempt must bind this provider revision and preserve the two earlier
+admission failures. No external workflow has yet been dispatched during this
+resumption, and W6 remains incomplete.

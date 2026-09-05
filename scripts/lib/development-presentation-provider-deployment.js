@@ -24,6 +24,33 @@ export const DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA =
   'agent-browser.development-presentation-provider-deployment.v1';
 
 /**
+ * Mirrors the workstation installer's two-entry extension JAR. Fixed metadata
+ * keeps source-identical staging byte-identical; Guacamole loads the JAR, not
+ * the adjacent reviewable JavaScript and manifest source files.
+ */
+function packageGuacamoleDefaultsExtension(sourceRoot) {
+  const entries = ['guac-manifest.json', 'agent-browser-defaults.js'].map((name) => [
+    name, readFileSync(join(sourceRoot, 'extensions', name)).toString('base64'),
+  ]);
+  const archive = spawnSync('python3', ['-c', `
+import base64, io, json, sys, zipfile
+output = io.BytesIO()
+with zipfile.ZipFile(output, 'w') as archive:
+    for name, encoded in json.load(sys.stdin):
+        entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+        entry.create_system = 3
+        entry.external_attr = 0o100644 << 16
+        entry.compress_type = zipfile.ZIP_DEFLATED
+        archive.writestr(entry, base64.b64decode(encoded), compresslevel=9)
+sys.stdout.buffer.write(output.getvalue())
+`], { input: JSON.stringify(entries), timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+  if (archive.error || archive.status !== 0 || !archive.stdout?.length) {
+    throw new Error('Development Guacamole extension packaging failed; python3 with zipfile is required');
+  }
+  return archive.stdout;
+}
+
+/**
  * Describes the ordered effect boundary without executing it. Every effect is
  * development-owned and the final ingress step remains gated on provider
  * readiness from current resources rather than bundle presence.
@@ -146,6 +173,7 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
       throw new Error(`Development Guacamole asset is unavailable: ${join(sourceRoot, required)}`);
     }
   }
+  const defaultsExtension = packageGuacamoleDefaultsExtension(sourceRoot);
   const bundle = renderDevelopmentPresentationProviderBundle(descriptor);
   mkdirSync(descriptor.root, { recursive: true, mode: 0o755 });
   chmodSync(descriptor.root, 0o755);
@@ -166,11 +194,13 @@ export function stageDevelopmentPresentationProviderBundle({ env = process.env }
     chmodSync(dirname(destination), 0o755);
     copyFileAtomic(join(sourceRoot, relativePath), destination, relativePath.endsWith('.sh') ? 0o755 : 0o644);
   }
+  writeFileAtomic(join(descriptor.root, 'extensions/agent-browser-defaults.jar'), defaultsExtension, 0o644);
   const files = [
     ...Object.keys(bundle.files),
     'init/001-initdb.sql',
     'extensions/guac-manifest.json',
     'extensions/agent-browser-defaults.js',
+    'extensions/agent-browser-defaults.jar',
     'start-guacamole.sh',
   ];
   return {
