@@ -4995,3 +4995,37 @@ The optimized candidate built successfully. One requested lifecycle package
 script name did not exist; lifecycle fixtures are part of the passing provider
 suite, not a separate successful command. The new environment has not yet
 been installed or exposed at this checkpoint.
+
+### First isolated installation and startup admission failure
+
+Source commit `02b3307d` was pushed before installation. The isolated candidate
+`0.28.0-7c7150b01efd` installed successfully, with both production and default
+development unchanged. The private `cleanroom-20260905/install-a.json` receipt
+has SHA-256 `9bd5fac933f3b9269197d68c2be210f6a9952ddd4c5e006ffff7d900b8e42873`.
+This is installation evidence, not healthy-runtime or campaign acceptance.
+
+The first doctor failed exact runtime-host ownership: a dashboard-unit child
+owned the new lane endpoint while the dedicated runtime-host unit failed with
+`port_conflict`. Process cgroup readback establishes dashboard ownership.
+The installer enables and restarts all three simple units without waiting for
+host readiness. A bounded specialist repair is adding ordered host activation
+and exact ownership admission before dashboard startup. The original doctor
+failure remains retained; no provider apply, ingress publication, visual
+capture, or external dispatch has followed it.
+
+Cooper source revision `1592a784d87bf9f34b472f575c666971845532d3` stages the
+separate dashboard and authenticated Guacamole path inventory. Its pinned-port
+inventory validation passed and raw dashboard port 5148 responded. This is
+reviewed source preparation only: generated routing and bastion publication
+remain deferred until the new provider-ready gate. The cleanroom configuration
+binds this exact revision and its separate public origin.
+
+The startup repair passed primary-run focused runtime fixtures. Both install
+and rollback now stop exact dashboard units, reset and start the exact host,
+and require matching process start token, executable, host manifests, listener,
+and systemd cgroup before publishing ingress or starting dashboard clients.
+The pre-fix activation reproduced early dashboard startup under injected
+effects; wrong-owner and timeout regressions now reject it. Unit rendering is
+unchanged. Provider staging and non-mutating preflight also passed, including
+exact unused resources and non-interactive helper readiness. Provider apply
+still awaits installed startup repair readback.

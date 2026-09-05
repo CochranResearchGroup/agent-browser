@@ -16,6 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   assertProductionUnchanged,
+  activateDevelopmentRuntime,
+  evaluateDevelopmentRuntimeHostReadiness,
   assertDefaultDevelopmentUnchanged,
   developmentCandidateBinary,
   developmentRuntimeDescriptor,
@@ -128,6 +130,58 @@ try {
     ['socket_path_not_unix_socket'],
   );
   const descriptor = developmentRuntimeDescriptor(env);
+  const hostEvidence = {
+    unit: { activeState: 'active', mainPid: 4242, executable: '/candidate/agent-browser' },
+    host: { pid: 4242, executableGeneration: 'candidate-sha', socketIdentity: 'unix:fixture' },
+    identity: { pid: 4242, executablePath: '/candidate/agent-browser', startToken: 'linux:fixture:123' },
+    listenerPid: 4242,
+    listenerCgroup: `0::/user.slice/app.slice/${descriptor.unitNames.runtimeHost}`,
+    startToken: 'linux:fixture:123', expectedUnit: descriptor.unitNames.runtimeHost,
+    generationBinary: '/candidate/agent-browser', sha256: 'candidate-sha',
+  };
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness(hostEvidence), { state: 'ready' });
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence,
+    listenerCgroup: `0::/user.slice/app.slice/${descriptor.unitNames.dashboard}`,
+  }), { state: 'wrong_owner' }, 'a dashboard-owned runtime host is not the systemd host');
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence, listenerPid: 9999 }),
+    { state: 'wrong_owner' });
+  assert.deepEqual(evaluateDevelopmentRuntimeHostReadiness({ ...hostEvidence, startToken: 'linux:fixture:124' }),
+    { state: 'pending' }, 'a reused PID must not satisfy retained host identity');
+  function activationFixture(observations) {
+    const events = [];
+    let clock = 0;
+    const run = () => activateDevelopmentRuntime({
+      descriptor, generationId: 'candidate', generationBinary: '/candidate/agent-browser', sha256: 'candidate-sha',
+      env: { AGENT_BROWSER_DEV_START_TIMEOUT_MS: '2' },
+      runSystemctl: (args) => {
+        assert(!args.includes('--now'), 'enable must not start dashboard clients before host readiness');
+        events.push(args.join(' '));
+      },
+      observeHost: () => { const state = observations.shift() || 'pending'; events.push(`observe:${state}`); return { state }; },
+      publishIngress: () => events.push('publish-ingress'),
+      waitForManifest: () => events.push('dashboard-ready'),
+      now: () => clock,
+      wait: () => { clock += 1; events.push('wait'); },
+    });
+    return { run, events };
+  }
+  const activation = activationFixture(['pending', 'ready']);
+  activation.run();
+  assert.deepEqual(activation.events, [
+    'daemon-reload', `enable ${descriptor.units.join(' ')}`,
+    `stop ${descriptor.unitNames.dashboard} ${descriptor.unitNames.backend}`,
+    `reset-failed ${descriptor.unitNames.runtimeHost}`,
+    `restart ${descriptor.unitNames.runtimeHost}`,
+    'observe:pending', 'wait', 'observe:ready', 'publish-ingress',
+    `start ${descriptor.unitNames.backend} ${descriptor.unitNames.dashboard}`, 'dashboard-ready',
+  ]);
+  const wrongOwnerActivation = activationFixture(['wrong_owner']);
+  assert.throws(wrongOwnerActivation.run, /wrong systemd unit/);
+  assert(!wrongOwnerActivation.events.includes('publish-ingress'));
+  assert(!wrongOwnerActivation.events.some((event) => event.startsWith('start ')));
+  const timeoutActivation = activationFixture(['pending']);
+  assert.throws(timeoutActivation.run, /exact owned readiness/);
+  assert(!timeoutActivation.events.some((event) => event.startsWith('start ')));
   const namespacedEnv = {
     ...env,
     AGENT_BROWSER_DEV_NAMESPACE: 'p158',

@@ -22,7 +22,7 @@ import {
   constants as fsConstants,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { developmentRuntimeNamespace, requireNamespacedDevelopmentPorts } from './development-runtime-namespace.js';
 import {
   developmentAgentSkillStatus,
@@ -346,11 +346,7 @@ export function installDevelopmentRuntime({
 
   try {
     if (activate && env.AGENT_BROWSER_DEV_SKIP_SYSTEMD !== '1') {
-      systemctl(['daemon-reload'], env);
-      systemctl(['enable', '--now', ...descriptor.units], env);
-      systemctl(['restart', ...descriptor.units], env);
-      waitForDevelopmentManifest(descriptor, generationBinary, env);
-      publishDevelopmentRuntimeIngress({ descriptor, generationId, generationBinary, sha256 });
+      activateDevelopmentRuntime({ descriptor, generationId, generationBinary, sha256, env });
     }
     synchronizeDevelopmentAgentSkill({ env });
     const after = snapshotProduction(env);
@@ -396,14 +392,86 @@ export function installDevelopmentRuntime({
     }
     if (activate && env.AGENT_BROWSER_DEV_SKIP_SYSTEMD !== '1') {
       try {
-        systemctl(['daemon-reload'], env);
-        if (previousCurrent) systemctl(['restart', ...descriptor.units], env);
+        if (previousCurrent) {
+          const previousBinary = join(previousCurrent, 'bin', 'agent-browser');
+          activateDevelopmentRuntime({ descriptor, generationId: basename(previousCurrent),
+            generationBinary: previousBinary,
+            sha256: createHash('sha256').update(readFileSync(previousBinary)).digest('hex'), env });
+        } else systemctl(['daemon-reload'], env);
       } catch {
         // Preserve the original activation error; doctor will expose rollback issues.
       }
     }
     throw error;
   }
+}
+
+/** Start only the runtime host until exact host ownership is ready, then admit dashboard clients. */
+export function activateDevelopmentRuntime({
+  descriptor, generationId, generationBinary, sha256, env = process.env,
+  runSystemctl = systemctl, observeHost = observeDevelopmentRuntimeHostReadiness,
+  publishIngress = publishDevelopmentRuntimeIngress, waitForManifest = waitForDevelopmentManifest,
+  now = Date.now, wait = () => execFileSync('sleep', ['0.25']),
+}) {
+  const timeout = Number(env.AGENT_BROWSER_DEV_START_TIMEOUT_MS || 20_000);
+  if (!Number.isFinite(timeout) || timeout < 1) throw new Error('Invalid development startup timeout');
+  runSystemctl(['daemon-reload'], env);
+  runSystemctl(['enable', ...descriptor.units], env);
+  runSystemctl(['stop', descriptor.unitNames.dashboard, descriptor.unitNames.backend], env);
+  runSystemctl(['reset-failed', descriptor.unitNames.runtimeHost], env);
+  runSystemctl(['restart', descriptor.unitNames.runtimeHost], env);
+  const deadline = now() + timeout;
+  let ready = false;
+  do {
+    const observation = observeHost({ descriptor, generationBinary, sha256, env });
+    if (observation.state === 'wrong_owner') {
+      throw new Error('Development runtime host listener belongs to the wrong systemd unit');
+    }
+    if (observation.state === 'ready') { ready = true; break; }
+    wait();
+  } while (now() < deadline);
+  if (!ready) throw new Error('Development runtime host did not establish exact owned readiness');
+  publishIngress({ descriptor, generationId, generationBinary, sha256 });
+  runSystemctl(['start', descriptor.unitNames.backend, descriptor.unitNames.dashboard], env);
+  waitForManifest(descriptor, generationBinary, env);
+}
+
+/** Evaluate the listener, systemd owner and current runtime identity together before client startup. */
+export function evaluateDevelopmentRuntimeHostReadiness({
+  unit, host, identity, listenerPid, listenerCgroup, startToken, expectedUnit, generationBinary, sha256,
+}) {
+  if (listenerPid && (listenerPid !== unit.mainPid ||
+      !listenerCgroup?.split('\n').some((line) => line.split(':').slice(2).join(':').endsWith(`/${expectedUnit}`)))) {
+    return { state: 'wrong_owner' };
+  }
+  const ready = unit.activeState === 'active' && unit.mainPid > 0 &&
+    unit.executable === generationBinary && listenerPid === unit.mainPid &&
+    host?.pid === unit.mainPid && identity?.pid === unit.mainPid &&
+    identity.executablePath === generationBinary && identity.startToken === startToken &&
+    typeof startToken === 'string' && host.executableGeneration === sha256 &&
+    typeof host.socketIdentity === 'string' && host.socketIdentity.length > 0;
+  return { state: ready ? 'ready' : 'pending' };
+}
+
+function observeDevelopmentRuntimeHostReadiness({ descriptor, generationBinary, sha256, env }) {
+  const unit = unitStatus(descriptor.unitNames.runtimeHost, env);
+  const listenerPid = listeningProcessId(descriptor.laneStreamPort);
+  let listenerCgroup = null;
+  let startToken = null;
+  if (listenerPid) {
+    try {
+      listenerCgroup = readFileSync(`/proc/${listenerPid}/cgroup`, 'utf8');
+      const stat = readFileSync(`/proc/${listenerPid}/stat`, 'utf8');
+      const ticks = stat.slice(stat.lastIndexOf(')') + 2).split(/\s+/)[19];
+      const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+      startToken = `linux:${boot}:${ticks}`;
+    } catch { /* An exiting process has not proved readiness. */ }
+  }
+  return evaluateDevelopmentRuntimeHostReadiness({ unit,
+    host: readJson(join(descriptor.socketDir, 'runtime-host.json')),
+    identity: readJson(join(descriptor.socketDir, 'runtime-host.identity.json')),
+    listenerPid, listenerCgroup, startToken, expectedUnit: descriptor.unitNames.runtimeHost,
+    generationBinary, sha256 });
 }
 
 export function developmentRuntimeStatus({ env = process.env } = {}) {
