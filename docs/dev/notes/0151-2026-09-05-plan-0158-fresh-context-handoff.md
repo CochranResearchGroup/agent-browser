@@ -2,6 +2,44 @@
 
 Date: 2026-09-05
 
+## External K terminal result and current next gate
+
+Manual readiness run
+[33985964435](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33985964435),
+bound to `7cf0f5fc673bac9445dce0146d2b5d2b128856b6`, is terminal: slow client
+passed, human client failed and aggregate failed. The slow client passed both
+external oracles, exact initial/concurrent/reconnect identity and pixels, and
+zero physical-browser launch delta without retry. The human client passed its
+initial pixel capture but failed reconnect with `external_stream_not_embeddable`:
+zero iframes and a visible Stream unavailable state. It recorded 96 Guacamole
+HTTP responses, all 200, and zero request failures. This is distinct from the
+repaired stale title and the earlier preparation 504.
+
+Seven human artifacts and eleven slow-client artifacts pass byte-count and
+SHA-256 checks. `external-readiness-k-summary-v2.json` binds the receipts and a
+private redacted provider timeline. That timeline shows a remaining viewer
+reported unresponsive at 19:05:42 UTC and connection removal, followed by a new
+connection at 19:05:47. Client-to-provider user mapping and the missing protocol
+acknowledgment cause remain unproven. Do not infer an HTTP failure, hide it by
+extending a timeout, or treat the successful client as aggregate acceptance.
+The first summary helper omitted container stderr; its zero-line timeline is
+superseded by the v2 readback, not used as evidence of absent provider events.
+
+The installed candidate also passes fresh W6 malformed-line and five-surface
+journal checks in `malformed-line-k.json` and `five-surface-journal-k.json`.
+The former uses a disposable journal and proves live/production journals
+unchanged; the latter records the declared synthetic failure stimuli in p158.
+Neither borrows the prior default-development candidate's receipts.
+`candidate-k.json` identifies the current installed executable and dashboard.
+`baselines-external-k.json` confirms production/default-development isolation;
+`scene-after-external-k.json` retains the synthetic browser and capacity state.
+
+Progress is installed title blocker reduction plus fresh logging evidence.
+Next is bounded diagnosis of the captured reconnect/stream loss on this retained
+scene, not another unchanged external dispatch. The shared 20-minute calibration,
+W6 freeze, terminal live schedule and W10 remain incomplete. No automatic retry,
+new freeze, further publication or production mutation occurred after run K.
+
 ## Controlled title-candidate publication window
 
 The next in-envelope publication intentionally ends the unfrozen synthetic

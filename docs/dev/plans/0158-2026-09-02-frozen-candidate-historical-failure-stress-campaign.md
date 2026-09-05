@@ -5318,3 +5318,29 @@ hash. The visual custody attestation explicitly does not claim current sharing
 checker acceptance. Next is one manual two-client external readiness attempt
 against the newly bound scene. This is blocker reduction through installed
 title proof, not external acceptance, calibration, freeze or final analysis.
+
+### External K terminal failure and current-candidate logging evidence
+
+Manual run
+[33985964435](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33985964435)
+is terminal against source `7cf0f5fc`: slow client passed both external oracles
+with stable initial/concurrent/reconnect identity, exact pixels, zero browser
+launch delta and no retry. Human initial pixels passed, but reconnect failed
+with `external_stream_not_embeddable`, zero iframes and a Stream unavailable
+surface. All 96 human Guacamole HTTP responses were 200 and no request failed.
+The aggregate correctly rejected the partial success. Seven human and eleven
+slow-client artifacts passed hash and byte-count verification.
+
+Private `external-readiness-k-summary-v2.json` preserves a redacted provider
+timeline: an unresponsive remaining viewer and connection removal occur during
+the failed reconnect window. This is correlation, not a proven mapping of
+external clients to provider users or an established acknowledgment failure
+cause. No unchanged external retry or timeout relaxation was applied.
+
+Fresh `malformed-line-k.json` and `five-surface-journal-k.json` pass against
+the installed candidate; earlier default-development receipts are not reused.
+Isolation guards pass and the synthetic browser is retained. Classification:
+`blocker_reduction` for installed title proof and new-candidate logging evidence,
+with external readiness still failed. Next is bounded diagnosis of the captured
+stream-loss path. Calibration, W6 freeze, terminal live cases and W10 remain
+incomplete; a passing slow client does not satisfy their prerequisites.
