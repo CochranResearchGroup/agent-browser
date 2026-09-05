@@ -1,6 +1,7 @@
 use rust_embed::Embed;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -12,9 +13,9 @@ use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(unix)]
 use crate::connection::get_socket_path;
-use crate::connection::{attach_daemon_auth_token, daemon_startup_ready};
 #[cfg(windows)]
-use crate::connection::{get_socket_dir, resolve_port};
+use crate::connection::resolve_port;
+use crate::connection::{attach_daemon_auth_token, daemon_startup_ready, get_socket_dir};
 use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state_with_principal,
@@ -2255,15 +2256,40 @@ const SERVICE_DAEMON_SESSION_RECOVERY_ENV_REMOVALS: &[&str] = &[
 
 fn service_daemon_session_ready_for_request(
     named_lane_ready: bool,
+    stream_port_ready: bool,
     requires_lane_refresh: bool,
 ) -> bool {
-    named_lane_ready && !requires_lane_refresh
+    named_lane_ready && stream_port_ready && !requires_lane_refresh
+}
+
+/// Verify that the named lane's published HTTP stream port is accepting
+/// connections. A shared runtime host can remain reachable after one logical
+/// lane exits, and that lane's `.stream` file can briefly outlive its listener.
+/// Treating only the host socket as readiness would return a stale port to the
+/// dashboard and surface a transient 502 instead of recreating the lane.
+fn service_daemon_stream_ready(session_name: &str) -> bool {
+    service_daemon_stream_file_ready(&get_socket_dir().join(format!("{session_name}.stream")))
+}
+
+fn service_daemon_stream_file_ready(stream_path: &Path) -> bool {
+    let Some(port) = std::fs::read_to_string(stream_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port > 0)
+    else {
+        return false;
+    };
+    TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], port)),
+        Duration::from_millis(50),
+    )
+    .is_ok()
 }
 
 async fn wait_for_service_daemon_session(session_name: &str) -> bool {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        if daemon_startup_ready(session_name) {
+        if daemon_startup_ready(session_name) && service_daemon_stream_ready(session_name) {
             return true;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -2279,6 +2305,7 @@ pub(super) async fn ensure_service_daemon_session(
 ) -> Result<(), String> {
     if service_daemon_session_ready_for_request(
         daemon_startup_ready(session_name),
+        service_daemon_stream_ready(session_name),
         service_daemon_session_requires_lane_refresh(service_command),
     ) {
         return Ok(());
@@ -4242,9 +4269,40 @@ mod tests {
 
     #[test]
     fn service_daemon_recovery_requires_the_named_runtime_host_lane() {
-        assert!(!service_daemon_session_ready_for_request(false, false));
-        assert!(!service_daemon_session_ready_for_request(true, true));
-        assert!(service_daemon_session_ready_for_request(true, false));
+        assert!(!service_daemon_session_ready_for_request(
+            false, true, false
+        ));
+        assert!(!service_daemon_session_ready_for_request(
+            true, false, false
+        ));
+        assert!(!service_daemon_session_ready_for_request(true, true, true));
+        assert!(service_daemon_session_ready_for_request(true, true, false));
+    }
+
+    #[test]
+    fn service_daemon_stream_readiness_rejects_a_stale_published_port() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-stale-stream-port-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let stream_path = root.join("dashboard-service-backend.stream");
+
+        let released_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let stale_port = released_listener.local_addr().unwrap().port();
+        drop(released_listener);
+        std::fs::write(&stream_path, stale_port.to_string()).unwrap();
+        assert!(!service_daemon_stream_file_ready(&stream_path));
+
+        let live_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        std::fs::write(
+            &stream_path,
+            live_listener.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        assert!(service_daemon_stream_file_ready(&stream_path));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

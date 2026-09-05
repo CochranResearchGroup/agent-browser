@@ -4331,3 +4331,51 @@ without publishing its URL, refresh only its candidate-bound expected identity
 if the installed generation changed the target, and dispatch a fresh pair of
 external readiness clients. Proceed to synchronized C01 only if both clients
 and their aggregate are clean for this exact candidate.
+
+### External Readiness Exposes Stale Internal Service Lane
+
+State transition: `c01_repaired_candidate_external_readiness_active ->
+c01_stale_service_lane_repair_ready_for_publication`.
+
+The exact sealed handoff was recovered by its durable URL digest without
+printing its ID or URL. Its retained row still said ready, but an ordinary
+resolution correctly reported that the previous tab had been explicitly
+closed and required operator reopening. The supported
+`allowReopenClosed=true` resolution preserved the browser, profile, session,
+and durable handoff while creating only replacement tab and target identities.
+It returned a ready authenticated presentation receipt at presentation
+generation 129. The environment-scoped handoff and expected-identity secrets
+were refreshed from that exact ready resolution without logging their values.
+
+External readiness workflow `33942453313` ran from exact commit
+`4581d93bb1cb5b6a5cd4b4e8c2734aed0625075b`. The human-paced client passed
+with exact initial and reconnect identity, zero internal URL leaks, zero
+physical browser launches, zero retries, and zero repairs. The delayed client
+rendered the expected fixture but its oracle rejected one dashboard API HTTP
+502 and the matching console error. Two Guacamole observation 404s were
+correctly classified as expected lifecycle noise. The aggregate retained both
+client identities and failed closed with zero retry or repair.
+
+The runtime journal recorded the actionable failure at the same epoch as a
+connect-stage `backend_unavailable` failure for the dashboard API and its CDP
+target-list companion. All three development services remained active with
+zero systemd restarts. Diagnosis found that the shared runtime host remained
+reachable after its logical `dashboard-service-backend` lane exited, while the
+lane's `.stream` discovery record remained. The old readiness predicate tested
+the shared host socket and the existence of the stream file, so it accepted the
+stale lane and immediately proxied to a dead port.
+
+The bounded repair now requires the named lane's published HTTP port to accept
+a loopback connection before `ensure_service_daemon_session` may reuse it.
+Missing, malformed, zero, or non-listening stream ports enter the existing
+exact-lane recovery path; the five-second post-start convergence loop applies
+the same predicate. It neither restarts the shared host nor launches a browser.
+A focused stale-versus-live port regression passes, all 82 HTTP stream tests
+pass serially, formatting passes, and workspace clippy passes with warnings
+denied.
+
+Revised next action: publish and install this exact development candidate,
+reopen the same sealed handoff if installation closes its tab, refresh only the
+environment-scoped expected identity, and rerun both external readiness
+clients. Dispatch synchronized C01 only after the human, delayed, and aggregate
+readiness results are all clean.
