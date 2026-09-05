@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { classifyOperatorUrl } from './p158-external-handoff-oracle.js';
 
+const ABORTED_REQUEST_FAILURE_SHA256 =
+  createHash('sha256').update('net::ERR_ABORTED').digest('hex');
+const GUACAMOLE_ACTIVE_SHARING_PROFILES =
+  /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i;
+
 export const DASHBOARD_FINDING_CODES = Object.freeze([
   'missing_rail_row',
   'duplicate_rail_row',
@@ -513,8 +518,7 @@ function isExpectedLifecycleNoise(entry, evidenceType, networkEntries = []) {
   if (evidenceType !== 'network') return false;
   if (entry.classification.code === 'guacamole_active_connection_observation_absent') {
     return entry.status === 404 &&
-      /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i
-        .test(String(entry.url ?? ''));
+      GUACAMOLE_ACTIVE_SHARING_PROFILES.test(String(entry.url ?? ''));
   }
   if (entry.classification.code === 'guacamole_token_refresh_recovered') {
     return entry.status === 403 &&
@@ -525,6 +529,8 @@ function isExpectedLifecycleNoise(entry, evidenceType, networkEntries = []) {
     return entry.status === null && typeof entry.error === 'string' &&
       (/\/guacamole\/tunnel$/i.test(String(entry.url ?? '')) ||
         entry.pathClass === 'dashboard_auth_status' ||
+        (GUACAMOLE_ACTIVE_SHARING_PROFILES.test(String(entry.url ?? '')) &&
+          entry.error === `request-failure-sha256:${ABORTED_REQUEST_FAILURE_SHA256}`) ||
         (/\/guacamole\/api\/tokens$/i.test(String(entry.url ?? '')) &&
           entry.classification.recoveryEvidenceEntryIds?.length > 0) ||
         (entry.pathClass === 'guacamole_transport' &&

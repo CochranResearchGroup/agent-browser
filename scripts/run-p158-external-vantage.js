@@ -48,6 +48,9 @@ const REQUIRED_INGRESS_KINDS = [
 ];
 
 const INTERNAL_HOST = /(^|\.)(localhost|[^.]+\.local)$|^(127\.|10\.|192\.168\.|169\.254\.)|^172\.(1[6-9]|2\d|3[01])\./i;
+const ABORTED_REQUEST_FAILURE_SHA256 = createHash('sha256').update('net::ERR_ABORTED').digest('hex');
+const GUACAMOLE_ACTIVE_SHARING_PROFILES =
+  /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i;
 const REQUIRED_IDENTITY_FIELDS = [
   'browserId',
   'profileId',
@@ -287,7 +290,7 @@ function classifyExternalNetworkEntry(entry, entries) {
   if (status >= 200 && status < 400) {
     return { disposition: 'success', code: 'successful_response', recoveryEvidenceEntryIds: [] };
   }
-  if (status === 404 && /\/guacamole\/api\/session\/tunnels\/[^/]+\/activeConnection\/connection\/sharingProfiles$/i.test(url)) {
+  if (status === 404 && GUACAMOLE_ACTIVE_SHARING_PROFILES.test(url)) {
     return {
       disposition: 'expected_lifecycle_noise',
       code: 'guacamole_active_connection_observation_absent',
@@ -303,6 +306,8 @@ function classifyExternalNetworkEntry(entry, entries) {
   }
   if (status === 0 &&
       (/\/guacamole\/tunnel$/i.test(url) || pathClass === 'dashboard_auth_status' ||
+        (GUACAMOLE_ACTIVE_SHARING_PROFILES.test(url) &&
+          entry.failureTextSha256 === ABORTED_REQUEST_FAILURE_SHA256) ||
         (pathClass === 'guacamole_transport' && recoveredBy.length > 0))) {
     return {
       disposition: 'expected_lifecycle_noise',

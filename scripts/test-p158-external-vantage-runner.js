@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -898,6 +899,44 @@ const cancelledLifecycleRequest = normalizeExternalDashboardEvidence({
 }).networkEntries[0];
 assert.equal(cancelledLifecycleRequest.classification.disposition, 'expected_lifecycle_noise');
 assert.equal(cancelledLifecycleRequest.classification.code, 'page_or_reconnect_request_cancelled');
+
+const abortedSharingProfileObservation = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-guac-sharing-aborted',
+    url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/activeConnection/connection/sharingProfiles',
+    urlSha256: '6'.repeat(64),
+    method: 'GET',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 0,
+    failureTextSha256: createHash('sha256').update('net::ERR_ABORTED').digest('hex'),
+    startedAt: '2026-09-04T00:00:04.020Z',
+    completedAt: '2026-09-04T00:00:04.030Z',
+    durationMs: 10,
+  }],
+}).networkEntries[0];
+assert.equal(abortedSharingProfileObservation.classification.disposition, 'expected_lifecycle_noise');
+assert.equal(abortedSharingProfileObservation.classification.code, 'page_or_reconnect_request_cancelled');
+
+const failedSharingProfileObservation = normalizeExternalDashboardEvidence({
+  networkEntries: [{
+    entryId: 'network-guac-sharing-failed',
+    url: 'https://external.example.test/guacamole/api/session/tunnels/%3Credacted%3E/activeConnection/connection/sharingProfiles',
+    urlSha256: '7'.repeat(64),
+    method: 'GET',
+    resourceType: 'xhr',
+    requestAction: null,
+    pathClass: 'guacamole_transport',
+    status: 0,
+    failureTextSha256: createHash('sha256').update('net::ERR_FAILED').digest('hex'),
+    startedAt: '2026-09-04T00:00:04.040Z',
+    completedAt: '2026-09-04T00:00:04.050Z',
+    durationMs: 10,
+  }],
+}).networkEntries[0];
+assert.equal(failedSharingProfileObservation.classification.disposition, 'actionable_failure');
+assert.equal(failedSharingProfileObservation.classification.code, 'unexplained_transport_failure');
 
 const recoveredGuacamoleAsset = normalizeExternalDashboardEvidence({
   consoleEntries: [{

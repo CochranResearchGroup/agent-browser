@@ -4379,3 +4379,33 @@ reopen the same sealed handoff if installation closes its tab, refresh only the
 environment-scoped expected identity, and rerun both external readiness
 clients. Dispatch synchronized C01 only after the human, delayed, and aggregate
 readiness results are all clean.
+
+The repair was published as `fe1218c0` and installed as development generation
+`0.28.0-6a28e573b3a5`. Provider-required doctor, the 90 percent filesystem
+threshold, and all three disposable browser launch smokes remained green. The
+same sealed handoff was reopened and its environment-scoped identity refreshed.
+Workflow `33943129378` then proved the original repair: the delayed client that
+previously observed the stale-lane 502 passed completely, with exact identity,
+no internal URL leak, no physical browser launch, and no retry or repair.
+
+The human client independently failed on one Guacamole sharing-profile
+observation canceled with Chromium's exact `net::ERR_ABORTED` lifecycle signal.
+Its identity and visual evidence completed, the provider returned no HTTP error,
+and the delayed client subsequently exercised the same presentation
+successfully. The oracle already treated an aborted Guacamole tunnel as page or
+reconnect lifecycle noise, but required same-URL recovery for every other
+Guacamole transport. That could never validate a tunnel-specific
+`activeConnection/.../sharingProfiles` observation because the next viewer has
+a different opaque tunnel identifier.
+
+The bounded oracle repair accepts only that exact sharing-profile endpoint with
+the SHA-256 of `net::ERR_ABORTED` as page or reconnect lifecycle noise. A generic
+`net::ERR_FAILED`, any other endpoint, an HTTP failure, and unexplained transport
+failure remain blocking. Provider-free runner and complete dashboard-oracle
+tests pass with both the positive cancellation case and negative generic-failure
+case.
+
+Revised next action: publish the exact oracle repair and rerun the two-client
+external readiness workflow without reinstalling the unchanged product
+candidate. If all three readiness results pass, freeze the installed identity
+and dispatch synchronized C01.
