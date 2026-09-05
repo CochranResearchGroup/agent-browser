@@ -59,7 +59,11 @@ assert.match(workflow, /P158_DEV_DASHBOARD_PASSWORD: \$\{\{ secrets\.P158_DEV_DA
 assert.equal((workflow.match(/P158_DEV_VISUAL_FIXTURE_ATTESTATION_JSON:/g) || []).length, 2);
 assert.match(workflow, /--pace-profile human_controller/);
 assert.match(workflow, /--pace-profile slow_concurrency/);
-assert.match(workflow, /Delay single-viewer readiness client[\s\S]*sleep 45/);
+assert.doesNotMatch(
+  workflow,
+  /Delay single-viewer readiness client|sleep 45/,
+  'readiness must exercise simultaneous external viewer setup instead of masking it with staging delay',
+);
 assert.match(workflow, /probe_mode:[\s\S]*default: calibration/);
 assert.match(workflow, /calibration_start_at:[\s\S]*RFC3339 UTC start/);
 assert.match(workflow, /calibration_start_at:[\s\S]*at least 2 minutes in the future/);

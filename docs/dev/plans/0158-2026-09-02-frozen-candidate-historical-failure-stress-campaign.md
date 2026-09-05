@@ -4517,3 +4517,9 @@ require both clients plus the aggregate to pass without retry or repair. Then
 dispatch one fresh synchronized C01 using a new run ID, workflow identity, and
 shared epoch. Preserve the failed pre-epoch attempt as diagnostic evidence and
 do not reuse its descriptor.
+
+The external workflow's readiness-only 45-second second-client delay is
+removed. Readiness and calibration now exercise the same simultaneous viewer
+setup boundary; readiness remains shorter only because it omits the 20-minute
+scheduled action loop. This prevents the admission gate from masking the exact
+race that blocked C01.
