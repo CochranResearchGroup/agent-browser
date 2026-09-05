@@ -5439,3 +5439,24 @@ host-provision, fresh-VM, durability, route-user and handoff-doc fixtures pass.
 New external preparation remains required: the prior P scene's protected
 binding is no longer valid for dispatch. No external workflow, W6 freeze,
 live-case acceptance, retry or final analysis is claimed in this repair slice.
+
+### Anchored readiness V and current-candidate journal acceptance
+
+Readiness run `33989772927`, source `e2f50e42`, completes successfully with both
+external clients and their aggregate accepted. The coordinator exits zero and
+seals passing ready/final anchor receipts, aggregate digest
+`48c3968ed9cbbead7662db05fe4ba9a8111f4485e1f0f2912e4232f417006945`.
+Independent artifact verification covers eight human and eleven slow files.
+Both clients have zero handoff/dashboard findings, zero retries, no repair and
+zero physical-browser launch delta. Protected V preparation binds current U.
+The prior anchor-free failures and anchored R focus failure remain immutable.
+
+After readiness terminality, `malformed-line-w.json` and
+`five-surface-journal-w.json` pass against candidate U. The malformed test does
+not mutate the live journal; declared five-surface synthetic failure stimuli
+remain p158-only. This is `outcome_progress` toward W6, not its freeze gate.
+Next is the full shared 20-minute C01 calibration with 25 logical agents,
+500 Service commands, two external viewers, 50 dashboard actions and ten
+reconnects. E1's local endpoints and E2's external ingress bind the same
+isolated installation and auth store, with separate vantage requirements.
+All case execution and W10 remain outstanding.

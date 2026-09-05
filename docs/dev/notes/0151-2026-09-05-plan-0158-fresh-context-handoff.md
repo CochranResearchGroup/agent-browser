@@ -2,6 +2,35 @@
 
 Date: 2026-09-05
 
+## Anchored readiness accepted; full calibration next
+
+Manual run [33989772927](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33989772927)
+on `e2f50e42` passes both external clients and the aggregate. The existing
+coordinator also passes anchor-ready and anchor-final, exits zero, and seals
+aggregate `48c3968ed9cbbead7662db05fe4ba9a8111f4485e1f0f2912e4232f417006945`.
+Eight human and eleven slow artifacts independently match their byte counts and
+SHA-256 digests. Both clients pass the handoff and dashboard oracles, with no
+findings, no product/runner retry, no repair and zero physical-browser launch
+delta. This accepts only the admitted anchored readiness configuration, not
+anchor-free reliability, full C01 calibration or W6 freeze.
+
+The six protected secrets now bind the current U scene through
+`external-secret-binding-v.json`; the prior R binding is superseded.
+After the readiness coordinator exited, current-candidate
+`malformed-line-w.json` and `five-surface-journal-w.json` pass. The malformed
+test uses a disposable journal and proves live/production journals unchanged.
+The five-surface check records its declared synthetic failures in p158 only;
+its artifact digest is
+`e12a8bca0023bdb8be1b971cdfaa6bcb8382c40a73a1572dc7f66968603e7307`.
+
+Next is one full anchored 20-minute calibration with 25 logical agent clients,
+500 scheduled Service reads, two off-host viewers, 50 dashboard actions and
+10 reconnects on one shared future schedule. E1 is the isolated installation's
+local Service/dashboard surface; E2 is its reviewed public ingress, not a
+second independent installation. Authenticate both exact p158 origins through
+the same owned auth store. Preserve the candidate unchanged while this runs.
+Terminal live cases, freeze and final analysis remain open.
+
 ## Embedded focus repair after anchored readiness R
 
 Manual run [33988373995](https://github.com/CochranResearchGroup/agent-browser/actions/runs/33988373995)
