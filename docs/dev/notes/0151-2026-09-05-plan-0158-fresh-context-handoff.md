@@ -2,7 +2,48 @@
 
 Date: 2026-09-05
 
-## Resumption checkpoint
+## Elevated-authority cleanroom checkpoint
+
+The user authorized the separately namespaced synthetic-only runtime and
+reviewed ingress. That provisioning approval wait is resolved. Source commits
+`02b3307d`, `415fb421`, `93042cde` and `ce38228e` are pushed: complete namespace
+isolation, exact ordered host activation, exact provider database probing, and
+unready first-install inventory bootstrap. Preserve the three earlier failure
+receipts rather than retrying their unchanged conditions.
+
+Namespace `p158` is installed as generation `0.28.0-7c7150b01efd`, with executable
+`agent-browser-dev-p158`, separate home, sockets, units, provider containers,
+database, route users, four warm displays and a six-route maximum. All seven
+ports are pinned: 5148, 5149, 5150, 5151, 8193, 4923 and 56433.
+Provider-required doctor and three disposable browser smokes passed. Existing
+production and default-development identities and state passed repeated
+non-interference readbacks. Never run an unscoped default-development command
+to operate the cleanroom.
+
+The new dashboard and capability ingress are published from Cooper inventory
+revisions `1592a78` and `b58221b`. Local and public authentication checks passed;
+the shared proxies and XRDP were not restarted. Authenticated Service Status
+projects four presentation slots and hard maximum six without binding warnings.
+The service broker selected the new synthetic durable profile and returned a
+ready route-bound handoff. Scene custody accounts for eight owned profiles
+(including three closed smoke profiles), five browsers, six synthetic/provider/
+blank tabs and no manual browsers.
+
+Private source receipts and exact configuration are under
+`/home/ecochran76/.local/state/agent-browser/campaigns/p158/cleanroom-20260905`.
+Use `environment.json`, `doctor-required-a.json`, `baselines-d.json`,
+`scene-open-a.json`, `scene-inventory-b.json` and `scene-custody-a.json`.
+The temporary bounded operator scripts are `/tmp/p158-cleanroom-control.mjs`
+and `/tmp/p158-cleanroom-scene.mjs`. Their receipts are exclusive-create;
+never rerun a mutation against an existing receipt or blindly choose a new label.
+
+The synthetic scene still needs fresh visual/marker verification and attestation,
+then protected external-workflow secret rebinding, exact-source readiness and
+shared-schedule calibration. Do not use the old default-development handoff or
+visual attestation. W6 freeze and W7 through W10 live acceptance remain incomplete.
+The Plan's final checkpoints are the current causal authority.
+
+## Earlier resumption checkpoint
 
 This section supersedes the repository and runtime snapshot below, which is
 preserved as history. The Plan's final checkpoints contain the current causal

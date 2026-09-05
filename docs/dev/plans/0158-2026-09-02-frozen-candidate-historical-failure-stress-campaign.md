@@ -5070,3 +5070,44 @@ Existing inventory authority must not be overwritten. This preserves the
 missing-file fail-closed contract while allowing the provider-owned bootstrap
 viewer to initialize its own new routes. No public publication or visual
 workflow is authorized by a bootstrap inventory alone.
+
+### Isolated provider-ready and public-ingress checkpoint
+
+Bootstrap source `ce38228e` passed the primary provider suite and was pushed
+before preflight C. Apply C succeeded as `provider_ready_ingress_pending`;
+its private receipt SHA-256 is
+`93341335521c7f1d694cdc9cffb8363d2411b2ff60fbe30342d1b11bb7ba6f3a`.
+The two failed apply receipts are retained unchanged. The new provider has
+four distinct warm displays and six configured routes. The original shared
+XRDP service and existing provider resources were not restarted or replaced.
+
+Cooper revision `b58221b` adds the separate capability-only sharing inventory
+and renders the two new ingress routes after provider readiness. Public and
+local checks returned dashboard 200, unauthenticated Service API 401,
+authenticated Guacamole path 302 to login, and sharing shell 200. Bastion's
+Traefik process identity and start time stayed unchanged across hot reload.
+Its two new snippets remain untracked operational files; `CODEX_LOG.md` was
+appended with a checked original-byte prefix and retains its prior dirty state.
+Existing route snippets and unrelated Cooper edits were preserved.
+
+Provider-required doctor passed every check, receipt SHA-256
+`d0166b7edddb9e2ad9272379ba685d116b545691c8fcc84b2b26d80612cfa59f`.
+Three disposable browser launch, URL-read, close and residue checks passed,
+receipt SHA-256
+`e4480b53a0040c48bb3ecd54ed5c43074f294c4991c41c7f575e765a7ab8501b`.
+Repeated post-apply and post-smoke baseline checks confirm production and
+default development unchanged. Authenticated public Service Status has
+non-null presentation capacity: four slots, hard maximum six, with no binding
+warnings. Provider readiness is therefore projected into Service, not merely
+reported by the provider doctor.
+
+The service operating guide and access plan were read before registration and
+route acquisition. The broker selected the new owned durable synthetic profile,
+and route-bound open returned `operatorVisible.state=ready` on its new private
+display. The durable handoff uses the separate authenticated public origin.
+The scene custody check accounts for every profile, browser and tab: four owned
+provider viewers, three closed disposable smoke profiles, one campaign fixture
+profile, five live browsers, six synthetic/provider/blank tabs, and zero manual
+browsers. This admits owned scene inspection, not visual attestation or W6
+acceptance. Fresh marker proof, protected secret rebinding, external readiness,
+shared-schedule calibration, actual freeze and W7 through W10 remain pending.
