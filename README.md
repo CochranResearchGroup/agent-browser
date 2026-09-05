@@ -1469,6 +1469,8 @@ host service without launching a browser. Each install records the exact
 executable and fixed loopback stream port in a lane manifest. Status reports
 shared-host executable drift, port conflicts, restart exhaustion, and whether
 the lane stream is reachable.
+Supervisor startup recreates a missing socket directory after reboot with
+private permissions before writing its authentication token.
 After an accepted workstation convergence, repeating `supervisor install` for
 the same lane and port may rebind its stale manifest to the exact selected
 generation. A clean candidate rollback may do the same only when that selected

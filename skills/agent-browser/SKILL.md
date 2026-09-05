@@ -2334,6 +2334,8 @@ exhaustion, and missing lane stream readiness. `remove` closes only the named
 lane, preserves other lanes, runtime profiles, browser storage, and service
 state, and stops the host only after the final supervised lane is removed. The
 host remains no-launch until an authenticated effectful request arrives.
+Supervisor startup recreates a missing socket directory after reboot with
+private permissions before writing its authentication token.
 After workstation convergence is accepted, repeat `supervisor install` with
 the lane's existing fixed port to rebind a stale manifest to the exact selected
 generation. A clean candidate rollback may rebind only when the preserved

@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,7 +35,7 @@ const socketDir = join(fixtureRoot, 'socket');
 const supervisorRoot = join(fixtureRoot, 'supervisor');
 const manifestDir = join(supervisorRoot, 'manifests');
 mkdirSync(home, { recursive: true });
-mkdirSync(socketDir, { recursive: true });
+// Reboot removes volatile socket directories before systemd starts the host.
 mkdirSync(manifestDir, { recursive: true });
 
 const env = {
@@ -44,6 +45,8 @@ const env = {
   AGENT_BROWSER_SOCKET_DIR: socketDir,
   AGENT_BROWSER_SESSION_SUPERVISOR_ROOT: supervisorRoot,
   AGENT_BROWSER_RUNTIME_HOST: '1',
+  AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
+  AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: 'disabled',
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: '0',
 };
 const executableSha256 = createHash('sha256').update(readFileSync(binary)).digest('hex');
@@ -154,6 +157,12 @@ async function stopHost(host) {
 }
 
 function assertHostTopology(expectedPid) {
+  if (process.platform !== 'win32') {
+    assert((statSync(socketDir).mode & 0o777) === 0o700,
+      'supervisor socket directory must be private');
+    assert((statSync(join(socketDir, 'runtime-host.token')).mode & 0o777) === 0o600,
+      'supervisor token must be private');
+  }
   const pidFiles = readdirSync(socketDir).filter((name) => name.endsWith('.pid'));
   const sockets = readdirSync(socketDir).filter((name) => name.endsWith('.sock'));
   assert(pidFiles.length === 1 && pidFiles[0] === 'runtime-host.pid', `unexpected PID files: ${pidFiles}`);
@@ -187,13 +196,17 @@ async function assertDashboardDiscovery() {
 let host = startHost();
 try {
   await waitFor(
-    () => existsSync(join(socketDir, 'alpha.stream')) && existsSync(join(socketDir, 'beta.stream')),
+    () => {
+      assert(host.child.exitCode === null, `host exited before readiness: ${host.output()}`);
+      return existsSync(join(socketDir, 'alpha.stream')) && existsSync(join(socketDir, 'beta.stream'));
+    },
     'supervised lanes',
   );
   const firstPid = assertHostTopology();
   await assertDashboardDiscovery();
   await stopHost(host);
   await waitFor(() => !processIsLive(firstPid), 'first host exit');
+  rmSync(socketDir, { recursive: true });
 
   host = startHost();
   await waitFor(

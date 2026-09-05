@@ -58,6 +58,9 @@ closes and removes only that lane. Other lanes remain active, and the shared
 host stops after the final lane is removed. Runtime profiles, browser storage,
 service state, and unrelated user services remain preserved. Browser work
 begins only after an authenticated effectful request.
+Supervisor startup recreates a missing socket directory after reboot with
+private permissions before writing its authentication token.
+
 After an accepted workstation convergence, repeat <code>supervisor install</code>
 with the lane&apos;s existing fixed port to rebind a stale manifest to the exact
 selected generation. A clean candidate rollback may rebind only while the

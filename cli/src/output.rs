@@ -5490,6 +5490,8 @@ rollback may rebind only while that generation retains the authenticated
 ingress presentation receipt. Other pre-acceptance drift fails closed.
 Hot-upgrade acceptance stops the old supervisor unit, rebinds its manifests to
 the selected generation, and leaves it enabled without launching another host.
+Supervisor startup recreates a missing socket directory with private
+permissions before writing its authentication token, including after reboot.
 
 Operations:
   (none)               Show current session name

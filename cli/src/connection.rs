@@ -208,6 +208,9 @@ pub(crate) fn generate_daemon_auth_token() -> Result<String, String> {
 }
 
 pub(crate) fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
+    // Direct supervisor startup bypasses ensure_daemon, including after reboot
+    // has removed the volatile socket directory. Secure it before writing auth.
+    ensure_socket_dir_exists()?;
     let path = get_auth_token_path(session);
     fs::write(&path, token).map_err(|e| format!("Failed to write daemon auth token: {}", e))?;
     set_private_file_permissions(&path)
