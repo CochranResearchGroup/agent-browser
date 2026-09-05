@@ -2,6 +2,37 @@
 
 Date: 2026-09-05
 
+## Repair investigation: forward-auth timeout, not yet repaired
+
+The user requested repair. The original 17:27:58 HTTP 500 is now localized:
+Cooper's local Traefik timed out calling the isolated dashboard's
+`/api/dashboard-auth/verify` while handling Guacamole active-connection
+discovery. Its access log records an empty 500 response after 27,649 ms with
+no selected Guacamole upstream. Guacamole itself had authenticated the prior
+token request successfully. Do not repair sharing-profile grants or replace
+the retained browser based on this failure.
+
+The failure remains intermittent. Two instrumented same-handoff diagnostics
+both reached a frame. The first then observed a distinct shared-tunnel
+sharing-profile 404; the second had no failed HTTP responses in its bounded
+observation. These are diagnostic results, not a repaired original attempt or
+visual acceptance. Separate read-only probes passed 64 sequential path checks
+and 32 concurrent forward-auth checks. No code fix, timeout increase, retry
+policy, runtime restart, screenshot, or external workflow was applied.
+
+The private cleanroom evidence root now also contains
+`forward-auth-timeout-extract.log`, `sharing-diagnostic-a/`,
+`sharing-inventory-prelude-b/`, `auth-path-a.json`, `auth-concurrent-b.json`,
+and durable copies of `sharing-diagnostic.mjs` and `auth-path-probe.mjs`.
+`baselines-repair-f.json` confirms production and default development unchanged.
+The missing repair prerequisite is a trace locating the delayed verification
+request inside or before the isolated ingress/backend. The diagnosing-bugs
+skill's red-capable reproduction gate prevents a speculative source patch.
+Do not repeat the completed probes merely to accumulate green counts. Reframe
+the next diagnostic around that transport boundary with private, bounded
+request-stage instrumentation. No new authority is needed for ordinary
+in-scope diagnosis; the gap is causal evidence, not provisioning approval.
+
 ## Elevated-authority cleanroom checkpoint
 
 The user authorized the separately namespaced synthetic-only runtime and

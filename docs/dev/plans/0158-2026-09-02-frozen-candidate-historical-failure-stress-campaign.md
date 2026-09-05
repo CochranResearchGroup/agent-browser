@@ -5138,3 +5138,47 @@ Graphiti checkpoint ingestion job
 `84e9d84d-1361-471b-8bbf-cdd680605738` failed with `TimeoutError`; no episode
 visibility was claimed and no automatic requeue was attempted. Repo checkpoints
 and the updated Note 0151 remain the verified continuation authorities.
+
+### Repair investigation: original 500 localized to forward authentication
+
+The user's repair request authorized bounded diagnosis of the preserved
+cleanroom failure. The original local Traefik records show a timeout calling
+the isolated dashboard's `/api/dashboard-auth/verify`. The affected request
+was Guacamole active-connection discovery, following a successful token POST.
+It returned empty HTTP 500 after 27,649 ms without selecting a Guacamole
+upstream. Thus the immediate failure is forward authentication, not a
+Guacamole sharing-credential exception. The reason the verification request
+stalled has not been established. Concurrent ordinary dashboard reads
+continued succeeding, so general backend unavailability is not proven.
+
+The sanitized private proxy extract has SHA-256
+`19708257c901b227752e1b72ffa48ace64e17af9ec768bb92fae09dd124832ad`.
+Two instrumented same-handoff diagnostics were performed without capture or
+replacement acquisition. Both reached a frame. The first failed its HTTP
+assertion on a distinct shared-tunnel sharing-profile 404; the second, with
+the original inventory-read prelude restored, had no failed HTTP response
+during its bounded observation. Neither result erases `visual-a` or proves
+visual acceptance. The transient 404 is separate unresolved evidence.
+
+A bounded read-only path comparison then passed 64 sequential checks across
+the direct backend, stable ingress, public verification endpoint and
+forward-auth-protected Guacamole language endpoint, maximum 323 ms. A separate
+32-request, four-concurrent forward-auth diagnostic passed, maximum 566 ms.
+Receipt SHA-256 values are respectively
+`21156f7ff5f03ac570c958d72ca78c29bfd4ca987a2aa152108cda3bd0362c63` and
+`26b2811f824ce13e0aed7e562812b19de1173cdd8efa32616a3af2574658cb1b`.
+These diagnostic checks do not exercise campaign acceptance cases and are not
+an unchanged retry promoted to success. They failed to reproduce the original
+authentication timeout and therefore provide no validated repair seam.
+
+State remains diagnosis-blocked, with `no_progress` on campaign acceptance:
+causal localization improved, but no verified blocker was removed. No product
+source, provider configuration, installed generation, timeout or retry policy
+changed. No service or retained browser was restarted. No screenshot,
+attestation, secret rebinding or external workflow was attempted. Production
+and default-development guards passed again in `baselines-repair-f.json`.
+Diagnostic scripts and receipts are preserved privately under the existing
+cleanroom root. The next bounded tactic is request-stage transport tracing of
+the verification hop, not repeating the same green probes or speculatively
+modifying sharing logic. A deterministic red-capable seam is still required
+before source repair; the approval for in-scope repair remains valid.
