@@ -147,13 +147,13 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Follow Plan 0158's validated priority repair checkpoint: typed pre-dispatch
-rejection correlation and deployment-owned environment provenance pass the
-60 focused Rust request checks, format, clippy, and client validation. Actual HTTP/MCP no-launch checks join five rejection responses to
-journal records; asynchronous delivery still leaves interruption durability
-unproven. After a disposition of the exhausted acquisition probe, verify the repaired request path once with independent synthetic
-clients. Profile/ACL usability and ordinary durable remote-view entry remain
-unaccepted; source repair is not installed P158 recovery.
+Plan 0158's isolated two-client verification passed shared-browser acquisition,
+foreign-release denial, and own-release peer preservation. The denial remains
+cryptic in structured evidence: subject_mismatch is flattened to a generic
+failure with uncertain effects despite rejection before physical release.
+Repair that exact child-authority recourse path next, preserving ownership
+checks and causal correlation. Authenticated Profile ACLs, interruption
+durability, and ordinary durable remote-view entry remain unaccepted.
 Do not automatically resume calibration, reinstall, restart, or the prior
 harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
 freeze gate, and full acceptance criteria are retained. Anchored readiness does

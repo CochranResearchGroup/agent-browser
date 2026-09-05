@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_request_repair_validated`
+Execution state: `priority_shared_clients_verified_denial_recourse_gap`
 
 Lane: P157
 
@@ -5677,3 +5677,52 @@ of the exhausted acquisition probe and run one isolated verification of the
 repaired client request path, with durable observations and explicit failure
 exit. Preserve the async-delivery crash window for the interruption oracle and
 ordinary anchor-free remote-view evidence as separate unmet requirements.
+
+### Priority Verification: Shared Clients And Child Denial
+
+One isolated verification ran after disposition of the two failed acquisition
+attempts. The disposition retains both failures and permits exactly one repair
+verification, not a reset of the diagnostic bound. Source b6ee48f2 and candidate
+SHA-256 5b1b930e0b9be1988a61bbceaabfdc77f7eafb85ada73ac826856b77ee4e2f0e
+bind this observation. No installed service was replaced or restarted.
+
+Two independent self-declared clients with identical display labels acquired
+distinct tabs in the same synthetic shared Profile browser. A foreign client's
+release was denied. The owner's release physically closed its own tab,
+preserved the browser, and left the peer tab live in Service state. This is
+outcome_progress for focused shared-client usability. It is not authenticated
+Profile ACL acceptance, the full A-family workload, or frozen W7 acceptance.
+
+The foreign release exposes a new concrete recourse defect. Its message is
+profile child access denied: subject_mismatch, but the structured response,
+terminal job, event and journal classify it as service_operation_failed with
+effect_uncertain. The response joins exactly one durable job, one terminal
+event, one journal occurrence, and one incident through its event ID. There
+are no duplicate matches on those captured surfaces. Trace and dashboard
+projections were not captured, so the complete logging oracle remains unmet.
+
+CodeGraph and focused source inspection locate the loss at
+`authorize_profile_child_access_in_state`: the policy evaluator's exact reason
+is flattened into a String. `handle_tab_handle_release` validates authority
+before calling `release_physical_tab_for_handle`; the observed subject mismatch
+returns before physical release and before child reconnect mutation. The
+generic failure classifier does not retain this cause or known no-effect
+ordering. This is actionable-denial/logging work, not evidence that the foreign
+release should have been allowed. Do not bypass authority or widen grants.
+
+Private evidence is under campaign directory
+`priority-verification-20260905T232407Z`: disposition, append-only fsynced
+request/response ledger, terminal state and journal copies, and a checkpoint
+with artifact hashes. Exact owned-lane close succeeded; host exit was zero.
+Terminal state contains zero browsers, sessions, and tabs. Process readback
+found no exact synthetic-root process. Retained evidence is not an operator
+handoff or installed runtime.
+
+Next: repair the diagnosed child-authority rejection representation and recourse
+at its real guard, with a regression that proves subject mismatch before
+physical effects and preserves the same denial across response, job, event,
+and journal. Bound this distinct failure to one repair/verification cycle;
+do not rerun the completed acquisition verification merely to reconfirm it.
+Authenticated ACL/revocation/restart, interruption durability, missing A-family
+producers, ordinary external remote-view links, W6, and W7–W10 remain open.
+Calibration and production mutation remain absent.
