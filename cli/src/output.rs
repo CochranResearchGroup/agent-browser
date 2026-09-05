@@ -6056,6 +6056,10 @@ browser with the wrong selected URL reports operatorVisible.state=wrong_tab.
 Hosted dashboards rebase only a recognized loopback /guacamole/ iframe path
 onto the configured public origin. The resulting iframe URL is internal
 presentation plumbing and is never the durable operator handoff.
+For simultaneous viewing, a connected direct frame retires its exact startup
+reservation. Reconnect requires a current reservation revision and two fresh
+empty provider snapshots before another primary is admitted. Unconfirmed
+reservations expire after 30 seconds; the election deadline stays 15 seconds.
 Repeat opens on the same route reuse a live same-origin target when available
 and report tabAcquisitionDecision plus duplicateTargetCleanup evidence.
 If the display and tab are ready but the Guacamole operator route is not,

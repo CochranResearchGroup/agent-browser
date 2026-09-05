@@ -5344,3 +5344,25 @@ Isolation guards pass and the synthetic browser is retained. Classification:
 with external readiness still failed. Next is bounded diagnosis of the captured
 stream-loss path. Calibration, W6 freeze, terminal live cases and W10 remain
 incomplete; a passing slow client does not satisfy their prerequisites.
+
+### Reproduced startup-reservation blocker and fenced retirement repair
+
+The bounded local replay `reconnect-diagnostic-o/receipt.json` reproduces the
+missing-iframe reconnect after primary closure. Empty provider snapshots cannot
+admit a replacement while the old 30-second startup reservation outlives the
+15-second election. The earlier diagnostic stopped at authentication timeout;
+the minimized replay reused authenticated local contexts. Both receipts remain
+private and neither is external-vantage acceptance or a complete attribution of
+run K's provider timeline.
+
+The source repair retires only the exact rendered direct frame's reservation
+after Guacamole reports managed `CONNECTED`. Revision fencing requires fresh
+empty provider observations after a denied claim and prevents late owner
+confirmation from retiring a replacement. Unconfirmed reservations retain
+their TTL. Election timeouts, campaign deadlines, identity and pixel acceptance
+remain unchanged. Focused owner and client checks, a red/green snapshot-fencing
+mutation, dashboard/docs builds and the optimized candidate build pass.
+Classification is `hardening` pending installed proof. Next is guarded isolated
+publication with controlled synthetic-browser closure and a fresh unfrozen
+scene, followed by installed reconnect verification. The admitted anchor remains
+a separate calibration fixture, not proof of ordinary reconnect reliability.

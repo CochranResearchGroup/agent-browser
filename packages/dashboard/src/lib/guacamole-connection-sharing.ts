@@ -25,7 +25,33 @@ type GuacamoleSharingCredentials = {
 type GuacamolePrimaryClaim = {
   granted?: boolean;
   retryAfterMs?: number;
+  claimId?: string | null;
+  revision?: string | null;
 };
+
+export type GuacamolePrimaryReservation = { claimId: string; revision: string; routeId: string; connectionId: string };
+
+/** Read Guacamole 1.5.5's ManagedClient state, not iframe load or authentication.
+ * The public revision binds this exact rendered frame without exposing its claim.
+ */
+export function isConnectedGuacamolePrimaryFrame(
+  frame: HTMLIFrameElement | null, expectedUrl: string, revision: string,
+): boolean {
+  if (!frame || frame.dataset.guacamolePrimaryRevision !== revision || frame.src !== expectedUrl) return false;
+  try {
+    const win = frame.contentWindow as (Window & {
+      angular?: { element?: (element: Element) => {
+        scope?: () => { client?: { clientState?: { connectionState?: string } } } | undefined;
+      } };
+    }) | null;
+    const doc = frame.contentDocument;
+    if (!doc || win?.location.origin !== new URL(expectedUrl).origin) return false;
+    for (const element of doc.querySelectorAll(".display, .client-tile, guac-client")) {
+      if (win?.angular?.element?.(element).scope?.()?.client?.clientState?.connectionState === "CONNECTED") return true;
+    }
+  } catch { /* Cross-origin or detached frames cannot confirm a primary. */ }
+  return false;
+}
 
 type GuacamoleActiveCandidate = readonly [string, GuacamoleActiveConnection];
 
@@ -35,7 +61,7 @@ export const GUACAMOLE_SHARE_FRAME_NAME_PREFIX = "agent-browser-guacamole-share:
 export type GuacamoleShareAuthOutcome = "ready" | "share_key_rejected";
 
 export type GuacamoleViewerFrameResolution =
-  | { mode: "direct"; url: string }
+  | { mode: "direct"; url: string; primaryReservation?: GuacamolePrimaryReservation }
   | {
     mode: "shared";
     url: string;
@@ -144,6 +170,40 @@ async function waitWithinDeadline({
   return nowImpl() < deadline;
 }
 
+/** Retire the exact startup claim only after the owned direct frame is connected.
+ * Missing, replaced, cross-origin, or unready frames retain the original TTL.
+ * This is not a viewer retry and never extends the election deadline.
+ */
+export async function confirmGuacamolePrimaryWhenConnected({
+  reservation, dashboardHref, isConnected, signal,
+  fetchImpl = globalThis.fetch, nowImpl = Date.now, waitImpl = waitForElection,
+}: {
+  reservation: GuacamolePrimaryReservation;
+  dashboardHref: string;
+  isConnected: () => boolean;
+  signal: AbortSignal;
+  fetchImpl?: typeof globalThis.fetch;
+  nowImpl?: () => number;
+  waitImpl?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+}): Promise<boolean> {
+  const deadline = nowImpl() + 30_000;
+  while (!signal.aborted && nowImpl() < deadline) {
+    if (isConnected()) {
+      if (signal.aborted) return false;
+      const response = await readJson<{ confirmed?: boolean }>(await fetchImpl(
+        new URL("/api/guacamole-primary-claim", dashboardHref), {
+          method: "POST", credentials: "include", cache: "no-store", signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: "connected", ...reservation }),
+        },
+      ), "Guacamole primary connection confirmation");
+      return response.confirmed === true;
+    }
+    if (!await waitWithinDeadline({ deadline, delayMs: 100, nowImpl, signal, waitImpl })) break;
+  }
+  return false;
+}
+
 function matchingActiveConnections(
   activeConnections: Record<string, GuacamoleActiveConnection>,
   connectionId: string,
@@ -232,12 +292,13 @@ export async function resolveGuacamoleViewerFrame({
     }),
     operation,
   );
+  let observedRevision: string | null = null;
   const claimPrimary = async (): Promise<GuacamolePrimaryClaim> => readJson<GuacamolePrimaryClaim>(
     await fetchImpl(new URL("/api/guacamole-primary-claim", dashboardHref), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ routeId, connectionId }),
+      body: JSON.stringify({ routeId, connectionId, observedRevision }),
       cache: "no-store",
       signal,
     }),
@@ -272,7 +333,16 @@ export async function resolveGuacamoleViewerFrame({
         continue;
       }
       const claim = await claimPrimary();
-      if (claim.granted) return { mode: "direct", url: frameUrl };
+      if (claim.granted) return {
+        mode: "direct", url: frameUrl,
+        ...(claim.claimId && claim.revision ? { primaryReservation: {
+          claimId: claim.claimId, revision: claim.revision, routeId, connectionId,
+        } } : {}),
+      };
+      observedRevision = claim.revision ?? null;
+      // A revision is admission metadata, not provider-absence proof. Collect
+      // both empty snapshots again after every denied or stale claim.
+      consecutiveEmptySnapshots = 0;
       const retryAfterMs = Number.isFinite(claim.retryAfterMs) ? claim.retryAfterMs! : 250;
       if (!await waitWithinDeadline({
         deadline: electionDeadline,

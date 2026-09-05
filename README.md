@@ -3106,6 +3106,10 @@ rejects that key before becoming usable, the installed extension reports only
 an opaque attempt ID and bounded outcome to the exact dashboard origin. The
 dashboard removes the failed frame, records the failure, and performs a fresh
 bounded election. It never reloads the rejected key.
+The exact connected direct frame retires its startup reservation. Reconnect
+must observe the resulting reservation revision and two fresh empty provider
+snapshots before admitting another primary. Unconfirmed reservations retain
+their 30-second expiry; the 15-second election deadline is unchanged.
 Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
 selected-browser inspector or embedded remote-control dialog; it drives the
 real dashboard UI with `agent-browser`, selects the remote-headed browser row,

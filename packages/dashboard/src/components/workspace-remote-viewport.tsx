@@ -45,6 +45,8 @@ import { reportDashboardFailure } from "@/lib/failure-observation";
 import {
   GUACAMOLE_SHARE_FRAME_NAME_PREFIX,
   classifyGuacamoleShareAuthMessage,
+  confirmGuacamolePrimaryWhenConnected,
+  isConnectedGuacamolePrimaryFrame,
   resolveGuacamoleViewerFrame,
 } from "@/lib/guacamole-connection-sharing";
 import {
@@ -1353,6 +1355,7 @@ export function WorkspaceRemoteViewport({
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
   const [viewerShareAttempt, setViewerShareAttempt] = useState<GuacamoleShareFrameAttempt | null>(null);
+  const [primaryRevision, setPrimaryRevision] = useState<string | null>(null);
   const [sharingResolutionNonce, setSharingResolutionNonce] = useState(0);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
@@ -1665,6 +1668,7 @@ export function WorkspaceRemoteViewport({
   }, [viewportTarget, viewportTargetToken]);
 
   useEffect(() => {
+    setPrimaryRevision(null);
     if (!streamUrl || !guacamoleSharingStream) {
       viewerShareAttemptRef.current = null;
       setViewerShareAttempt(null);
@@ -1700,6 +1704,25 @@ export function WorkspaceRemoteViewport({
       viewerShareAttemptRef.current = shareAttempt;
       setViewerShareAttempt(shareAttempt);
       setViewerFrameUrl(resolution.url);
+      if (resolution.mode === "direct" && resolution.primaryReservation) {
+        const reservation = resolution.primaryReservation;
+        setPrimaryRevision(reservation.revision);
+        void confirmGuacamolePrimaryWhenConnected({
+          reservation, dashboardHref: window.location.href, signal: controller.signal,
+          isConnected: () => isConnectedGuacamolePrimaryFrame(
+            viewportFrameRef.current, resolution.url, reservation.revision,
+          ),
+        }).catch(() => {
+          if (controller.signal.aborted) return;
+          void reportDashboardFailure({
+            category: "guacamole_load", stage: "connection_sharing",
+            code: "guacamole_primary_confirmation_failed",
+            summary: "The connected primary could not retire its startup reservation.",
+            action: "remote_view_load", browserId: browser?.id, profileId: browser?.profileId,
+            routeId: guacamoleSharingStream.routeId,
+          });
+        });
+      }
     }).catch((cause) => {
       if (controller.signal.aborted) return;
       const message = cause instanceof Error ? cause.message : "Guacamole connection sharing failed.";
@@ -2843,8 +2866,9 @@ export function WorkspaceRemoteViewport({
           />
         ) : stream && canRenderFrame ? (
           <iframe
-            key={`${streamUrl ?? ""}:${streamRefreshNonce}:${viewerShareAttempt?.attemptId ?? "direct"}`}
+            key={`${streamUrl ?? ""}:${streamRefreshNonce}:${viewerShareAttempt?.attemptId ?? primaryRevision ?? "direct"}`}
             ref={viewportFrameRef}
+            data-guacamole-primary-revision={primaryRevision ?? undefined}
             name={viewerShareAttempt ? `${GUACAMOLE_SHARE_FRAME_NAME_PREFIX}${viewerShareAttempt.attemptId}` : undefined}
             title={`${viewStreamLabel(stream)} ${stream.id ?? ""}`.trim()}
             src={frameUrl ?? undefined}

@@ -2,6 +2,35 @@
 
 Date: 2026-09-05
 
+## Reconnect startup-reservation repair checkpoint
+
+The local instrumented replay `reconnect-diagnostic-o/receipt.json` reproduces
+Stream unavailable after the primary closes: provider snapshots are empty,
+but the previous startup reservation keeps denying admission beyond the
+15-second election deadline. This establishes a concrete local cause, not an
+exact reconstruction of every run K provider user. The preceding diagnostic
+`reconnect-diagnostic-n/receipt.json` stopped at a second authentication timeout;
+the minimized replay reuses a legitimately authenticated session across its
+local viewer contexts. Neither is external campaign acceptance.
+
+The repair confirms only the exact rendered direct frame's Guacamole managed
+`CONNECTED` state, retires its startup reservation, and revision-fences later
+admission. A denied revision requires two fresh empty provider snapshots.
+Unknown, expired, wrong-route, and superseded owner confirmations cannot retire
+another reservation; unconfirmed reservations retain their original TTL. The
+election and campaign deadlines are unchanged. No provider extension change or
+extra anchor is needed for this repair.
+
+Focused Rust reservation tests and dashboard sharing, viewport, view-stream,
+navigator and handoff checks pass. Removing the post-denial snapshot reset made
+the new regression fail; restoring it passes. Dashboard and docs builds and the
+optimized candidate build pass. Publication and same-scene installed reconnect
+proof remain the next gate. Before publication, the exact single retained
+synthetic browser must be deliberately closed with its profile and evidence
+preserved, then a new unfrozen scene established. This is not continuity through
+the installer's control-group restart. Production and default-development guards
+pass. Plan 158 calibration, freeze, live cases and final analysis remain open.
+
 ## External K terminal result and current next gate
 
 Manual readiness run

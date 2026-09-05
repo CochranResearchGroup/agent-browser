@@ -72,6 +72,13 @@ and bounded outcome to the exact dashboard origin. The dashboard removes that
 frame, records the failure, and performs a fresh bounded election. It never
 reloads a rejected key. Operators continue using the same durable handoff URL.
 
+The connected direct frame retires only its own startup reservation. Before a
+replacement primary is admitted, reconnect observes the current reservation
+revision and two fresh empty provider snapshots. This prevents both a stale
+startup reservation from blocking reconnect and a late confirmation from
+retiring a replacement viewer's reservation. Unconfirmed reservations retain
+their 30-second expiry; the election deadline remains 15 seconds.
+
 ## Open the browser and copy the durable link
 
 Follow these steps to create one operator-visible browser handoff:

@@ -2897,6 +2897,13 @@ ID plus `ready` or `share_key_rejected`. The dashboard must discard the iframe,
 record the failure, and run a fresh bounded election. It must never reload the
 rejected key.
 
+A direct frame retires only its own startup reservation after Guacamole reports
+`CONNECTED`. Reconnect admission requires the current reservation revision and
+two fresh empty provider snapshots. A stale confirmation cannot retire a new
+primary. Unconfirmed reservations keep their 30-second expiry; the election
+deadline remains 15 seconds. Do not treat frame load or authentication as
+connection proof, extend campaign deadlines, or publish reservation credentials.
+
 ## Ready-to-Use Templates
 
 | Template                                                                 | Description                         |

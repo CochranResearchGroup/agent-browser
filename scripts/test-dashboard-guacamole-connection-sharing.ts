@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   classifyGuacamoleShareAuthMessage,
+  confirmGuacamolePrimaryWhenConnected,
+  isConnectedGuacamolePrimaryFrame,
   resolveGuacamoleViewerFrame,
 } from "../packages/dashboard/src/lib/guacamole-connection-sharing.ts";
 
@@ -113,6 +115,84 @@ const response = (value: unknown) => new Response(JSON.stringify(value), {
   status: 200,
   headers: { "content-type": "application/json" },
 });
+
+const primaryFrame = (state: string) => ({
+  src: direct, dataset: { guacamolePrimaryRevision: "rendered-revision" },
+  contentDocument: { querySelectorAll: () => [{}] },
+  contentWindow: {
+    location: { origin: "https://dashboard.example.test" },
+    angular: { element: () => ({ scope: () => ({ client: { clientState: { connectionState: state } } }) }) },
+  },
+}) as unknown as HTMLIFrameElement;
+assert.equal(isConnectedGuacamolePrimaryFrame(primaryFrame("CONNECTED"), direct, "rendered-revision"), true);
+for (const state of ["IDLE", "CONNECTING", "WAITING", "DISCONNECTED", "CLIENT_ERROR", "TUNNEL_ERROR"]) {
+  assert.equal(isConnectedGuacamolePrimaryFrame(primaryFrame(state), direct, "rendered-revision"), false);
+}
+assert.equal(isConnectedGuacamolePrimaryFrame(primaryFrame("CONNECTED"), direct, "replaced-revision"), false);
+assert.equal(isConnectedGuacamolePrimaryFrame(primaryFrame("CONNECTED"), `${direct}-other`, "rendered-revision"), false);
+assert.equal(isConnectedGuacamolePrimaryFrame(null, direct, "rendered-revision"), false);
+const inaccessibleFrame = primaryFrame("CONNECTED");
+Object.defineProperty(inaccessibleFrame, "contentWindow", { get() { throw new Error("cross-origin"); } });
+assert.equal(isConnectedGuacamolePrimaryFrame(inaccessibleFrame, direct, "rendered-revision"), false);
+
+// Reproduce a confirmed primary closing within the original 30-second startup
+// TTL. A stale revision must force two new empty observations before admission.
+let fencedNow = 0;
+const fencedSteps: string[] = [];
+let fencedClaims = 0;
+const fencedResolution = await resolveGuacamoleViewerFrame({
+  dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  frameUrl: direct, stream, nowImpl: () => fencedNow,
+  waitImpl: async (delay) => { fencedNow += delay; },
+  fetchImpl: (async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/tokens")) return response({ authToken: "private-auth" });
+    if (url.endsWith("/activeConnections")) { fencedSteps.push("empty"); return response({}); }
+    assert.ok(url.endsWith("/api/guacamole-primary-claim"));
+    fencedSteps.push("claim");
+    fencedClaims += 1;
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.observedRevision, fencedClaims === 1 ? null : "connected-revision");
+    return response(fencedClaims === 1
+      ? { granted: false, retryAfterMs: 0, revision: "connected-revision" }
+      : { granted: true, retryAfterMs: 30_000, claimId: "private-claim", revision: "next-revision" });
+  }) as typeof globalThis.fetch,
+});
+assert.deepEqual(fencedSteps, ["empty", "empty", "claim", "empty", "empty", "claim"]);
+assert.equal(fencedResolution.mode, "direct");
+assert.ok(fencedResolution.mode === "direct" && fencedResolution.primaryReservation);
+const reservation = fencedResolution.primaryReservation;
+assert.deepEqual(reservation, { claimId: "private-claim", revision: "next-revision", routeId: "route-1", connectionId: "17" });
+assert.ok(fencedNow < 15_000, "the original election budget is not extended");
+let confirmationNow = 0;
+let confirmationRequests = 0;
+assert.equal(await confirmGuacamolePrimaryWhenConnected({
+  reservation, dashboardHref: "https://dashboard.example.test/remote-view/opaque",
+  signal: new AbortController().signal, nowImpl: () => confirmationNow,
+  waitImpl: async (delay) => { confirmationNow += delay; },
+  isConnected: () => confirmationNow >= 300,
+  fetchImpl: (async (url, init) => {
+    confirmationRequests += 1;
+    assert.equal(String(url), "https://dashboard.example.test/api/guacamole-primary-claim");
+    assert.equal(init?.credentials, "include");
+    assert.deepEqual(JSON.parse(String(init?.body)), { operation: "connected", ...reservation });
+    return response({ confirmed: true });
+  }) as typeof globalThis.fetch,
+}), true);
+assert.equal(confirmationRequests, 1);
+assert.equal(confirmationNow, 300);
+for (const aborted of [false, true]) {
+  let now = 0;
+  const controller = new AbortController();
+  if (aborted) controller.abort();
+  assert.equal(await confirmGuacamolePrimaryWhenConnected({
+    reservation, dashboardHref: "https://dashboard.example.test/", signal: controller.signal,
+    nowImpl: () => now, waitImpl: async (delay) => { now += delay; },
+    isConnected: () => aborted,
+    fetchImpl: (async () => { throw new Error("an unready or cancelled frame cannot confirm"); }) as typeof globalThis.fetch,
+  }), false);
+  assert.equal(now, aborted ? 0 : 30_000);
+}
 function assertSharedResolution(
   actual: Awaited<ReturnType<typeof resolveGuacamoleViewerFrame>>,
   expectedUrl: string,

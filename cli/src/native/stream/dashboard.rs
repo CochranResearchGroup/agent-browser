@@ -141,17 +141,86 @@ struct GuacamolePrimaryClaimKey {
 
 #[derive(Default)]
 struct GuacamolePrimaryClaimRegistry {
-    claims: HashMap<GuacamolePrimaryClaimKey, Instant>,
+    claims: HashMap<GuacamolePrimaryClaimKey, GuacamolePrimaryReservation>,
+}
+
+struct GuacamolePrimaryReservation {
+    expires_at: Instant,
+    claim_id: String,
+    revision: String,
+    connected: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GuacamolePrimaryClaimResult {
+    granted: bool,
+    retry_after_ms: u32,
+    claim_id: Option<String>,
+    revision: Option<String>,
 }
 
 impl GuacamolePrimaryClaimRegistry {
-    fn claim(&mut self, key: GuacamolePrimaryClaimKey, now: Instant) -> (bool, Duration) {
-        self.claims.retain(|_, expires_at| *expires_at > now);
-        if let Some(expires_at) = self.claims.get(&key) {
-            return (false, expires_at.saturating_duration_since(now));
+    fn claim(
+        &mut self,
+        key: GuacamolePrimaryClaimKey,
+        observed_revision: Option<&str>,
+        now: Instant,
+    ) -> GuacamolePrimaryClaimResult {
+        self.claims.retain(|_, claim| claim.expires_at > now);
+        let current = self.claims.get(&key);
+        // Confirming a connected primary retires only its startup reservation.
+        // Fence empty-provider observations made before that confirmation: the
+        // caller must observe this revision, then collect fresh empty snapshots.
+        if observed_revision != current.map(|claim| claim.revision.as_str())
+            || current.is_some_and(|claim| !claim.connected)
+        {
+            return GuacamolePrimaryClaimResult {
+                granted: false,
+                retry_after_ms: current
+                    .filter(|claim| !claim.connected)
+                    .map(|claim| claim.expires_at.saturating_duration_since(now).as_millis() as u32)
+                    .unwrap_or(0),
+                claim_id: None,
+                revision: current.map(|claim| claim.revision.clone()),
+            };
         }
-        self.claims.insert(key, now + GUACAMOLE_PRIMARY_CLAIM_TTL);
-        (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+        let claim_id = uuid::Uuid::new_v4().to_string();
+        let revision = uuid::Uuid::new_v4().to_string();
+        self.claims.insert(
+            key,
+            GuacamolePrimaryReservation {
+                expires_at: now + GUACAMOLE_PRIMARY_CLAIM_TTL,
+                claim_id: claim_id.clone(),
+                revision: revision.clone(),
+                connected: false,
+            },
+        );
+        GuacamolePrimaryClaimResult {
+            granted: true,
+            retry_after_ms: GUACAMOLE_PRIMARY_CLAIM_TTL.as_millis() as u32,
+            claim_id: Some(claim_id),
+            revision: Some(revision),
+        }
+    }
+
+    fn confirm_connected(
+        &mut self,
+        key: &GuacamolePrimaryClaimKey,
+        claim_id: &str,
+        now: Instant,
+    ) -> bool {
+        let Some(claim) = self.claims.get_mut(key) else {
+            return false;
+        };
+        if claim.expires_at <= now || claim.claim_id != claim_id {
+            return false;
+        }
+        if !claim.connected {
+            claim.connected = true;
+            claim.revision = uuid::Uuid::new_v4().to_string();
+        }
+        true
     }
 }
 
@@ -1816,19 +1885,40 @@ async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
         );
     }
 
-    let (granted, remaining) = guacamole_primary_claim_registry().lock().await.claim(
-        GuacamolePrimaryClaimKey {
-            route_id: route_id.to_string(),
-            connection_id: connection_id.to_string(),
-        },
+    let key = GuacamolePrimaryClaimKey {
+        route_id: route_id.to_string(),
+        connection_id: connection_id.to_string(),
+    };
+    if value["operation"] == "connected" {
+        let claim_id = value["claimId"].as_str().unwrap_or("");
+        let confirmed = guacamole_primary_claim_registry()
+            .lock()
+            .await
+            .confirm_connected(&key, claim_id, Instant::now());
+        return ("200 OK", json!({ "success": true, "confirmed": confirmed }));
+    }
+    if value
+        .get("operation")
+        .is_some_and(|operation| operation != "claim")
+    {
+        return (
+            "400 Bad Request",
+            json!({ "success": false, "code": "invalid_guacamole_primary_claim" }),
+        );
+    }
+    let result = guacamole_primary_claim_registry().lock().await.claim(
+        key,
+        value["observedRevision"].as_str(),
         Instant::now(),
     );
     (
         "200 OK",
         json!({
             "success": true,
-            "granted": granted,
-            "retryAfterMs": remaining.as_millis().min(u128::from(u32::MAX)) as u32,
+            "granted": result.granted,
+            "retryAfterMs": result.retry_after_ms,
+            "claimId": result.claim_id,
+            "revision": result.revision,
         }),
     )
 }
@@ -3713,17 +3803,70 @@ mod tests {
         };
         let start = Instant::now();
 
-        assert_eq!(
-            registry.claim(key.clone(), start),
-            (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+        let first = registry.claim(key.clone(), None, start);
+        assert!(first.granted);
+        assert_eq!(first.retry_after_ms, 30_000);
+        let denied = registry.claim(key.clone(), None, start + Duration::from_secs(1));
+        assert!(!denied.granted);
+        assert_eq!(denied.retry_after_ms, 29_000);
+        assert!(denied.claim_id.is_none());
+        assert!(
+            registry
+                .claim(key, None, start + GUACAMOLE_PRIMARY_CLAIM_TTL)
+                .granted
         );
-        let (granted, remaining) = registry.claim(key.clone(), start + Duration::from_secs(1));
-        assert!(!granted);
-        assert_eq!(remaining, Duration::from_secs(29));
-        assert_eq!(
-            registry.claim(key, start + GUACAMOLE_PRIMARY_CLAIM_TTL),
-            (true, GUACAMOLE_PRIMARY_CLAIM_TTL)
+    }
+
+    #[test]
+    fn guacamole_primary_confirmation_retires_only_exact_startup_and_fences_stale_observations() {
+        let mut registry = GuacamolePrimaryClaimRegistry::default();
+        let key = GuacamolePrimaryClaimKey {
+            route_id: "route-1".into(),
+            connection_id: "17".into(),
+        };
+        let start = Instant::now();
+        let first = registry.claim(key.clone(), None, start);
+        let claim_id = first.claim_id.unwrap();
+        let connected_at = start + Duration::from_secs(3);
+        assert!(!registry.confirm_connected(&key, "wrong-owner", connected_at));
+        let other_key = GuacamolePrimaryClaimKey {
+            route_id: "route-2".into(),
+            connection_id: "17".into(),
+        };
+        assert!(!registry.confirm_connected(&other_key, &claim_id, connected_at));
+        assert!(registry.confirm_connected(&key, &claim_id, connected_at));
+        let stale = registry.claim(key.clone(), first.revision.as_deref(), connected_at);
+        assert!(
+            !stale.granted,
+            "pre-connection empty snapshots cannot admit a second primary"
         );
+        assert_eq!(stale.retry_after_ms, 0);
+        assert!(registry.confirm_connected(&key, &claim_id, connected_at));
+        let reconnect = registry.claim(
+            key.clone(),
+            stale.revision.as_deref(),
+            start + Duration::from_secs(5),
+        );
+        assert!(
+            reconnect.granted,
+            "fresh empty snapshots after confirmed primary closes need not wait 30 seconds"
+        );
+        assert!(!registry.confirm_connected(&key, &claim_id, start + Duration::from_secs(6)));
+        let racing = registry.claim(
+            key.clone(),
+            stale.revision.as_deref(),
+            start + Duration::from_secs(6),
+        );
+        assert!(
+            !racing.granted,
+            "only one reconnect owns the startup reservation"
+        );
+        assert!(racing.claim_id.is_none());
+        assert!(!registry.confirm_connected(
+            &key,
+            reconnect.claim_id.as_deref().unwrap(),
+            start + Duration::from_secs(35)
+        ));
     }
 
     #[tokio::test]
