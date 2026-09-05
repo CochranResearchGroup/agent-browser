@@ -119,6 +119,7 @@ function makeReceipts(prepared) {
     success: true,
     repairAttempted: false,
     retryCount: 0,
+    runnerRetryCount: 0,
     startedAt: prepared.externalDispatchDescriptor.calibrationStartAt,
     completedAt: prepared.externalDispatchDescriptor.calibrationEndAt,
     sourceCommit: prepared.sourceCommit,
@@ -237,6 +238,9 @@ await runTest('finalizes after late receipt availability without replay or time 
   assert.equal(result.distributedEvidence.dashboardActionCount, 50);
   assert.equal(result.distributedEvidence.handoffReconnectCount, 10);
   assert.equal(result.distributedEvidence.externalReplayEffectCount, 0);
+  const rawArtifact = result.artifacts.find((artifact) => artifact.kind === 'calibration_raw');
+  assert.ok(JSON.parse(rawArtifact.content).externalViewerReceipts
+    .every((receipt) => receipt.runnerRetryCount === 0));
   assert.equal(result.distributedEvidence.finalizedAt, new Date(END_MS + 6 * 60 * 60_000).toISOString());
   assert.ok(result.artifacts.every((artifact) => artifact.declaredSha256 === sha256(artifact.content)));
   assert.doesNotMatch(JSON.stringify(result), /\/remote-view\//u);
@@ -425,6 +429,10 @@ await runTest('rejects external evidence defects only during effect-free finaliz
     ['external_action_count_mismatch', true, (receipts) => { receipts[0].actions.pop(); }],
     ['external_action_contract_mismatch', true, (receipts) => { receipts[0].actions[0].retryAttempted = true; }],
     ['external_action_contract_mismatch', true, (receipts) => { receipts[0].actions[0].repairAttempted = true; }],
+    ['external_receipt_binding_mismatch', true, (receipts) => { delete receipts[0].runnerRetryCount; }],
+    ['external_receipt_binding_mismatch', true, (receipts) => { receipts[0].runnerRetryCount = 1; }],
+    ['external_receipt_binding_mismatch', true, (receipts) => { delete receipts[0].retryCount; }],
+    ['external_receipt_binding_mismatch', true, (receipts) => { delete receipts[0].repairAttempted; }],
   ];
   for (const [code, rehash, mutate] of mutations) {
     const context = await preparedLocalRun();

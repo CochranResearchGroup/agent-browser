@@ -385,7 +385,8 @@ function validateReceipts(prepared, receipts) {
         receipt.startedAt !== descriptor.calibrationStartAt || receipt.completedAt !== descriptor.calibrationEndAt ||
         receipt.runnerIdentity?.provider !== 'github_actions' || receipt.outsideServiceHost !== true ||
         receipt.outsideServiceNetworkNamespace !== true || receipt.publicEgressObserved !== true ||
-        receipt.success !== true || receipt.retryCount !== 0 || receipt.repairAttempted !== false) {
+        receipt.success !== true || receipt.retryCount !== 0 || receipt.runnerRetryCount !== 0 ||
+        receipt.repairAttempted !== false) {
       fail('external_receipt_binding_mismatch', 'External receipt does not match the prepared schedule and identity');
     }
     runnerIds.add(receipt.runnerIdentity.runnerId);
@@ -453,6 +454,7 @@ function safeReceiptProjection(receipt) {
     calibration: { dispatchDescriptor: clone(receipt.calibration.dispatchDescriptor) },
     actions: clone(receipt.actions),
     retryCount: receipt.retryCount,
+    runnerRetryCount: receipt.runnerRetryCount,
     repairAttempted: receipt.repairAttempted,
   };
 }

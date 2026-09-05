@@ -178,6 +178,7 @@ function makeReceipts(prepared) {
     receiptId: `external-receipt-${index + 1}`,
     clientId: client.clientId, viewerId: client.viewerId, paceProfile: client.paceProfile,
     mode: 'calibration', success: true, repairAttempted: false, retryCount: 0,
+    runnerRetryCount: 0,
     startedAt: prepared.externalDispatchDescriptor.calibrationStartAt,
     completedAt: prepared.externalDispatchDescriptor.calibrationEndAt,
     sourceCommit: prepared.sourceCommit,
@@ -211,7 +212,7 @@ function makeAggregate(receipts, prepared) {
   const body = {
     schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
     planId: 'P158', runId: prepared.runId, success: true,
-    repairAttempted: false, retryCount: 0, mode: 'calibration',
+    repairAttempted: false, retryCount: 0, runnerRetryCount: 0, mode: 'calibration',
     clientIds: receipts.map((receipt) => receipt.clientId).sort(),
     runnerIdentitySha256s: receipts.map((receipt) => canonicalHash(receipt.runnerIdentity)).sort(),
     handoffUrlSha256: HANDOFF_SHA256,
@@ -376,6 +377,45 @@ await runTest('fails closed on roots, runtime identity, overwrite, and aggregate
     );
     assert.equal(network.calls.length, beforeFinalize);
   });
+});
+
+await runTest('rejects missing or nonzero aggregate retry accounting', async () => {
+  const mutations = [
+    (aggregate) => { delete aggregate.runnerRetryCount; },
+    (aggregate) => { aggregate.runnerRetryCount = 1; },
+    (aggregate) => { delete aggregate.retryCount; },
+    (aggregate) => { aggregate.retryCount = 1; },
+    (aggregate) => { delete aggregate.repairAttempted; },
+    (aggregate) => { aggregate.repairAttempted = true; },
+  ];
+  for (const mutate of mutations) {
+    await withRunRoot(async (runRoot) => {
+      const config = makeConfig();
+      const time = clockHarness();
+      const network = fetchHarness(config.candidate);
+      const envelope = await prepareLiveDistributedCalibration({
+        config, runRoot, fetch: network.fetch, clock: time.clock,
+      });
+      await startLiveDistributedCalibration({
+        runRoot, fetch: network.fetch, clock: time.clock, scheduler: time.scheduler,
+      });
+      time.advanceTo(END_MS + 1);
+      const receipts = makeReceipts(envelope.prepared);
+      const aggregate = makeAggregate(receipts, envelope.prepared);
+      mutate(aggregate);
+      aggregate.aggregateSha256 = canonicalHash(Object.fromEntries(Object.entries(aggregate)
+        .filter(([key]) => key !== 'aggregateSha256')));
+      const beforeFinalize = network.calls.length;
+      await assert.rejects(
+        () => finalizeLiveDistributedCalibration({
+          runRoot, externalAggregate: aggregate, externalReceipts: receipts, clock: time.clock,
+        }),
+        (error) => error instanceof LiveCalibrationError
+          && error.code === 'external_aggregate_integrity_mismatch',
+      );
+      assert.equal(network.calls.length, beforeFinalize);
+    });
+  }
 });
 
 await runTest('rejects a reordered action, client, or environment before fetch', () => withRunRoot(async (runRoot) => {

@@ -480,6 +480,7 @@ const sourceReceipts = ['external-runner-human', 'external-runner-slow'].map((cl
   success: true,
   repairAttempted: false,
   retryCount: 0,
+  runnerRetryCount: 0,
   runner: { runnerIdentitySha256: digest(`runner-${clientIndex}`) },
   handoff: { urlSha256: externalSeals.handoffUrlSha256 },
   expectedIdentity: externalSeals.expectedIdentity,

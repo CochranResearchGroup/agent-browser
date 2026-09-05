@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `c01_starvation_repair_active`
+Execution state: `resumed_candidate_validation_and_live_preparation`
 
 Lane: P157
 
@@ -4523,3 +4523,218 @@ removed. Readiness and calibration now exercise the same simultaneous viewer
 setup boundary; readiness remains shorter only because it omits the 20-minute
 scheduled action loop. This prevents the admission gate from masking the exact
 race that blocked C01.
+
+### Sibling-Origin Share Rejection Becomes Recoverable
+
+State transition: `c01_simultaneous_viewer_repair_ready_for_external_acceptance
+-> c01_simultaneous_share_signal_candidate_ready_for_publication`.
+
+The first simultaneous-start acceptance at workflow `33945807852` failed
+before Guacamole because installation had closed the sealed handoff target and
+the operator dispatch preceded the supported reopen step. Both clients
+reported `handoff_target_closed_operator_action_required`; no browser or
+campaign action ran. The same durable handoff was then reopened through
+`allowReopenClosed=true`, reached presentation generation 153, and had only its
+candidate-bound environment identity refreshed.
+
+Workflow `33945994974` then reached the actual simultaneous-view boundary on
+exact commit `31afdbb0`. Both clients rendered their initial and reconnect
+artifacts, but the human-paced client lost its identity marker and the delayed
+client's oracle retained a sibling-origin `/guacamole/api/tokens` HTTP 403.
+The delayed client later recovered through a dashboard-origin direct token,
+while the human client remained stranded. Neither client retried or repaired
+the campaign. The aggregate failed closed.
+
+The failure proves that post-mint row stability alone cannot close the final
+interval between credential creation and sibling-frame redemption. The
+ten-second dashboard primary claim is only an election mutex; it does not own
+or preserve a Guacamole tunnel. When the viewer that supplied the primary row
+closes during reconnect, Guacamole invalidates its restricted sharing keys.
+The sibling frame can observe the token rejection, but the dashboard cannot
+inspect that frame's DOM or network response across origins.
+
+The bounded product repair adds an installed Guacamole extension signal. A
+shared frame receives a fresh opaque attempt ID in its browsing-context name.
+For only its own token POST, the extension sends the exact parent origin one
+allowlisted message containing the attempt ID and `ready` or
+`share_key_rejected`. It sends no key, token, URL, response body, credential,
+or provider detail. The parent accepts the signal only from the exact expected
+origin, iframe window, and current attempt. A rejection immediately removes
+the iframe, records `guacamole_share_key_rejected`, and consumes the existing
+three-attempt fresh-election budget. The dead key is never reloaded.
+
+Election remains fail-closed while any matching provider row lingers,
+including a nonconnectable or explicitly shared row. Direct ownership still
+requires two completely empty snapshots. The server-side claim lease now lasts
+30 seconds, twice the resolver's complete 15-second election window, so a
+delayed provider row cannot let a second resolver become another direct
+primary during the same admission interval.
+
+Provider-free coverage now executes the extension under both XHR and fetch,
+proves the privacy allowlist and exact origin derivation, rejects untrusted or
+irrelevant messages, and exercises two simultaneous reconnectors across a
+closing primary. The focused resolver suite, workstation Guacamole asset
+suite, dashboard production build, and whitespace gate pass.
+
+The recovery is an operational product escape hatch, not permission for the
+campaign to erase a failed attempt. Plan 158 external evidence treats any
+fresh election after an observed key rejection as a retry, preserves the first
+failure, and refuses a clean readiness aggregate for that epoch. A clean C01
+admission therefore still requires a stable retained authenticated anchor so
+both external clients can disconnect and reopen without invalidating their
+credential donor.
+
+Revised next action: publish and install this exact candidate, ensure the
+development Guacamole service loads the revised extension, run provider doctor
+and disposable launch smokes, reopen the same sealed handoff if needed, retain
+one authenticated anchor through the complete two-client epoch, and repeat
+simultaneous external readiness. C01 remains gated on clean human, delayed,
+anchor-final, and aggregate results with no retry and no additional physical
+browser launch.
+
+### Retained Authenticated Anchor Coordination Contract
+
+The retained anchor is campaign infrastructure, not a product runtime owner or
+another direct Guacamole primary. Start it with
+`pnpm p158:retained-authenticated-anchor` using the same secret-backed durable
+handoff, dashboard authentication, expected identity, marker region, run ID,
+and a unique anchor ID used by the external dispatch. The process opens the
+external durable handoff once, emits `1-ready-receipt.json`, and remains alive
+until an explicit signal. Raw handoff URLs, authentication inputs, and captured
+pixels are never campaign receipt fields.
+
+The live caller imports `coordinateRetainedAnchorExternalCampaign` from
+`scripts/lib/p158-retained-anchor-coordinator.js`. Its injected callbacks start
+or supply the anchor child, wait for receipt files, dispatch the two external
+clients, persist the returned aggregate, and optionally wait for child exit.
+The coordinator has no GitHub CLI or provider coupling. It dispatches only
+after exactly one self-hash-valid passed ready receipt matches the run, anchor,
+and durable-handoff digest. After the external dispatch returns or fails, it
+sends exactly one `SIGTERM`, waits for exactly one matching passed final receipt,
+and writes a digest-only campaign aggregate.
+
+Acceptance requires all five bound evidence units to pass: human client, slow
+client, external aggregate, anchor-ready receipt, and anchor-final receipt. It
+also requires distinct external clients, the same durable handoff digest, zero
+product retry, zero runner retry, no repair, no duplicate physical browser
+launch, and clean ingress and URL-leak checks. A missing, duplicate, malformed,
+failed, cross-run, cross-anchor, or digest-mismatched receipt fails closed. An
+invalid ready receipt prevents external dispatch but still closes the anchor;
+an external dispatch failure still closes and terminally observes the anchor.
+Neither path retries or repairs the failed campaign epoch.
+
+The first complete provider-free umbrella run correctly rejected one older W8
+fixture because it represented a clean external receipt without the newly
+mandatory explicit `runnerRetryCount: 0`. The contract was not weakened. Every
+provider-free external receipt and aggregate fixture now carries explicit
+runner-retry evidence, and the successful runtime receipt and aggregate do the
+same. The affected W6, distributed calibration, W8, external runner, anchor,
+coordinator, and evidence-collector suites pass after that migration. A fresh
+`pnpm test:p158-harness` then passed end to end, including all 54 cases, 894
+scheduled attempts, the retained-anchor lifecycle, exact source sealing, W7,
+W8, W9, teardown contracts, and W10 analysis.
+
+A subsequent closed-world review found that three downstream admission paths
+could still accept compliant-looking fixtures without proving current values.
+Distributed C01 finalization now requires and safely projects explicit
+`repairAttempted: false`, `retryCount: 0`, and `runnerRetryCount: 0` on both
+external receipts, and requires the same values on the external aggregate. The
+W6 external-evidence projector enforces those fields on its aggregate and both
+clients. Missing-field and nonzero-field mutations with recomputed hashes prove
+that neither boundary can infer a clean default. The retained anchor also
+rechecks the live dashboard authentication status and exact secure HttpOnly
+session cookie during every observation, including its terminal sample; a
+session that expires while the anchor is held now produces a failed final
+receipt without another login, navigation, retry, repair, or reconnect. A new
+complete `pnpm test:p158-harness` passes after all three corrections.
+
+The simultaneous-view product repair is committed and pushed as `ca85f967`.
+That commit identifies the product checkpoint only. The final campaign
+candidate source head must be the later commit that also contains the retained
+anchor and live-adapter infrastructure, and the dispatched workflow must bind
+that exact 40-character head through `expected_commit`.
+
+Run the complete retained-anchor external command with
+`pnpm p158:retained-anchor-live`. Before invocation, supply the existing
+secret-backed dashboard and handoff environment, `P158_RUN_ID`, a unique
+`P158_ANCHOR_ID`, the exact current `P158_CANDIDATE_COMMIT`, a canonical UTC
+`P158_CALIBRATION_START_AT`, and `P158_PROBE_MODE` set to `readiness` or
+`calibration`. The current checked-out branch must point at that exact head.
+Optional bounded settings control artifact retention and observation timeouts;
+they do not authorize retry or repair.
+
+The command starts the local authenticated anchor, waits for its unique passed
+ready receipt, and dispatches `p158-external-vantage.yml` at the current branch.
+The workflow run name binds the campaign run ID and expected commit. The caller
+accepts exactly one post-dispatch run matching that name, head, branch, event,
+and a bounded creation-time window. It observes the run until terminal, then
+downloads the human, slow, and aggregate artifacts exactly once, including
+failure artifacts. It always requests graceful anchor shutdown after workflow
+terminality, requires the final anchor receipt and child exit, and writes
+`p158-retained-anchor-external-aggregate.json`. A non-successful workflow,
+ambiguous run identity, timeout, interruption, missing or duplicate artifact,
+failed receipt, retry, repair, or forced anchor shutdown makes the command exit
+nonzero. Forced process closure is a bounded cleanup fallback and never changes
+the failed campaign epoch into a retry.
+
+### September 5 Resumption And Anchor Disposition
+
+The user renewed the objective to complete this Plan. Source and remote HEAD
+both resolve to `ca85f96705a55d6964c57f14b2278bdef84fb182`; the pre-existing
+campaign changes and note 0151 were preserved. The installed development
+generation at resumption was `0.28.0-4ccc6f42a631`. This checkpoint is
+`blocker_reduction`, not live acceptance progress.
+
+The anchor is admitted as an explicitly declared stable-primary calibration
+fixture. An anchored result proves only that fixture configuration. It cannot
+prove ordinary anchor-free reconnect reliability, replace the previously
+failed anchor-free attempts, or add a persistent viewer to the product's user
+requirements. W10 must report this limitation alongside those failures.
+
+Primary-owned continuation: finish the existing adapter verification, publish
+and identify the development candidate, calibrate and freeze W6, execute the
+available concrete cases with exact blockers for unsupported cases, and seal
+the complete terminal schedule before W10. Dashboard measurements and durable
+handoff transitions remain substantive acceptance requirements. Missing
+drivers cannot be converted into fabricated execution evidence.
+
+The bounded `/root/anchor_adapter` lane reproduced loss of workflow identity
+on timeout and repaired that path, independent failure-artifact collection,
+reused output admission, child startup and exit observation, and actual source
+binding. The primary inspected the changed paths and accepted the focused
+test evidence. `P158_LIVE_OUTPUT_DIR` is now mandatory, absolute, outside the
+repository after symlink resolution, and empty. Campaign scripts, workflow,
+package metadata, and lockfile must match the committed candidate before
+dispatch. Failed aggregates retain the identified workflow and safe per-artifact
+download/read diagnostics.
+
+The read-only `/root/live_case_ledger` lane reconciled current integration:
+W7 has complete drivers for A01, A02, A03, A05, A08, and A13; W8 has conditional
+complete drivers for H01, H03, D01, D03, and D04. A11 predispatch and D05
+tab/target implementations remain partial coverage. The assembly preparer
+requires fresh ownership inputs and does not yet have a retained live assembly
+descriptor. Concrete preparation of those inputs can proceed during the
+external calibration scheduling interval.
+
+The complete `pnpm test:p158-harness` passed on the resumed tree, including
+the repaired adapter. The optimized candidate built successfully with eight
+Cargo jobs and installed as development generation `0.28.0-7565e73806cf`.
+Provider-required doctor and all three disposable launch smokes passed;
+installation reported production unchanged. Selected release-asset fixtures
+and diff checks passed.
+
+Provider staging exposed a loaded-asset discrepancy: the mounted extension
+was current but Guacamole's startup copy was old. Repeat provider apply only
+reconciled authority. Restart then exposed a stale Docker Desktop bind mount;
+an exact recreation of the development Guacamole service from its reviewed
+compose and protected environment files restored it. The loaded extension
+now hashes to `a67200cff9a90110ebfcd7c24fc5a5064767a6929d96d0b111d8e2268fc3db3d`,
+matching the staged source. The same durable synthetic handoff reopened and
+resolved ready; its candidate-bound expected identity was refreshed in the
+protected workflow environment. These preparation effects precede freeze.
+
+The W7 input investigation also found a topology prerequisite conflict: A13
+requires a retained legacy per-session daemon, while the current CLI rejects
+new legacy daemon launches. Its source bundle alone is not proof of current
+executability. If no positively owned legacy daemon exists, retain that exact
+blocker rather than substituting a shared runtime-host session.

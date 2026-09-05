@@ -12,6 +12,7 @@ import { canonicalCandidateDigest } from './lib/p158-campaign-preparation.js';
 import { compileP158ExecutionSchedule } from './lib/p158-execution-schedule.js';
 import { auditExternalHandoffSession } from './lib/p158-external-handoff-oracle.js';
 import {
+  P158W6EvidenceAssemblerError,
   assembleP158W6LiveBindings,
   createP158E2AuthenticatedFetch,
   projectP158W6ExternalEvidence,
@@ -63,21 +64,27 @@ const reports = [0, 1].map((index) => auditExternalHandoffSession({
 const receipt = (clientId, ordinal) => ({
   schemaVersion: 'agent-browser.p158-external-calibration-receipt.v1',
   runId: candidate.runId, clientId, success: true, outsideServiceHost: true,
+  repairAttempted: false, retryCount: 0, runnerRetryCount: 0,
   outsideServiceNetworkNamespace: true, publicEgressObserved: true,
   runnerIdentity: { provider: 'github_actions', runnerId: `runner-${ordinal}` },
   ingressChecks: clean.ingressChecks.map((entry) => ({ ...entry, state: 'passed' })),
 });
 const externalReceipts = [receipt('external-human', 1), receipt('external-slow', 2)];
-const projected = projectP158W6ExternalEvidence({
-  externalAggregate: {
-    schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
-    runId: candidate.runId, success: true, clientIds: externalReceipts.map((entry) => entry.clientId).sort(),
-  },
+const externalAggregate = {
+  schemaVersion: 'agent-browser.p158-external-vantage-aggregate.v1',
+  runId: candidate.runId, success: true, clientIds: externalReceipts.map((entry) => entry.clientId).sort(),
+  repairAttempted: false, retryCount: 0, runnerRetryCount: 0,
+};
+const externalProjectionInput = {
+  externalAggregate,
   externalReceipts,
   oracleReports: reports,
   serviceHostId: 'p158-development-service-host',
   serviceNetworkNamespaceId: 'p158-development-service-namespace',
   artifactId: 'artifact-13',
+};
+const projected = projectP158W6ExternalEvidence({
+  ...externalProjectionInput,
 });
 assert.equal(projected.externalVantage.clients.length, 2);
 assert.equal(new Set(projected.externalVantage.clients.map((entry) => entry.hostId)).size, 2);
@@ -88,6 +95,32 @@ assert.equal(projected.externalHandoffOracleReport.summary.ingressCheckCount,
   reports.reduce((count, report) => count + report.summary.ingressCheckCount, 0));
 assert.equal(projected.externalHandoffOracleReport.urlClassifications.length,
   reports.reduce((count, report) => count + report.urlClassifications.length, 0));
+for (const field of ['repairAttempted', 'retryCount', 'runnerRetryCount']) {
+  for (const mutation of ['missing', 'nonzero']) {
+    const input = structuredClone(externalProjectionInput);
+    if (mutation === 'missing') delete input.externalAggregate[field];
+    else input.externalAggregate[field] = field === 'repairAttempted' ? true : 1;
+    assert.throws(
+      () => projectP158W6ExternalEvidence(input),
+      (error) => error instanceof P158W6EvidenceAssemblerError &&
+        error.code === 'external_evidence_retry_or_repair',
+      `aggregate ${field} ${mutation} must fail closed`,
+    );
+  }
+  for (const receiptIndex of [0, 1]) {
+    for (const mutation of ['missing', 'nonzero']) {
+      const input = structuredClone(externalProjectionInput);
+      if (mutation === 'missing') delete input.externalReceipts[receiptIndex][field];
+      else input.externalReceipts[receiptIndex][field] = field === 'repairAttempted' ? true : 1;
+      assert.throws(
+        () => projectP158W6ExternalEvidence(input),
+        (error) => error instanceof P158W6EvidenceAssemblerError &&
+          error.code === 'external_evidence_retry_or_repair',
+        `receipt ${receiptIndex + 1} ${field} ${mutation} must fail closed`,
+      );
+    }
+  }
+}
 const ajv = new Ajv2020({ strict: true, allErrors: true });
 addFormats(ajv);
 const preparationSchema = JSON.parse(readFileSync(join(

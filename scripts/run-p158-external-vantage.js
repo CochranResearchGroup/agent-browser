@@ -284,11 +284,38 @@ function networkRecoveryEvidence(entry, entries) {
     .sort();
 }
 
+function guacamoleTokenRecoveryEvidence(entry, entries) {
+  if (!safeEvidenceId(entry.pageId) || entry.method !== 'POST') return [];
+  const rejectedAt = Date.parse(entry.completedAt ?? entry.timestamp ?? '');
+  if (!Number.isFinite(rejectedAt)) return [];
+  const candidates = entries
+    .filter((candidate) => {
+      let candidatePath;
+      try {
+        candidatePath = new URL(candidate.url).pathname;
+      } catch {
+        return false;
+      }
+      const recoveredAt = Date.parse(candidate.completedAt ?? candidate.timestamp ?? '');
+      return candidate.entryId !== entry.entryId &&
+        candidate.pageId === entry.pageId &&
+        candidate.method === 'POST' &&
+        candidatePath === '/guacamole/api/tokens' &&
+        Number(candidate.status) >= 200 && Number(candidate.status) < 400 &&
+        Number.isFinite(recoveredAt) && recoveredAt > rejectedAt;
+    })
+    .sort((left, right) =>
+      Date.parse(left.completedAt ?? left.timestamp ?? '') -
+      Date.parse(right.completedAt ?? right.timestamp ?? ''));
+  return candidates.length > 0 && candidates[0].entryId ? [candidates[0].entryId] : [];
+}
+
 function classifyExternalNetworkEntry(entry, entries) {
   const status = Number(entry.status);
   const url = String(entry.url ?? '');
   const pathClass = entry.pathClass ?? safeNetworkPathClass(url);
   const recoveredBy = networkRecoveryEvidence(entry, entries);
+  const tokenRecoveredBy = guacamoleTokenRecoveryEvidence(entry, entries);
   if (status >= 200 && status < 400) {
     return { disposition: 'success', code: 'successful_response', recoveryEvidenceEntryIds: [] };
   }
@@ -299,11 +326,15 @@ function classifyExternalNetworkEntry(entry, entries) {
       recoveryEvidenceEntryIds: [],
     };
   }
-  if (status === 403 && /\/guacamole\/api\/tokens$/i.test(url) && recoveredBy.length > 0) {
+  if (
+    [400, 401, 403].includes(status) &&
+    /\/guacamole\/api\/tokens$/i.test(url) &&
+    tokenRecoveredBy.length > 0
+  ) {
     return {
-      disposition: 'expected_lifecycle_noise',
-      code: 'guacamole_token_refresh_recovered',
-      recoveryEvidenceEntryIds: recoveredBy,
+      disposition: 'actionable_failure',
+      code: 'guacamole_token_rejection_recovered_by_fresh_election',
+      recoveryEvidenceEntryIds: tokenRecoveredBy,
     };
   }
   if (status === 0 &&
@@ -333,6 +364,7 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
     const classification = entry.classification ?? classifyExternalNetworkEntry(entry, networkEntries);
     return {
       entryId: entry.entryId ?? `network-${index + 1}`,
+      pageId: safeEvidenceId(entry.pageId),
       url: redactOperatorUrl(entry.url),
       status,
       error: numericStatus === 0
@@ -396,6 +428,89 @@ export function auditExternalDashboardEvidence({ clientId, consoleEntries, netwo
   return auditDashboardFixture({ fixture, options: { auditedAt } });
 }
 
+export function detectFreshGuacamoleElections(networkEntries = []) {
+  return networkEntries
+    .filter((entry) =>
+      entry?.classification?.code === 'guacamole_token_rejection_recovered_by_fresh_election')
+    .map((entry) => {
+      const recoveryEvidenceEntryIds = (entry.classification.recoveryEvidenceEntryIds ?? [])
+        .map(safeEvidenceId)
+        .filter(Boolean)
+        .slice(0, 10);
+      const recoveryUrlSha256s = recoveryEvidenceEntryIds
+        .map((entryId) => networkEntries.find((candidate) => candidate.entryId === entryId)?.urlSha256)
+        .filter((digest) => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest));
+      return {
+        entryId: safeEvidenceId(entry.entryId),
+        pageId: safeEvidenceId(entry.pageId),
+        status: [400, 401, 403].includes(entry.status) ? entry.status : null,
+        startedAt: safeIsoTimestamp(entry.startedAt),
+        completedAt: safeIsoTimestamp(entry.completedAt),
+        rejectedUrlSha256: typeof entry.urlSha256 === 'string' && /^[a-f0-9]{64}$/.test(entry.urlSha256)
+          ? entry.urlSha256
+          : null,
+        recoveryEvidenceEntryIds,
+        recoveryUrlSha256s,
+      };
+    });
+}
+
+export function externalDashboardOracleFailure({ dashboardOracle, dashboardEvidence }) {
+  if (dashboardOracle.passed) return null;
+  const findingCodes = [...new Set(dashboardOracle.findings.map((item) => item.code))].sort();
+  const freshGuacamoleElections = detectFreshGuacamoleElections(dashboardEvidence.networkEntries);
+  const error = new Error(freshGuacamoleElections.length > 0
+    ? `External dashboard observed ${freshGuacamoleElections.length} fresh Guacamole election(s) after a rejected key`
+    : `External dashboard oracle rejected evidence: ${findingCodes.join(',')}`);
+  error.code = freshGuacamoleElections.length > 0
+    ? 'external_guacamole_fresh_election_after_rejected_key'
+    : 'external_dashboard_oracle_rejected';
+  error.retryCount = freshGuacamoleElections.length;
+  error.details = {
+    findingCodes,
+    findingCount: dashboardOracle.findings.length,
+    consoleEntryCount: dashboardEvidence.consoleEntries.length,
+    networkEntryCount: dashboardEvidence.networkEntries.length,
+    actionableConsoleErrorCount: dashboardEvidence.consoleEntries.filter(
+      (entry) => entry.classification.disposition === 'actionable_failure',
+    ).length,
+    actionableNetworkFailureCount: dashboardEvidence.networkEntries.filter(
+      (entry) => entry.classification.disposition === 'actionable_failure',
+    ).length,
+    expectedLifecycleNoiseCount: [...dashboardEvidence.consoleEntries, ...dashboardEvidence.networkEntries]
+      .filter((entry) => entry.classification.disposition === 'expected_lifecycle_noise').length,
+    freshGuacamoleElectionCount: freshGuacamoleElections.length,
+    firstGuacamoleElectionFailure: freshGuacamoleElections[0] ?? null,
+    retryScope: freshGuacamoleElections.length > 0 ? 'product_guacamole_election' : null,
+  };
+  return error;
+}
+
+export function attributeFreshGuacamoleElectionRetry(error, dashboardEvidence) {
+  const freshGuacamoleElections = detectFreshGuacamoleElections(dashboardEvidence.networkEntries);
+  if (freshGuacamoleElections.length === 0 || !error || typeof error !== 'object') return error;
+  error.retryCount = Math.max(
+    Number.isSafeInteger(error.retryCount) && error.retryCount > 0 ? error.retryCount : 0,
+    freshGuacamoleElections.length,
+  );
+  error.details = {
+    ...(error.details && typeof error.details === 'object' && !Array.isArray(error.details)
+      ? error.details
+      : {}),
+    freshGuacamoleElectionCount: freshGuacamoleElections.length,
+    firstGuacamoleElectionFailure: freshGuacamoleElections[0],
+    retryScope: 'product_guacamole_election',
+  };
+  return error;
+}
+
+export function externalVantageFailureRetryMetadata(error) {
+  const retryCount = Number.isSafeInteger(error?.retryCount) && error.retryCount > 0
+    ? error.retryCount
+    : 0;
+  return { repairAttempted: false, retryCount, runnerRetryCount: 0 };
+}
+
 export function findInternalUrlLeaks(urlEvidence) {
   const findings = [];
   for (const evidence of urlEvidence) {
@@ -432,7 +547,8 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
       throw new Error('External vantage receipt has invalid probe mode');
     }
     if (receipt.runId !== runId) throw new Error('External vantage receipt run binding mismatch');
-    if (receipt.repairAttempted !== false || receipt.retryCount !== 0) {
+    if (receipt.repairAttempted !== false || receipt.retryCount !== 0 ||
+        receipt.runnerRetryCount !== 0) {
       throw new Error('External vantage receipt records repair or retry');
     }
     if (receipt.mode === 'calibration') {
@@ -563,6 +679,7 @@ export function aggregateExternalVantageReceipts(receipts, { runId }) {
     success: true,
     repairAttempted: false,
     retryCount: 0,
+    runnerRetryCount: 0,
     mode: ordered[0].mode,
     clientIds: ordered.map((item) => item.clientId),
     runnerIdentitySha256s: ordered.map((item) => item.runner.runnerIdentitySha256),
@@ -849,6 +966,7 @@ export async function runExternalVantageProbe({
       failedMonotonicNanoseconds,
     });
     const failureRecord = externalVantageFailureRecord(error, env);
+    const retryMetadata = externalVantageFailureRetryMetadata(error);
     const failure = {
       schemaVersion: EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
       planId: 'P158',
@@ -857,8 +975,7 @@ export async function runExternalVantageProbe({
       paceProfile: paceProfile || null,
       mode,
       success: false,
-      repairAttempted: false,
-      retryCount: 0,
+      ...retryMetadata,
       failedAt: new Date(failedAtMs).toISOString(),
       elapsedMs: monotonicElapsedMilliseconds(
         runnerStartedMonotonicNanoseconds,
@@ -905,6 +1022,7 @@ async function executeExternalVantageProbe({
     handoffResolutions,
     pendingNetworkRequests,
     requestFailureCounter,
+    pageCounter: 0,
   };
   const resolvedAddresses = await resolvePublicAddresses(handoff.hostname);
   const tls = await observeTls(handoff);
@@ -1158,26 +1276,8 @@ async function executeExternalVantageProbe({
       serializedDashboardOracle,
       { mode: 0o600 },
     );
-    if (!dashboardOracle.passed) {
-      const findingCodes = [...new Set(dashboardOracle.findings.map((item) => item.code))].sort();
-      const error = new Error(`External dashboard oracle rejected evidence: ${findingCodes.join(',')}`);
-      error.code = 'external_dashboard_oracle_rejected';
-      error.details = {
-        findingCodes,
-        findingCount: dashboardOracle.findings.length,
-        consoleEntryCount: dashboardEvidence.consoleEntries.length,
-        networkEntryCount: dashboardEvidence.networkEntries.length,
-        actionableConsoleErrorCount: dashboardEvidence.consoleEntries.filter(
-          (entry) => entry.classification.disposition === 'actionable_failure',
-        ).length,
-        actionableNetworkFailureCount: dashboardEvidence.networkEntries.filter(
-          (entry) => entry.classification.disposition === 'actionable_failure',
-        ).length,
-        expectedLifecycleNoiseCount: [...dashboardEvidence.consoleEntries, ...dashboardEvidence.networkEntries]
-          .filter((entry) => entry.classification.disposition === 'expected_lifecycle_noise').length,
-      };
-      throw error;
-    }
+    const dashboardFailure = externalDashboardOracleFailure({ dashboardOracle, dashboardEvidence });
+    if (dashboardFailure) throw dashboardFailure;
     const viewerId = `external-viewer-${clientId.replace(/^external-runner-/, '')}`;
     const w8ActionObservations = reviewedW8Manifest
       ? buildW8H01ActionObservations({
@@ -1203,6 +1303,7 @@ async function executeExternalVantageProbe({
       success: true,
       repairAttempted: false,
       retryCount: 0,
+      runnerRetryCount: 0,
       startedAt: mode === 'calibration' ? calibrationDescriptor.calibrationStartAt : startedAt,
       completedAt: mode === 'calibration' ? calibrationDescriptor.calibrationEndAt : new Date().toISOString(),
       probeStartedAt: startedAt,
@@ -1286,6 +1387,7 @@ async function executeExternalVantageProbe({
     return receipt;
   } catch (error) {
     const dashboardEvidence = normalizeExternalDashboardEvidence({ consoleEntries, networkEntries });
+    attributeFreshGuacamoleElectionRetry(error, dashboardEvidence);
     writeSanitizedHar(dashboardEvidence.networkEntries, join(outputDir, 'network.redacted.har'));
     const pendingRequests = [...pendingNetworkRequests.values()]
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
@@ -1553,6 +1655,8 @@ function redirectChainLength(request) {
 }
 
 function attachCapture(page, capture) {
+  capture.pageCounter += 1;
+  const pageId = `page-${capture.pageCounter}`;
   page.on('console', (message) => {
     const messageText = message.text();
     const locationUrl = message.location()?.url ?? '';
@@ -1579,6 +1683,7 @@ function attachCapture(page, capture) {
   });
   page.on('request', (request) => {
     capture.pendingNetworkRequests.set(request, {
+      pageId,
       startedAt: new Date().toISOString(),
       method: request.method(),
       resourceType: request.resourceType(),
@@ -1594,6 +1699,7 @@ function attachCapture(page, capture) {
     capture.requestFailureCounter.count += 1;
     capture.networkEntries.push({
       entryId: `network-${capture.networkEntries.length + 1}`,
+      pageId: pending?.pageId ?? pageId,
       url: redactOperatorUrl(request.url()),
       urlSha256: hashText(request.url()),
       method: request.method(),
@@ -1616,6 +1722,7 @@ function attachCapture(page, capture) {
     const completedAt = new Date().toISOString();
     const entry = {
       entryId: `network-${capture.networkEntries.length + 1}`,
+      pageId: pending?.pageId ?? pageId,
       url: redactOperatorUrl(response.url()),
       urlSha256: hashText(response.url()),
       method: request.method(),
@@ -2429,6 +2536,37 @@ function safeExternalFailureDetails(value) {
   ]) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0) details[key] = value[key];
   }
+  if (
+    Number.isSafeInteger(value.freshGuacamoleElectionCount) &&
+    value.freshGuacamoleElectionCount >= 0
+  ) {
+    details.freshGuacamoleElectionCount = value.freshGuacamoleElectionCount;
+  }
+  if (value.retryScope === 'product_guacamole_election') {
+    details.retryScope = value.retryScope;
+  }
+  if (value.firstGuacamoleElectionFailure && typeof value.firstGuacamoleElectionFailure === 'object') {
+    const first = value.firstGuacamoleElectionFailure;
+    details.firstGuacamoleElectionFailure = {
+      entryId: safeEvidenceId(first.entryId),
+      pageId: safeEvidenceId(first.pageId),
+      status: [400, 401, 403].includes(first.status) ? first.status : null,
+      startedAt: safeIsoTimestamp(first.startedAt),
+      completedAt: safeIsoTimestamp(first.completedAt),
+      rejectedUrlSha256: typeof first.rejectedUrlSha256 === 'string' &&
+          /^[a-f0-9]{64}$/.test(first.rejectedUrlSha256)
+        ? first.rejectedUrlSha256
+        : null,
+      recoveryEvidenceEntryIds: Array.isArray(first.recoveryEvidenceEntryIds)
+        ? first.recoveryEvidenceEntryIds.map(safeEvidenceId).filter(Boolean).slice(0, 10)
+        : [],
+      recoveryUrlSha256s: Array.isArray(first.recoveryUrlSha256s)
+        ? first.recoveryUrlSha256s
+          .filter((digest) => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest))
+          .slice(0, 10)
+        : [],
+    };
+  }
   if (value.guacamoleHttpStatusCounts && typeof value.guacamoleHttpStatusCounts === 'object') {
     details.guacamoleHttpStatusCounts = Object.fromEntries(
       Object.entries(value.guacamoleHttpStatusCounts)
@@ -2472,6 +2610,15 @@ function safeExternalFailureDetails(value) {
 
 function safeFailureToken(value) {
   return typeof value === 'string' && /^[a-z0-9_]{1,64}$/.test(value) ? value : null;
+}
+
+function safeEvidenceId(value) {
+  return typeof value === 'string' && /^[a-z0-9_-]{1,80}$/.test(value) ? value : null;
+}
+
+function safeIsoTimestamp(value) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+  return new Date(value).toISOString() === value ? value : null;
 }
 
 function monotonicElapsedMilliseconds(start, end) {
@@ -2536,7 +2683,14 @@ export async function aggregateExternalVantageDirectory(inputRoot, outputPath, r
       runId,
       success: false,
       repairAttempted: false,
-      retryCount: 0,
+      retryCount: receipts.reduce((sum, receipt) =>
+        sum + (Number.isSafeInteger(receipt.retryCount) && receipt.retryCount > 0
+          ? receipt.retryCount
+          : 0), 0),
+      runnerRetryCount: receipts.reduce((sum, receipt) =>
+        sum + (Number.isSafeInteger(receipt.runnerRetryCount) && receipt.runnerRetryCount > 0
+          ? receipt.runnerRetryCount
+          : 0), 0),
       jobResults,
       observedReceiptCount: receipts.length,
       observedClientIds: receipts.map((receipt) => receipt.clientId ?? null).sort(),

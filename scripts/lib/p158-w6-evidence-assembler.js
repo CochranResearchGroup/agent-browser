@@ -215,6 +215,10 @@ export function projectP158W6ExternalEvidence({
       externalReceipts.length !== 2 || !Array.isArray(oracleReports) || oracleReports.length !== 2) {
     fail('external_evidence_incomplete', 'W6 projection requires one passing aggregate, two receipts, and two complete oracle reports');
   }
+  if (externalAggregate.repairAttempted !== false || externalAggregate.retryCount !== 0 ||
+      externalAggregate.runnerRetryCount !== 0) {
+    fail('external_evidence_retry_or_repair', 'W6 projection requires an aggregate with zero retry and no repair');
+  }
   for (const report of oracleReports) assertOracleReport(report);
   const receipts = [...externalReceipts].sort((left, right) => left.clientId.localeCompare(right.clientId));
   const clientIds = receipts.map((receipt) => receipt.clientId);
@@ -222,6 +226,10 @@ export function projectP158W6ExternalEvidence({
     fail('external_client_identity_mismatch', 'External aggregate and receipt client identities differ');
   }
   const clients = receipts.map((receipt) => {
+    if (receipt.repairAttempted !== false || receipt.retryCount !== 0 ||
+        receipt.runnerRetryCount !== 0) {
+      fail('external_evidence_retry_or_repair', `${receipt.clientId} does not prove zero retry and no repair`);
+    }
     if (receipt.runId !== externalAggregate.runId || receipt.success !== true ||
         receipt.outsideServiceHost !== true || receipt.outsideServiceNetworkNamespace !== true ||
         receipt.publicEgressObserved !== true) {

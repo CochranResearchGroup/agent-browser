@@ -421,6 +421,7 @@ function verifyExternalAggregate(aggregate, receipts, prepared) {
   if (!aggregate || aggregate.schemaVersion !== 'agent-browser.p158-external-vantage-aggregate.v1' ||
       aggregate.success !== true || aggregate.mode !== 'calibration' || aggregate.runId !== prepared.runId ||
       aggregate.repairAttempted !== false || aggregate.retryCount !== 0 ||
+      aggregate.runnerRetryCount !== 0 ||
       aggregate.aggregateSha256 !== canonicalHash(without(aggregate, ['aggregateSha256']))) {
     fail('external_aggregate_integrity_mismatch', 'External aggregate is missing, failed, or changed');
   }

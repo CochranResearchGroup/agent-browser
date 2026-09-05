@@ -15,12 +15,16 @@ import {
   aggregateExternalVantageReceipts,
   aggregateExternalVantageDirectory,
   acquireSyntheticRemoteController,
+  attributeFreshGuacamoleElectionRetry,
   buildExternalCalibrationDescriptor,
   buildExternalCalibrationSchedule,
   canonicalHash,
   classifyRenderedStreamFailure,
   classifyHandoffResolutionFailure,
+  detectFreshGuacamoleElections,
+  externalDashboardOracleFailure,
   externalVantageFailureRecord,
+  externalVantageFailureRetryMetadata,
   findInternalUrlLeaks,
   handoffResolutionReadinessGaps,
   humanPacedObservation,
@@ -623,6 +627,7 @@ const before = JSON.stringify(receipts);
 const aggregate = aggregateExternalVantageReceipts(receipts, { runId: 'p158-test-run' });
 assert.equal(aggregate.schemaVersion, EXTERNAL_VANTAGE_AGGREGATE_SCHEMA);
 assert.equal(aggregate.success, true);
+assert.equal(aggregate.runnerRetryCount, 0);
 assert.equal(aggregate.checks.distinctOffHostClients, true);
 assert.equal(JSON.stringify(receipts), before, 'aggregation must not mutate evidence');
 assert.deepEqual(
@@ -740,6 +745,7 @@ for (const mutate of [
   (values) => { values[1].serverPhysicalBrowserLaunchDelta = 1; },
   (values) => { values[1].internalUrlLeakCount = 1; },
   (values) => { values[1].retryCount = 1; },
+  (values) => { values[1].runnerRetryCount = 1; },
 ]) {
   const defective = structuredClone(receipts);
   mutate(defective);
@@ -808,6 +814,37 @@ try {
     ['external-runner-human', 'external-runner-slow'],
   );
 
+  const electionFailureDownloads = join(fixtureRoot, 'election-failure-downloads');
+  mkdirSync(join(electionFailureDownloads, 'human'), { recursive: true });
+  mkdirSync(join(electionFailureDownloads, 'slow'), { recursive: true });
+  writeFileSync(
+    join(electionFailureDownloads, 'human', 'failure-receipt.json'),
+    JSON.stringify({
+      ...failureReceipt,
+      clientId: 'external-runner-human',
+      retryCount: 1,
+      runnerRetryCount: 0,
+    }),
+  );
+  writeFileSync(
+    join(electionFailureDownloads, 'slow', 'failure-receipt.json'),
+    JSON.stringify({
+      ...failureReceipt,
+      clientId: 'external-runner-slow',
+      retryCount: 0,
+      runnerRetryCount: 0,
+    }),
+  );
+  const electionFailureAggregate = await aggregateExternalVantageDirectory(
+    electionFailureDownloads,
+    join(fixtureRoot, 'election-failure-aggregate', 'receipt.json'),
+    'p158-test-run',
+    { 'human-controller': 'failure', 'slow-concurrency-client': 'success' },
+  );
+  assert.equal(electionFailureAggregate.success, false);
+  assert.equal(electionFailureAggregate.retryCount, 1);
+  assert.equal(electionFailureAggregate.runnerRetryCount, 0);
+
   const aggregatePath = join(fixtureRoot, 'aggregate', 'receipt.json');
   const failedAggregate = await aggregateExternalVantageDirectory(
     join(fixtureRoot, 'missing-downloads'),
@@ -848,12 +885,14 @@ const dashboardEvidence = normalizeExternalDashboardEvidence({
     },
     {
       entryId: 'network-token-403', url: 'https://external.example.test/guacamole/api/tokens',
+      pageId: 'page-dashboard-evidence',
       urlSha256: 'e'.repeat(64), method: 'POST', resourceType: 'xhr', requestAction: null,
       pathClass: 'guacamole_transport', status: 403, startedAt: '2026-09-04T00:00:02.000Z',
       completedAt: '2026-09-04T00:00:02.010Z', durationMs: 10,
     },
     {
       entryId: 'network-token-200', url: 'https://external.example.test/guacamole/api/tokens',
+      pageId: 'page-dashboard-evidence',
       urlSha256: 'e'.repeat(64), method: 'POST', resourceType: 'xhr', requestAction: null,
       pathClass: 'guacamole_transport', status: 200, startedAt: '2026-09-04T00:00:02.020Z',
       completedAt: '2026-09-04T00:00:02.040Z', durationMs: 20,
@@ -876,6 +915,185 @@ assert.deepEqual(
   dashboardEvidence.networkEntries[2].classification.recoveryEvidenceEntryIds,
   ['network-token-200'],
 );
+assert.equal(
+  dashboardEvidence.networkEntries[2].classification.disposition,
+  'actionable_failure',
+  'a rejected Guacamole key followed by a fresh token must remain a product failure',
+);
+assert.equal(
+  dashboardEvidence.networkEntries[2].classification.code,
+  'guacamole_token_rejection_recovered_by_fresh_election',
+);
+const crossOriginFreshElection = normalizeExternalDashboardEvidence({
+  networkEntries: [
+    {
+      entryId: 'network-share-origin-token-403',
+      pageId: 'page-observed-33945994974',
+      url: 'https://agent-browser-dev-share.example.test/guacamole/api/tokens',
+      urlSha256: 'a'.repeat(64),
+      method: 'POST',
+      resourceType: 'xhr',
+      pathClass: 'guacamole_transport',
+      status: 403,
+      startedAt: '2026-09-04T00:00:02.000Z',
+      completedAt: '2026-09-04T00:00:02.010Z',
+      durationMs: 10,
+    },
+    {
+      entryId: 'network-dashboard-origin-token-200',
+      pageId: 'page-observed-33945994974',
+      url: 'https://agent-browser-dev.example.test/guacamole/api/tokens',
+      urlSha256: 'b'.repeat(64),
+      method: 'POST',
+      resourceType: 'xhr',
+      pathClass: 'guacamole_transport',
+      status: 200,
+      startedAt: '2026-09-04T00:00:02.020Z',
+      completedAt: '2026-09-04T00:00:02.040Z',
+      durationMs: 20,
+    },
+  ],
+});
+assert.equal(
+  crossOriginFreshElection.networkEntries[0].classification.code,
+  'guacamole_token_rejection_recovered_by_fresh_election',
+  'share-origin rejection followed by a dashboard-origin token on the same page is a fresh election',
+);
+assert.deepEqual(detectFreshGuacamoleElections(crossOriginFreshElection.networkEntries), [{
+  entryId: 'network-share-origin-token-403',
+  pageId: 'page-observed-33945994974',
+  status: 403,
+  startedAt: '2026-09-04T00:00:02.000Z',
+  completedAt: '2026-09-04T00:00:02.010Z',
+  rejectedUrlSha256: 'a'.repeat(64),
+  recoveryEvidenceEntryIds: ['network-dashboard-origin-token-200'],
+  recoveryUrlSha256s: ['b'.repeat(64)],
+}]);
+const laterProbeFailure = new Error('The external dashboard did not render the prepared remote pixel marker');
+laterProbeFailure.code = 'external_stream_identity_marker_missing';
+laterProbeFailure.details = { observedPixelHash: 'c'.repeat(64) };
+attributeFreshGuacamoleElectionRetry(laterProbeFailure, crossOriginFreshElection);
+assert.equal(laterProbeFailure.code, 'external_stream_identity_marker_missing');
+assert.equal(laterProbeFailure.retryCount, 1);
+assert.equal(laterProbeFailure.details.freshGuacamoleElectionCount, 1);
+assert.deepEqual(
+  laterProbeFailure.details.firstGuacamoleElectionFailure.recoveryUrlSha256s,
+  ['b'.repeat(64)],
+  'a later probe failure must retain the earlier recovered-key retry attribution',
+);
+assert.deepEqual(externalVantageFailureRetryMetadata(laterProbeFailure), {
+  repairAttempted: false,
+  retryCount: 1,
+  runnerRetryCount: 0,
+});
+const differentPageTokenSuccess = normalizeExternalDashboardEvidence({
+  networkEntries: [
+    {
+      ...crossOriginFreshElection.networkEntries[0],
+      classification: undefined,
+    },
+    {
+      ...crossOriginFreshElection.networkEntries[1],
+      pageId: 'page-unrelated-viewer',
+      classification: undefined,
+    },
+  ],
+});
+assert.equal(
+  differentPageTokenSuccess.networkEntries[0].classification.code,
+  'unexplained_http_failure',
+  'a token success on another page must not be attributed as this page fresh election',
+);
+const nonLaterTokenSuccess = normalizeExternalDashboardEvidence({
+  networkEntries: [
+    {
+      ...crossOriginFreshElection.networkEntries[0],
+      classification: undefined,
+    },
+    {
+      ...crossOriginFreshElection.networkEntries[1],
+      startedAt: '2026-09-04T00:00:02.000Z',
+      completedAt: '2026-09-04T00:00:02.010Z',
+      classification: undefined,
+    },
+  ],
+});
+assert.equal(
+  nonLaterTokenSuccess.networkEntries[0].classification.code,
+  'unexplained_http_failure',
+  'a non-later token success must not be attributed as a fresh election',
+);
+for (const rejectedStatus of [400, 401, 403]) {
+  const rejectedEntryId = `network-token-${rejectedStatus}`;
+  const recoveredEntryId = `network-token-${rejectedStatus}-fresh`;
+  const tokenUrlSha256 = String(rejectedStatus).repeat(64).slice(0, 64);
+  const freshElectionEvidence = normalizeExternalDashboardEvidence({
+    networkEntries: [
+      {
+        entryId: rejectedEntryId,
+        pageId: 'page-same-digest-election',
+        url: 'https://external.example.test/guacamole/api/tokens',
+        urlSha256: tokenUrlSha256,
+        method: 'POST',
+        resourceType: 'xhr',
+        pathClass: 'guacamole_transport',
+        status: rejectedStatus,
+        startedAt: '2026-09-04T00:00:02.000Z',
+        completedAt: '2026-09-04T00:00:02.010Z',
+        durationMs: 10,
+      },
+      {
+        entryId: recoveredEntryId,
+        pageId: 'page-same-digest-election',
+        url: 'https://external.example.test/guacamole/api/tokens',
+        urlSha256: tokenUrlSha256,
+        method: 'POST',
+        resourceType: 'xhr',
+        pathClass: 'guacamole_transport',
+        status: 200,
+        startedAt: '2026-09-04T00:00:02.020Z',
+        completedAt: '2026-09-04T00:00:02.040Z',
+        durationMs: 20,
+      },
+    ],
+  });
+  const detected = detectFreshGuacamoleElections(freshElectionEvidence.networkEntries);
+  assert.deepEqual(detected, [{
+    entryId: rejectedEntryId,
+    pageId: 'page-same-digest-election',
+    status: rejectedStatus,
+    startedAt: '2026-09-04T00:00:02.000Z',
+    completedAt: '2026-09-04T00:00:02.010Z',
+    rejectedUrlSha256: tokenUrlSha256,
+    recoveryEvidenceEntryIds: [recoveredEntryId],
+    recoveryUrlSha256s: [tokenUrlSha256],
+  }]);
+  const freshElectionAudit = auditExternalDashboardEvidence({
+    clientId: `external-runner-token-${rejectedStatus}`,
+    ...freshElectionEvidence,
+    auditedAt: '2026-09-04T00:00:03.000Z',
+  });
+  assert.equal(freshElectionAudit.passed, false, `recovered token HTTP ${rejectedStatus} must not audit clean`);
+  const electionFailure = externalDashboardOracleFailure({
+    dashboardOracle: freshElectionAudit,
+    dashboardEvidence: freshElectionEvidence,
+  });
+  assert.equal(electionFailure.code, 'external_guacamole_fresh_election_after_rejected_key');
+  assert.equal(electionFailure.retryCount, 1);
+  assert.deepEqual(externalVantageFailureRetryMetadata(electionFailure), {
+    repairAttempted: false,
+    retryCount: 1,
+    runnerRetryCount: 0,
+  });
+  const boundedFailure = externalVantageFailureRecord(electionFailure, env);
+  assert.equal(boundedFailure.details.freshGuacamoleElectionCount, 1);
+  assert.equal(boundedFailure.details.retryScope, 'product_guacamole_election');
+  assert.deepEqual(boundedFailure.details.firstGuacamoleElectionFailure, detected[0]);
+  assert.doesNotMatch(
+    JSON.stringify(boundedFailure),
+    /private-share-key|private-token|guacamole\/api\/tokens|external\.example\.test/,
+  );
+}
 const unrecoveredFailure = normalizeExternalDashboardEvidence({
   networkEntries: [{
     entryId: 'network-token-403-unrecovered',
@@ -1143,6 +1361,7 @@ function receipt(clientId, runnerHashSeed) {
     success: true,
     repairAttempted: false,
     retryCount: 0,
+    runnerRetryCount: 0,
     runner: { runnerIdentitySha256: canonicalHash(runnerHashSeed) },
     handoff: { urlSha256: canonicalHash('same-handoff') },
     expectedIdentity: retained,
