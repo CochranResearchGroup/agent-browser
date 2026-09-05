@@ -2,7 +2,34 @@
 
 Date: 2026-09-05
 
-## Repair investigation: forward-auth timeout, not yet repaired
+## Shared-view capability repair checkpoint
+
+The forward-auth 500 remains unresolved, but the next bounded diagnostic
+reproduced a separate clean-visual gate failure: an anonymous PostgreSQL shared
+viewer requests its unavailable tunnel re-sharing profiles and receives 404.
+The extension now declares that capability empty before sending the request,
+only for the named embedded sharing viewer and current shared anonymous
+identity. Full users, unknown identities and other tunnel operations keep
+their original calls and failures. This is not an authentication bypass or a
+retry policy change.
+
+The focused regression failed with the recorded error before the fix and
+passed afterward. The real Guacamole client also passed in a disposable
+response-substitution prototype, with exact extension hash and active guard
+readback. That prototype is not installed acceptance. The optimized candidate
+build and exact-candidate workstation fixture passed, as did asset, provider,
+connection-sharing, host-provision, VM-harness, database-durability and route
+sync checks. An earlier fixture accidentally selected the old debug binary;
+its disposable child was stopped, and that run is excluded from validation.
+
+The temporary ingress trace required one controlled restart of only the
+isolated ingress. Its tracer is detached, its override removed, and production
+and default-development guards passed. Runtime host, backend and retained
+browser were not restarted by that trace. Next is guarded publication of the
+candidate and extension to `p158`, followed by installed same-handoff proof.
+The earlier 500, failed visuals and distinct 404 remain preserved.
+
+## Earlier repair investigation: forward-auth timeout, not yet repaired
 
 The user requested repair. The original 17:27:58 HTTP 500 is now localized:
 Cooper's local Traefik timed out calling the isolated dashboard's

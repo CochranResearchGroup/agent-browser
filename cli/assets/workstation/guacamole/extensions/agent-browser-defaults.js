@@ -29,6 +29,38 @@
 }());
 
 /*
+ * PostgreSQL's anonymous sharing user has no readable ActiveConnection and
+ * cannot re-share its tunnel. Guacamole 1.5.5 still asks that tunnel for sharing
+ * profiles, producing a 404 during an otherwise working shared-view load.
+ * Declare the empty capability before that request, only for our embedded
+ * sharing viewer and its current authenticated shared-user identity. Other
+ * users retain the original discovery call and all of its failures.
+ */
+(function installAgentBrowserSharedViewerCapabilities() {
+    'use strict';
+
+    if (!window.angular || window.parent === window
+            || typeof window.name !== 'string'
+            || window.name.indexOf('agent-browser-guacamole-share:') !== 0
+            || !window.location || !/^[^.]+-share\./.test(window.location.hostname))
+        return;
+
+    window.angular.module('rest').config(['$provide', function ($provide) {
+        $provide.decorator('tunnelService', ['$delegate', '$injector', function ($delegate, $injector) {
+            var getSharingProfiles = $delegate.getSharingProfiles;
+            $delegate.getSharingProfiles = function getAvailableSharingProfiles() {
+                var authentication = $injector.get('authenticationService');
+                if (authentication.getDataSource() === 'postgresql-shared'
+                        && authentication.isAnonymous())
+                    return $injector.get('$q').when({});
+                return getSharingProfiles.apply(this, arguments);
+            };
+            return $delegate;
+        }]);
+    }]);
+}());
+
+/*
  * Embedded Guacamole must leave initial keyboard focus with its host dashboard.
  * Chromium blocks declarative autofocus in a cross-origin frame. Register after
  * templates.js on its existing module so this runs after the upstream cache

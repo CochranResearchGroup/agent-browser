@@ -360,6 +360,75 @@ assert.deepEqual(
   'XHR token success without a key-bearing POST body must not signal readiness',
 )
 
+// Restricted PostgreSQL share users cannot re-share their tunnel. Exercise
+// the same tunnel-service call used by Guacamole's client UI, including auth
+// changes after decorator registration and unchanged failures for full users.
+async function checkSharedViewerCapabilities({
+  frameName = 'agent-browser-guacamole-share:capability-test',
+  hostname = 'dashboard-share.example.test',
+  embedded = true,
+  expectsGuard = true,
+} = {}) {
+  let decorator
+  let dataSource = 'postgresql-shared'
+  let anonymous = true
+  const calls = []
+  const unavailable = new Error('No readable active connection for tunnel.')
+  const delegate = {
+    getSharingProfiles(tunnel) {
+      calls.push({ receiver: this, tunnel })
+      return Promise.reject(unavailable)
+    },
+    getProtocol() { return 'rdp' },
+  }
+  const window = {
+    parent: {}, name: frameName,
+    location: { hostname, protocol: 'https:', port: '' },
+    angular: { module(name) {
+      if (name === 'templates-main') return { run() {} }
+      assert.equal(name, 'rest')
+      return { config(injected) {
+        assert.equal(injected[0], '$provide')
+        injected.at(-1)({ decorator(name, injected) {
+          assert.equal(name, 'tunnelService')
+          decorator = injected.at(-1)
+        } })
+      } }
+    } },
+  }
+  if (!embedded) window.parent = window
+  vm.runInNewContext(defaultsScript, { window })
+  const services = {
+    authenticationService: { getDataSource: () => dataSource, isAnonymous: () => anonymous },
+    $q: { when: (value) => Promise.resolve(value) },
+  }
+  const decorated = decorator ? decorator(delegate, { get: (name) => services[name] }) : delegate
+  if (!expectsGuard) {
+    assert.equal(decorator, undefined)
+    await assert.rejects(decorated.getSharingProfiles('unchanged-tunnel'), (error) => error === unavailable)
+    return
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(await decorated.getSharingProfiles('shared-tunnel'))), {})
+  assert.equal(calls.length, 0, 'restricted sharing must not issue the known-unavailable HTTP request')
+  assert.equal(decorated.getProtocol(), 'rdp')
+  for (const identity of [
+    { source: 'postgresql', anonymous: false },
+    { source: 'postgresql-shared', anonymous: false },
+    { source: 'unknown-shared', anonymous: true },
+    { source: null, anonymous: true },
+  ]) {
+    dataSource = identity.source
+    anonymous = identity.anonymous
+    await assert.rejects(decorated.getSharingProfiles('full-tunnel'), (error) => error === unavailable)
+    assert.equal(calls.at(-1).receiver, delegate)
+    assert.equal(calls.at(-1).tunnel, 'full-tunnel')
+  }
+}
+await checkSharedViewerCapabilities()
+await checkSharedViewerCapabilities({ frameName: '', expectsGuard: false })
+await checkSharedViewerCapabilities({ hostname: 'dashboard.example.test', expectsGuard: false })
+await checkSharedViewerCapabilities({ embedded: false, expectsGuard: false })
+
 assert.deepEqual(manifestHashMismatches, [], 'workstation asset hashes must match the manifest')
 
 const generator = readFileSync(join(assetRoot, 'generate-initdb.sh'), 'utf8')

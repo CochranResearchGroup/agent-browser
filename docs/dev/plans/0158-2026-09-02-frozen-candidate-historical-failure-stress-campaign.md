@@ -5182,3 +5182,41 @@ cleanroom root. The next bounded tactic is request-stage transport tracing of
 the verification hop, not repeating the same green probes or speculatively
 modifying sharing logic. A deterministic red-capable seam is still required
 before source repair; the approval for in-scope repair remains valid.
+
+### Shared-view capability repair: source and prototype gate
+
+A bounded syscall trace was admitted by starting only the owned cleanroom
+dashboard ingress under its tracer after direct attachment was denied. Buffer
+contents were not traced. The tracer was detached and the temporary override
+removed; ingress remains active, and the runtime host, backend and retained
+browser were not restarted. Non-interference guards passed. The original
+forward-auth timeout was not reproduced or declared repaired.
+
+The traced same-handoff diagnostic instead reproduced the separate 404 from
+the shared tunnel's re-sharing-profile request. Guacamole 1.5.5's
+[tunnel resource](https://github.com/apache/guacamole-client/blob/1.5.5/guacamole/src/main/java/org/apache/guacamole/rest/tunnel/TunnelResource.java)
+rejects that lookup when the tunnel has no readable active connection. The
+observed anonymous PostgreSQL sharing identity has that restricted capability.
+The extension now declares an empty re-sharing capability before request
+dispatch, gated on the named embedded sibling-origin viewer and its current
+anonymous `postgresql-shared` authentication. Other identities retain the
+original method, arguments, receiver and rejection. No general HTTP errors are
+suppressed and no authentication or retry policy changes.
+
+The real service-method regression failed with the recorded error before the
+fix, then passed. A disposable response-substitution prototype used the actual
+Guacamole client, reached the shared frame, verified the installed-in-document
+guard and anonymous identity, and observed no failed HTTP response. Its private
+receipt is `sharing-candidate-prototype-d/receipt.json`; it is explicitly not
+an installed or visual acceptance receipt. Extension source SHA-256 is
+`3ea4fb484771361ec08ba1293d66be991c16843bf8ee4c5eb8ab15f86f4fb6c6`.
+
+Primary validation passed asset, development-provider, connection-sharing,
+exact-candidate workstation-install, host-provision, fresh-VM-harness,
+database-durability and route-sync checks. The optimized candidate build
+passed. An accidentally selected historical debug-binary fixture was stopped
+at its exact disposable child and excluded; the exact new candidate fixture
+was then run successfully. This checkpoint is hardening pending installed
+proof, not W6 acceptance. Next is guarded candidate and extension publication
+to the existing isolated namespace, preserving the retained browser and all
+failed evidence, then same-handoff installed validation.
