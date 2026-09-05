@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_remote_view_runtime_recovered`
+Execution state: `priority_retained_handoff_false_convergence_diagnosed`
 
 Lane: P157
 
@@ -5818,3 +5818,41 @@ binding, and retain its failure without an automatic retry. Old protected
 scene bindings cannot be reused after the reboot without current validation.
 Calibration, W6 freeze, W7–W10, authenticated ACL/revocation/restart, and full
 logging and ordinary remote-view acceptance remain incomplete.
+
+### Priority Retained Handoff: False Convergence Evidence
+
+One supported service_remote_view_handoff_resolve request targeted the latest
+retained P158 synthetic handoff on installed 0.28.0-22f36d5ada2c. It did not
+set allowReopenClosed, substitute a provider, or create a new operator URL.
+The response is HTTP 200 / success true with resolved false, status converging,
+and retryable true. Its message reports
+runtime_handoff_orphan_browser_hint_mismatch: the original source session is
+not bound to the recorded logical browser. The exact target browser record
+is absent in the retained state, and the handoff identity remains unchanged.
+Browser/session/tab collection counts do not change. No current target,
+operatorVisible ready state, pixels, or interaction is proven.
+
+The resolver job is recorded succeeded with one terminal event and zero
+failure-journal matches for its request ID. A separate stream_enable job failed
+because streaming was already enabled; that is not the resolver's failure
+record. The request and before/after snapshots are preserved under private
+campaign directory `retained-handoff-20260905T234513414Z`, with a hashed
+checkpoint and exact journal-match readback. This is service-host diagnostic
+evidence, not external-vantage acceptance.
+
+Code inspection identifies the conversion in execute_durable_resolution:
+every EffectFailed from adopt_retained_browser or validate_retained_browser
+becomes Converging with retryable true. The underlying orphan identity guard
+correctly refuses an unbound browser. Do not weaken that guard or automatically
+reopen a replacement target to make this handoff appear resolved.
+
+Classification: blocker_reduction through an actual ordinary-handoff failure
+and its logging gap. Next establish a red-capable coordinator regression that
+distinguishes confirmed lost process/identity from a transient ownership
+transition, then preserve terminal unavailability and actionable recourse into
+response, job, event, and failure journal. Absence from one state snapshot
+alone must not classify an in-flight owner as permanently lost. Keep the
+presentation-receipt convergence case separate. Allow one repair/verification
+cycle for this finding; no automatic repeat of this unresolved link probe.
+The P/Q frame-lifecycle failures, external pixels and interaction, authenticated
+ACLs, logging durability, W6, and W7–W10 remain open. Calibration stays deferred.

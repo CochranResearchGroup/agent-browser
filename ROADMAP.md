@@ -147,14 +147,13 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Plan 0158's isolated runtime is recovered on 0.28.0-22f36d5ada2c. Required
-doctor and three disposable launch smokes pass; Service projects four warm
-idle presentation slots without binding warnings. Production and default
-development are unchanged. Next capture ordinary durable handoff resolution
-and frame lifecycle, preserving exact retained target identity and adding the
-causal evidence absent from failed P/Q probes. Runtime recovery and a public
-login response do not establish ordinary external-view acceptance.
-Authenticated ACLs, revocation/restart, and logging durability remain open.
+Plan 0158's recovered runtime exposed false convergence on the latest retained
+synthetic handoff: exact browser identity is unbound, yet resolution returns
+retryable converging and records a succeeded job without a failure-journal
+match. Next distinguish confirmed lost identity from transient adoption at the
+coordinator seam, with truthful unavailability and causal logging. Preserve the
+same durable URL and no-relaunch contract. Ordinary external pixels, frame
+lifecycle, authenticated ACLs, and interruption durability remain unaccepted.
 Do not automatically resume calibration, reinstall, restart, or the prior
 harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
 freeze gate, and full acceptance criteria are retained. Anchored readiness does
