@@ -34,6 +34,8 @@ import {
   reportDashboardFailure,
 } from "@/lib/failure-observation";
 import { fetchDashboardAuthStatus } from "@/lib/dashboard-auth-status";
+import { fetchSharedRuntimeHealth } from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import { summarizeRuntimeAccess } from "@/lib/runtime-health-summary";
 import {
   ServiceDetailInspector,
@@ -959,10 +961,7 @@ function DashboardExperience({
     let cancelled = false;
     const checkRuntimeHealth = async () => {
       try {
-        const response = await fetch("/api/runtime/health", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
+        const response = await fetchSharedRuntimeHealth();
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -982,11 +981,10 @@ function DashboardExperience({
         }
       }
     };
-    void checkRuntimeHealth();
-    const interval = window.setInterval(checkRuntimeHealth, 10_000);
+    const stop = startCompletionDrivenDashboardPoll(checkRuntimeHealth, 10_000);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stop();
     };
   }, []);
   useEffect(() => {

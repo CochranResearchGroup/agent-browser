@@ -11,6 +11,7 @@ const selectedWorkspaceContextHook = readFileSync('packages/dashboard/src/hooks/
 const chatStore = readFileSync('packages/dashboard/src/store/chat.ts', 'utf8');
 const remoteViewport = readFileSync('packages/dashboard/src/components/workspace-remote-viewport.tsx', 'utf8');
 const dashboardApi = readFileSync('packages/dashboard/src/lib/dashboard-api.ts', 'utf8');
+const dashboardReadCoordinator = readFileSync('packages/dashboard/src/lib/dashboard-read-coordinator.ts', 'utf8');
 const serviceWorkspaces = readFileSync('packages/dashboard/src/lib/service-workspaces.ts', 'utf8');
 const workspaceUrl = readFileSync('packages/dashboard/src/lib/workspace-url-selection.ts', 'utf8');
 const css = readFileSync('packages/dashboard/src/app/globals.css', 'utf8');
@@ -62,7 +63,7 @@ assert.match(
 
 assert.match(
   page,
-  /fetch\("\/api\/runtime\/health", \{[\s\S]*cache: "no-store"[\s\S]*credentials: "same-origin"[\s\S]*setInterval\([\s\S]*10_000[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
+  /fetchSharedRuntimeHealth\(\)[\s\S]*startCompletionDrivenDashboardPoll\(checkRuntimeHealth, 10_000\)[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
   'Dashboard shell must poll live runtime health and render executable drift before operator UX degrades',
 );
 
@@ -117,8 +118,20 @@ assert.match(
 
 assert.match(
   dashboardApi,
-  /SHARED_SERVICE_STATUS_TTL_MS = 10_000[\s\S]*sharedServiceStatusFlight[\s\S]*fetchSharedServiceStatus/,
+  /SHARED_SERVICE_READ_TTL_MS = 10_000[\s\S]*fetchSharedServiceStatus[\s\S]*fetchCoordinatedDashboardRead\(`\$\{SERVICE_API_BASE\}\/status\?projection=dashboard-summary`/,
   'Dashboard components must share one bounded Service Status projection instead of downloading independent multi-megabyte copies',
+);
+
+assert.match(
+  dashboardApi,
+  /RUNTIME_STATIC_READ_TTL_MS = 5 \* 60_000[\s\S]*cacheGroup: RUNTIME_STATIC_READ_GROUP[\s\S]*observedRuntimeGeneration !== generation[\s\S]*invalidateCoordinatedDashboardReadGroup/,
+  'Static contracts and capability reads must be bounded and invalidated when the installed runtime generation changes',
+);
+
+assert.match(
+  dashboardReadCoordinator,
+  /class DashboardReadCoordinator[\s\S]*flights = new Map[\s\S]*snapshots = new Map/,
+  'Dashboard read sharing must be owned by one per-document coordinator',
 );
 
 for (const [label, source] of [
@@ -189,7 +202,7 @@ assert.match(
 
 assert.match(
   sessionsStore,
-  /fetch\(sessionTabsApiUrl\(s\.port\)\)/,
+  /fetchCoordinatedDashboardRead\([\s\S]*sessionTabsApiUrl\(s\.port\)/,
   'Workspace tab polling must use the same-origin dashboard session-tabs proxy',
 );
 

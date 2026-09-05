@@ -65,7 +65,13 @@ import {
   writeDashboardWorkspaceUrlSelection,
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
-import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
+import {
+  fetchSharedBrowserCapabilityRegistry,
+  fetchSharedServiceContracts,
+  fetchSharedServiceStatus,
+  SERVICE_API_BASE,
+} from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import { browserRowCloseRoute } from "@/lib/service-browser-row-actions";
 import { execCommand } from "@/lib/exec";
 import { fetchForeignCdpScreenshot } from "@/lib/foreign-cdp-control";
@@ -1395,12 +1401,11 @@ export function WorkspaceNavigator() {
     if (typeof window === "undefined" || serviceStatusInFlightRef.current) return null;
     serviceStatusInFlightRef.current = true;
     try {
-      const base = serviceBase(activePort);
       const statusPromise = fetchSharedServiceStatus();
       const [statusResp, contractsResp, registryResp] = await Promise.all([
         statusPromise,
-        fetch(`${base}/contracts`).catch(() => null),
-        fetch(`${base}/browser-capability-registry`).catch(() => null),
+        fetchSharedServiceContracts().catch(() => null),
+        fetchSharedBrowserCapabilityRegistry().catch(() => null),
       ]);
       const json = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       if (!json.success) throw new Error(json.error || "Service status failed");
@@ -1427,9 +1432,9 @@ export function WorkspaceNavigator() {
   }, [activePort]);
 
   useEffect(() => {
-    void fetchServiceStatus();
-    const timer = setInterval(fetchServiceStatus, 7000);
-    return () => clearInterval(timer);
+    return startCompletionDrivenDashboardPoll(async () => {
+      await fetchServiceStatus();
+    }, 7000);
   }, [fetchServiceStatus]);
 
   useEffect(() => {

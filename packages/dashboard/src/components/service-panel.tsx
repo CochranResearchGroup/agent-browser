@@ -42,7 +42,13 @@ import {
 } from "lucide-react";
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
-import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
+import {
+  fetchSharedServiceContracts,
+  fetchSharedServiceResources,
+  fetchSharedServiceStatus,
+  SERVICE_API_BASE,
+} from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import { reportDashboardFailure } from "@/lib/failure-observation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7191,13 +7197,13 @@ export function ServicePanel({
       if (windowOption?.milliseconds) {
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
-      const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
+      const contractsPromise = fetchSharedServiceContracts().catch(() => null);
       const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp, profileLeasesResp] = await Promise.all([
         fetchSharedServiceStatus(),
         fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
-        fetch(`${serviceBase(activePort)}/resources`).catch(() => null),
+        fetchSharedServiceResources().catch(() => null),
         contractsPromise,
         fetch(`${serviceBase(activePort)}/profile-leases`).catch(() => null),
       ]);
@@ -7243,11 +7249,11 @@ export function ServicePanel({
     setTraceError("");
     setError("");
     if (!canFetch) return;
-    fetchService(true);
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") fetchService(false);
+    let initial = true;
+    return startCompletionDrivenDashboardPoll(async () => {
+      await fetchService(initial);
+      initial = false;
     }, 7000);
-    return () => clearInterval(timer);
   }, [canFetch, fetchService]);
 
   const loadTraceForFilters = useCallback(async (filters: TraceFilters) => {

@@ -345,7 +345,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const contractsPromise = fetch\(`\$\{serviceBase\(activePort\)\}\/contracts`\)\.catch\(\(\) => null\);[\s\S]*contractsPromise,[\s\S]*const contractsJson = contractsResp\?\.ok[\s\S]*: null;[\s\S]*setContracts\(contractsJson\?\.success \? contractsJson\.data \?\? null : null\);/,
+  /const contractsPromise = fetchSharedServiceContracts\(\)\.catch\(\(\) => null\);[\s\S]*contractsPromise,[\s\S]*const contractsJson = contractsResp\?\.ok[\s\S]*: null;[\s\S]*setContracts\(contractsJson\?\.success \? contractsJson\.data \?\? null : null\);/,
   'Service contracts discovery must be optional so older services render with row remedies disabled',
 );
 

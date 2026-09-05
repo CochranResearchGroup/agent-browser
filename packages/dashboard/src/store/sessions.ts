@@ -6,6 +6,11 @@ import { useAtomCallback } from "jotai/utils";
 import type { SessionInfo } from "@/types";
 import { type ExecResult, execCommand, killSession, sessionArgs } from "@/lib/exec";
 import { sessionTabsApiUrl } from "@/lib/dashboard-api";
+import {
+  createSessionTabPollPlanner,
+  fetchCoordinatedDashboardRead,
+  startCompletionDrivenDashboardPoll,
+} from "@/lib/dashboard-read-coordinator";
 import { tabCacheAtom, engineCacheAtom } from "@/store/tabs";
 import { streamTabsAtom, streamEngineAtom } from "@/store/stream";
 
@@ -212,7 +217,7 @@ const reconcileSessionsAtom = atom(
 export function useSessionsSync(pollInterval = 10_000) {
   const failCountRef = useRef(0);
   const fetchInFlightRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tabPollPlannerRef = useRef(createSessionTabPollPlanner(4));
 
   const reconcile = useAtomCallback(
     useCallback((_get, set) => {
@@ -226,7 +231,7 @@ export function useSessionsSync(pollInterval = 10_000) {
         if (fetchInFlightRef.current) return;
         fetchInFlightRef.current = true;
         try {
-          const resp = await fetch(getSessionsUrl());
+          const resp = await fetchCoordinatedDashboardRead(getSessionsUrl());
           if (resp.ok) {
             failCountRef.current = 0;
             const data: SessionInfo[] = await resp.json();
@@ -255,16 +260,17 @@ export function useSessionsSync(pollInterval = 10_000) {
               set(activePortAtom, sessions[0].port);
             }
 
-            // Poll tabs for all sessions
-            for (const s of data) {
-              if (s.port <= 0) continue;
+            // Keep the selected session fresh and rotate a bounded budget
+            // across new, changed, and inactive live sessions.
+            const tabPollBatch = tabPollPlannerRef.current.select(data, activePort);
+            for (const s of tabPollBatch) {
               try {
-                const tabsResp = await fetch(sessionTabsApiUrl(s.port)).catch(() => null);
+                const tabsResp = await fetchCoordinatedDashboardRead(
+                  sessionTabsApiUrl(s.port),
+                ).catch(() => null);
                 if (tabsResp?.ok) {
                   const tabs = await tabsResp.json();
-                  if (tabs.length > 0) {
-                    set(tabCacheAtom, (prev) => ({ ...prev, [s.port]: tabs }));
-                  }
+                  set(tabCacheAtom, (prev) => ({ ...prev, [s.port]: tabs }));
                 }
               } catch {
                 // Session unreachable
@@ -286,10 +292,6 @@ export function useSessionsSync(pollInterval = 10_000) {
   );
 
   useEffect(() => {
-    fetchSessions();
-    timerRef.current = setInterval(fetchSessions, pollInterval);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return startCompletionDrivenDashboardPoll(fetchSessions, pollInterval);
   }, [fetchSessions, pollInterval]);
 }

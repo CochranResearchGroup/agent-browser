@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { sessionsAtom } from "@/store/sessions";
 import { engineForPortAtom, tabsForPortAtom } from "@/store/tabs";
-import { fetchSharedServiceStatus, SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { fetchSharedServiceResources, fetchSharedServiceStatus } from "@/lib/dashboard-api";
+import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
 import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
   readDashboardWorkspaceUrlSelection,
@@ -96,7 +97,7 @@ export function useSelectedWorkspaceContext(
     try {
       const [statusResponse, resourcesResponse] = await Promise.all([
         fetchSharedServiceStatus(),
-        fetch(`${SERVICE_API_BASE}/resources`, { cache: "no-store" }).catch(() => null),
+        fetchSharedServiceResources().catch(() => null),
       ]);
       if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
       const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
@@ -132,11 +133,7 @@ export function useSelectedWorkspaceContext(
 
   useEffect(() => {
     if (!enabled) return;
-    void refresh();
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 7000);
-    return () => window.clearInterval(interval);
+    return startCompletionDrivenDashboardPoll(refresh, 7000);
   }, [enabled, refresh]);
 
   const daemonTabsByPort = useMemo(() => {
