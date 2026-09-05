@@ -136,6 +136,16 @@ The <code>service.profiles</code> and <code>service.sessions</code> maps define
 service control-plane metadata for profile allocation, keyring posture, caller
 ownership, profile binding, lease state, and cleanup policy. These records are
 exposed through service status, MCP resources, and the HTTP service APIs.
+
+Set <code>AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled</code> on runtime
+processes to skip host process enumeration and foreign CDP endpoint probes in
+session discovery. Runtime-owned socket sessions remain visible. The default
+is <code>enabled</code>; invalid explicit values disable external discovery.
+The isolated development launcher and services pin <code>disabled</code>, and
+development doctor checks the running process environments. This does not
+sandbox browsers or sanitize retained Service records and desktop content;
+verify those independently before synthetic-only visual capture.
+
 Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
 the patched Chromium posture. If no explicit default is configured and a ready

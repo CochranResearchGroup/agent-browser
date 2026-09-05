@@ -13,6 +13,14 @@ versioned support assets, pinned Guacamole stack, protected credentials,
 canonical two-route pool, dashboard, runtime interlock, and PostgreSQL backup
 timer. A first apply that adds required groups exits 75 with
 `relogin_required`; log out and back in or reboot, then rerun the same apply.
+
+`AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled` prevents session discovery
+from enumerating host browser processes or probing foreign CDP endpoints;
+runtime-owned socket sessions remain visible. Default: `enabled`. Invalid
+explicit values fail closed to disabled. Development publication pins disabled
+in its launcher and services and checks attached process environments in its
+doctor. Before synthetic-only capture, also verify retained Service inventory
+and desktop content; disabling discovery alone does not prove that boundary.
 The first bootstrap has one `sudo -v` boundary. Every recurring installed
 route-user, XRDP restart, and route-display action then uses the fixed
 root-owned helper through passwordless `sudo -n`. Compatible helper versions

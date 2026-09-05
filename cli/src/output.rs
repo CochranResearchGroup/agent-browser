@@ -7418,6 +7418,8 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM state encryption
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
+  AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
+                                 Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_CDP_BOOTSTRAP_MODE Local Chrome CDP bootstrap: eager (default) or experimental navigation_minimal
   AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH
                                  Force an unsafe launch when a runtime profile browserFamily does not match the resolved executable family

@@ -4868,3 +4868,40 @@ the retained fixture's scroll position from y=454 to y=0 and blurred its
 active element. The receipt is separate from Readiness C. This confirms the
 displaced scroll state but does not identify which client caused it. No
 production browser or profile was changed.
+
+### Source-Bound Discovery Isolation Repair
+
+Checkpoint `f953fc45` published the repaired anchor lifecycle, artifact
+download, dashboard keyboard guard, optional W7 assembly, and embedded
+Guacamole autofocus correction. Development generation
+`0.28.0-d0d59b4daf72` installed with production unchanged. Fresh provider plan,
+stage, preflight, apply, and exact development Guacamole recreation succeeded.
+The loader reported the defaults extension active at 15:32:34 UTC, and the
+served application contains the exact repaired extension bytes with SHA-256
+`a797939077bb5fb438ca5956cce8156d0f2c3744526a3d103b3bd1b2e98c02e5`.
+
+Read-only inventory reconciliation found seven foreign-discovery rows in
+addition to three runtime-owned socket rows. Existing session discovery
+unconditionally enumerated host processes and probed discovered CDP endpoints;
+there was no configuration-only isolation switch. The bounded repair adds
+`AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY`: absent or `enabled` preserves
+ordinary behavior; `disabled` and invalid explicit values skip external
+discovery before enumeration or probing. Runtime-owned socket discovery stays
+unchanged. The new callback regression first failed, then all ten discovery
+tests passed through the safe Cargo wrapper.
+
+Development publication pins the policy to disabled in its launcher, all three
+service units, and generation metadata. Status and doctor read only the policy
+from each attached MainPID's bounded process environment. Missing, enabled,
+invalid, duplicate, or unavailable live evidence fails readiness. Tests use
+real disposable subprocess environments and prove inherited caller settings
+cannot re-enable development discovery. Primary-run development runtime tests,
+focused Rust tests, format, clippy, remote-view documentation tests, and docs
+site build passed. Production configuration is unchanged.
+
+This repair does not establish a synthetic-only inventory. The retained
+development Service State also contains non-campaign profiles and an older
+local tab outside the declared fixture origin. Those remain untouched. Their
+ownership and possible appearance during full-frame recording require
+separate reconciliation. No external capture or calibration has resumed, and
+the prior protected visual attestation must not be treated as current proof.

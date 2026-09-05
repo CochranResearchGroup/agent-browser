@@ -2484,6 +2484,14 @@ agent-browser --config ./ci-config.json open example.com
 AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 ```
 
+Set `AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled` on the runtime processes
+to skip host process enumeration and foreign CDP probing in session discovery.
+Runtime-owned socket sessions remain visible. The default is `enabled`; invalid
+explicit values disable external discovery. The isolated development launcher
+and services pin `disabled`, and their doctor verifies the running processes.
+This is not a browser sandbox or a synthetic-only capture guarantee: retained
+Service records and displayed desktop content still require ownership checks.
+
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
 Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. Ordinary launch and queued tab paths consume that default through the same access-plan resolver used by service clients, so a matching managed profile, site policy, remote view posture, and browser capability binding are applied unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. `agent-browser install stealthcdp-chromium` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromium-stealthcdp` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths such as `/mnt/c/...` to `C:\...` for Chrome arguments and adds `--no-sandbox`, which this host mode requires for the patched Windows build to expose DevTools. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, `profileSmoke` readiness for validating WSL Windows profile writes, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.

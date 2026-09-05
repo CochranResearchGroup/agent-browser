@@ -17,6 +17,8 @@ import {
   assertProductionUnchanged,
   developmentCandidateBinary,
   developmentRuntimeDescriptor,
+  developmentExternalDiscoveryChecks,
+  observeDevelopmentExternalDiscovery,
   evaluateProtectedLeaseAuthorityStatus,
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
@@ -34,7 +36,7 @@ writeFileSync(
 if [ "\${1:-}" = "--version" ]; then
   echo "agent-browser 0.28.0-fixture"
 else
-  printf '%s|%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH" "$AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY"
 fi
 `,
   { mode: 0o755 },
@@ -132,9 +134,13 @@ try {
   assert.equal(descriptor.presentationProvider.hardMaxSlots, 6);
   assert.equal(descriptor.guacamoleHeaderUser, 'fixture-provider-operator');
   assert.equal(descriptor.browserExecutable, fakeBrowser);
+  assert.equal(descriptor.externalBrowserDiscovery, 'disabled');
+  assert.equal(developmentRuntimeDescriptor({ ...env, AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: 'enabled' })
+    .externalBrowserDiscovery, 'disabled');
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
   for (const source of Object.values(units)) {
     assert.match(source, /AGENT_BROWSER_RUNTIME_ENVIRONMENT=development/);
+    assert.match(source, /^Environment=AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled$/m);
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST=1/);
     assert.match(source, /AGENT_BROWSER_SOCKET_DIR=/);
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=/);
@@ -158,6 +164,9 @@ try {
   const generationManifest = JSON.parse(
     readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
   );
+  assert.equal(generationManifest.externalBrowserDiscovery, 'disabled');
+  assert.equal(installed.status.externalBrowserDiscovery, 'disabled');
+  assert.equal(installed.status.generationMetadata.externalBrowserDiscovery, 'disabled');
   assert.deepEqual(generationManifest.desktopInputProvider, {
     enabled: true,
     providerId: 'controlled-x11-xtest',
@@ -169,7 +178,7 @@ try {
   }).trim();
   assert.equal(
     launcherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${fakeBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${fakeBrowser}|disabled`,
   );
   const diagnosticBrowser = join(fixture, 'diagnostic-chrome');
   const overriddenLauncherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
@@ -178,8 +187,35 @@ try {
   }).trim();
   assert.equal(
     overriddenLauncherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${diagnosticBrowser}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${diagnosticBrowser}|disabled`,
   );
+  for (const inherited of ['enabled', 'invalid-value']) {
+    const actual = execFileSync(descriptor.executable, ['print-env'], {
+      encoding: 'utf8', env: { ...env, AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: inherited },
+    }).trim();
+    assert.equal(actual.split('|').at(-1), 'disabled', 'caller cannot enable development host discovery');
+  }
+  assert.deepEqual(observeDevelopmentExternalDiscovery(null), { state: 'unavailable', policy: null });
+  for (const [value, state, policy, accepted] of [
+    ['disabled', 'observed', 'disabled', true],
+    ['enabled', 'observed', 'enabled', false],
+    [undefined, 'missing', null, false],
+    ['invalid-private-value', 'invalid', null, false],
+  ]) {
+    const childEnv = { ...env };
+    if (value === undefined) delete childEnv.AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY;
+    else childEnv.AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY = value;
+    const source = `import {observeDevelopmentExternalDiscovery} from ${JSON.stringify(
+      new URL('./lib/development-runtime.js', import.meta.url).href)};
+      console.log(JSON.stringify(observeDevelopmentExternalDiscovery(process.pid)));`;
+    const observed = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', source], {
+      env: childEnv, encoding: 'utf8',
+    }));
+    assert.deepEqual(observed, { state, policy });
+    assert.equal(developmentExternalDiscoveryChecks({ fixture: { externalBrowserDiscovery: observed } })[0].ok,
+      accepted, 'doctor must reject missing, wrong, or invalid live policy');
+    assert(!JSON.stringify(observed).includes('invalid-private-value'));
+  }
   writeFileSync(join(descriptor.socketDir, 'runtime-host.json'), `${JSON.stringify({
     schemaVersion: 'agent-browser.runtime-host.v1',
     hostId: 'runtime-host:4242',

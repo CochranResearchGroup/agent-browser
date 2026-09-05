@@ -4,11 +4,14 @@ import {
   accessSync,
   chmodSync,
   copyFileSync,
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   readlinkSync,
   renameSync,
   rmSync,
@@ -81,6 +84,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: 'development',
+    externalBrowserDiscovery: 'disabled',
     executable: resolve(env.AGENT_BROWSER_DEV_BIN || join(userHome, '.local', 'bin', 'agent-browser-dev')),
     installRoot,
     generations: join(installRoot, 'generations'),
@@ -122,6 +126,7 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
   const common = [
     `Environment=HOME=${descriptor.pseudoHome}`,
     `Environment=AGENT_BROWSER_RUNTIME_ENVIRONMENT=development`,
+    `Environment=AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled`,
     `Environment=AGENT_BROWSER_RUNTIME_HOST=1`,
     `Environment=AGENT_BROWSER_SOCKET_DIR=${descriptor.socketDir}`,
     `Environment=AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${descriptor.runtimeHostIngressState}`,
@@ -240,6 +245,7 @@ export function installDevelopmentRuntime({
     sha256,
     sourceBinary,
     browserExecutable: descriptor.browserExecutable,
+    externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
     desktopInputProvider: {
       enabled: true,
       providerId: 'controlled-x11-xtest',
@@ -400,6 +406,8 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     presentationProvider,
     developmentSkill,
     protectedLeaseAuthority,
+    externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
+    generationMetadata: selectedGeneration ? readJson(join(selectedGeneration, 'generation.json')) : null,
     ready:
       Boolean(selectedGeneration) &&
       Boolean(executable) &&
@@ -411,6 +419,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
       runtimeHostIngress?.selectedBackend?.pid === units['agent-browser-dev-runtime-host.service']?.mainPid &&
       runtimeHostIngress?.selectedBackend?.binarySha256 === manifest?.executable?.sha256 &&
       Object.values(units).every((unit) => unit.activeState === 'active') &&
+      developmentExternalDiscoveryChecks(units).every((item) => item.ok) &&
       protectedLeaseAuthority.ready &&
       manifest?.runtimeEnvironment === 'development' &&
       manifest?.executable?.path === executable,
@@ -440,6 +449,10 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     ...Object.entries(status.units).map(([name, unit]) =>
       check(`unit-executable:${name}`, unit.executable === status.executable, unit.executable),
     ),
+    ...developmentExternalDiscoveryChecks(status.units),
+    check('generation-external-browser-discovery',
+      status.generationMetadata?.externalBrowserDiscovery === 'disabled',
+      status.generationMetadata?.externalBrowserDiscovery),
     check('port:dashboard', status.ports.dashboard === status.units['agent-browser-dev-dashboard.service'].mainPid, status.ports.dashboard),
     check('port:backend', status.ports.backend === status.units['agent-browser-dev-dashboard-backend.service'].mainPid, status.ports.backend),
     check('port:lane', status.ports.lane === status.units['agent-browser-dev-runtime-host.service'].mainPid, status.ports.lane),
@@ -479,6 +492,7 @@ export function renderDevelopmentLauncher(descriptor, generationBinary) {
 set -eu
 export HOME=${shellQuote(descriptor.pseudoHome)}
 export AGENT_BROWSER_RUNTIME_ENVIRONMENT=development
+export AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled
 export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
 export AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${shellQuote(descriptor.runtimeHostIngressState)}
@@ -677,11 +691,52 @@ function unitStatus(unit, env) {
       activeState: values.ActiveState || 'unknown',
       mainPid,
       executable: mainPid ? processExecutable(mainPid) : null,
+      externalBrowserDiscovery: observeDevelopmentExternalDiscovery(mainPid),
       activeEnterTimestamp: values.ActiveEnterTimestamp || null,
     };
   } catch (error) {
     return { loadState: 'unknown', activeState: 'unknown', mainPid: null, error: String(error.message || error) };
   }
+}
+
+/** Read only the exact attached process's discovery policy; never return its other environment values. */
+export function observeDevelopmentExternalDiscovery(pid) {
+  if (!Number.isSafeInteger(pid) || pid < 1) return { state: 'unavailable', policy: null };
+  let fd;
+  try {
+    fd = openSync(`/proc/${pid}/environ`, 'r');
+    const buffer = Buffer.alloc(65_537);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(fd, buffer, length, buffer.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length === buffer.length) return { state: 'unavailable', policy: null };
+    const prefix = 'AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=';
+    const matches = buffer.subarray(0, length).toString('utf8').split('\0')
+      .filter((entry) => entry.startsWith(prefix));
+    if (matches.length === 0) return { state: 'missing', policy: null };
+    const value = matches[0].slice(prefix.length);
+    if (matches.length !== 1 || !['enabled', 'disabled'].includes(value)) {
+      return { state: 'invalid', policy: null };
+    }
+    return { state: 'observed', policy: value };
+  } catch {
+    return { state: 'unavailable', policy: null };
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Doctor admission uses live process readback, including missing/invalid-policy failures. */
+export function developmentExternalDiscoveryChecks(units) {
+  return Object.entries(units).map(([name, unit]) => check(
+    `unit-external-browser-discovery:${name}`,
+    unit.externalBrowserDiscovery?.state === 'observed' &&
+      unit.externalBrowserDiscovery.policy === 'disabled',
+    unit.externalBrowserDiscovery ?? { state: 'unavailable', policy: null },
+  ));
 }
 
 function protectedLeaseAuthorityStatus(env) {
