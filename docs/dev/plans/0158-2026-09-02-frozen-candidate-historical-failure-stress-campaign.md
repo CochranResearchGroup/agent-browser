@@ -5220,3 +5220,50 @@ was then run successfully. This checkpoint is hardening pending installed
 proof, not W6 acceptance. Next is guarded candidate and extension publication
 to the existing isolated namespace, preserving the retained browser and all
 failed evidence, then same-handoff installed validation.
+
+### Publication regression: retained baseline lost, provider quarantined
+
+Publication of `69bd75fb` installed isolated generation
+`0.28.0-d778e92eab61`, but the runtime-host restart closed the retained
+synthetic browser and four provider viewers. The earlier preservation plan
+did not succeed. The original browser PID and target cannot be reused as
+acceptance identity. Retain the failed epoch and its evidence.
+
+The direct provider container restart failed because staging replaced a
+Docker Desktop bind-mounted file. A governed provider apply subsequently
+recreated the containers and opened routes 1 and 2, then stopped on route 3
+with `existing_session_profile_identity_unproven`. Quarantine closed those
+new viewers and stopped all three isolated provider containers. A non-null
+capacity projection or old ready manifest does not supersede that readback.
+
+The failed route has matching terminal process-exit and profile-lock-release
+evidence, but its degraded browser row is profile-less and references an
+absent session. A focused provider-free regression reproduced how a late
+close-health callback recreates that malformed operational row after cleanup.
+The original strict relaunch guard remains unchanged. The bounded repair
+retains late failure events without recreating an already removed browser
+only when the current exact terminal owner and cleanup proofs match. This
+prevents recurrence; it does not itself repair an existing malformed row or
+restore the lost synthetic browser. Source validation passed all 85
+service-health tests, the exact terminal-owner relaunch regression, formatting
+and workspace Clippy. The new regression went red before the fix and now
+includes six fail-closed counterexamples. An intermediate patch also failed
+the event-retention assertion; the final patch explicitly preserves the late
+failure event. No second publication has been attempted.
+
+Private receipts under the cleanroom evidence root include
+`install-share-repair-d.json`, `provider-extension-restart-d.json`,
+`provider-apply-share-repair-e.json`, `scene-after-quarantine-e.json` and
+`baselines-quarantine-f.json`. Production and default-development guards pass.
+No screenshot, pixel attestation, protected-secret rebinding or external
+workflow dispatch occurred. W6 and the terminal live campaign remain
+incomplete. The distinct shared-view 404 repair is source/prototype-verified
+only; the original intermittent forward-auth 500 is not declared repaired.
+
+A read-only governed prune preview in `terminal-row-prune-preview-f.json`
+lists exactly three terminal browser rows and no profiles, tabs, sessions or
+displays. No cleanup was applied. The next recovery slice must first reconcile
+ancillary profile-reclaim resumption against namespace isolation, back up
+private state, and revalidate the exact candidate set. Restoring the provider
+and establishing a new synthetic baseline epoch remain separate installed
+gates; source green does not satisfy them.

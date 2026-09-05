@@ -1696,9 +1696,67 @@ fn persist_closed_browser_health_with_context(
             session.boot_epoch = crate::process_identity::current_boot_epoch();
             session.profile_lease_conflict_session_ids.clear();
         }
+        // A duplicate close callback can arrive after terminal cleanup removed
+        // the operational row. Keep its failure event, but do not recreate a
+        // profile-less browser with an active session from that stale callback.
+        // Uncertain process cleanup must still retain its degraded obligation.
+        let removed_terminal_owner = previous.is_none()
+            && !service_state.sessions.contains_key(session_id)
+            && !service_state.browser_process_identities.contains_key(&id)
+            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible())
+            && service_state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get(&id)
+                .is_some_and(|lifecycle| {
+                    use crate::runtime_owner_transfer::{
+                        CleanupObligationState, RuntimeLaneLifecycleState,
+                    };
+                    lifecycle.logical_browser_id == id
+                        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+                        && lifecycle
+                            .terminal_evidence
+                            .iter()
+                            .any(|evidence| evidence == "exact_process_exited")
+                        && lifecycle
+                            .terminal_evidence
+                            .iter()
+                            .any(|evidence| evidence == "profile_lock_released")
+                        && outcome
+                            .and_then(|outcome| outcome.pid)
+                            .is_none_or(|pid| lifecycle.process_group_id == Some(pid))
+                        && service_state
+                            .runtime_owner_registry
+                            .owner(&lifecycle.profile_identity_digest)
+                            .is_some_and(|owner| {
+                                owner.browser_id == id
+                                    && owner.daemon_session_route == session_id
+                                    && owner.owner_generation == lifecycle.owner_generation
+                                    && owner.pending_transfer.is_none()
+                            })
+                });
+        if removed_terminal_owner {
+            push_service_event(
+                service_state,
+                ServiceEvent {
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Late close failure retained without recreating a terminal browser"
+                        .to_string(),
+                    browser_id: Some(id.clone()),
+                    current_health: Some(health),
+                    details: Some(serde_json::json!({
+                        "operationalRecordRecreated": false,
+                        "terminalEvidencePreserved": true,
+                        "lateCloseObservation": browser.last_health_observation,
+                    })),
+                    ..new_service_event()
+                },
+            );
+        }
         if health == BrowserHealth::NotStarted {
             remove_browser_operational_record(service_state, &id, Some(session_id));
-        } else {
+        } else if !removed_terminal_owner {
             service_state.browsers.insert(id, browser);
         }
         Ok(())

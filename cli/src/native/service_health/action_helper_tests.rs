@@ -651,6 +651,118 @@ fn test_current_stale_health_in_repository_records_recovery_started() {
 }
 
 #[test]
+fn late_close_health_does_not_resurrect_removed_terminal_browser() {
+    use crate::runtime_owner_transfer::{
+        CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+        RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    };
+    let home = unique_socket_dir("late-terminal-close");
+    fs::create_dir_all(&home).unwrap();
+    let store = JsonServiceStateStore::new(home.join("state.json"));
+    let repository = LockedServiceStateRepository::new(store.clone());
+    let session_id = "late-close";
+    let browser_id = "session:late-close";
+    let owner = ProfileOwner {
+        owner_id: "synthetic-owner".into(),
+        profile_identity_digest: "1".repeat(64),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: browser_id.into(),
+        daemon_session_route: session_id.into(),
+        process_instance_digest: "2".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: "3".repeat(64),
+        target_set_digest: "4".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut registry = RuntimeOwnerRegistry::from_owner(owner);
+    registry.lifecycle_records.insert(
+        browser_id.into(),
+        RuntimeLifecycleRecord {
+            logical_browser_id: browser_id.into(),
+            profile_identity_digest: "1".repeat(64),
+            owner_generation: 1,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        },
+    );
+    // Cleanup already removed the operational browser and session. A late CDP
+    // close failure must remain evidence, not recreate an ownerless active row.
+    for case in 0..7 {
+        let mut state = ServiceState {
+            runtime_owner_registry: registry.clone(),
+            ..ServiceState::default()
+        };
+        if case == 1 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .lifecycle_state = RuntimeLaneLifecycleState::Ready;
+        }
+        if case == 3 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .owner_generation = 2;
+        }
+        if case == 4 {
+            state
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap()
+                .terminal_evidence
+                .pop();
+        }
+        if case == 6 {
+            state.runtime_owner_registry.owners.clear();
+        }
+        store.save(&state).unwrap();
+        persist_closed_browser_health_in_repository(
+            &repository,
+            session_id,
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_failed: true,
+                force_kill_failed: case == 2,
+                pid: (case == 5).then_some(99999),
+                errors: vec!["CDP connection already closed".into()],
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers.contains_key(browser_id),
+            case != 0,
+            "late close must not resurrect an exactly terminal removed browser: case {case}"
+        );
+        if case == 0 {
+            assert!(persisted
+                .events
+                .iter()
+                .any(|event| event.browser_id.as_deref() == Some(browser_id)
+                    && event.kind == ServiceEventKind::BrowserHealthChanged));
+        }
+        assert_eq!(
+            persisted.runtime_owner_registry,
+            state.runtime_owner_registry
+        );
+    }
+    fs::remove_dir_all(&home).unwrap();
+}
+
+#[test]
 fn test_close_health_event_marks_operator_requested_close() {
     let home = unique_socket_dir("service-browser-close-reason-home");
     fs::create_dir_all(&home).unwrap();

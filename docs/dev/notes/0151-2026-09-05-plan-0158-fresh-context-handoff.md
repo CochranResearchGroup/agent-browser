@@ -2,6 +2,53 @@
 
 Date: 2026-09-05
 
+## Publication failure and quarantine checkpoint
+
+This checkpoint supersedes the installed-state claims below. Source repair
+`69bd75fb` is pushed and generation `0.28.0-d778e92eab61` is installed only in
+the isolated namespace, but installed shared-view acceptance has not passed.
+The runtime-host restart during publication closed the retained synthetic
+browser and all four provider viewers. The old synthetic PID and target are
+not a preserved baseline. Keep that failed epoch intact.
+
+Provider staging replaced bind-mounted files. A direct container restart
+failed on a stale Docker Desktop bind mount. The subsequent governed provider
+apply recreated the containers, reopened routes 1 and 2, then failed on route
+3 with `existing_session_profile_identity_unproven`. Its quarantine closed
+the newly opened viewers and stopped all three isolated provider containers.
+No further provider attempt is authorized by a stale ready manifest alone.
+
+Route 3 has exact terminal process-exit and profile-lock-release evidence,
+but its degraded browser projection has no profile and still names an active
+session whose record is absent. The strict relaunch guard correctly refuses
+that inconsistent projection. The focused late-close regression failed before
+the repair and now passes, including six fail-closed counterexamples. All 85
+service-health tests, the exact terminal-owner relaunch regression, formatting
+and workspace Clippy passed. Late close failures are retained as events, not
+recreated as profile-less operational rows when exact terminal cleanup is
+proven. This source repair is not yet installed and does not fix existing
+malformed rows. Do not weaken ownership checks or edit Service State by hand.
+Production and default-development non-interference
+checks still pass in `baselines-quarantine-f.json`.
+
+Private evidence also includes `install-share-repair-d.json`,
+`provider-extension-restart-d.json`, `provider-apply-share-repair-e.json`, and
+`scene-after-quarantine-e.json` under the cleanroom campaign root. No screenshot,
+fresh pixel proof, visual attestation, protected-secret update or external
+workflow dispatch followed publication. The original forward-auth 500 remains
+unrepaired; the separate 404 repair remains pending installed proof. W6 and
+the terminal live campaign are incomplete.
+
+`terminal-row-prune-preview-f.json` is a read-only governed preview. It lists
+three terminal browser rows (provider routes 3 and 4 and the lost synthetic
+browser), and no profiles, tabs, sessions or displays for removal. No prune
+was applied. Before using the maintenance command, reconcile its ancillary
+profile-reclaim resumption behavior against the isolation boundary, preserve
+a private state backup, and freshly check the exact candidate set. Then build
+and publish the new source candidate through the isolated workflow and restore
+the provider through plan, stage, preflight and apply. A replacement synthetic
+browser must be a new evidence epoch, never the preserved original target.
+
 ## Shared-view capability repair checkpoint
 
 The forward-auth 500 remains unresolved, but the next bounded diagnostic
