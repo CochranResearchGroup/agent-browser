@@ -147,14 +147,14 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-Plan 0158's child-denial repair is verified: the exact subject-mismatch cause,
-no-effect certainty, and own-handle recourse agree across response, job,
-terminal event, trace, and journal, with zero duplicate matches or failure
-conflicts in the focused synthetic probe. Shared-client behavior and cleanup
-remain intact. Next reconcile current isolated service ownership and retained
-anchor-free failure evidence for one ordinary durable remote-view probe.
-Authenticated Profile ACLs, revocation/restart, dashboard projection, and
-interruption durability remain unaccepted.
+Plan 0158's isolated runtime is recovered on 0.28.0-22f36d5ada2c. Required
+doctor and three disposable launch smokes pass; Service projects four warm
+idle presentation slots without binding warnings. Production and default
+development are unchanged. Next capture ordinary durable handoff resolution
+and frame lifecycle, preserving exact retained target identity and adding the
+causal evidence absent from failed P/Q probes. Runtime recovery and a public
+login response do not establish ordinary external-view acceptance.
+Authenticated ACLs, revocation/restart, and logging durability remain open.
 Do not automatically resume calibration, reinstall, restart, or the prior
 harness repair queue. W6 and W7–W10 remain incomplete; the original workload,
 freeze gate, and full acceptance criteria are retained. Anchored readiness does

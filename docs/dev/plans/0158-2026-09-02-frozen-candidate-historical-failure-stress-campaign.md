@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_child_denial_verified_remote_view_next`
+Execution state: `priority_remote_view_runtime_recovered`
 
 Lane: P157
 
@@ -5769,3 +5769,52 @@ handoff probe through the supported durable contract. Do not restore the
 anchored calibration loop as a prerequisite. Authenticated Profile ACLs,
 revocation/restart, interruption durability, missing A-family producers,
 ordinary link reliability, W6, and W7–W10 remain outstanding.
+
+### Priority Remote-View Recovery: Current Isolated Stack
+
+Read-only reconciliation found the P158 host failed and both dashboards
+inactive. The selected old generation remained 0.28.0-8884c5fa8980. Its retained
+Service state marked one synthetic browser ready although the recorded process
+was absent. No executable from the isolated generation tree was live. Provider
+containers, schema, route users, and connections were present; only the four
+required warm displays and their uniqueness check failed.
+
+Retained P/Q receipts remain failures. P elected a replacement primary after
+closing the first viewer and rendered an iframe, but did not reach managed
+CONNECTED. Q lost the first frame before connection. These receipts establish
+neither a complete frame-lifecycle cause nor ordinary link acceptance. The
+prior loop stays stopped; no unchanged external retry or anchored calibration
+was used to mask it.
+
+After backing up isolated Service state, ingress records, and unit definitions,
+one scoped recovery installed source abc784c5 as 0.28.0-22f36d5ada2c. All three
+P158 units are active on the new generation. The supported installer verified
+production and default-development custody remained unchanged. Three disposable
+browser-launch smoke iterations passed. Required provider doctor initially
+still failed on missing warm displays, as expected from the read-only baseline.
+
+Provider plan, stage, and preflight passed using the existing reviewed namespace
+and paired external-ingress binding. One explicit apply with deferred ingress
+restored the warm displays and ended provider_ready_ingress_pending. It did not
+publish ingress. The exact required doctor then passed, and Service Status
+projected four warm_idle slots, hard/pressure maximum six, and zero binding
+warnings. A host-vantage read of the existing public login path returned HTTP
+200. That is not a viewer, pixel, interaction, or external-vantage pass. Final
+production/default-development snapshot comparisons also passed.
+
+Private recovery evidence lives in campaign directory
+`remote-view-priority-20260905T233828Z`, including the preserved pre-recovery
+state, one-attempt disposition, installed identity, provider receipts, final
+doctor/capacity readbacks, isolation checks, and a checkpoint hashing 26
+artifacts. No raw credentials, provider links, or runtime state enter the repo.
+
+Classification: blocker_reduction through verified isolated runtime recovery.
+Next capture the ordinary durable handoff's resolution and frame lifecycle
+with durable observations. First determine whether a retained synthetic handoff
+can recover its exact target; do not silently replace its URL or target. Any
+new external probe must explicitly address P/Q's missing causal observations,
+use the manual protected external-vantage lane and current synthetic identity
+binding, and retain its failure without an automatic retry. Old protected
+scene bindings cannot be reused after the reboot without current validation.
+Calibration, W6 freeze, W7–W10, authenticated ACL/revocation/restart, and full
+logging and ordinary remote-view acceptance remain incomplete.
