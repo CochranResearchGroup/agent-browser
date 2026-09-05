@@ -26,6 +26,8 @@ type GuacamolePrimaryClaim = {
   retryAfterMs?: number;
 };
 
+type GuacamoleActiveCandidate = readonly [string, GuacamoleActiveConnection];
+
 export type GuacamoleViewerFrameResolution = {
   mode: "direct" | "shared";
   url: string;
@@ -77,6 +79,57 @@ function waitForElection(delayMs: number, signal?: AbortSignal): Promise<void> {
     }, delayMs);
     signal?.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+async function waitWithinDeadline({
+  deadline,
+  delayMs,
+  nowImpl,
+  signal,
+  waitImpl,
+}: {
+  deadline: number;
+  delayMs: number;
+  nowImpl: () => number;
+  signal?: AbortSignal;
+  waitImpl: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+}): Promise<boolean> {
+  const remainingMs = deadline - nowImpl();
+  if (remainingMs <= 0) return false;
+  await waitImpl(Math.min(delayMs, remainingMs), signal);
+  return nowImpl() < deadline;
+}
+
+function matchingActiveConnections(
+  activeConnections: Record<string, GuacamoleActiveConnection>,
+  connectionId: string,
+): GuacamoleActiveCandidate[] {
+  return Object.entries(activeConnections)
+    .filter(([, active]) => active.connectionIdentifier === connectionId);
+}
+
+function connectableCandidates(
+  activeConnections: Record<string, GuacamoleActiveConnection>,
+  connectionId: string,
+): GuacamoleActiveCandidate[] {
+  return matchingActiveConnections(activeConnections, connectionId)
+    .filter(([, active]) => active.connectable === true)
+    .sort(([leftId, left], [rightId, right]) => {
+      const leftStart = Number.isFinite(left.startDate) ? left.startDate! : Number.POSITIVE_INFINITY;
+      const rightStart = Number.isFinite(right.startDate) ? right.startDate! : Number.POSITIVE_INFINITY;
+      return leftStart - rightStart || leftId.localeCompare(rightId);
+    });
+}
+
+function hasExactConnectableCandidate(
+  activeConnections: Record<string, GuacamoleActiveConnection>,
+  candidate: GuacamoleActiveCandidate,
+): boolean {
+  const [candidateId, expected] = candidate;
+  const observed = activeConnections[candidateId];
+  return observed?.connectionIdentifier === expected.connectionIdentifier
+    && observed.connectable === true
+    && observed.startDate === expected.startDate;
 }
 
 /**
@@ -147,25 +200,28 @@ export async function resolveGuacamoleViewerFrame({
       "Guacamole active-connection discovery",
     );
     // Guacamole 1.5.5 does not identify which REST rows are primary versus
-    // shared children. Probe every matching row through the restricted
-    // sharing-profile endpoint instead of guessing from row shape.
-    const activeCandidates = Object.entries(activeConnections)
-      .filter(([, active]) => active.connectionIdentifier === connectionId)
-      .sort(([leftId, left], [rightId, right]) => {
-        const leftStart = Number.isFinite(left.startDate) ? left.startDate! : Number.NEGATIVE_INFINITY;
-        const rightStart = Number.isFinite(right.startDate) ? right.startDate! : Number.NEGATIVE_INFINITY;
-        return rightStart - leftStart || leftId.localeCompare(rightId);
-      });
-    if (activeCandidates.length === 0) {
+    // shared children. Prefer the oldest connectable row, then prove it remains
+    // stable after key creation so a closing viewer cannot donate a dead key.
+    const matchingRows = matchingActiveConnections(activeConnections, connectionId);
+    const activeCandidates = connectableCandidates(activeConnections, connectionId);
+    if (matchingRows.length === 0) {
       consecutiveEmptySnapshots += 1;
       if (consecutiveEmptySnapshots < 2) {
-        await waitImpl(100, signal);
+        if (!await waitWithinDeadline({
+          deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
+        })) break;
         continue;
       }
       const claim = await claimPrimary();
       if (claim.granted) return { mode: "direct", url: frameUrl };
       const retryAfterMs = Number.isFinite(claim.retryAfterMs) ? claim.retryAfterMs! : 250;
-      await waitImpl(Math.max(50, Math.min(250, retryAfterMs)), signal);
+      if (!await waitWithinDeadline({
+        deadline: electionDeadline,
+        delayMs: Math.max(50, Math.min(250, retryAfterMs)),
+        nowImpl,
+        signal,
+        waitImpl,
+      })) break;
       continue;
     }
     consecutiveEmptySnapshots = 0;
@@ -182,7 +238,8 @@ export async function resolveGuacamoleViewerFrame({
       throw new Error("Guacamole simultaneous-view sharing profile is unavailable");
     }
 
-    for (const [activeConnectionId] of activeCandidates) {
+    for (const candidate of activeCandidates) {
+      const [activeConnectionId] = candidate;
       const credentialsResponse = await fetchImpl(new URL(
         `api/session/data/postgresql/activeConnections/${encodeURIComponent(activeConnectionId)}/sharingCredentials/${encodeURIComponent(sharingProfile.identifier)}`,
         root,
@@ -206,11 +263,32 @@ export async function resolveGuacamoleViewerFrame({
       const key = credentials.values?.key;
       if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
 
+      let stable = true;
+      for (let snapshot = 0; snapshot < 2; snapshot += 1) {
+        if (!await waitWithinDeadline({
+          deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
+        })) {
+          stable = false;
+          break;
+        }
+        const validation = await authenticatedFetch<Record<string, GuacamoleActiveConnection>>(
+          "api/session/data/postgresql/activeConnections",
+          "Guacamole active-connection stability validation",
+        );
+        if (!hasExactConnectableCandidate(validation, candidate)) {
+          stable = false;
+          break;
+        }
+      }
+      if (!stable) break;
+
       const shared = guacamoleSharingRoot(root);
       shared.hash = `/?key=${encodeURIComponent(key)}`;
       return { mode: "shared", url: shared.toString() };
     }
-    await waitImpl(100, signal);
+    if (!await waitWithinDeadline({
+      deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
+    })) break;
   }
   throw new Error("Guacamole primary election timed out");
 }
