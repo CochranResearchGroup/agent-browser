@@ -123,6 +123,32 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
+    // This exact guard precedes orphan adoption's first state mutation. A
+    // rejected binding requires inspection, not a replacement browser or a
+    // claim that the retained process is permanently lost.
+    if error.starts_with("runtime_handoff_orphan_browser_hint_mismatch:") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "runtime_handoff_orphan_browser_hint_mismatch".to_string(),
+            axis: ServiceFailureAxis::LifecycleOwner,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_profile_recovery_plan".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_profile_recovery_plan".to_string(),
+                "inspect_service_job".to_string(),
+                "inspect_service_trace".to_string(),
+            ],
+            hard_stops: vec![
+                "blind_retry".to_string(),
+                "replace_handoff_identity".to_string(),
+                "reopen_without_operator_confirmation".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     let wait_ms = failure_metadata_value(error, "waited_ms").and_then(|value| value.parse().ok());
     let holder_operation = failure_metadata_value(error, "holder_operation").map(str::to_string);
     let route_bound_blocker_code = failure_metadata_value(error, "route_bound_blocker_code");

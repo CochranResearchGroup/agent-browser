@@ -1897,6 +1897,14 @@ journal request ID as HTTP `id` or MCP error `data.requestId`. Correct invalid
 requests before resubmitting. Runtime provenance uses the server's deployment
 environment; clients cannot submit `runtimeEnvironmentId`.
 
+A retained-browser identity rejection such as
+`runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
+successful retryable convergence response. Inspect the profile recovery plan
+before retrying; do not change the handoff's browser identity or automatically
+reopen a replacement. This rejection reports no effect and does not establish
+that the browser is permanently lost. Transient adoption and incomplete
+presentation receipts retain their separate convergence behavior.
+
 Child-resource authority denials report `axis: "profile_access"`,
 `phase: "child_admission"`, and `effectState: "no_effect"` before the guarded
 operation. `profile_child_subject_mismatch` requires your own service tab

@@ -138,6 +138,14 @@ job. Route-bound callers must use authenticated `remote_view_open`. Derived
 display-allocation identity follows the stable route identity, not an X11
 display number that may later be reused by another route.
 
+A retained-browser identity rejection such as
+`runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
+successful retryable convergence response. Inspect the profile recovery plan
+before retrying; do not change the handoff's browser identity or automatically
+reopen a replacement. This rejection reports no effect and does not establish
+that the browser is permanently lost. Transient adoption and incomplete
+presentation receipts retain their separate convergence behavior.
+
 ## Resume software automation from a handoff
 
 Resolve the stored handoff ID first. Then derive the exact retained route and

@@ -1460,6 +1460,20 @@ pub(crate) async fn execute_durable_resolution<
             return Ok(RouteBoundOpenOutcome::Planned { plan });
         }
         Ok(RouteBoundDirectOpenResult::Opened(opened)) => opened.into_value(),
+        // The orphan identity guard rejects before adoption effects. Preserve this
+        // failure for Service recourse and journaling instead of inviting retries.
+        // It does not establish permanent loss of the retained browser.
+        Err(error)
+            if matches!(
+                error.runtime_issue.as_ref(),
+                Some(RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "adopt_retained_browser",
+                    message,
+                }) if message.starts_with("runtime_handoff_orphan_browser_hint_mismatch:")
+            ) =>
+        {
+            return Err(error);
+        }
         Err(error)
             if error.runtime_issue.as_ref().is_some_and(|issue| {
                 matches!(

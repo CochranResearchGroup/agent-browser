@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_reconciled_before_further_execution`
+Execution state: `priority_retained_handoff_source_repaired_verification_pending`
 
 Lane: P157
 
@@ -5918,3 +5918,33 @@ presentation-receipt convergence case separate. Allow one repair/verification
 cycle for this finding; no automatic repeat of this unresolved link probe.
 The P/Q frame-lifecycle failures, external pixels and interaction, authenticated
 ACLs, logging durability, W6, and W7–W10 remain open. Calibration stays deferred.
+
+### Priority Retained Handoff: Source Repair
+
+The existing coordinator regression now includes the observed explicit orphan
+identity rejection. Before repair it fails because the result is Converging
+with retryable true. The coordinator now propagates that exact adoption guard
+failure instead. Service recourse preserves its cause, lifecycle_owner axis,
+launch_admission phase, no_effect certainty, inspect_before_retry, and
+inspect_profile_recovery_plan. The guard runs before orphan adoption's first
+state mutation; it remains unchanged. No permanent-loss conclusion or automatic
+replacement is introduced. Transient adoption and incomplete presentation
+receipts retain their separate convergence paths.
+
+After repair, all 28 focused remote-view coordinator tests pass, including
+unchanged retained state on rejection and subsequent valid adoption. All 13
+failure-recourse tests, workspace clippy with warnings denied, generated-client
+checks, API/MCP parity, docs build, and handoff guidance checks pass. These are
+focused source checks, not installed or comprehensive acceptance. User guidance
+and CLI help describe the rejection and recourse. Candidate build and the one
+same-handoff installed verification remain pending at this source checkpoint.
+
+Current read-only P158 inspection identifies all three service processes on
+the preceding 22f36d5ada2c generation and four live provider browser processes
+whose command lines are P158-scoped. This is preparation for exact ownership
+reconciliation, not target recovery or provider visibility proof. No install,
+restart, external dispatch, or calibration has occurred in this source slice.
+Classification: blocker_reduction. The next step remains one installed
+response/job/event/trace/journal verification, preserving the original handoff.
+Authenticated ACL lifecycle, interruption durability, ordinary external pixels
+and input, P/Q frame behavior, W6, and W7–W10 remain unmet.
