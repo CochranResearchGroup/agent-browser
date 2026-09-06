@@ -488,3 +488,17 @@ campaigns/p160/census/stale-binding-release-build.log. Do not start another buil
 because a polling window ends. Qualify that exact binary, publish while preserving
 current browser identities, then repeat the original profile's blank-tab test
 once against the changed production binary. Continue the remaining W1–W5 work.
+
+### W2 read-only diagnosis during the W1 release build
+
+The current Linux socket census confirms the earlier remote-headed `:91`
+failure has an independent allocation cause. An abstract X11 socket for that
+display is live in the network namespace while its filesystem socket is absent
+from the caller's `/tmp`; the visible lock names a PID that no longer exists.
+The allocator in `cdp/chrome.rs` classifies only filesystem sockets and lock PID
+command lines. It can therefore treat this occupied display as a stale lock and
+select it. The private abstract-socket census is under campaigns/p160/census.
+No lock was removed and no X server or browser was changed by this diagnosis.
+Next W2 repair must account for abstract socket occupancy, preserve unknown
+owners and retain useful Xvfb startup diagnostics. This evidence does not close
+remote-headed launch/reopen or operator presentation acceptance.
