@@ -1015,6 +1015,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> AccessPlanDecisio
 
     let recommended_action = if policy_denies || denied_challenge {
         "deny_request_by_site_policy"
+    } else if !acquisition.access_decision().allowed {
+        // An ACL or occupancy denial must direct the client to its actual blocker
+        // before freshness advice can suggest probing or seeding this Profile.
+        acquisition.access_decision().next_action.action.as_str()
     } else if manual_seeding_required {
         readiness_recommended_action(readiness, target_service_ids)
             .unwrap_or("seed_profile_before_authenticated_work")
@@ -1497,6 +1501,22 @@ fn attention_decision(recommended_action: &str) -> Value {
             "Request denied by site policy",
             "The selected site policy or retained challenge denies this browser request.",
             vec!["review_site_policy", "resolve_or_acknowledge_challenge"],
+        ),
+        "inspect_profile_access_policy" => (
+            true,
+            "client",
+            "blocking",
+            "Profile permission required",
+            "Inspect the denied Profile access decision and required permission before using this Profile.",
+            vec!["inspect_profile_access_policy"],
+        ),
+        "inspect_profile_occupancy" => (
+            true,
+            "client",
+            "blocking",
+            "Profile occupancy blocks access",
+            "Inspect the Profile's drain or exclusive occupancy before requesting access again.",
+            vec!["inspect_profile_occupancy"],
         ),
         "seed_profile_before_authenticated_work"
         | "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable" => (
@@ -5234,6 +5254,15 @@ mod tests {
             "profile_access_denied"
         );
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            plan["decision"]["profileAccess"]["decision"]["nextAction"]["action"]
+        );
+        assert_eq!(plan["decision"]["attention"]["severity"], "blocking");
+        assert_eq!(
+            plan["decision"]["attention"]["suggestedActions"],
+            json!(["inspect_profile_access_policy"])
+        );
     }
 
     #[test]

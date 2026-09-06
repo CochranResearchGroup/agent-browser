@@ -1920,6 +1920,10 @@ revision; its recovery action is to inspect Profile access policy. Use the
 same credential when following that read-only action. Do not change caller
 labels, seed a profile, or retry a denied operation to bypass its policy.
 Pre-dispatch denials have no job; join their request ID to the failure journal.
+Access-plan permission and occupancy denials take priority over freshness or
+seeding advice. Follow the blocking policy or occupancy inspection action in
+`decision.recommendedAction` and the exact `profileAccess.decision.nextAction`.
+
 Authenticated service requests record the validated principal and its assurance
 in job and terminal provenance, including profile policy mutations. Service,
 agent, and task labels remain attribution and cannot replace that actor.
