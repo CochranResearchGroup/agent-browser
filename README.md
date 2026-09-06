@@ -781,9 +781,17 @@ rejects raw URLs and handoff IDs. Failure records contain causal identifiers,
 runtime and boot epochs, typed codes, bounded redacted summaries, and no page
 content, credentials, headers, bearer material, or query strings.
 
-Journal writes use a dedicated bounded writer. Queue pressure backpressures
-instead of dropping accepted records, and failure readback reports delivery
-pressure and delivery failure counters. The dashboard retains up to 4,096
+Failure records first enter private pending files in
+`~/.agent-browser/service/failure-journal.pending/`. On Unix, the record and
+directory entry are synced before returning. A background writer projects
+pending records into the journal and recovers them at daemon startup without
+resubmitting requests. Journal contention defers projection; queue pressure
+retains disk custody. Replay checks occurrence identity and content before
+retiring pending files. Readback reports `pendingRecordCount` separately from
+projected records and process-local delivery counters. Persistence failure
+reports `custody_failed`; it never establishes durable custody. Journal reads
+fail promptly on lock contention. Host power-loss durability and non-Unix
+directory persistence require separate platform validation. The dashboard retains up to 4,096
 privacy-bounded same-origin status, resource, tab, and runtime-health read
 failures per document and submits them after a later valid recovery response.
 Any overflow is represented by an explicit delivery-gap occurrence.

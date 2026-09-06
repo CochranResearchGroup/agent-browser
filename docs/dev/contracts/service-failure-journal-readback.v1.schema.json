@@ -15,6 +15,7 @@
     "malformedLineCount": { "type": "integer", "minimum": 0 },
     "writeFailureCount": { "type": "integer", "minimum": 0 },
     "deliveryOverloadCount": { "type": "integer", "minimum": 0 },
-    "deliveryFailureCount": { "type": "integer", "minimum": 0 }
+    "deliveryFailureCount": { "type": "integer", "minimum": 0 },
+    "pendingRecordCount": { "type": "integer", "minimum": 0 }
   }
 }

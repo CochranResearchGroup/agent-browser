@@ -13,6 +13,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
+use std::time::Duration;
+
+mod pending;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -50,20 +53,50 @@ enum FailureJournalEnqueueResult {
 struct FailureJournalDispatcher {
     sender: SyncSender<FailureJournalCommand>,
     counters: Arc<FailureJournalDeliveryCounters>,
+    durable_pending: bool,
 }
 
 impl FailureJournalDispatcher {
+    #[cfg(test)]
     fn start(
         capacity: usize,
         sink: FailureJournalSink,
         counters: Arc<FailureJournalDeliveryCounters>,
     ) -> Result<Self, String> {
+        Self::start_with_recovery(capacity, sink, counters, None)
+    }
+
+    fn start_with_recovery(
+        capacity: usize,
+        sink: FailureJournalSink,
+        counters: Arc<FailureJournalDeliveryCounters>,
+        recovery_path: Option<PathBuf>,
+    ) -> Result<Self, String> {
+        let durable_pending = recovery_path.is_some();
         let (sender, receiver) = sync_channel::<FailureJournalCommand>(capacity.max(1));
         let worker_counters = counters.clone();
         thread::Builder::new()
             .name("agent-browser-failure-journal".to_string())
             .spawn(move || {
-                while let Ok(command) = receiver.recv() {
+                let recover = || {
+                    if let Some(path) = &recovery_path {
+                        if let Err(code) = pending::recover(path) {
+                            worker_counters.write_failures.fetch_add(1, Ordering::Relaxed);
+                            worker_counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
+                            eprintln!("agent_browser_failure_journal_delivery event=recovery_failed code={code}");
+                        }
+                    }
+                };
+                recover();
+                loop {
+                    let command = match receiver.recv_timeout(Duration::from_secs(1)) {
+                        Ok(command) => command,
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            recover();
+                            continue;
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                    };
                     match command {
                         FailureJournalCommand::Append(record) => {
                             let delivered =
@@ -83,13 +116,18 @@ impl FailureJournalDispatcher {
                             }
                         }
                         FailureJournalCommand::Flush(acknowledge) => {
+                            recover();
                             let _ = acknowledge.send(());
                         }
                     }
                 }
             })
             .map_err(|error| format!("failed to start service failure journal worker: {error}"))?;
-        Ok(Self { sender, counters })
+        Ok(Self {
+            sender,
+            counters,
+            durable_pending,
+        })
     }
 
     fn enqueue(&self, record: &ServiceFailureRecord) -> FailureJournalEnqueueResult {
@@ -103,6 +141,10 @@ impl FailureJournalDispatcher {
                     .queue_overloads
                     .fetch_add(1, Ordering::Relaxed);
                 eprintln!("agent_browser_failure_journal_delivery event=queue_backpressure");
+                if self.durable_pending {
+                    // The notification may be dropped; the synced record may not.
+                    return FailureJournalEnqueueResult::Backpressured;
+                }
                 match self.sender.send(FailureJournalCommand::Append(record)) {
                     Ok(()) => FailureJournalEnqueueResult::Backpressured,
                     Err(_) => {
@@ -130,12 +172,12 @@ impl FailureJournalDispatcher {
     }
 
     fn flush(&self) -> Result<(), String> {
-        let (acknowledge, acknowledged) = sync_channel(0);
+        let (acknowledge, acknowledged) = sync_channel(1);
         self.sender
-            .send(FailureJournalCommand::Flush(acknowledge))
+            .try_send(FailureJournalCommand::Flush(acknowledge))
             .map_err(|_| "service failure journal worker is unavailable".to_string())?;
         acknowledged
-            .recv()
+            .recv_timeout(Duration::from_secs(2))
             .map_err(|_| "service failure journal worker stopped before flush".to_string())
     }
 }
@@ -160,12 +202,25 @@ fn failure_journal_dispatcher() -> &'static Result<FailureJournalDispatcher, Str
     static DISPATCHER: OnceLock<Result<FailureJournalDispatcher, String>> = OnceLock::new();
     DISPATCHER.get_or_init(|| {
         let counters = failure_journal_delivery_counters().clone();
-        FailureJournalDispatcher::start(
+        let path = default_failure_journal_path()?;
+        let sink_path = path.clone();
+        FailureJournalDispatcher::start_with_recovery(
             FAILURE_JOURNAL_QUEUE_CAPACITY,
-            Arc::new(|record| append_service_failure(record).map(|_| ())),
+            Arc::new(move |_| pending::recover(&sink_path)),
             counters,
+            Some(path),
         )
     })
+}
+
+/// Start restart recovery without requiring another failure to trigger delivery.
+pub fn initialize_failure_journal() {
+    if failure_journal_dispatcher().is_err() {
+        let counters = failure_journal_delivery_counters();
+        counters.write_failures.fetch_add(1, Ordering::Relaxed);
+        counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
+        eprintln!("agent_browser_failure_journal_delivery event=worker_start_failed");
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,6 +312,8 @@ pub struct ServiceFailureJournalReadback {
     pub write_failure_count: u64,
     pub delivery_overload_count: u64,
     pub delivery_failure_count: u64,
+    /// Pending publications, including retained corrupt/conflicting records.
+    pub pending_record_count: u64,
 }
 
 impl ServiceFailureRecord {
@@ -321,13 +378,20 @@ impl ServiceFailureRecord {
     }
 }
 
-/// Append one record to the default user-scoped journal.
+/// Persist one record in private pending custody and notify journal projection.
+/// The returned path names the final journal; projection may still be pending.
 ///
 /// This is deliberately best-effort at call sites: logging failure must not
 /// hide or replace the primary product failure being reported.
 pub fn append_service_failure(record: &ServiceFailureRecord) -> Result<PathBuf, String> {
     let path = default_failure_journal_path()?;
-    append_service_failure_at(&path, record)?;
+    pending::stage(&path, record)?;
+    match failure_journal_dispatcher() {
+        Ok(dispatcher) => {
+            let _ = dispatcher.enqueue(record);
+        }
+        Err(_) => initialize_failure_journal(),
+    }
     Ok(path)
 }
 
@@ -338,16 +402,13 @@ pub fn append_service_failure_best_effort(record: &ServiceFailureRecord) {
         "agent_browser_service_failure event=observed occurrence_id={} category={:?}",
         occurrence_id, record.category
     );
-    match failure_journal_dispatcher() {
-        Ok(dispatcher) => {
-            let _ = dispatcher.enqueue(record);
-        }
-        Err(_) => {
-            let counters = failure_journal_delivery_counters();
-            counters.write_failures.fetch_add(1, Ordering::Relaxed);
-            counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
-            eprintln!("agent_browser_failure_journal_delivery event=worker_start_failed");
-        }
+    // Durable custody precedes returning to response construction. Projection
+    // can be deferred by contention without leaving the record only in memory.
+    if let Err(code) = append_service_failure(record) {
+        let counters = failure_journal_delivery_counters();
+        counters.write_failures.fetch_add(1, Ordering::Relaxed);
+        counters.delivery_failures.fetch_add(1, Ordering::Relaxed);
+        eprintln!("agent_browser_failure_journal_delivery event=custody_failed occurrence_id={occurrence_id} code={code}");
     }
 }
 
@@ -388,6 +449,7 @@ pub fn read_service_failures_at(
             write_failure_count: failure_journal_write_failure_count(),
             delivery_overload_count: failure_journal_delivery_overload_count(),
             delivery_failure_count: failure_journal_delivery_failure_count(),
+            pending_record_count: pending::count(path)?,
         });
     }
     let file = OpenOptions::new().read(true).open(path).map_err(|error| {
@@ -396,7 +458,7 @@ pub fn read_service_failures_at(
             path.display()
         )
     })?;
-    file.lock_shared().map_err(|error| {
+    file.try_lock_shared().map_err(|error| {
         format!(
             "failed to read-lock service failure journal {}: {error}",
             path.display()
@@ -429,6 +491,7 @@ pub fn read_service_failures_at(
         write_failure_count: failure_journal_write_failure_count(),
         delivery_overload_count: failure_journal_delivery_overload_count(),
         delivery_failure_count: failure_journal_delivery_failure_count(),
+        pending_record_count: pending::count(path)?,
     })
 }
 

@@ -44,6 +44,7 @@ assert(validateReadback({
   writeFailureCount: 0,
   deliveryOverloadCount: 0,
   deliveryFailureCount: 0,
+  pendingRecordCount: 2,
 }), JSON.stringify(validateReadback.errors));
 
 for (const category of ['guacamole_load', 'handoff_link', 'cdp_stream', 'dashboard_action']) {
@@ -68,7 +69,7 @@ assert(!validateObservation({
 assert(rust.includes('failure-journal.jsonl'));
 assert(rust.includes('file.sync_data()'));
 assert(rust.includes('file.lock()'));
-assert(rust.includes('file.lock_shared()'));
+// Lock contention and pending replay are exercised by the Rust filesystem tests.
 assert(rust.includes('malformed_line_count'));
 assert(rust.includes('Permissions::from_mode(0o600)'));
 assert(browser.includes('ServiceFailureCategory::BrowserLaunch'));

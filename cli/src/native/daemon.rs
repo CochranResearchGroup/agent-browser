@@ -90,6 +90,7 @@ fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
 
 pub async fn run_daemon(session: &str) {
     let startup_started = Instant::now();
+    super::service_failure_journal::initialize_failure_journal();
     let socket_dir = get_daemon_socket_dir();
     let endpoint_key = crate::runtime_host::endpoint_key(session).to_string();
     if !socket_dir.exists() {

@@ -27,9 +27,17 @@ handoff IDs, and query strings.
 Authenticated operators and software clients can read recent records with
 <code>GET /api/service/failures?limit=100</code>. The reader skips malformed
 lines and reports their count so one damaged occurrence does not hide later
-evidence. Journal writes use a dedicated bounded writer. Queue pressure
-backpressures instead of silently dropping accepted records, and readback
-reports separate overload, worker, and sink failure counters. The authenticated
+evidence. Records enter private <code>failure-journal.pending/</code> files before
+returning; Unix writes sync the file and directory entry. A bounded background
+writer projects these records and recovers pending occurrences on daemon
+startup without resubmitting requests. Journal lock contention defers
+projection, while queue pressure preserves disk custody. Replay checks
+occurrence identity and content before retiring pending files. Readback reports
+<code>pendingRecordCount</code> separately from projected records and
+process-local overload and failure counters. A persistence failure reports
+<code>custody_failed</code>, not durable custody. Reads fail promptly on journal
+lock contention. Power-loss and non-Unix directory durability require separate
+platform validation. The authenticated
 dashboard uses
 <code>POST /api/service/failure-observation</code> for failures visible only in
 the client, including Guacamole iframe failures, unusable handoffs, CDP streams
