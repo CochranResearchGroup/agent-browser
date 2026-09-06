@@ -1862,3 +1862,36 @@ Next build the final candidate and run the supported production dry run, then
 finish exact support/rollback composition and the concrete delivery proposal.
 The live migration gate is not yet claimed resolved: no rebuilt candidate has
 passed that dry run. Production state and selected generation remain unchanged.
+
+## Checkpoint 44: release candidate and supported dry run captured
+
+The release build from `b3c6b6119a805ff87723c4c6701e83516f27dec9`
+completed, including a fresh 80-asset dashboard. Frozen binary SHA-256:
+`367c1006318811324faa64a2bbf0c3e016a76902971fadde677ab39d9452337e`.
+The supported production dry run completed with `mutated=false`; the previous
+missing-browser reader rejection is gone. The preview has an available forward
+reader, old-reader compatibility and no protected record removals. This is
+reader compatibility evidence, not production acceptance or migration approval.
+
+The candidate materialized its sealed bundle through the supported isolated
+installer. That fixture reports payload installed, not live workstation ready.
+Its units were rendered to the reviewed production root and existing ports
+4848/8092; exact JSON serialization was checked before deriving the proposed
+support manifest SHA-256
+`27306db23f455e196d1700b550f7478ea9e3b2266009632ea28198c044408c9b`
+and expected generation `0.28.0-367c10063188-27306db23f45`.
+The actual production transaction must match these derived identities. Private
+`production-candidate-v2/` contains all binaries, logs, source composition,
+dry-run, isolated bundle custody and expected production units/manifest.
+Production's selected generation and binary remained unchanged. A separate
+private rollback copy matches all 32 files in the retained production generation.
+
+The dry-run class diff still needs explicit delivery disposition: 71 browser
+placeholders and 72 session rows added, two browser records changed, 77 profile
+records and nine tabs normalized. Principal records, capabilities, runtime
+owners, routes, handoffs, displays and viewer/acquisition leases have no removals
+or changes in the class summary. The presentation bootstrap has one eligible
+handoff and still requires a candidate proof after staging. These facts do not
+waive fresh runtime census, exact state backup, override disposition or outcome
+checks. Next finish the class-diff review and concrete delivery proposal, with
+production deployment explicitly pending. No new external probe was run.

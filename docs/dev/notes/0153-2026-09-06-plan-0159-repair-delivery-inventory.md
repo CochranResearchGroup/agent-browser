@@ -146,3 +146,22 @@ orphans; runtime-owner migration and signalling authority remain unchanged.
 Private logs and the state-bound adjudication are retained in the campaign.
 A rebuilt candidate's supported production dry run is still required before
 calling the observed migration gate resolved.
+
+## Frozen release candidate and dry-run evidence
+
+Source: `b3c6b6119a805ff87723c4c6701e83516f27dec9`.
+Release binary: `367c1006318811324faa64a2bbf0c3e016a76902971fadde677ab39d9452337e`.
+Expected production support manifest:
+`27306db23f455e196d1700b550f7478ea9e3b2266009632ea28198c044408c9b`.
+Expected production generation: `0.28.0-367c10063188-27306db23f45`.
+The support identity is derived from the materialized isolated bundle with
+reviewed production unit paths and ports; require equality in the real guarded
+transaction. It is not production-installed evidence.
+
+The supported production dry run now passes the reader that previously rejected
+the prior-boot orphan. It performs no mutation and reports no protected record
+removals. The explicit normalization/placeholder class diff, staged presentation
+proof, compatibility drop-in disposition and post-install outcomes still require
+review in the concrete proposal. Rollback generation custody now includes an
+independent private copy with all 32 source file hashes verified. Details and
+receipts are in Plan checkpoint 44 and private `production-candidate-v2/`.
