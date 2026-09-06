@@ -557,6 +557,7 @@ export function evaluateDevelopmentPresentationProviderObservation(descriptor, o
     check('presentation-provider:observed-environment', observation?.environment === 'development', observation?.environment),
     check('presentation-provider:secrets-private', observation?.secrets?.private === true, observation?.secrets?.private),
     check('presentation-provider:database-schema', observation?.database?.schemaReady === true, observation?.database?.schemaReady),
+    check('presentation-provider:loaded-extension', observation?.extension?.matches === true, observation?.extension || null),
   ];
   for (const [service, name] of Object.entries(descriptor.services)) {
     const container = observation?.containers?.find((item) => item.name === name);

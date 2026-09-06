@@ -14,6 +14,7 @@ import {
   developmentPresentationProviderManifestUpgradeCompatible,
   developmentAgentSkillStatus,
   doctorDevelopmentPresentationProvider,
+  evaluateDevelopmentPresentationProviderObservation,
   synchronizeDevelopmentAgentSkill,
   validateDevelopmentPresentationProviderIsolation,
 } from './lib/development-presentation-provider.js';
@@ -575,6 +576,7 @@ try {
   assert.equal(configuredWithoutResources.success, false);
   assert.equal(configuredWithoutResources.status.state, 'not_ready');
   const readyObservation = {
+    extension: { matches: true },
     environment: 'development',
     containers: Object.values(descriptor.services).map((name) => ({
       name,
@@ -610,6 +612,11 @@ try {
   };
   const probed = probeDevelopmentPresentationProvider(descriptor, {
     run(command, args) {
+      if (command === 'curl') return {
+        status: 0,
+        stdout: readFileSync(join(descriptor.root, 'extensions/agent-browser-defaults.js'), 'utf8'),
+        stderr: '',
+      };
       if (command === 'docker' && args[0] === 'inspect') {
         return { status: 0, stdout: `true\t${descriptor.composeProject}\n`, stderr: '' };
       }
@@ -644,6 +651,8 @@ try {
     displaySocketExists: () => true,
   });
   assert.equal(probed.database.schemaReady, true);
+  assert.equal(probed.extension.matches, true);
+  assert.match(probed.extension.expectedSha256, /^[a-f0-9]{64}$/);
   assert.equal(probed.database.routes.length, 6);
   assert.equal(probed.displays.length, 6);
   assert.equal(probed.displays.at(-1).displayReservationId, 'development-display-6');
@@ -939,6 +948,12 @@ try {
   assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
   assert.deepEqual(effectCalls, []);
 
+  const staleExtension = structuredClone(readyObservation);
+  staleExtension.extension.matches = false;
+  assert.equal(evaluateDevelopmentPresentationProviderObservation(descriptor, staleExtension)
+    .every((check) => check.ok), false,
+  'healthy containers serving the previous extension cannot satisfy provider readiness');
+
   effectCalls.length = 0;
   let capacityObservation = capacityDrift;
   const capacityReconciled = applyDevelopmentPresentationProvider({
@@ -974,42 +989,45 @@ try {
   ).running = false;
   stoppedObservation.ports.guacamole.listening = false;
   stoppedObservation.displays = [];
-  let reconcileObservation = stoppedObservation;
-  const recovered = applyDevelopmentPresentationProvider({
-    env,
-    authorizeEffects: true,
-    deferIngress: true,
-    effects: {
-      snapshotProduction: () => ({ identity: 'production-fixture' }),
-      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
-      createVolume: () => effectCalls.push('create-volume'),
-      startDatabase: () => effectCalls.push('start-database'),
-      ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
-      syncConnections: () => effectCalls.push('sync-connections'),
-      startProvider: () => effectCalls.push('start-provider'),
-      grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
-      openWarmRoutes: () => {
-        effectCalls.push('open-warm-routes');
-        reconcileObservation = readyObservation;
+  for (const initialObservation of [stoppedObservation, staleExtension]) {
+    effectCalls.length = 0;
+    let reconcileObservation = initialObservation;
+    const recovered = applyDevelopmentPresentationProvider({
+      env,
+      authorizeEffects: true,
+      deferIngress: true,
+      effects: {
+        snapshotProduction: () => ({ identity: 'production-fixture' }),
+        assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+        createVolume: () => effectCalls.push('create-volume'),
+        startDatabase: () => effectCalls.push('start-database'),
+        ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
+        syncConnections: () => effectCalls.push('sync-connections'),
+        startProvider: () => effectCalls.push('start-provider'),
+        grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
+        openWarmRoutes: () => {
+          effectCalls.push('open-warm-routes');
+          reconcileObservation = readyObservation;
+        },
+        observe: () => reconcileObservation,
+        grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
+        quarantine: () => effectCalls.push('quarantine'),
       },
-      observe: () => reconcileObservation,
-      grantDisplayAccess: (display) => effectCalls.push(`grant:${display.displayReservationId}`),
-      quarantine: () => effectCalls.push('quarantine'),
-    },
-  });
-  assert.equal(recovered.state, 'provider_ready_ingress_pending');
-  assert.equal(recovered.providerReady, true);
-  assert.deepEqual(effectCalls, [
-    'create-volume',
-    'start-database',
-    ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
-    'sync-connections',
-    'start-provider',
-    'grant-operator-route-access',
-    'open-warm-routes',
-    ...descriptor.routes.slice(0, descriptor.warmSlots)
-      .map((route) => `grant:${route.displayReservationId}`),
-  ]);
+    });
+    assert.equal(recovered.state, 'provider_ready_ingress_pending');
+    assert.equal(recovered.providerReady, true);
+    assert.deepEqual(effectCalls, [
+      'create-volume',
+      'start-database',
+      ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
+      'sync-connections',
+      'start-provider',
+      'grant-operator-route-access',
+      'open-warm-routes',
+      ...descriptor.routes.slice(0, descriptor.warmSlots)
+        .map((route) => `grant:${route.displayReservationId}`),
+    ]);
+  }
 
   let configuredQuarantine = null;
   effectCalls.length = 0;

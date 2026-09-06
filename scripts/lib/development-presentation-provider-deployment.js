@@ -585,8 +585,27 @@ from (
   } catch {
     privateSecret = false;
   }
+  // Tomcat retains the loaded extension after the staged JAR changes. Require
+  // the served application to contain the exact staged source before accepting
+  // provider readiness. Report hashes only, never the application body.
+  let expectedExtension = null;
+  try {
+    expectedExtension = readFileSync(join(descriptor.root, 'extensions/agent-browser-defaults.js'), 'utf8');
+  } catch { /* Missing staging is unready. */ }
+  const servedExtension = run('curl', [
+    '-fsS', '--max-time', '5',
+    `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/app.js`,
+  ]);
+  const extension = {
+    matches: Boolean(expectedExtension) && servedExtension.status === 0 &&
+      servedExtension.stdout.includes(expectedExtension),
+    expectedSha256: expectedExtension ? createHash('sha256').update(expectedExtension).digest('hex') : null,
+    responseSha256: servedExtension.status === 0
+      ? createHash('sha256').update(servedExtension.stdout).digest('hex') : null,
+  };
   return {
     environment: 'development',
+    extension,
     containers,
     ports,
     routeUsers,

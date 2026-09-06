@@ -196,6 +196,8 @@ identity matches exactly. Staging and preflight recognize that state as an
 additive upgrade, while status remains drifted until explicit apply writes v2
 authority. Any other manifest drift remains blocking.
 Ingress publication remains deferred until the provider-ready checkpoint.
+Development provider readiness verifies that Guacamole serves the exact staged extension source. A stale loaded extension requires provider reconciliation even when containers are healthy.
+
 Provider doctor success proves provider readiness; Service Status must also
 report non-null `presentationCapacity` before capacity acceptance begins.
 Elastic provider changes are explicit and one route per command. Scale-out

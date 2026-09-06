@@ -1622,3 +1622,37 @@ closure has occurred. The provider effect adapter supports force-recreation of
 the P158 Guacamole/guacd containers when reconciliation requires startup; verify
 that publication actually loads the new extension rather than accepting only
 healthy containers with stale code.
+
+## Checkpoint 37: installed candidate; provider skipped extension reload
+
+The white-marker synthetic fixture was closed through Service after exact
+target/process checks. Its row and all fourteen captured process identities
+are gone; the synthetic server remains retained. The frozen `593cc6ee` binary
+is installed only in P158. Installer, doctor and three launch smokes passed.
+Private `keyboard-focus-candidate/` retains source/hash, cleanup and installation
+receipts. No new browser has been opened.
+
+The supported provider stage and preflight passed. One apply with deferred
+ingress reported `provider_ready_ingress_pending`, production unchanged, and
+only `reconcile-provider-authority` completed. Direct readback of Guacamole's
+served `app.js` before and after apply had the same SHA-256 and contained the
+previous extension verbatim; the new trusted-focus handler was absent. Thus
+container health and a successful apply did not prove extension delivery.
+No external verification was dispatched against that stale application.
+
+The readiness probe now compares served application text with the exact staged
+extension source and retains only expected/response hashes plus the match result.
+A missing, unreadable or stale extension fails readiness. The existing configured
+reconciliation path consequently recreates the isolated provider and checks
+readiness again before accepting its authority. The regression failed on the
+old readiness rule and now passes. The existing recovery fixture also exercises
+both stopped containers and healthy containers with stale extension code.
+Provider fixtures, Guacamole assets, cross-origin focus regression, handoff docs,
+docs build, Rust format and workspace clippy with warnings denied pass. All five
+guidance surfaces are updated.
+
+This is a specific delivery correction, not a new presentation diagnostic. Next
+run one changed provider reconciliation and verify the loaded extension digest
+before creating the fresh synthetic browser for external input/reopen proof.
+The runtime binary is already installed, the extension is staged but not yet
+verified loaded, and production remains unchanged. W3 and W5 remain open.
