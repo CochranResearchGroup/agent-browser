@@ -1140,11 +1140,39 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     )
 }
 
+/// Admission failure with the planner-owned denied decision, when applicable.
+#[derive(Debug)]
+pub(crate) struct ProfileRouteHintFailure {
+    pub(crate) message: String,
+    pub(crate) access_decision:
+        Option<Box<super::service_profile_access_policy::ServiceProfileAccessDecision>>,
+}
+
+impl From<String> for ProfileRouteHintFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            access_decision: None,
+        }
+    }
+}
+
+/// Compatibility entry point for callers that only consume the error text.
 pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principal(
     service_state: &ServiceState,
     command: &mut Value,
     authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Result<(), String> {
+    apply_shared_profile_route_hints_with_decision(service_state, command, authenticated_principal)
+        .map_err(|failure| failure.message)
+}
+
+/// Retain denied policy evidence through normalization without a second evaluation.
+pub(crate) fn apply_shared_profile_route_hints_with_decision(
+    service_state: &ServiceState,
+    command: &mut Value,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> Result<(), ProfileRouteHintFailure> {
     if !matches!(
         command.get("action").and_then(Value::as_str),
         Some("tab_new" | "remote_view_open")
@@ -1172,7 +1200,9 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
         return Ok(());
     }
     if service_request_has_browser_hint(command) && !service_request_has_session_hint(command) {
-        return Err("service_access_plan_incomplete_route_hints".to_string());
+        return Err("service_access_plan_incomplete_route_hints"
+            .to_string()
+            .into());
     }
 
     let request = service_access_plan_request_from_service_command(command)?;
@@ -1185,15 +1215,25 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principa
         let requested_browser = command.get("browserId").and_then(Value::as_str);
         let requested_session = command.get("sessionName").and_then(Value::as_str);
         if artifact.acquisition.browser_id() != requested_browser {
-            return Err("service_access_plan_route_browser_conflict".to_string());
+            return Err("service_access_plan_route_browser_conflict"
+                .to_string()
+                .into());
         }
         if artifact.acquisition.session_name() != requested_session {
-            return Err("service_access_plan_route_session_conflict".to_string());
+            return Err("service_access_plan_route_session_conflict"
+                .to_string()
+                .into());
         }
     }
     artifact
         .acquisition
         .apply_to_service_command(command, authenticated_principal)
+        .map_err(|message| ProfileRouteHintFailure {
+            message,
+            access_decision: (artifact.acquisition.acquisition_blocker()
+                == Some("profile_access_denied"))
+            .then(|| Box::new(artifact.acquisition.access_decision().clone())),
+        })
 }
 
 /// Preserve an explicitly selected daemon lane while recording that normal

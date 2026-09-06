@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_authenticated_profile_access_proven_denial_recourse_gap`
+Execution state: `priority_profile_denial_recourse_verified_interruption_durability_next`
 
 Lane: P157
 
@@ -6051,3 +6051,65 @@ from the operation-rejection repair when adjudicating scope. Interruption
 logging durability remains a separate ready unit. Missing A-family producers,
 revocation/rejoin/live-browser restart, identity-unproven recovery, ordinary
 external pixels/input, P/Q frame behavior, W6 and W7–W10 remain outstanding.
+
+### Priority Profile Denial: Decision Custody Repair Verified
+
+The existing authenticated request-admission regression reproduces the defect:
+profile_access_denied is expected, but route_hint_failure is returned. The
+acquisition owner now retains the exact typed access decision, and the shared
+route-admission error carries it through normalization without re-evaluating
+policy or trusting caller-supplied authority. Compatibility callers retain the
+same error text. Permission, principal, and route decisions are unchanged.
+
+The rejection response exposes profile_access_denied on profile_access with
+no_effect, the subject and assurance, missing permission, and the planner's
+policy-inspection action. Its profileAccessDecision retains decision ID,
+resource, operation, policy revision, and denied outcome. The bounded journal
+retains the same decision and profile reference. If it cannot fit, details
+explicitly report profileAccessDecisionOmitted: record_size_limit rather than
+silently suggesting complete decision custody. Oversized runtime cases remain
+unverified. MCP forwards the decision alongside its JSON-RPC failure envelope;
+generated client response types and all required guidance surfaces are updated.
+
+One HTTP verification against the existing disposable restricted-Profile
+fixture returns the corrected denial. Following its read-only policy-inspection
+recourse with the same capability returns the same decision. Exactly one
+journal occurrence matches the response decision, code, and no-effect result;
+missing, duplicate, and conflicting counts are zero. Expected/observed denial
+jobs are zero. No browser, session, or tab is created; host exit and fixture
+process absence are verified. This episode uses candidate SHA-256
+9a316b1886f05c9363a9f638673bf903e8913a9fcab0f36a9d0dd5a7de57b906.
+
+The final adapter check found MCP's envelope initially omitted the new
+profileAccessDecision field. That projection is corrected. One separate MCP
+adapter verification on final candidate SHA-256
+5c86c5e2f23f436bf316494f3269b89e71e981cd8f88f484c95f8e408f048a0f
+returns the typed denied decision and exactly one matching journal occurrence,
+with zero missing/duplicate/conflicting matches, jobs, or browser effects.
+This is one repair cycle with two explicit adapter checks, not a repeated failed
+HTTP operation or a combined frozen epoch.
+
+Private evidence directories auth-profile-6eZQ5n and mcp-denial-IscpID contain
+fsynced request/response ledgers, journal and state readbacks, exact scratch
+sources, source-patch/candidate hashes, and checkpoints. Credentials remain
+private. No installed P158, provider, production, or default-development runtime
+is replaced or restarted. The candidate runs only in disposable processes.
+
+Validation: the red-capable regression is green within 27 request-normalization
+tests; all 65 focused service-access tests pass. These precede the final narrow
+MCP envelope addition, which passes final workspace clippy and actual-process
+MCP verification. Final format, optimized candidate build, generated-client
+checks/types, API/MCP parity, docs build, handoff guidance checks, and the five
+normal HTTP/MCP pre-dispatch journal joins pass. This is focused and bounded
+live validation, not the comprehensive suite or full ACL acceptance.
+
+Classification: outcome_progress for actionable authenticated ACL denial and
+normal-operation evidence custody. The bounded repair cycle is complete. Next
+prove the response-to-journal interruption boundary using a disposable process
+and durable observations, without retrying the already-verified ACL denial or
+starting calibration. The top-level access-plan freshness recommendation
+remains a separate known usability gap; it never overrides a denied access
+decision. Full revocation/rejoin/live-browser restart, identity-unproven
+recovery, missing A-family producers, dashboard logging projection,
+interruption/reboot durability, ordinary external pixels/input, P/Q frame
+behavior, W6, and W7–W10 remain outstanding.

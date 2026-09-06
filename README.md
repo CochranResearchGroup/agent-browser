@@ -3744,6 +3744,16 @@ reopen a replacement. This rejection reports no effect and does not establish
 that the browser is permanently lost. Transient adoption and incomplete
 presentation receipts retain their separate convergence behavior.
 
+Profile ACL admission denials preserve `profile_access_denied` on the
+`profile_access` axis with `no_effect`. The response includes the planner's
+`profileAccessDecision`, subject and identity assurance, missing permission, and policy
+revision; its recovery action is to inspect Profile access policy. Use the
+same credential when following that read-only action. Do not change caller
+labels, seed a profile, or retry a denied operation to bypass its policy.
+Pre-dispatch denials have no job; join their request ID to the failure journal.
+An oversized decision is explicitly marked
+`profileAccessDecisionOmitted: record_size_limit` in journal details.
+
 Child-resource authority denials report `axis: "profile_access"`,
 `phase: "child_admission"`, and `effectState: "no_effect"` before the guarded
 operation. `profile_child_subject_mismatch` requires your own service tab

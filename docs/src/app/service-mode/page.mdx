@@ -2,6 +2,17 @@
 
 Service mode turns agent-browser from a single CLI session helper into a persistent browser control plane. It keeps service-owned state for profiles, sessions, browsers, tabs, jobs, incidents, events, site policies, providers, and challenges so multiple agents and software clients can share browser automation without racing each other.
 
+Profile ACL admission denials preserve `profile_access_denied` on the
+`profile_access` axis with `no_effect`. The response includes the planner's
+`profileAccessDecision`, subject and identity assurance, missing permission, and policy
+revision; its recovery action is to inspect Profile access policy. Use the
+same credential when following that read-only action. Do not change caller
+labels, seed a profile, or retry a denied operation to bypass its policy.
+Pre-dispatch denials have no job; join their request ID to the failure journal.
+An oversized decision is explicitly marked
+`profileAccessDecisionOmitted: record_size_limit` in journal details.
+
+
 ## Forensic failure journal
 
 The bounded Service event collection is for current operations, not complete

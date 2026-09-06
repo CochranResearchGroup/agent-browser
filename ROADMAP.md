@@ -160,21 +160,22 @@ unchanged browser/session/tab/handoff records. Source is 5803203b; installed
 generation is 0.28.0-75f7d4a2caab. This proves truthful failure, not recovery or
 working links. The bounded verification is complete; do not repeat it.
 
-Two independent registered-capability clients now pass focused acquisition of
-their own restricted Profiles, including after a disposable host restart with
-persisted capabilities and closed browsers. An unauthorized cross-profile
-operation is denied before effects and joins one journal entry, but its
-profile_access_denied cause becomes route_hint_failure with misleading request-
-schema guidance. Next preserve the actual denied decision and useful recourse
-at request normalization, then verify that finding once. Live-browser restart,
-revocation/rejoin, identity-unproven recovery, and full authenticated ACL
-acceptance remain open.
+Two independent registered-capability clients pass focused acquisition of their
+own restricted Profiles, including after a disposable host restart with
+persisted capabilities and closed browsers. The unauthorized cross-profile
+operation now preserves profile_access_denied, the planner's denied decision,
+subject/assurance, missing permission, and policy-inspection recourse. One HTTP
+and one MCP adapter verification each join exactly one journal occurrence with
+zero missing/duplicate/conflicting captured matches and no browser effects.
+The denial repair cycle is complete; installed P158 remains unchanged.
 
-Keep logging interruption durability as a separate ready slice and ordinary
-external same-URL pixel/input proof as an unmet outcome. The renewed Plan 0158
-reconciliation governs. Calibration remains deferred; W6 and W7–W10, original
-workload, freeze gate, and full acceptance criteria remain open. Anchored
-readiness does not prove ordinary links or production reliability.
+Next prove the response-to-journal interruption boundary in a disposable
+process. Keep the top-level access-plan freshness advice as a separate known
+gap; it cannot override a denied decision. Live-browser restart, revocation/
+rejoin, identity-unproven recovery, dashboard logging projection, and ordinary
+external same-URL pixels/input remain open. The renewed Plan 0158 reconciliation
+governs. Calibration stays deferred; W6 and W7–W10, original workload, freeze
+gate, and full acceptance criteria remain unmet.
 
 ## P156 | Full Runtime Shutdown Replacement
 

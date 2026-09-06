@@ -1303,7 +1303,7 @@ pub(crate) enum ProfileAcquisitionDisposition {
 }
 
 /// Joined acquisition result consumed by access-plan and action-runtime code.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ProfileAcquisitionDecision {
     disposition: ProfileAcquisitionDisposition,
     selected_profile_id: Option<String>,
@@ -1312,6 +1312,7 @@ pub(crate) struct ProfileAcquisitionDecision {
     acquisition_blocker: Option<String>,
     policy_revision: u64,
     access_decision_id: String,
+    access_decision: ServiceProfileAccessDecision,
     client_subject_id: Option<String>,
     identity_assurance: ProfileIdentityAssurance,
     connection_instance_id: Option<String>,
@@ -1388,6 +1389,7 @@ impl ProfileAcquisitionDecision {
             acquisition_blocker,
             policy_revision: access_decision.policy_revision,
             access_decision_id: access_decision.decision_id.clone(),
+            access_decision: access_decision.clone(),
             client_subject_id: access_decision.subject.subject_id.clone(),
             identity_assurance: access_decision.subject.assurance,
             connection_instance_id: access_decision.subject.connection_instance_id.clone(),
@@ -1441,6 +1443,11 @@ impl ProfileAcquisitionDecision {
 
     pub(crate) fn session_name(&self) -> Option<&str> {
         self.session_name.as_deref()
+    }
+
+    /// The same decision used for admission, retained for structured denials.
+    pub(crate) fn access_decision(&self) -> &ServiceProfileAccessDecision {
+        &self.access_decision
     }
 
     pub(crate) fn acquisition_blocker(&self) -> Option<&str> {

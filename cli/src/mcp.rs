@@ -11251,14 +11251,18 @@ impl JsonRpcError {
 
     fn invalid_service_request(rejection: &ServiceRequestRejection) -> Self {
         let response = rejection.response();
+        let mut data = json!({
+            "message": response["error"],
+            "requestId": response["id"],
+            "failure": response["failure"],
+        });
+        if let Some(decision) = response.get("profileAccessDecision") {
+            data["profileAccessDecision"] = decision.clone();
+        }
         Self {
             code: -32602,
             message: "Invalid params",
-            data: Some(json!({
-                "message": response["error"],
-                "requestId": response["id"],
-                "failure": response["failure"],
-            })),
+            data: Some(data),
         }
     }
 

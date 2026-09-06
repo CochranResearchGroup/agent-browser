@@ -11,13 +11,14 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
-use crate::native::service_access::apply_shared_profile_route_hints_for_service_request_with_principal;
+use crate::native::service_access::apply_shared_profile_route_hints_with_decision;
 use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
 use crate::native::service_failure_journal::{
     ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
 };
 use crate::native::service_model::ServiceState;
 use crate::native::service_principal::AuthenticatedServicePrincipal;
+use crate::native::service_profile_access_policy::ServiceProfileAccessDecision;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
 const REPAIR_POLICIES: &[&str] = &[
@@ -396,10 +397,11 @@ pub(crate) enum ServiceRequestIssueKind {
     MissingAccountablePrincipal,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ServiceRequestIssue {
     pub kind: ServiceRequestIssueKind,
     message: String,
+    access_decision: Option<Box<ServiceProfileAccessDecision>>,
 }
 
 impl ServiceRequestIssue {
@@ -407,6 +409,7 @@ impl ServiceRequestIssue {
         Self {
             kind,
             message: message.into(),
+            access_decision: None,
         }
     }
 
@@ -415,6 +418,9 @@ impl ServiceRequestIssue {
     }
 
     pub(crate) fn code(&self) -> &str {
+        if self.access_decision.is_some() {
+            return "profile_access_denied";
+        }
         match self.kind {
             ServiceRequestIssueKind::InvalidRequest => "invalid_request",
             ServiceRequestIssueKind::MissingAction => "missing_action",
@@ -478,11 +484,28 @@ impl ServiceRequestRejection {
             failure.safe_next_actions = vec!["inspect_service_request_schema".to_string()];
             failure.retry_disposition = ServiceRetryDisposition::DoNotRetry;
         }
+        if let Some(decision) = self.issue.access_decision.as_ref() {
+            failure.axis = ServiceFailureAxis::ProfileAccess;
+            failure.subject = Some(json!(decision.subject));
+            failure.missing_permission = decision.missing_permission.clone();
+            failure.recommended_action = decision.next_action.action.clone();
+            failure.executable_next_action = Some(json!(decision.next_action));
+            failure.safe_next_actions = vec![decision.next_action.action.clone()];
+            failure.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+            failure.hard_stops = vec![
+                "blind_retry".to_string(),
+                "impersonate_profile_subject".to_string(),
+            ];
+        }
         failure.code = self.issue.code().to_string();
         failure.phase = ServiceFailurePhase::IngressValidation;
         failure.effect_state = ServiceEffectState::NoEffect;
-        json!({ "success": false, "id": self.request_id,
-            "error": self.issue.message(), "failure": failure })
+        let mut response = json!({ "success": false, "id": self.request_id,
+            "error": self.issue.message(), "failure": failure });
+        if let Some(decision) = self.issue.access_decision.as_ref() {
+            response["profileAccessDecision"] = json!(decision);
+        }
+        response
     }
 }
 
@@ -510,8 +533,26 @@ pub(crate) fn service_request_rejection_failure_record(
     .with_references(ServiceFailureReferences {
         request_id: Some(request_id.to_string()),
         session_id: Some(session_id.to_string()),
+        profile_id: issue
+            .access_decision
+            .as_ref()
+            .and_then(|decision| decision.resource.profile_id.clone()),
         ..ServiceFailureReferences::default()
     });
+    if let Some(decision) = issue.access_decision.as_ref() {
+        record = record.with_details(json!({
+            "profileAccessDecision": decision,
+            "effectState": "no_effect",
+            "retryDisposition": "inspect_before_retry",
+        }));
+        if record.details.is_none() {
+            record = record.with_details(json!({
+                "profileAccessDecisionOmitted": "record_size_limit",
+                "effectState": "no_effect",
+                "retryDisposition": "inspect_before_retry",
+            }));
+        }
+    }
     if let Some(action) = action {
         record = record.with_action(action);
     }
@@ -678,13 +719,15 @@ pub(crate) fn normalize_service_request(
                     apply_remote_view_handoff_route_hints(service_state, &mut command);
                 }
                 RouteHintStage::SharedProfile => {
-                    apply_shared_profile_route_hints_for_service_request_with_principal(
+                    apply_shared_profile_route_hints_with_decision(
                         service_state,
                         &mut command,
                         input.authenticated_principal,
                     )
-                    .map_err(|message| {
-                        ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, message)
+                    .map_err(|failure| ServiceRequestIssue {
+                        kind: ServiceRequestIssueKind::RouteHintFailure,
+                        message: failure.message,
+                        access_decision: failure.access_decision,
                     })?;
                 }
             }
@@ -2224,7 +2267,7 @@ mod tests {
             capability_revision: 1,
             provenance: ServicePrincipalProvenance::RegisteredCapability,
         };
-        let state = ServiceState {
+        let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 "odollo-fedex".to_string(),
                 BrowserProfile {
@@ -2291,6 +2334,65 @@ mod tests {
         assert_eq!(
             error.message(),
             "service_access_plan_request_unavailable:foreign_principal_profile_lease"
+        );
+
+        // A real denied policy decision must survive request admission rather
+        // than sending an authenticated caller to request-schema repair.
+        state
+            .profiles
+            .get_mut("odollo-fedex")
+            .unwrap()
+            .access_policy
+            .as_mut()
+            .unwrap()
+            .default_permissions
+            .clear();
+        let denied = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: Some(&state),
+            authenticated_principal: Some(&authority),
+            fallback_principal: None,
+            request_id: "request-denied-profile",
+            effective_session: Some("foreign-fedex"),
+        })
+        .unwrap_err();
+        let record = service_request_rejection_failure_record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-denied-profile",
+            "foreign-fedex",
+            &denied,
+        );
+        let response = ServiceRequestRejection::record(
+            "http_service_request",
+            Some("tab_new"),
+            "request-denied-profile",
+            "foreign-fedex",
+            denied,
+        )
+        .response();
+        assert_eq!(response["failure"]["code"], "profile_access_denied");
+        assert_eq!(response["failure"]["axis"], "profile_access");
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["subject"]["subjectId"],
+            authority.principal_id
+        );
+        assert_eq!(
+            response["failure"]["subject"]["assurance"],
+            "registered-capability"
+        );
+        assert_eq!(response["failure"]["missingPermission"], "tab_create");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "inspect_profile_access_policy"
+        );
+        assert_eq!(response["profileAccessDecision"]["allowed"], false);
+        assert_eq!(response["profileAccessDecision"]["policyRevision"], 1);
+        assert_eq!(record.code, "profile_access_denied");
+        assert_eq!(
+            record.details.as_ref().unwrap()["profileAccessDecision"],
+            response["profileAccessDecision"]
         );
     }
 

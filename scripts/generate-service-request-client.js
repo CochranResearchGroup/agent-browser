@@ -1542,6 +1542,19 @@ export interface ServiceFailureRecourse {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileAccessDecision {
+  schemaVersion: string;
+  decisionId: string;
+  subject: { subjectId: string | null; assurance: string; connectionInstanceId: string | null };
+  resource: { profileId: string | null; resourceKey: string };
+  operation: string;
+  policyRevision: number;
+  allowed: boolean;
+  missingPermission: string | null;
+  blockingOccupancy: string[];
+  nextAction: { action: string; executable: boolean; request: Record<string, unknown> | null };
+}
+
 export interface ServiceRequestResponse<TData = unknown> {
   id?: string;
   success: boolean;
@@ -1549,6 +1562,7 @@ export interface ServiceRequestResponse<TData = unknown> {
   error?: unknown;
   warning?: unknown;
   failure?: ServiceFailureRecourse;
+  profileAccessDecision?: ServiceProfileAccessDecision;
   [key: string]: unknown;
 }
 
