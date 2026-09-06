@@ -447,3 +447,44 @@ fully disposable shared-local fixture with exact retained browser processes and
 an explicitly constructed older capability binding, then exercises acquisition,
 blank-tab control and handle release through the Service API. No production
 state or capability is copied into that fixture.
+
+## Execution checkpoint 6: shared-local admission repair qualified
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete
+
+progress_classification: blocker_reduction
+
+evidence: Repair `c1acd4c7` is committed and pushed. Optimized binary SHA256
+`4bfecff9b205401a7525dde3d662e93836b610ae8f1e92711650d8f662e8588a`
+passed the disposable full Service API reproduction with two independently
+permitted shared-local clients. Both reused their respective original browser
+processes, controlled only owned blank tabs and released their handles. Exact
+older capability bindings remained unchanged. Final fixture state contained zero
+browsers and zero nonterminal tabs; the subsequent scoped process census found
+no residue. The same candidate was published in the separate p160 development
+namespace and passed the standard three-iteration browser-launch smoke.
+
+Validation retains the first two harness failures: unsupported CLI flag placement
+prevented initial registration, and a JSON-only fixture edit was superseded by
+the authoritative owner registry. The third bounded fixture attempt corrected
+both setup defects and checked retained binding equality against the resulting
+state. Its private evidence is campaigns/p160/shared-local-repair-tcqAHT; earlier
+attempts remain diagnostic evidence. The synthetic state edit affected only a
+disposable home with its host stopped. Constructed bindings were removed only
+during fixture teardown after the acceptance assertions, before disposing its
+browsers. No production registry or capability was edited.
+
+material_blockers: The installed production binary still predates this second
+repair. Its original blank-tab request remains a failed no-effect receipt.
+The new full release build is active and must finish before exact-binary
+qualification and controlled publication. Wider profile/principal projection,
+remote-headed reopen, operator journey, upgrade readiness, diagnostic recourse
+and unattended-cycle criteria remain open.
+
+next_action_or_stop_reason: Resume the existing full release build, recorded in
+campaigns/p160/census/stale-binding-release-build.log. Do not start another build
+because a polling window ends. Qualify that exact binary, publish while preserving
+current browser identities, then repeat the original profile's blank-tab test
+once against the changed production binary. Continue the remaining W1–W5 work.
