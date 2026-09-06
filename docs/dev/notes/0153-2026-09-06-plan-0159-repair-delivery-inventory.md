@@ -135,3 +135,14 @@ hand-edit production state. The supported migration guard requires further
 candidate compatibility work. Exact retained generation and compatibility
 drop-in hashes are preserved under `production-rollback-custody/`; production
 replacement, override retirement and final support composition remain pending.
+
+## Prior-boot migration candidate correction
+
+Checkpoint 43 repairs the reproduced prior-boot orphan reader mismatch without
+signalling the current reused PID or editing production state. The full focused
+migration module passes 25 tests, including current-boot, malformed-token and
+retained-reference counterexamples. The check applies only to unreferenced
+orphans; runtime-owner migration and signalling authority remain unchanged.
+Private logs and the state-bound adjudication are retained in the campaign.
+A rebuilt candidate's supported production dry run is still required before
+calling the observed migration gate resolved.

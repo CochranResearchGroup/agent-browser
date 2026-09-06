@@ -1835,3 +1835,30 @@ process and assess existing migration guards and retained references before
 changing candidate behavior. No production state was edited. W5 remains open;
 the next candidate must incorporate the delivery correction and resolve or
 explicitly disposition the migration gate before the concrete delivery decision.
+
+## Checkpoint 43: prior-boot orphan migration compatibility
+
+A fresh read-only production census found the affected identity only in the
+process-identity map, with no browser row or other reference. The private
+`production-rollback-custody/orphan-prior-boot-adjudication.json` binds this
+observation to the state hash, recorded identity and current boot/PID readback.
+The current PID is foreign to the recorded identity and was not signalled.
+
+The synthetic regression reproduced `service_state_process_browser_missing`
+using the test process's live PID and a valid identity from another Linux boot.
+Staged migration now treats a validated prior-boot identity as absent only for
+an orphan with no browser projection or runtime-owner reference. It validates
+both boot UUIDs and recorded start ticks. The process-signalling API and
+owner-only placeholder migration remain unchanged. Current-boot mismatches,
+malformed tokens and retained session references still block in the regression.
+The complete focused migration module passes 25 tests. Workspace clippy with
+warnings denied and docs build pass; private red/green and validation logs are
+preserved under `prior-boot-migration-candidate/`.
+
+Work-selection reassessment after the preparation checkpoints: W1 and W3 retain
+their accepted outcome evidence. These corrections address two observed W5
+candidate-delivery gates; they do not start another general hardening campaign.
+Next build the final candidate and run the supported production dry run, then
+finish exact support/rollback composition and the concrete delivery proposal.
+The live migration gate is not yet claimed resolved: no rebuilt candidate has
+passed that dry run. Production state and selected generation remain unchanged.

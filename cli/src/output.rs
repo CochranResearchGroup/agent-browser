@@ -5709,6 +5709,10 @@ Before Compose can recreate Guacamole, reconciliation aligns the protected
 PostgreSQL password with any retained database container without changing the
 database and reuses its Compose project label. A retained container without a
 usable password or project label fails closed.
+On Linux, staged migration may discard a validated prior-boot process identity
+only when its browser row is missing and no projection or runtime-owner reference
+remains. It never signals a reused PID. Current-boot mismatches and uncertain
+boot evidence retain the existing migration checks.
 The packaged defaults extension hash is bound to Guacamole's Compose service
 configuration. Changed extension code schedules web-container recreation during
 upgrade reconciliation without changing PostgreSQL or guacd configuration.

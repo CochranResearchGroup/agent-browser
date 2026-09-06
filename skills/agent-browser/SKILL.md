@@ -148,6 +148,8 @@ container and managed Chrome path, and it fails the live-gate readiness view
 when the managed Chrome sandbox policy is absent, inactive, or mismatched.
 Standalone doctor runs discover the versioned installed helper-script root, so
 they do not require a checkout or an ambient script-root override.
+On Linux, staged workstation migration can discard a process identity from a validated prior boot only when its browser row is missing and no browser projection or runtime-owner reference remains. A reused numeric PID is never signalled. Current-boot mismatches and uncertain boot evidence retain the existing migration checks.
+
 Workstation upgrades bind the packaged Guacamole defaults extension hash to the web container configuration. Changed extension code therefore schedules recreation of that container during Compose reconciliation. This content change leaves the PostgreSQL and guacd service configurations unchanged; verify the served extension after applying an upgrade.
 
 The packaged Guacamole defaults extension migrates each browser origin once to

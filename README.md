@@ -134,6 +134,8 @@ and cannot create false production multiplicity drift.
 The skill commands publish and verify guidance only inside the development
 pseudo-home. They do not replace the shared user-scoped production skill.
 
+On Linux, staged workstation migration can discard a process identity from a validated prior boot only when its browser row is missing and no browser projection or runtime-owner reference remains. A reused numeric PID is never signalled. Current-boot mismatches and uncertain boot evidence retain the existing migration checks.
+
 Workstation upgrades bind the packaged Guacamole defaults extension hash to the web container configuration. Changed extension code therefore schedules recreation of that container during Compose reconciliation. This content change leaves the PostgreSQL and guacd service configurations unchanged; verify the served extension after applying an upgrade.
 
 In embedded Guacamole text-input mode, clicking the remote display directs subsequent keyboard input into the browser. Opening the view leaves dashboard focus unchanged; synthetic mouse events cannot claim keyboard focus.
