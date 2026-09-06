@@ -935,7 +935,6 @@ oracle. No external workflow was dispatched in this checkpoint. The selected
 primary-endpoint failure-custody review and W5 production proposal/final cleanup
 remain open.
 
-
 ## Checkpoint 18: external proof exposes idle primary loss
 
 Protected readiness run `34014574632`, workflow source `4c902d8b`, is FAILED.
@@ -1308,3 +1307,64 @@ takeover/concurrent-resolution transition with the new terminal custody. Do not
 claim the historical guard failure was contention without a typed live record.
 The synthetic server remains retained. External W3 and production delivery W5
 remain open.
+
+## Checkpoint 29: installed typed guard and local transition diagnostic
+
+Source `3428a7a7` is installed only in P158 with binary SHA-256
+`35cb5a62b307f8ea3e2a463479ef5c248caeac62323455a922d04a5ef5ffd28b`.
+Build, installer, doctor and three launch smokes pass. A fresh broker-selected
+synthetic browser and its original handle pass; one primary startup returned
+HTTP 200 with exact provider identity. Private receipts are under
+`primary-guard-candidate/` and `primary-guard-live/`.
+
+The first local concurrent probe supplied convenience takeover fields to the
+client helper, which retained them both at top level and in params. HTTP rejected
+that envelope with `unknown_field` before takeover execution. The peer resolution
+succeeded and the primary survived. Preserve this as a probe/client-envelope
+finding, not a failed product takeover or proof about the external transition.
+The corrected probe puts action-specific fields only in params. Its one takeover
+and one concurrent resolution both succeeded, with the same browser/target and
+primary UUID, and zero owner terminal records. No repeated local diagnostic was
+run after that passing result. The helper envelope defect remains a separately
+identified delivery risk; the valid params form is used by this probe.
+
+The local transition did not reproduce the external failure. Protected run
+[34018112693](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34018112693)
+was therefore dispatched once in readiness mode against this exact instrumented
+source to distinguish the external guard rejection. This is a changed custody
+diagnostic, not a claim that timeout or identity policy was repaired. It retains
+the historical pixel oracle and synthetic capture attestation. Its initial
+readback was in progress; external outcome and specific live rejection cause
+remain pending. No automatic retry or production replacement occurred.
+
+## Checkpoint 30: diagnostic stopped at a scaled capture-region mismatch
+
+Run 34018112693 completed failed. Both clients had one Guacamole iframe,
+successful transport requests and the same observed pixel hash
+`13f238a8d65c66de0325dafcded7fefed3e7e954f03ab2ad080e6a75d6ec24e0`.
+Both stopped at `external_stream_identity_marker_missing` before takeover or
+input. All five artifacts from each client match their recorded byte counts
+and digests. No runner repair or retry occurred.
+
+Direct review of the initial screenshot shows the expected synthetic page in
+the remote browser, scaled down within the iframe. Direct review of the saved
+marker crop shows the orange strip and surrounding page below the blue marker.
+The source currently applies the frozen x/y/width/height as iframe CSS pixels;
+the backend primary requests a 1920-by-1080 desktop. The crop is therefore not
+sampling the intended marker in this rendered geometry. This is a capture-
+geometry failure, not evidence that a different browser was displayed. Do not
+replace the expected pixel hash with the observed orange-strip hash.
+
+Provider readback still finds the original primary UUID connectable, and the
+journal has zero terminal owner records for this session. This diagnostic did
+not reach the transition that failed in run 34017270853 and cannot identify or
+clear that historical guard failure. The next bounded W4 slice must reconcile
+the declared marker coordinates with rendered remote-display geometry, prove
+the crop/input mapping locally, and preserve the independent synthetic oracle
+before another external diagnostic can reach takeover. The client-helper
+envelope finding and W5 production proposal remain explicit delivery risks.
+
+Private `primary-guard-live/external/` retains the failed artifacts, aggregate,
+hash verification, terminal-record readback and provider observations. The
+synthetic browser and fixture server remain intentionally retained. W3 is not
+accepted, production is unchanged, and the goal remains open.
