@@ -187,9 +187,13 @@ history no longer blocks drain completion. Revision 1 drains, revision 2 denies
 the revoked client, and revision 3 permits restored-grant rejoin over a fresh
 connection while the retained peer remains usable. Two denial journal joins
 pass with zero missing/duplicate/code-conflicting records. Three policy mutation
-receipts still disagree with terminal provenance about the authenticated actor.
-Next repair that bounded provenance defect from the retained evidence. Do not
-repeat the completed journal or drain cycles or resume calibration by default.
+receipts originally disagreed with terminal provenance about the authenticated
+actor. Repair 062727fb now passes three focused policy operations with 18 matching
+response/job/event/trace provenance projections and zero missing, duplicate, or
+conflicting records. Next reconcile the retained remote-view target and supported
+recovery path, then pursue ordinary external same-URL pixels/input. Preserve P/Q
+failures and the original target. Do not repeat the completed journal, drain, or
+provenance cycles or resume calibration by default.
 Full ACL lifecycle, identity-unproven recovery, top-level access-plan advice,
 dashboard projection, reboot durability, ordinary external pixels/input, W6,
 and W7–W10 remain unmet. The renewed Plan 0158 priorities and original

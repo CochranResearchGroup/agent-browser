@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_authenticated_revocation_rejoin_verified`
+Execution state: `priority_authenticated_actor_provenance_verified`
 
 Lane: P157
 
@@ -42,16 +42,18 @@ bounded repairs and their evidence are recorded in the checkpoints below.
 | Priority | Recorded outcome evidence | Remaining acceptance gap |
 | --- | --- | --- |
 | Usable authenticated Profile leases and ACLs | Own-Profile acquisition and exact denials have focused proof. After repair 54d1a8f6, two registered-capability clients also pass shared-Profile drain, own release, committed revocation, restored grant, fresh-connection rejoin, and retained-peer control. | Live-browser restart, actual identity-unproven recovery, full matrix coverage, and top-level access-plan advice remain open. |
-| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Three policy-mutation receipt/provenance identity conflicts remain in the latest lifecycle verification. Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
+| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Repair 062727fb resolves the policy actor conflict in three focused authenticated operations with 18 matching provenance projections. Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
 | Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
 
 The bounded product logging repair and its two distinct interruption checks
 are complete; preserve the original failed epoch and do not repeat this cycle.
 Authenticated policy revocation and rejoin now pass after the closed-tab drain
-repair. Next address the concrete policy-mutation provenance conflict: preserve
-the authenticated actor used by authorization in job and terminal evidence.
-Use the retained three conflicting receipts as the regression target; do not
-repeat the completed lifecycle campaign or restart calibration.
+repair. The policy-mutation actor conflict now passes its bounded repair
+verification. Next reconcile the ordinary retained remote-view target and its
+supported recovery path using current read-only evidence, then select the
+external synthetic same-URL pixel/input probe. Preserve the old target and
+failed P/Q epochs; do not substitute a replacement URL or an anchored pass.
+Do not repeat the completed lifecycle or provenance checks or restart calibration.
 
 Retain live-browser restart and actual identity-unproven recovery as explicit
 remaining lifecycle criteria, and the ordinary external synthetic same-URL
@@ -6371,3 +6373,45 @@ the narrowly identified policy-mutation provenance conflict using these retained
 receipts and a request-to-job regression. Ordinary external handoff pixels/input,
 P/Q behavior, live-browser restart, actual identity-unproven recovery, remaining
 logging coverage, missing producers, W6, and W7–W10 remain open.
+
+
+### Priority Logging: Authenticated Policy Actor Verified
+
+Source 062727fb binds public job provenance to the validated principal during
+Service request normalization. Previously, policy authorization used the
+registered capability while queue provenance fell back to caller labels.
+The fix retains service, agent, and task attribution but overrides public
+subject and assurance hints with the validated actor before queue capture.
+The existing normalization regression fails before the repair and passes
+afterward. All 27 focused request tests, workspace clippy with warnings denied,
+format check, docs build, and optimized candidate build pass.
+
+One disposable host runs three authenticated policy operations: restrict,
+restore, and unchanged. For each, the response terminal outcome, durable job,
+job terminal outcome, terminal event, trace job, and trace terminal event agree
+with the policy receipt's registered-capability subject and assurance. Expected
+18 projections, observed 18, missing 0, duplicates 0, conflicts 0. Caller labels
+remain intact. This targets the three retained actor conflicts without repeating
+the completed browser revocation/rejoin campaign. Other authentication modes,
+full logging coverage, and dashboard projection are not established by this
+focused check.
+
+Candidate SHA-256:
+8a039d6bd15dea42f9debd842d4d37875759d661d457f13d8ccbeb3cec2ac909.
+Private campaign directory policy-provenance-f66DTO retains the fsynced ledger,
+three operation traces, final trace/state, exact probe source, and artifact
+hash checkpoint bound to the source commit and candidate. A scan against both
+fixture capabilities finds zero leaks in the checked evidence. Final state has
+zero browsers, sessions, and tabs; the exact host exits 0 and process readback
+finds zero fixture processes. No browser is opened and no installed runtime,
+provider, production, or default-development environment is changed.
+
+Classification: outcome_progress for authenticated postmortem actor agreement.
+The bounded repair verification is consumed and passed; retain the original
+conflicting lifecycle receipts. Next pursue ordinary remote-view links. Initial
+read-only readback shows all three P158 units active, which is not pixel or
+recovery evidence. The retained target's earlier identity rejection and P/Q
+frame failures remain unresolved. Reconcile exact target ownership and the
+supported recovery surface before external observation; refresh synthetic
+identity/capture bindings only for the selected authorized probe. Calibration
+remains deferred, and all original incomplete Plan 0158 criteria remain open.
