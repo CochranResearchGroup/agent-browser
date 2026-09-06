@@ -1526,3 +1526,55 @@ The optimized candidate subsequently built successfully in 2m10s from
 Private `restore-bubble-candidate/` retains a frozen executable, source/hash
 receipt and build log. Installation and fixture replacement have not occurred;
 continue with exact retained-fixture disposition before publication.
+
+## Checkpoint 35: installed suppression; external mouse passes, keyboard fails
+
+The previous synthetic browser was closed through Service after exact original
+target/process checks. Its row is absent and all fourteen captured process
+identities are gone. The fixture server remains retained. The frozen `7d6ac6dc`
+candidate is installed only in P158 as `0.28.0-9e6280975da3`; installer, doctor
+and three launch smokes passed. Private `restore-bubble-candidate/` retains the
+close ledger, separate cleanup receipt, installation and validation outputs.
+
+A fresh broker-selected browser opened with `operatorVisible.state=ready`.
+Its original handle works and live command-line readback confirms
+`--hide-crash-restore-bubble`. One authenticated backend primary startup and
+the supported retained-handoff resolution pass with the exact new target.
+Production still hashes to
+`4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`.
+
+Protected readiness run
+[34020129111](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34020129111)
+binds producer `c4038995` and installed source `7d6ac6dc`; their difference is
+only the candidate checkpoint. Both initial external crops pass the independent
+historical hash. The slow client's concurrent page also passes. The human passes
+takeover, exact baseline and a real trusted mouse click with the all-white
+acknowledgment, then fails `synthetic_remote_input_keyboard_missing`: Enter does
+not reset the marker. Its screenshot shows the dashboard Advanced menu open
+and the remote marker still white. The slow client's reopen reaches the same
+white marker with a cursor overlay and fails the blue identity oracle.
+
+Both client jobs and aggregate failed, with zero retries. All nine human and
+eleven slow artifacts match their recorded byte counts and hashes. The primary
+remains the same connectable UUID; its journal has zero terminal owner records.
+This is initial/concurrent pixels and mouse outcome progress, not full W3
+acceptance or proof that every historical primary failure is repaired. Evidence
+is private under `restore-bubble-live/external-geometry/`.
+
+The next bounded seam is keyboard focus after the trusted display click.
+The Advanced menu is evidence that the dashboard reacted to Enter; the exact
+focus-transfer cause still needs a local regression. Guacamole's text-input
+directive normally focuses its target during initialization; the owned embedded
+extension suppresses that initial focus and restores the method afterward.
+Preserve the initial no-focus-steal boundary while proving that an intentional
+display click makes later keys reach the remote browser. Do not force the input
+state back to blue through remote DOM evaluation or accept white as the new
+oracle. The current synthetic marker remains clicked; preserve that state as
+evidence until the selected recovery or fixture-disposition step.
+
+The [delivery inventory](../notes/0153-2026-09-06-plan-0159-repair-delivery-inventory.md)
+now separates inherited repairs, primary/frontend/provider dependencies, source
+composition, isolated installation, existing scoped proofs, and the remaining
+production bundle/rollback/override gates. It is preparation, not an approval-
+ready production proposal. W3 keyboard/reopen and W5 remain open; the new
+synthetic browser and fixture server are retained obligations.
