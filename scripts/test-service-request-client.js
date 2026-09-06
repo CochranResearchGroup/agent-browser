@@ -3053,6 +3053,32 @@ async function main() {
     viewerLeaseId: 'viewer-a',
     viewerId: 'operator-a',
   });
+  const takeoverEnvelopeSchema = JSON.parse(readFileSync(
+    new URL('../docs/dev/contracts/service-request.v1.schema.json', import.meta.url), 'utf8',
+  ));
+  assert.deepEqual(
+    Object.keys(controllerTakeoverRequest).filter((field) => !Object.hasOwn(takeoverEnvelopeSchema.properties, field)),
+    [],
+    'takeover convenience fields must not become unknown HTTP envelope fields',
+  );
+  const takeoverInput = Object.freeze({
+    serviceName: 'review', agentName: 'client', taskName: 'takeover',
+    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
+    routeId: 'route-a', viewerLeaseId: 'lease-a', viewerId: 'viewer-a',
+    viewerName: 'Operator', openMode: 'tile', expiresAt: '2026-09-06T12:00:00Z',
+    params: Object.freeze({ routeId: 'overridden-route', extra: true }),
+  });
+  assert.deepEqual(createServiceControllerLeaseTakeoverRequest(takeoverInput), {
+    action: 'service_controller_lease_takeover',
+    serviceName: 'review', agentName: 'client', taskName: 'takeover',
+    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
+    params: {
+      browserId: 'browser-a', routeId: 'route-a', viewerLeaseId: 'lease-a',
+      viewerId: 'viewer-a', viewerName: 'Operator', openMode: 'tile',
+      expiresAt: '2026-09-06T12:00:00Z', extra: true,
+    },
+  });
+  assert.deepEqual(takeoverInput.params, { routeId: 'overridden-route', extra: true });
 
   const viewerLeaseHeartbeatRequest = createServiceViewerLeaseHeartbeatRequest({
     serviceName: 'agent-browser-dashboard',

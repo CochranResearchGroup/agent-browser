@@ -1784,3 +1784,28 @@ provider remain explicit retained obligations. W5 now owns the next work:
 complete the exact production candidate/support bundle, compatibility and
 override disposition, rollback custody, and acceptance-by-acceptance audit before
 presenting the concrete delivery decision. No further external rerun is queued.
+
+## Checkpoint 41: takeover client envelope compatibility repaired
+
+W5's checkpoint 29 finding reproduced against the canonical HTTP schema: the
+takeover helper emitted `routeId`, `viewerLeaseId` and `viewerId` as unknown
+top-level request fields. The merge helper removed convenience keys only after
+the request spread had already copied them. The repaired takeover constructor
+separates its convenience fields before serialization, places them only in
+params, and retains browser/session routing and provenance in the envelope.
+Explicit convenience values still override corresponding params, and the caller
+object is unchanged. This corrects the named helper; it does not relax HTTP
+unknown-field rejection or claim a general audit of every client constructor.
+
+The schema-bound regression failed before repair and now passes. Full client
+contract, generated-file, type, export, request/observability, fixed-input,
+managed-profile and no-launch example checks pass. Docs build, Rust format and
+workspace clippy with warnings denied pass. All five guidance surfaces are
+updated. No live takeover or external acceptance cycle was repeated: the valid
+params-only path used by the accepted outcome is unchanged.
+
+This is source compatibility work, not a replacement of installed P158 or
+production. Next freeze a release-profile candidate with a freshly built
+dashboard for the concrete production proposal, then verify its materialized
+support composition and supported dry-run/rollback plan. W5 and the retained
+fixture obligations remain open; production mutation remains unperformed.

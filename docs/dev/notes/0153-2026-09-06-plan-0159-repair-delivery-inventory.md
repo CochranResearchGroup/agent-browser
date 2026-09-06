@@ -61,9 +61,11 @@ composition history, not a new behavioral test or production-installation claim.
 The external producer also requires the input acknowledgment, geometry and
 resized-sample corrections (`d75d79ca`, `9d825b1c`, `846ec620`, `80ef60ab`). They
 are evidence tools, not substitutes for shipping runtime repairs. The independent
-historical PNG oracle remains fixed. The client-helper takeover envelope finding
-in checkpoint 29 remains a delivery risk; the verified local probe uses the valid
-params-only form. It is not silently included as a completed repair.
+historical PNG oracle remains fixed. The checkpoint 29 takeover helper envelope defect is source-repaired in
+checkpoint 41 with schema-bound red/green and full client checks. That helper
+change is not in the installed P158 candidate named above; include it in the
+proposed production composition. The accepted external path uses the unchanged
+valid params form.
 
 ## Production decision still to make concrete
 
@@ -111,7 +113,7 @@ all historical transition failures.
 
 Runtime-convergence notices and a retained workspace attention message remain
 visible in screenshots. The production compatibility review must disposition
-these observed notices alongside the checkpoint 29 client-helper envelope risk.
+these observed notices and include the checkpoint 41 client-helper repair.
 They are not silently accepted as absent or turned into an automatic broad
 experiment queue. The synthetic browser, server and warm provider remain retained
 for this delivery review with exact private identity receipts and cleanup duties.

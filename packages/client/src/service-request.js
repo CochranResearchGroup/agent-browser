@@ -1698,16 +1698,19 @@ export function createServiceViewerLeaseReleaseRequest(input) {
 }
 
 /**
+ * Route and viewer convenience fields are action params only; browser/session
+ * identity remains in the service envelope for routing and provenance.
  * @param {ServiceControllerLeaseTakeoverOptions} input
  * @returns {ServiceRequest}
  */
 export function createServiceControllerLeaseTakeoverRequest(input) {
   assertPlainObject(input, 'controller lease takeover request');
-  const { params, ...request } = input;
+  const { params, routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt, ...request } = input;
   return createServiceRequest({
     ...request,
     action: 'service_controller_lease_takeover',
-    params: mergeParams(params, request, [
+    params: mergeParams(params, { routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt,
+      browserId: request.browserId }, [
       'routeId',
       'viewerLeaseId',
       'viewerId',

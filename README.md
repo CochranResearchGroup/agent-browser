@@ -4219,6 +4219,8 @@ The equivalent service request field is top-level
 the requested URL becomes Chrome's initial destination and the resulting
 same-origin target is reused. Headless requests fail closed.
 
+`createServiceControllerLeaseTakeoverRequest()` and `takeoverServiceControllerLease()` place route/viewer convenience fields and `expiresAt` only in `params`. Browser and session identity stay in the top-level service envelope; an explicit convenience value overrides the matching `params` value without changing the caller object.
+
 Use route descriptors as structured diagnostic data.
 `routeDescriptor.localEmbedUrl` and `dashboardEmbedUrl` are for dashboard and
 harness embedding; `routeDescriptor.publicOperatorUrl` and `externalUrl`
