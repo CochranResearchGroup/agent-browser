@@ -61,12 +61,34 @@ try {
   assert.deepEqual(mapped, { x: 529, y: 492, width: 400, height: 100 });
   const oldCrop = await page.screenshot({ clip: { x: 610, y: 637, width: 400, height: 100 } });
   assert.notEqual(createHash('sha256').update(oldCrop).digest('hex'), oracleHash);
+  const nativeDisplay = page.frameLocator('iframe').locator('.display > div > div');
+  await nativeDisplay.evaluate((element) => { element.style.width = '1000px'; });
+  assert.equal(await observeRemoteDisplayClip(page, displayRegion), null,
+    'a reconnect desktop smaller than the declared marker waits within the existing deadline');
+  await assert.rejects(observeRemoteDisplayClip(page, { ...displayRegion, x: -1 }), /Invalid native/);
+  await nativeDisplay.evaluate((element) => {
+    setTimeout(() => { element.style.width = '1920px'; }, 300);
+  });
   const mappedInput = await verifySyntheticRemoteInput(page, {
     region: displayRegion, expectedPixelHash: oracleHash, outputDir,
   });
   assert.equal(mappedInput.keyboard.sha256, oracleHash);
   assert.equal(await observeRemoteDisplayClip(page, { ...displayRegion, sampleWidth: 600 }), null,
     'do not shrink the oracle when the rendered marker is too small');
+  await nativeDisplay.evaluate((element) => {
+    element.style.width = '1108px';
+    element.style.height = '633px';
+    element.style.transform = 'scale(1)';
+    element.parentElement.style.width = '1108px';
+    element.parentElement.style.height = '633px';
+  });
+  assert.deepEqual(await observeRemoteDisplayClip(page, displayRegion),
+    { x: 846, y: 653, width: 400, height: 100 },
+    'a desktop resize can clip the marker edge while the full oracle sample remains visible');
+  const resizedInput = await verifySyntheticRemoteInput(page, {
+    region: displayRegion, expectedPixelHash: oracleHash, outputDir,
+  });
+  assert.equal(resizedInput.keyboard.sha256, oracleHash);
   // Restore the existing direct-iframe cases below.
   await marker.evaluate((element) => {
     const doc = element.ownerDocument;

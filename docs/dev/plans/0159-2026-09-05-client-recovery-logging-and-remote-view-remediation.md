@@ -1405,3 +1405,48 @@ and installed candidate explicitly, and retain the historical RDP oracle. The
 test's 86-pixel chrome offset is a local fixture construction, not a live
 readback. W3 takeover/reopen/concurrency and the W5 production proposal remain
 open; the retained synthetic browser and server remain cleanup obligations.
+
+## Checkpoint 32: external pixel mapping passes; resized sample guard corrected
+
+Live original-handle readback measured a 1920-by-1080 browser with a 1920-by-993
+content viewport, zero screen offsets and device scale one. The prepared native
+marker is therefore x=240, y=207, width=960, height=320, with the historical
+400-by-100 sample. Source `846ec620` was dispatched once in protected readiness
+run [34019097339](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34019097339).
+Its binding separately identifies the unchanged installed `3428a7a7` binary
+`35cb5a62b307f8ea3e2a463479ef5c248caeac62323455a922d04a5ef5ffd28b`.
+The intervening changes were reviewed as producer/docs plus one CLI help line;
+no runtime implementation, install or browser replacement occurred.
+
+Both clients' initial crops now match the independent historical RDP hash
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+The human passed controller takeover, then failed at native geometry validation
+before input acknowledgment. The slow client failed in its second page's
+geometry validation. Both jobs and the aggregate failed; retries remain zero.
+All five human and six slow artifacts match their declared bytes and hashes.
+Private `primary-guard-live/external-geometry/` retains the binding, dispatch,
+receipts, artifacts, verification and production/development identity readbacks.
+The same primary remains connectable with zero terminal owner records.
+
+The first hypothesis was a transient undersized desktop. A fresh original-handle
+readback instead proves a persistent 1108-by-633 browser after takeover, with
+1108-by-546 content and the same marker rectangle and ready input state. The
+full marker extends beyond the resized desktop, while its centered 400-by-100
+sample remains visible. Requiring the entire marker to fit was an overly broad
+producer guard. Waiting for the full marker would not fix this settled geometry.
+
+The guard now requires the full sample inside the declared marker, actual
+rendered desktop and iframe. It still refuses malformed coordinates and never
+shrinks the oracle. A sample that cannot fit waits within the existing deadline.
+The real-Chrome regression was red on the old guard. It now proves bounded
+waiting through a too-small display, rejects negative coordinates, and passes
+trusted click/Enter at both the scaled geometry and the settled 1108-by-633
+geometry with a clipped marker edge. Focused input and runner checks and diff
+validation pass. This is the corrected resized-sample seam, not permission to
+repeat the prior full-marker rule or relax browser/primary identity guards.
+
+Progress is external initial-pixel acceptance plus W4 blocker reduction. Full W3
+is still unaccepted. Next use this changed guard for one source-bound external
+verification with the same retained handle and historical oracle; keep the
+failed runs counted. W5 production delivery remains pending, production hashes
+are unchanged, and the synthetic browser/server remain retained obligations.

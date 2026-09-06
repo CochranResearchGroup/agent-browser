@@ -26,8 +26,7 @@ export function remoteDisplayClip(region, native, box, frameBox) {
     region.sampleWidth, region.sampleHeight, native.width, native.height,
     box.x, box.y, box.width, box.height];
   if (!values.every(Number.isFinite) || region.x < 0 || region.y < 0 ||
-      region.width <= 0 || region.height <= 0 || region.sampleWidth <= 0 || region.sampleHeight <= 0 ||
-      region.x + region.width > native.width || region.y + region.height > native.height) {
+      region.width <= 0 || region.height <= 0 || region.sampleWidth <= 0 || region.sampleHeight <= 0) {
     throw new Error('Invalid native remote marker geometry');
   }
   const sx = box.width / native.width;
@@ -40,7 +39,10 @@ export function remoteDisplayClip(region, native, box, frameBox) {
     y: Math.round(marker.y + (marker.height - region.sampleHeight) / 2),
     width: region.sampleWidth, height: region.sampleHeight,
   };
-  for (const boundary of [marker, frameBox]) {
+  // A resize may clip the marker's far edge while leaving the complete sample
+  // visible. Require the sample (not the full marker) inside the desktop and
+  // iframe. If it cannot fit, both callers wait within their existing deadline.
+  for (const boundary of [marker, box, frameBox]) {
     if (clip.x < boundary.x || clip.y < boundary.y ||
         clip.x + clip.width > boundary.x + boundary.width ||
         clip.y + clip.height > boundary.y + boundary.height) return null;
