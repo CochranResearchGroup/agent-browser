@@ -337,6 +337,19 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let store = JsonServiceStateStore::new(root.join("state.json"));
         let mut initial = repository().0;
+        let mut capacity_slot =
+            crate::native::presentation_capacity::PresentationSlot::warm_idle("slot:slot")
+                .with_binding("route", "display");
+        capacity_slot.state = crate::native::presentation_capacity::PresentationSlotState::Active;
+        capacity_slot.browser_id = Some("browser".into());
+        capacity_slot.scene_generation = 13;
+        capacity_slot.lease_request_id = Some("retained-recovery".into());
+        initial.presentation_capacity = Some(
+            crate::native::presentation_capacity::PresentationCapacityAuthority {
+                slots: vec![capacity_slot],
+                ..Default::default()
+            },
+        );
         initial.route_pool.insert(
             "slot".into(),
             serde_json::from_value(json!({
@@ -457,7 +470,7 @@ mod tests {
         inventory
             .overlay_service_state(&mut overlaid, config.clone())
             .unwrap();
-        let overlaid = Repository(overlaid);
+        let mut overlaid = Repository(overlaid);
         assert!(
             binding.is_current(&overlaid),
             "provider inventory erased retained reservation custody"
@@ -466,6 +479,46 @@ mod tests {
         assert_eq!(overlaid.0.remote_view_routes["route"].state, "pending");
         assert_eq!(overlaid.0.display_allocations["display"].state, "pending");
         assert_eq!(overlaid.0.route_pool["slot"].state, "pending");
+        // Checkout calls this on the inventory-overlaid repository. Retaining
+        // the primary alone is insufficient if refresh loses its capacity slot.
+        overlaid
+            .0
+            .presentation_capacity
+            .as_mut()
+            .unwrap()
+            .activate_bound_browser("route", "display", "browser")
+            .expect("inventory refresh lost the slot needed by route checkout");
+        let retained_slot = &overlaid.0.presentation_capacity.as_ref().unwrap().slots[0];
+        assert_eq!(retained_slot.scene_generation, 13);
+        assert_eq!(
+            retained_slot.lease_request_id.as_deref(),
+            Some("retained-recovery")
+        );
+        for case in [
+            "missing_capacity",
+            "foreign_browser",
+            "foreign_display",
+            "foreign_route",
+            "foreign_slot",
+        ] {
+            let mut changed = pending.clone();
+            let capacity = changed.presentation_capacity.as_mut().unwrap();
+            match case {
+                "missing_capacity" => capacity.slots.clear(),
+                "foreign_browser" => capacity.slots[0].browser_id = Some("peer".into()),
+                "foreign_display" => capacity.slots[0].display_allocation_id = Some("peer".into()),
+                "foreign_route" => capacity.slots[0].route_id = Some("peer".into()),
+                "foreign_slot" => capacity.slots[0].id = "peer".into(),
+                _ => unreachable!(),
+            }
+            inventory
+                .overlay_service_state(&mut changed, config.clone())
+                .unwrap();
+            assert!(
+                changed.presentation_capacity.unwrap().slots.is_empty(),
+                "overlay manufactured or borrowed {case}"
+            );
+        }
         for case in [
             "missing",
             "failed",

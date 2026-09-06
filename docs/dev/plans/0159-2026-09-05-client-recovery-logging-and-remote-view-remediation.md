@@ -1169,3 +1169,46 @@ remote-view pixels or input. This repair is source-verified only. Next dispose
 of that exact fixture, publish the isolated candidate, and verify the same
 primary UUID survives same-handoff resolution before any external readiness
 attempt. W3 external input/reopen and W5 delivery/final cleanup remain open.
+
+## Checkpoint 25: primary continuity survives but checkout loses capacity
+
+Candidate `3ad29c44` is installed only in P158 with SHA-256
+`dca7acc08af9ec8fb2b439fa68dd0e0ab5ca874756cfb9074c231266fb7bac02`.
+Build, installer, doctor and three launch smokes passed. The preceding fixture
+closed through Service after current process and synthetic target checks; its
+browser row is absent and all fourteen captured identities are gone. Private
+`primary-inventory-candidate/` retains these receipts.
+
+Fresh broker-selected acquisition and the original handle passed. One primary
+startup returned HTTP 200. The single same-handoff resolution then failed with
+`checkout_failed`, underlying `presentation_bound_slot_missing`. Its exact
+acquisition rolled back, restoring the previous route, display and pool row.
+The provider still reports the original primary UUID connectable, with zero
+owner terminal records for this session. This advances primary continuity but
+does not accept the failed resolution. No resolution retry or external dispatch
+occurred. The synthetic browser remains retained.
+
+The inventory overlay rebuilds capacity from ready rows before copying prior
+slot details. Preserving pending reservation rows therefore excludes the slot
+from that reconstruction; checkout later cannot find it. The regression now
+executes the same capacity activation called by checkout. It reproduces
+`presentation_bound_slot_missing` in 0.01 seconds before repair. The bounded
+repair preserves only an existing exact browser/route/display/provider-slot
+binding during a current acquisition, including its scene generation and lease.
+It does not create missing capacity. Source validation and installed verification
+must finish before this new checkout outcome can be accepted. Private live
+evidence is under `primary-inventory-live/`.
+
+The capacity repair passes fourteen focused primary tests and fifty-five
+selected presentation tests. It preserves the prior scene generation and
+recovery lease, and rejects missing capacity and foreign browser/display/route/
+slot bindings. Workspace clippy with warnings denied, format, docs build and
+handoff documentation checks pass. Clippy initially rejected a redundant clone
+on a Copy type; that was removed before the final passing run. Private
+`primary-capacity-reservation/` retains red/green and validation receipts.
+
+Before the next isolated publication, the failed-checkout fixture was closed
+through Service after exact current process and synthetic target checks. Its
+row is absent and all fourteen captured process identities are gone. Receipts
+are under `primary-capacity-candidate/`. This is captured-tree disposition;
+the fixture server and other retained cleanup obligations remain explicit.

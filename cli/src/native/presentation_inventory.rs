@@ -428,6 +428,38 @@ impl PresentationProviderInventory {
                     *slot = previous_slot.clone();
                 }
             }
+            // Pending rows are deliberately excluded from new capacity
+            // derivation. Preserve an already owned slot across its exact
+            // acquisition, so route checkout can reactivate that same slot.
+            for slot in previous.slots {
+                if capacity.slots.iter().any(|current| current.id == slot.id) {
+                    continue;
+                }
+                let retained = self.routes.iter().any(|provider| {
+                    provider.state == "ready"
+                        && slot.id == format!("slot:{}", provider.slot_id)
+                        && slot.route_id.as_ref() == Some(&provider.route_id)
+                        && slot.display_allocation_id.as_ref()
+                            == Some(&provider.display_reservation_id)
+                        && state
+                            .remote_view_routes
+                            .get(&provider.route_id)
+                            .is_some_and(|route| {
+                                has_current_acquisition_reservation(state, route)
+                                    && slot.browser_id.is_some()
+                                    && slot.browser_id == route.browser_id
+                            })
+                });
+                if retained {
+                    capacity.slots.push(slot);
+                }
+            }
+            capacity.slots.sort_by(|left, right| left.id.cmp(&right.id));
+            capacity.slots = PresentationCapacityAuthority::new(
+                capacity.config,
+                std::mem::take(&mut capacity.slots),
+            )?
+            .slots;
         }
         state.presentation_capacity = Some(capacity);
         Ok(())

@@ -6095,6 +6095,7 @@ to the exact browser and display. Closing a viewer preserves that primary.
 Same-handoff revalidation preserves an existing primary only with exact retained
 acquisition proof; pending routes cannot start new primaries.
 Provider inventory refresh preserves current reservations as pending.
+Revalidation retains the same browser capacity slot and its recovery lease.
 Dashboard ingress allows up to 21 seconds for the primary-start response;
 reconcile an uncertain startup outcome before another attempt.
 A failed primary remains an explicit failure requiring provider reconciliation;
