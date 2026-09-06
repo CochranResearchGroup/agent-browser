@@ -372,3 +372,19 @@ changed-source isolated candidate, and verify that ordinary URL resolution
 preserves a newly authorized original handle. Investigate the Guacamole login
 boundary from source/evidence before another presentation attempt. W2's earlier
 stream-enable logging gap and W5 delivery decision remain open.
+
+### Checkpoint 5 cleanup addendum
+
+The failed fixture was subsequently closed through `service_browser_close` on
+its exact original daemon/browser, after rechecking the captured process start
+identity. Service reported success. All 14 captured Chrome tree identities were
+absent or terminal afterward, and the readable namespace scan found no remaining
+Chrome or crashpad process. The authoritative lifecycle projection reports 29
+terminal records, all with satisfied cleanup. Four provider placeholder browser
+rows and their historical sessions/tabs remain; these are not zero-row evidence.
+Receipts: `ordinary-close-ledger.jsonl`, `ordinary-close-owned-processes.json`,
+`ordinary-close-process-readback.json`, and `ordinary-after-close-state.json`.
+The synthetic fixture HTTP server is intentionally retained for the next
+source-bound verification and remains an explicit final cleanup obligation.
+The failed URL is now terminal and will not count as successful original-handle
+recovery or be reopened without an explicit, applicable reopening decision.
