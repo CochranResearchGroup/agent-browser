@@ -246,3 +246,32 @@ candidate and served dashboard asset to this repair, reconcile the isolated
 provider/target state, and prepare the ordinary external verification within the
 existing synthetic capture and no-retry controls. The terminal-target replacement
 proposal remains unexecuted and is not the continuity oracle.
+
+## Checkpoint 3: isolated candidate installed and served
+
+Date: 2026-09-06 UTC. Progress: `blocker_reduction`.
+
+Source `c1434e57dda060da85922dcb44be851c80dd8c0f` built successfully and is
+installed only in the existing isolated P158 lane as generation
+`0.28.0-8f2e24a62491`. Binary SHA-256:
+`8f2e24a624918118faf1d20f7e4500f402d345f3cbd89687e03d91427bdb22c5`.
+Before installation, authoritative lifecycle readback showed 26 terminal records
+with satisfied cleanup, no viable retained browser, and four provider slots.
+The previous generation and private Service snapshot are preserved. The installer
+verified production and default development unchanged, synchronized only the
+isolated skill, and reported the new lane ready. Required development doctor and
+three disposable browser launch/URL-read/close/residue checks passed.
+
+The installed dashboard served the exact built JavaScript bytes containing the
+viewport implementation. Asset SHA-256:
+`8db63419295968e07ea66a393b6c53cc467c1f1907bbe73f5b0cecf987d30bf6`.
+Private candidate, installation, guards, doctor, launch checks and served-asset
+receipts are under `campaigns/p159/frame-candidate-install/`.
+
+This advances isolated-installed custody for the recovery and frame repairs;
+it does not prove remote desktop pixels/input or ordinary external reconnect.
+No external workflow, terminal-target replacement, production update or P158
+calibration was executed. Next: obtain the supported access plan for the
+synthetic ordinary-link fixture, preserve the terminal proposal boundary,
+and bind one protected external verification to the exact installed candidate.
+W2 logging and W5 production decision remain open.
