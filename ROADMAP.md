@@ -147,6 +147,15 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
+The operator now authorizes writing and executing
+[Plan 0159](docs/dev/plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
+Begin its retained-handle recovery and diagnostic repair, then ordinary
+remote-view verification and a consolidated deployment decision. This replaces
+the discussion-only successor direction below. P158's historical calibration
+sequence remains paused; its incomplete criteria and consumed attempts remain.
+
+### Postmortem Disposition Before Successor Authorization
+
 Plan 0158 execution is paused following the operator's interruption. The
 [completed postmortem](docs/dev/notes/0152-2026-09-05-plan-0158-postmortem.md)
 and [finite defect register](docs/dev/notes/0152-2026-09-05-plan-0158-defect-register.json)

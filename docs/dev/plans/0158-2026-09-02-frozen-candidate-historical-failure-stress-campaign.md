@@ -39,6 +39,12 @@ Overlaps: [P144]
 
 ## Current Postmortem Disposition
 
+Subsequent operator instruction authorizes writing and executing
+[Plan 0159](0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
+That plan owns successor repair execution. The discussion-only boundary below
+is historical; P158's old campaign/calibration sequence remains paused and its
+unmet criteria remain unchanged.
+
 The [completed postmortem](../notes/0152-2026-09-05-plan-0158-postmortem.md)
 and its [finite defect register](../notes/0152-2026-09-05-plan-0158-defect-register.json)
 record the interrupted effort's causes, evidence limits, and corrective actions
