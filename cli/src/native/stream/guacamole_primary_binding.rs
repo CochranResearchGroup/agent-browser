@@ -6,6 +6,10 @@ use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::OwnerAuthorityClaim;
 use sha2::{Digest, Sha256};
 
+/// A fail-closed authority check carries only a bounded public code, never
+/// repository paths or raw provider/identity evidence.
+pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static str> + Send + Sync>;
+
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct PrimaryBinding {
     pub route_id: String,
@@ -38,9 +42,13 @@ impl PrimaryBinding {
         connection_id: &str,
         retained: Option<&Self>,
     ) -> Result<Self, &'static str> {
-        let snapshot = repository
-            .load_snapshot()
-            .map_err(|_| "guacamole_primary_state_unavailable")?;
+        let snapshot = repository.load_snapshot().map_err(|error| {
+            if error.starts_with("service_state_lock_timeout") {
+                "guacamole_primary_state_lock_timeout"
+            } else {
+                "guacamole_primary_state_unavailable"
+            }
+        })?;
         let route = snapshot
             .remote_view_routes
             .get(route_id)
@@ -78,7 +86,17 @@ impl PrimaryBinding {
         let expected_claim = OwnerAuthorityClaim::from_owner(owner);
         RuntimeLifecycleAuthority::new(repository)
             .authorize_effect(&mut binding)
-            .map_err(|_| "guacamole_primary_owner_stale")?;
+            .map_err(|error| {
+                if error.starts_with("service_state_lock_timeout") {
+                    "guacamole_primary_authority_lock_timeout"
+                } else if error.starts_with("runtime_owner_generation_stale:")
+                    || error.starts_with("runtime_owner_observation_only:")
+                {
+                    "guacamole_primary_owner_stale"
+                } else {
+                    "guacamole_primary_authority_unavailable"
+                }
+            })?;
         if binding.claim != expected_claim {
             return Err("guacamole_primary_owner_stale");
         }
@@ -241,8 +259,24 @@ impl PrimaryBinding {
     }
 
     pub fn is_current(&self, repository: &impl ServiceStateRepository) -> bool {
-        Self::resolve_inner(repository, &self.route_id, &self.connection_id, Some(self))
-            .is_ok_and(|current| current == *self)
+        self.verify_current(repository).is_ok()
+    }
+
+    /// Preserve the failed guard through primary termination and response
+    /// custody. A read failure remains a rejection, never an identity verdict.
+    pub fn verify_current(
+        &self,
+        repository: &impl ServiceStateRepository,
+    ) -> Result<(), &'static str> {
+        let current =
+            Self::resolve_inner(repository, &self.route_id, &self.connection_id, Some(self))?;
+        if current.owner != self.owner {
+            return Err("guacamole_primary_owner_changed");
+        }
+        if current != *self {
+            return Err("guacamole_primary_binding_changed");
+        }
+        Ok(())
     }
 }
 
@@ -548,6 +582,64 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn read_failures_keep_their_stage_without_exposing_repository_details() {
+        struct FailedRead {
+            state: ServiceState,
+            reads: std::cell::Cell<usize>,
+            fail_at: usize,
+            error: &'static str,
+        }
+        impl ServiceStateRepository for FailedRead {
+            fn load_snapshot(&self) -> Result<ServiceState, String> {
+                self.reads.set(self.reads.get() + 1);
+                if self.reads.get() == self.fail_at {
+                    Err(self.error.into())
+                } else {
+                    Ok(self.state.clone())
+                }
+            }
+            fn mutate<R>(
+                &self,
+                _: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+            ) -> Result<R, String> {
+                panic!("guard must not mutate authority")
+            }
+        }
+        let repository = repository();
+        let binding = PrimaryBinding::resolve(&repository, "route", "1").unwrap();
+        for (fail_at, error, expected) in [
+            (
+                1,
+                "service_state_lock_timeout: private holder details",
+                "guacamole_primary_state_lock_timeout",
+            ),
+            (
+                2,
+                "service_state_lock_timeout: private holder details",
+                "guacamole_primary_authority_lock_timeout",
+            ),
+            (
+                1,
+                "Failed to read private repository path",
+                "guacamole_primary_state_unavailable",
+            ),
+            (
+                2,
+                "Failed to read private repository path",
+                "guacamole_primary_authority_unavailable",
+            ),
+        ] {
+            let failed = FailedRead {
+                state: repository.0.clone(),
+                reads: std::cell::Cell::new(0),
+                fail_at,
+                error,
+            };
+            assert_eq!(binding.verify_current(&failed), Err(expected));
+        }
     }
 
     #[test]

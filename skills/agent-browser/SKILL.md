@@ -2970,6 +2970,9 @@ Provider inventory refresh preserves a current acquisition reservation and its
 pending state; provider availability alone does not make it ready.
 The same browser keeps its existing capacity slot through revalidation, including
 its scene generation and recovery lease. Missing capacity is not created.
+A primary guard failure retains a specific safe code: state or authority read
+timeout/unavailability is distinct from owner or binding change. Every guard
+rejection still ends the primary and requires reconciliation before another attempt.
 
 A rejected key is discarded and reported through the existing bounded recovery
 flow. Recovery may request a fresh key from the same healthy primary. It cannot

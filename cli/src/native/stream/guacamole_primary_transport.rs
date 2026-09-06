@@ -1,8 +1,10 @@
 //! Backend task ownership for a receive-only Guacamole primary connection.
 
+use super::guacamole_primary_binding::PrimaryGuard;
 use super::guacamole_primary_protocol::Protocol;
 use futures_util::{SinkExt, StreamExt};
 use std::future::Future;
+#[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -52,17 +54,14 @@ impl<F: FnOnce(&str, &'static str, u64)> Drop for TerminalObserver<F> {
 }
 
 impl PrimaryTask {
-    pub fn spawn<S>(
-        socket: WebSocketStream<S>,
-        is_current: Arc<dyn Fn() -> bool + Send + Sync>,
-    ) -> Self
+    pub fn spawn<S>(socket: WebSocketStream<S>, is_current: PrimaryGuard) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         Self::connect(async move { Ok(socket) }, is_current)
     }
 
-    pub fn connect<S, F>(connection: F, is_current: Arc<dyn Fn() -> bool + Send + Sync>) -> Self
+    pub fn connect<S, F>(connection: F, is_current: PrimaryGuard) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         F: Future<Output = Result<WebSocketStream<S>, &'static str>> + Send + 'static,
@@ -74,7 +73,7 @@ impl PrimaryTask {
     /// The observer receives only a static code and elapsed time, never payloads.
     pub fn connect_observed<S, F>(
         connection: F,
-        is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+        is_current: PrimaryGuard,
         on_closed: impl FnOnce(&str, &'static str, u64) + Send + 'static,
     ) -> Self
     where
@@ -156,7 +155,7 @@ impl Drop for PrimaryTask {
 
 async fn connect_and_run<S, F>(
     connection: F,
-    is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+    is_current: PrimaryGuard,
     status: &watch::Sender<PrimaryStatus>,
     mut shutdown: watch::Receiver<bool>,
 ) -> &'static str
@@ -164,8 +163,8 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
     F: Future<Output = Result<WebSocketStream<S>, &'static str>>,
 {
-    if !is_current() {
-        return "guacamole_primary_binding_changed";
+    if let Err(code) = is_current() {
+        return code;
     }
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut fence = tokio::time::interval(Duration::from_millis(250));
@@ -174,7 +173,7 @@ where
         tokio::select! {
             _ = shutdown.changed() => return "guacamole_primary_stopped",
             _ = fence.tick() => {
-                if !is_current() { return "guacamole_primary_binding_changed"; }
+                if let Err(code) = is_current() { return code; }
                 if Instant::now() >= deadline { return "guacamole_primary_start_timeout"; }
             }
             result = &mut connection => match result {
@@ -188,7 +187,7 @@ where
 
 async fn run<S>(
     mut socket: WebSocketStream<S>,
-    is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+    is_current: PrimaryGuard,
     status: &watch::Sender<PrimaryStatus>,
     mut shutdown: watch::Receiver<bool>,
     start_deadline: Instant,
@@ -204,17 +203,17 @@ where
         tokio::select! {
             _ = shutdown.changed() => break "guacamole_primary_stopped",
             _ = fence.tick() => {
-                if !is_current() { break "guacamole_primary_binding_changed"; }
+                if let Err(code) = is_current() { break code; }
                 if !ready && Instant::now() >= start_deadline { break "guacamole_primary_start_timeout"; }
             }
             _ = keepalive.tick() => {
-                if !is_current() { break "guacamole_primary_binding_changed"; }
+                if let Err(code) = is_current() { break code; }
                 if send(&mut socket, Message::Text("3.nop;".into())).await.is_err() {
                     break "guacamole_primary_transport_closed";
                 }
             }
             message = socket.next() => {
-                if !is_current() { break "guacamole_primary_binding_changed"; }
+                if let Err(code) = is_current() { break code; }
                 let observation = match message {
                     Some(Ok(Message::Text(text))) => match protocol.receive(&text) {
                         Ok(value) => value,
@@ -230,9 +229,7 @@ where
                     _ => break "guacamole_primary_transport_closed",
                 };
                 for reply in observation.replies {
-                    if !is_current() {
-                        return "guacamole_primary_binding_changed";
-                    }
+                    if let Err(code) = is_current() { return code; }
                     if send(&mut socket, Message::Text(reply)).await.is_err() {
                         return "guacamole_primary_transport_closed";
                     }
@@ -277,7 +274,13 @@ mod tests {
         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
         let mut owner = PrimaryTask::connect_observed(
             async move { connected_rx.await.map_err(|_| "fixture_connection_closed") },
-            Arc::new(move || guard.load(Ordering::SeqCst)),
+            Arc::new(move || {
+                if guard.load(Ordering::SeqCst) {
+                    Ok(())
+                } else {
+                    Err("guacamole_primary_state_lock_timeout")
+                }
+            }),
             move |occurrence_id, code, elapsed_ms| {
                 terminal_tx
                     .send((occurrence_id.to_owned(), code, elapsed_ms))
@@ -333,12 +336,12 @@ mod tests {
         .unwrap();
         assert_eq!(
             owner.status(),
-            PrimaryStatus::Closed("guacamole_primary_binding_changed")
+            PrimaryStatus::Closed("guacamole_primary_state_lock_timeout")
         );
         // Closed is observable only after the terminal sink has accepted custody.
         let (occurrence_id, code, elapsed_ms) = terminal_rx.await.unwrap();
         assert_eq!(occurrence_id, owner.occurrence_id);
-        assert_eq!(code, "guacamole_primary_binding_changed");
+        assert_eq!(code, "guacamole_primary_state_lock_timeout");
         assert!(elapsed_ms >= 5_000);
         owner.close().await;
     }
@@ -351,7 +354,7 @@ mod tests {
         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
         let owner = PrimaryTask::connect_observed(
             async move { Ok(client) },
-            Arc::new(|| true),
+            Arc::new(|| Ok(())),
             move |_, code, _| {
                 terminal_tx.send(code).unwrap();
             },
@@ -383,7 +386,10 @@ mod tests {
         let (client, server) = tokio::io::duplex(4096);
         let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
         let mut server = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
-        let mut owner = PrimaryTask::spawn(client, Arc::new(|| false));
+        let mut owner = PrimaryTask::spawn(
+            client,
+            Arc::new(|| Err("guacamole_primary_binding_changed")),
+        );
         server
             .send(Message::Text("4.sync,1.1;".into()))
             .await

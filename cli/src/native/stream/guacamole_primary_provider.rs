@@ -1,7 +1,8 @@
 //! Local Guacamole authentication and receive-only tunnel startup.
 //! Provider tokens never leave this module's transient connection setup.
 
-use super::guacamole_primary_binding::PrimaryBinding;
+use super::guacamole_primary_binding::{PrimaryBinding, PrimaryGuard};
+#[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpStream;
@@ -9,11 +10,9 @@ use tokio_tungstenite::{tungstenite::client::IntoClientRequest, MaybeTlsStream, 
 
 pub(super) async fn connect(
     binding: PrimaryBinding,
-    is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+    is_current: PrimaryGuard,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
-    if !is_current() {
-        return Err("guacamole_primary_binding_changed");
-    }
+    is_current()?;
     let principal = std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -23,12 +22,10 @@ pub(super) async fn connect(
 
 async fn connect_with_principal(
     binding: PrimaryBinding,
-    is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+    is_current: PrimaryGuard,
     principal: String,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
-    if !is_current() {
-        return Err("guacamole_primary_binding_changed");
-    }
+    is_current()?;
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -84,9 +81,7 @@ async fn connect_with_principal(
         .as_str()
         .filter(|value| !value.is_empty() && value.len() <= 8192)
         .ok_or("guacamole_primary_provider_auth_invalid")?;
-    if !is_current() {
-        return Err("guacamole_primary_binding_changed");
-    }
+    is_current()?;
     let mut url = binding
         .provider_base
         .join("websocket-tunnel")
@@ -124,9 +119,7 @@ async fn connect_with_principal(
     .await
     .map_err(|_| "guacamole_primary_provider_connect_timeout")?
     .map_err(|_| "guacamole_primary_provider_connect_failed")?;
-    if !is_current() {
-        return Err("guacamole_primary_binding_changed");
-    }
+    is_current()?;
     Ok(socket)
 }
 
@@ -217,7 +210,7 @@ mod tests {
                     }
                 }
             });
-            let guard: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(|| true);
+            let guard: PrimaryGuard = Arc::new(|| Ok(()));
             let mut owner = PrimaryTask::connect(
                 connect_with_principal(binding, guard.clone(), "synthetic-operator".into()),
                 guard,

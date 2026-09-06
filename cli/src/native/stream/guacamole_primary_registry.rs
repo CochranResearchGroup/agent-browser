@@ -1,6 +1,6 @@
 //! Backend-scoped primary ownership. Failed attempts remain explicit and sticky.
 
-use super::guacamole_primary_binding::PrimaryBinding;
+use super::guacamole_primary_binding::{PrimaryBinding, PrimaryGuard};
 use super::guacamole_primary_provider;
 use super::guacamole_primary_transport::{PrimaryStatus, PrimaryTask};
 use crate::native::service_store::LockedServiceStateRepository;
@@ -44,8 +44,8 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
             let binding = PrimaryBinding::resolve(&repository, route_id, connection_id)?;
             registry.admit(binding, |binding| {
                 let expected = binding.clone();
-                let is_current: Arc<dyn Fn() -> bool + Send + Sync> =
-                    Arc::new(move || expected.is_current(&repository));
+                let is_current: PrimaryGuard =
+                    Arc::new(move || expected.verify_current(&repository));
                 let evidence_binding = binding.clone();
                 PrimaryTask::connect_observed(
                     guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
@@ -130,7 +130,7 @@ mod tests {
             std::future::pending::<
                 Result<tokio_tungstenite::WebSocketStream<tokio::io::DuplexStream>, &'static str>,
             >(),
-            Arc::new(|| true),
+            Arc::new(|| Ok(())),
         )
     }
 

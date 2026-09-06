@@ -1278,3 +1278,33 @@ aggregate, owner/endpoint records, provider readbacks and hash verification.
 Next distinguish typed primary guard rejection causes with a local regression
 before selecting another live repair verification. The synthetic browser and
 fixture server remain retained cleanup obligations. W3 and W5 remain open.
+
+## Checkpoint 28: preserve the specific primary guard rejection
+
+The primary's boolean guard discarded the reason for rejection before transport
+termination. The existing transport regression now supplies a lock-timeout
+rejection after proven startup and continued keepalive. Before repair, its
+waiting caller received `guacamole_primary_binding_changed` instead of the
+supplied cause. The regression failed in 5.25 seconds.
+
+The provider and transport now carry a typed, bounded guard result. Repository
+state-read and authority-read timeout/unavailability remain distinct from owner
+or binding change through the terminal observer and waiter response. Raw paths,
+holder details and provider evidence are excluded. Guard rejection still stops
+the primary; no check, timeout or sticky-failure rule is relaxed. Additional
+coverage faults each of the two real repository-read boundaries and verifies
+their distinct safe codes. This repairs diagnostic custody; it does not yet
+identify the cause of run 34017270853 or repair that external transition.
+
+All fifteen focused primary tests, workspace clippy with warnings denied,
+format, docs build and handoff documentation checks pass. All five guidance
+surfaces are updated. Private `primary-guard-custody/` retains red/green and
+validation receipts. The preceding synthetic browser was closed through Service
+after exact process/target checks; its row is absent and all fourteen captured
+process identities are gone, recorded under `primary-guard-candidate/`.
+
+Next publish this isolated diagnostic candidate and exercise one bounded local
+takeover/concurrent-resolution transition with the new terminal custody. Do not
+claim the historical guard failure was contention without a typed live record.
+The synthetic server remains retained. External W3 and production delivery W5
+remain open.
