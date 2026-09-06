@@ -432,3 +432,45 @@ failure: source shows that the public forward-auth route supplies the provider's
 that as a scope limitation and verify through the required protected public
 workflow; do not add a guessed authentication repair or repeat localhost as the
 external oracle. The synthetic HTTP server remains intentionally retained.
+
+## Checkpoint 7: live custody passes; external verification remains incomplete
+
+Progress: `outcome_progress`. Execution remains
+`recovery_verified_logging_and_presentation_active`.
+
+The installed custody candidate preserved a newly authorized original handle:
+evaluation succeeded before and after supported durable handoff resolution,
+which returned ready for the same browser/session/target. The access-plan session
+also survived the client helper and HTTP routing. Private source-bound receipts,
+the append-only ledger and preserved probe sources are under
+`campaigns/p159/custody-outcome/`. This verifies the live grant-preservation seam;
+it does not replace the earlier two-client host-restart proof.
+
+Protected manual readiness run
+[34009455909](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34009455909)
+finished with failure against source `ba55a7f7` and installed binary
+`7df13c4085f9b2bf235e0326be76d3171f83c7e6dcd9488efdc4bd7841c131c2`.
+The human-paced client passed ordinary public pixels and same-URL reconnect,
+with unchanged expected identity and zero physical browser launch delta. Its
+action manifest was absent and action observations empty: remote input is NOT
+proven by that pass.
+
+The slow concurrent client captured initial, concurrent and reconnect pixel
+markers matching the independently frozen expected hash, but its dashboard
+oracle rejected one console error. All 146 captured Guacamole HTTP responses
+were 200, with zero failed or pending requests. These facts do not waive the
+console failure or establish complete concurrent acceptance. The error was
+unclassified; its location hash joins to the shared-view Guacamole
+`guacamole-common-js/all.min.js` asset, whose request succeeded. Raw error text
+was not retained, so the causal diagnosis remains incomplete. Preserve this
+logging limitation rather than inventing a transport cause from the hash.
+
+Both clients report zero retries. No calibration or unchanged rerun occurred.
+Private downloaded artifacts and their adjudication are retained in
+`custody-outcome/external/`; the aggregate failure remains authoritative.
+The synthetic browser and fixture server are retained cleanup obligations.
+W3 remains open for the console failure and actual remote input. W2's duplicate
+stream-enable failure and owner-counterexample scope, and W5's concrete
+production proposal, remain open. Next: resolve the selected console evidence
+gap before any changed-seam external verification, while continuing independent
+logging work. Production replacement remains pending.
