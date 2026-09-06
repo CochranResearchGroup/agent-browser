@@ -3075,6 +3075,7 @@ and force desktop GL so XRDP and Xvfb view streams paint the browser window
 instead of a blank white surface. Remote-headed launches also start maximized
 by default and run the same native-window maximize step used by `view_focus`, so
 window managers can resize the browser with the Guacamole or XRDP viewport.
+Remote-headed launches suppress Chrome's crash-restore bubble so an unclean Profile exit cannot cover the control surface; this does not rewrite Profile exit state or restore old tabs.
 When a caller sends remote-headed flags through an already-running daemon,
 agent-browser carries `AGENT_BROWSER_REMOTE_HEADED_DISPLAY`,
 `AGENT_BROWSER_REMOTE_VIEW_URL`, `AGENT_BROWSER_REMOTE_VIEW_FRAME_URL`,

@@ -1484,3 +1484,38 @@ remote-headed scope still need focused verification before changing launch or
 replacing the fixture. No popup was dismissed, profile edited, browser closed,
 candidate installed or production changed during this adjudication. W3 and W5
 remain open, with the same retained synthetic browser/server obligations.
+
+## Checkpoint 34: remote-headed restore-bubble suppression verified locally
+
+Chromium's `HasPendingUncleanExit` implementation explicitly excludes launches
+with `--hide-crash-restore-bubble`. Agent Browser already supplies that switch
+for manual login, but omitted it for ordinary remote-headed automation. The
+existing remote-headed argument regression was extended and failed on that
+omission before repair. The remote-headed window policy now adds the switch
+without duplicating an explicit argument. Its existing headless/manual-login
+guards remain; manual login retains its own existing switch. Profile exit state
+and saved tabs are not rewritten by this change.
+
+Four focused remote-headed launch tests pass, including explicit window geometry
+and manual-login behavior. Workspace clippy with warnings denied, format, docs
+build and handoff documentation checks pass. All five guidance surfaces are
+updated. These source checks are not installed browser acceptance.
+
+A bounded disposable Xvfb check used two separately prepared synthetic unclean
+profiles with the installed Chrome executable. Direct desktop screenshot review
+shows the restore bubble without the flag and its absence with the flag. Both
+Chrome processes exited; the subsequent readable-process scan found no Chrome
+processes referencing these fixture directories. The check does not claim
+namespace-wide ancillary cleanup. Private `restore-bubble-check/` retains its
+script, Chrome logs, screenshots, hashes, process receipts and adjudication.
+This verifies Chrome's switch behavior independently of the argument test; it
+does not claim the new Agent Browser candidate is already installed.
+
+Progress: source repair and locally verified obstruction removal. Next build
+the optimized candidate, close the exact retained P158 fixture with separate
+Service/process accounting, install only in P158, and open a fresh synthetic
+fixture to verify the launch flag and external ordinary input/reopen outcome.
+That controlled replacement is not retained-browser upgrade acceptance. Keep
+the historical pixel oracle and failed runs. Production replacement and W5
+delivery review remain pending; no current browser or production runtime was
+changed in this slice.

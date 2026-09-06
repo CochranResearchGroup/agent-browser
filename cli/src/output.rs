@@ -6360,6 +6360,7 @@ Notes:
     URL that the dashboard should embed.
   - Linux remote_headed launches disable Chromium's Vulkan/ANGLE path and force
     desktop GL so XRDP and Xvfb view streams paint the headed browser surface.
+    Remote-headed launches suppress the crash-restore bubble without rewriting Profile exit state.
     Remote-headed launches start maximized by default and run the same native
     maximize step as view_focus so the browser tracks Guacamole or XRDP viewport
     resizing. Remote-headed launch commands also carry the remote display, view

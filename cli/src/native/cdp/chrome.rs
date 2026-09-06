@@ -895,6 +895,16 @@ fn apply_remote_headed_window_flags(args: &mut Vec<String>, options: &LaunchOpti
         return;
     }
 
+    // Retained profiles can record an unclean exit after a host interruption.
+    // Keep Chrome's restore bubble from occluding the remote control surface;
+    // this does not rewrite profile exit state or restore previous tabs.
+    push_launch_arg_if_absent(
+        args,
+        &options.args,
+        "--hide-crash-restore-bubble",
+        "--hide-crash-restore-bubble",
+    );
+
     // Remote desktop operators expect the browser window to track the desktop
     // size. Leave explicit geometry alone, but otherwise start maximized so a
     // window manager can resize Chrome with the Guacamole/XRDP viewport.
@@ -3388,6 +3398,10 @@ mod tests {
             .iter()
             .any(|arg| arg == "--disable-gpu-compositing"));
         assert!(result.args.iter().any(|arg| arg == "--start-maximized"));
+        assert!(result
+            .args
+            .iter()
+            .any(|arg| arg == "--hide-crash-restore-bubble"));
         assert!(result.args.iter().any(|arg| arg == "--use-gl=desktop"));
         assert!(result.args.iter().any(|arg| arg == "--use-angle=gl"));
         assert!(disable_features.contains("Vulkan"));
@@ -3428,13 +3442,24 @@ mod tests {
         let opts = LaunchOptions {
             headless: false,
             remote_headed: true,
-            args: vec!["--window-size=960,720".to_string()],
+            args: vec![
+                "--window-size=960,720".to_string(),
+                "--hide-crash-restore-bubble".to_string(),
+            ],
             ..Default::default()
         };
         let result = build_chrome_args(&opts, true).unwrap();
 
         assert!(!result.args.iter().any(|arg| arg == "--start-maximized"));
         assert!(result.args.iter().any(|arg| arg == "--window-size=960,720"));
+        assert_eq!(
+            result
+                .args
+                .iter()
+                .filter(|arg| *arg == "--hide-crash-restore-bubble")
+                .count(),
+            1
+        );
     }
 
     #[test]
