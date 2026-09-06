@@ -6478,3 +6478,26 @@ durable evidence, and bind any subsequent protected external readiness probe
 to the resulting new identity. Preserve every previous target and failed P/Q
 receipt as history; new-target visibility cannot count as preservation of the
 old process. Full Plan 0158 remains open.
+
+
+### Priority Remote-View: Guarded Reopen Execution Prepared
+
+The explicit reopening question remains pending. Automatic goal continuation
+is not operator confirmation. Independent execution preparation adds the private
+execute-reopen-once.mjs beside the frozen proposal. Syntax validation and its
+read-only prepare mode pass against installed candidate SHA-256
+75f7d4a2caab01870057c3f82bd8e14b9cec976a4d103f524cb21c0337a66604,
+retained owner generation 5, and current replacementEligible=true.
+
+The script binds the proposal hash, durable URL hash, Profile, owner/lifecycle
+identity and generation, exact installed namespace, and synthetic source/document.
+It requires a fresh supported access plan and the restored fixture's matching
+body before dispatch. Exclusive ledger creation and directory/file fsync precede
+the sole request; a transport failure records uncertain effects and never retries.
+Before/after state, owner, lifecycle, handoff, presentation, and journal snapshots
+support subsequent response and logging adjudication. Prepare mode makes no
+request mutation and the execution ledger does not exist. No fixture service,
+browser reopen, external workflow, or calibration has run. Source/hash and
+prepare receipts remain private in execution-preparation.json. This is execution
+preparation, not a remote-view acceptance pass; explicit confirmation is still
+required for the proposed replacement-target effect.
