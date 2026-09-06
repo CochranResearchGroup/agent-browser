@@ -5196,6 +5196,17 @@ not refresh the old capability binding or grant it lifecycle authority.
 Restricted profiles, inconsistent profile identities and future-generation
 bindings still fail admission; registered clients must use guarded rejoin.
 
+Remote-headed Xvfb allocation checks both filesystem and Linux abstract X11
+sockets. A live abstract socket reserves its display even when PrivateTmp hides
+the pathname socket. An unreadable abstract-socket census remains unknown and
+cannot authorize allocation or stale-lock cleanup.
+
+If Xvfb exits or times out during startup, the error includes its first 4096
+stderr bytes and a private log path under `~/.agent-browser/tmp/xvfb-launches`.
+The X server writes directly to that private file, so retaining it across a
+runtime restart does not depend on a logging pipe. Unavailable log capture is
+reported with the startup failure and does not itself prevent launch.
+
 A newly installed development lane with an optional, unconfigured presentation
 provider records an empty route inventory so headless work can start. It does
 not report presentation ready. Existing provider inventories and retained routes

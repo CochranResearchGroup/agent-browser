@@ -2841,29 +2841,39 @@ fn start_remote_headed_virtual_display(
     let (width, height) = viewport_size.unwrap_or((1280, 720));
     let display_arg = format!(":{}", display);
     let screen = format!("{}x{}x24", width, height);
+    let (stderr, diagnostic_path) = match open_xvfb_startup_log(display) {
+        Ok((file, path)) => (Stdio::from(file), Ok(path)),
+        Err(error) => (Stdio::null(), Err(error)),
+    };
     let mut child = Command::new(xvfb)
         .args([&display_arg, "-screen", "0", &screen, "-nolisten", "tcp"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(stderr)
         .spawn()
         .map_err(|err| format!("Failed to start Xvfb for remote_headed launch: {}", err))?;
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                return Err(format!(
-                    "Xvfb for remote_headed launch exited before display {} became ready: {}",
-                    display_arg, status
+                return Err(xvfb_startup_failure(
+                    format!(
+                        "Xvfb for remote_headed launch exited before display {} became ready: {}",
+                        display_arg, status
+                    ),
+                    &diagnostic_path,
                 ));
             }
             Ok(None) => {}
             Err(err) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!(
-                    "Failed to verify Xvfb for remote_headed display {}: {}",
-                    display_arg, err
+                return Err(xvfb_startup_failure(
+                    format!(
+                        "Failed to verify Xvfb for remote_headed display {}: {}",
+                        display_arg, err
+                    ),
+                    &diagnostic_path,
                 ));
             }
         }
@@ -2875,13 +2885,65 @@ fn start_remote_headed_virtual_display(
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!(
-                "Xvfb for remote_headed display {} did not become ready within 2 seconds",
-                display_arg
+            return Err(xvfb_startup_failure(
+                format!(
+                    "Xvfb for remote_headed display {} did not become ready within 2 seconds",
+                    display_arg
+                ),
+                &diagnostic_path,
             ));
         }
         std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+/// Use a private file so the retained X server never depends on a daemon-owned
+/// stderr pipe surviving host replacement. Logging failure does not block launch.
+#[cfg(target_os = "linux")]
+fn open_xvfb_startup_log(display: u16) -> Result<(fs::File, PathBuf), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let dir = dirs::home_dir()
+        .ok_or_else(|| "home_directory_unavailable".to_string())?
+        .join(".agent-browser/tmp/xvfb-launches");
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    set_private_dir_permissions(&dir);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let path = dir.join(format!(
+        "xvfb-{}-{timestamp}-{display}.stderr.log",
+        std::process::id()
+    ));
+    let file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| error.to_string())?;
+    Ok((file, path))
+}
+
+/// Preserve the first startup diagnostic with a bounded inline sample and the
+/// full private log locator. No pipe read can extend the startup deadline.
+#[cfg(target_os = "linux")]
+fn xvfb_startup_failure(message: String, diagnostic_path: &Result<PathBuf, String>) -> String {
+    use std::io::Read;
+    let path = match diagnostic_path {
+        Ok(path) => path,
+        Err(error) => return format!("{message}; xvfb_stderr_capture_unavailable={error}"),
+    };
+    let sample = fs::File::open(path)
+        .and_then(|file| {
+            let mut bytes = Vec::new();
+            file.take(4096).read_to_end(&mut bytes)?;
+            Ok(String::from_utf8_lossy(&bytes).trim().to_string())
+        })
+        .unwrap_or_else(|error| format!("stderr_read_failed: {error}"));
+    format!(
+        "{message}; xvfb_stderr_path={}; xvfb_stderr_first_4096_bytes={sample}",
+        path.display()
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -2923,7 +2985,7 @@ fn remote_headed_display_exhausted_message() -> String {
         .filter(|state| state.status == XDisplayStatus::Unknown)
         .count();
     format!(
-        "No available X display number found for remote_headed launch in :90-:129; active_or_reserved={}, stale_lock_count={}, unknown_count={}. Run the RDP ready-to-go doctor or remove safe stale allocator-range locks that have no matching /tmp/.X11-unix/X* socket.",
+        "No available X display number found for remote_headed launch in :90-:129; active_or_reserved={}, stale_lock_count={}, unknown_count={}. Run the RDP ready-to-go doctor or inspect allocator-range locks and both filesystem and abstract X11 sockets before cleanup. Do not remove a lock while either socket is active or observation is unknown.",
         active_count, stale_count, unknown_count
     )
 }
@@ -2973,8 +3035,14 @@ fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
     let lock_pid = read_x_lock_pid(&lock_path);
     let lock_exists = lock_path.exists();
 
-    let status = if socket_exists {
+    // PrivateTmp can hide the pathname socket while the same network namespace
+    // still contains the live abstract X11 socket. Never reclaim that display's
+    // visible lock based solely on the caller's filesystem view.
+    let abstract_socket_exists = abstract_x_socket_present(&socket_path);
+    let status = if socket_exists || matches!(abstract_socket_exists, Ok(true)) {
         XDisplayStatus::ActiveSocket
+    } else if abstract_socket_exists.is_err() {
+        XDisplayStatus::Unknown
     } else if let Some(pid) = lock_pid {
         if x_display_lock_pid_matches_display(pid, display) {
             XDisplayStatus::ActiveXProcess
@@ -2992,6 +3060,18 @@ fn classify_x_display(tmp_root: &Path, display: u16) -> XDisplayState {
         status,
         lock_pid,
     }
+}
+
+/// Observe the current network namespace without connecting to or rebinding a
+/// display owned by another runtime. An unreadable census is unknown, not free.
+#[cfg(target_os = "linux")]
+fn abstract_x_socket_present(socket_path: &Path) -> std::io::Result<bool> {
+    let expected = format!("@{}", socket_path.display());
+    let sockets = fs::read_to_string("/proc/net/unix")?;
+    Ok(sockets
+        .lines()
+        .skip(1)
+        .any(|line| line.split_whitespace().nth(7) == Some(expected.as_str())))
 }
 
 #[cfg(target_os = "linux")]
@@ -3247,6 +3327,56 @@ mod tests {
 
         assert_eq!(state.status, XDisplayStatus::ActiveSocket);
         assert_eq!(available_x_display_in(&dir, 90..91), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_x_display_preserves_abstract_socket_without_visible_filesystem_socket() {
+        use std::os::linux::net::SocketAddrExt;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::net::{SocketAddr, UnixListener};
+
+        let dir = TempDir::new("xd-abstract");
+        fs::create_dir_all(&*dir).unwrap();
+        let socket_path = dir.join(".X11-unix").join("X90");
+        let address = SocketAddr::from_abstract_name(socket_path.as_os_str().as_bytes()).unwrap();
+        let listener = UnixListener::bind_addr(&address).unwrap();
+        assert!(!socket_path.exists());
+        assert_eq!(
+            classify_x_display(&dir, 90).status,
+            XDisplayStatus::ActiveSocket
+        );
+        let lock_path = dir.join(".X90-lock");
+        fs::write(&lock_path, "999999\n").unwrap();
+        assert_eq!(available_x_display_in(&dir, 90..91), None);
+        assert!(remove_stale_x_lock(&dir, 90).is_err());
+        assert_eq!(fs::read_to_string(&lock_path).unwrap(), "999999\n");
+        drop(listener);
+        assert_eq!(available_x_display_in(&dir, 90..91), Some(90));
+        assert!(!lock_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_xvfb_startup_diagnostic_preserves_first_cause_with_bounded_sample() {
+        let dir = TempDir::new("xvfb-diagnostic");
+        fs::create_dir_all(&*dir).unwrap();
+        let log = dir.join("stderr.log");
+        fs::write(
+            &log,
+            format!("Address already in use\n{}\nend-marker", "x".repeat(8192)),
+        )
+        .unwrap();
+        let failure = xvfb_startup_failure("Xvfb exited".to_string(), &Ok(log.clone()));
+        assert!(failure.contains("Address already in use"));
+        assert!(failure.contains(log.to_str().unwrap()));
+        assert!(!failure.contains("end-marker"));
+        assert!(failure.len() < 4600);
+        let unavailable = xvfb_startup_failure(
+            "Xvfb exited".to_string(),
+            &Err("permission denied".to_string()),
+        );
+        assert!(unavailable.contains("xvfb_stderr_capture_unavailable=permission denied"));
     }
 
     #[cfg(target_os = "linux")]
@@ -4121,6 +4251,11 @@ mod tests {
             return;
         }
 
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("xvfb-home");
+        fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+
         let Ok((display, mut child)) = start_remote_headed_virtual_display(Some((640, 480))) else {
             return;
         };
@@ -4137,6 +4272,11 @@ mod tests {
         if find_path_executable("Xvfb").is_none() {
             return;
         }
+
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("xvfb-home");
+        fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
 
         let Ok((display_a, mut child_a)) = start_remote_headed_virtual_display(Some((640, 480)))
         else {

@@ -540,3 +540,22 @@ next_action_or_stop_reason: Repair abstract X11 socket occupancy handling with a
 red/green allocation regression and useful bounded Xvfb startup diagnostics.
 Validate remote-headed launch/reopen, then complete the current profile/doctor
 finding dispositions, causal-tracing contract and remaining W2–W5 acceptance.
+
+### W2 implementation and focused validation
+
+The allocator now observes abstract X11 sockets in the current Linux network
+namespace as well as filesystem sockets. It refuses allocation and stale-lock
+cleanup when an abstract socket is live; an unreadable socket census is unknown.
+The real abstract-socket regression reported `Free` before the repair. After
+correcting the fixture's directory setup, all 84 Chrome/display tests passed,
+including lock preservation while the abstract listener remains live and reuse
+only after it closes. Test setup/compile failures remain in the private logs.
+
+Xvfb writes stderr to a private file so retained display ownership does not depend
+on a daemon logging pipe. Startup exit/timeout errors include a bounded first
+4096-byte sample and the log locator; inability to create the log does not itself
+prevent launch. A focused diagnostic regression proves first-cause retention and
+bounded inline output. The existing Xvfb tests now isolate their log HOME; their
+final focused run passed. Workspace clippy, formatting, documentation build and
+handoff documentation checks passed. The optimized candidate build completed;
+installed development remote-headed launch/control/close/reopen is next.
