@@ -934,3 +934,44 @@ external readiness proof, preserving prior failed attempts and the frozen pixel
 oracle. No external workflow was dispatched in this checkpoint. The selected
 primary-endpoint failure-custody review and W5 production proposal/final cleanup
 remain open.
+
+
+## Checkpoint 18: external proof exposes idle primary loss
+
+Protected readiness run `34014574632`, workflow source `4c902d8b`, is FAILED.
+It used installed candidate `0552574f397a`, the exact retained synthetic browser,
+fresh original-handle/input-ready and durable-resolution identity checks, and
+the existing historical pixel oracle. Six protected environment secrets were
+bound from private sources. No calibration, anchor or retry was used.
+
+Both external clients failed `external_stream_not_embeddable`, with zero
+iframes and zero provider WebSockets observed. The screenshots show the ordinary
+authenticated dashboard reporting Stream unavailable. The primary endpoint
+returned 503. Neither client reached pixel/input/peer-departure acceptance.
+No successful aggregate can be inferred from these partial artifacts.
+
+Read-only provider reconciliation found no matching primary. Provider logs show
+its disconnect at 05:39:37 UTC after 126216 milliseconds, with guacd reporting
+"User is not responding". This precedes the external clients' startup around
+05:41:51 UTC. The primary-start response pass remains valid, but it does not
+prove idle lifetime. Root cause is not yet established. No unchanged primary
+POST, backend restart or further external run followed this result.
+
+The original authorized handle still answers after the failed run, with the
+synthetic input marker still ready. This isolates the observed failure to
+presentation rather than proving a browser-control failure. The exact fixture
+remains retained with a cleanup obligation. Private `primary-owner-ingress-live/
+external/` retains bindings, secret-update metadata, dispatch intent/receipt,
+run status, client artifacts, screenshot review, provider/backend logs,
+post-run original-handle result and adjudication.
+
+Source review also confirms missing product failure custody at the new primary
+endpoint: it returns a typed error without appending its own correlated record.
+The client journal retained generic HTTP 503 and connection-sharing failures,
+which do not establish the owner's terminal cause. Next repair primary lifetime
+observability and verify the idle keepalive/acknowledgement path at the protocol
+boundary before another installed or external attempt. Apache Guacamole 1.5.5
+Client.js confirms that its client uses five-second nop keepalives; matching
+that instruction alone does not prove our task continues delivering them.
+Relevant upstream source snapshots are retained with the private evidence.
+W3 remains unaccepted; W2 selected custody and W5 delivery/cleanup remain open.
