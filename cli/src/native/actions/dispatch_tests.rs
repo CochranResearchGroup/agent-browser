@@ -481,6 +481,65 @@ async fn run_retained_handle_recovery_fixture(target_present: bool) {
             "sessionName": "retained-owner", "profileId": "retained-profile",
             "targetId": "retained-target", "tabId": "target:retained-target"}
     });
+    // Missing owner evidence must stop the original-handle path before CDP.
+    let owner_registry = repository.load_snapshot().unwrap().runtime_owner_registry;
+    repository
+        .mutate(|service| {
+            service.runtime_owner_registry = Default::default();
+            Ok(())
+        })
+        .unwrap();
+    let missing_owner = execute_command(&command, &mut state).await;
+    let failure = crate::native::service_failure::classify_service_failure(
+        missing_owner["error"].as_str().unwrap(),
+    );
+    assert_eq!(
+        failure.code, "service_tab_recovery_owner_missing",
+        "{missing_owner}"
+    );
+    assert_eq!(
+        failure.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert!(failure.executable_next_action.is_some());
+    assert!(state.browser.is_none());
+    assert!(methods.lock().unwrap().is_empty());
+    repository
+        .mutate(|service| {
+            service.runtime_owner_registry = owner_registry.clone();
+            service
+                .browsers
+                .get_mut("session:retained-owner")
+                .unwrap()
+                .pid = None;
+            Ok(())
+        })
+        .unwrap();
+    let missing_process = execute_command(&command, &mut state).await;
+    let failure = crate::native::service_failure::classify_service_failure(
+        missing_process["error"].as_str().unwrap(),
+    );
+    assert_eq!(
+        failure.code, "service_tab_recovery_process_unproven",
+        "{missing_process}"
+    );
+    assert_eq!(
+        failure.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert!(failure.executable_next_action.is_some());
+    assert!(state.browser.is_none());
+    assert!(methods.lock().unwrap().is_empty());
+    repository
+        .mutate(|service| {
+            service
+                .browsers
+                .get_mut("session:retained-owner")
+                .unwrap()
+                .pid = Some(std::process::id());
+            Ok(())
+        })
+        .unwrap();
     let rejected = execute_command(&command, &mut state).await;
     assert!(
         rejected["error"]
@@ -489,6 +548,15 @@ async fn run_retained_handle_recovery_fixture(target_present: bool) {
             .starts_with("service_tab_recovery_identity_mismatch:"),
         "{rejected}"
     );
+    let failure = crate::native::service_failure::classify_service_failure(
+        rejected["error"].as_str().unwrap(),
+    );
+    assert_eq!(failure.code, "service_tab_recovery_identity_mismatch");
+    assert_eq!(
+        failure.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert!(failure.executable_next_action.is_some());
     assert!(state.browser.is_none());
     assert!(methods.lock().unwrap().is_empty());
     repository

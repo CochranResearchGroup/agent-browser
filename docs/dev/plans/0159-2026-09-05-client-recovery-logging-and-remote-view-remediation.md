@@ -608,3 +608,54 @@ Finish the selected W3 verification before controlled fixture cleanup and any
 candidate replacement; retain the exact browser/process cleanup obligations.
 W1 owner counterexamples and the consolidated W5 production proposal remain
 required work. Production replacement has not been performed.
+
+## Checkpoint 11: input reaches a primary-connection lifetime defect
+
+Progress: `blocker_reduction` through a specific causal finding; W3 is open.
+
+Protected readiness run
+[34010718428](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34010718428)
+finished with failure against verifier `d46ddc71` and unchanged installed binary
+`7df13c4085f9`. The original handle and synthetic fixture were checked beforehand;
+no replacement, calibration anchor or secret change accompanied dispatch.
+The slow client passed. The human client passed its post-takeover baseline,
+sent its one mouse action, and failed `synthetic_remote_input_mouse_missing`.
+Keyboard input was not sent. The retained failure screenshot shows Guacamole's
+disconnected overlay. Extending the pixel wait again is not the selected repair.
+
+The console error's exact SHA-256 matches the fixed browser message
+`WebSocket is already in CLOSING or CLOSED state.` Source coordinates point to
+the Guacamole WebSocket tunnel's send call. This also identifies the formerly
+unclassified error in run 34009455909; it does not retroactively accept that run.
+Selected provider logs show the authenticated primary disconnecting, then both
+shared tunnels disconnecting within six milliseconds. A later primary connection
+starts another RDP client. Raw provider logs, screenshots, redacted transport
+receipts and adjudication remain private under
+`custody-outcome/baseline-external/`.
+
+Current `guacamole-connection-sharing.ts` elects a viewer's direct frame as the
+primary and obtains restricted sharing keys from it. Closing that viewer can
+therefore invalidate peers even while their browser, route and Service leases
+remain valid. The previous calibration anchor hid this lifetime dependency.
+The selected next W3 unit is product-level primary-connection ownership and
+peer continuity. Establish that lifetime at the existing provider/Service
+boundary, bind it to the exact browser/route and cleanup obligations, and verify
+primary-viewer departure before another external attempt. Do not add a harness
+anchor, waive closed-socket errors, change the expected pixel oracle, or repeat
+the failed external loop unchanged. Any new endpoint or worker must have its
+ownership and shutdown contract recorded here before implementation.
+
+Separately, the real-dispatch retained-handle fixture now tests missing owner
+registry evidence and missing process evidence as well as a changed endpoint.
+All return their expected typed recovery failures, `no_effect` and executable
+recourse before any CDP method, without installing a browser manager. Restoring
+valid evidence still recovers the original target; an absent target still cannot
+create or select a peer. Both focused tests, Rust format and workspace clippy
+with warnings denied pass. Private logs are in `baseline-external/owner-counterexamples/`.
+This closes the selected guard-level counterexample gap; it is not a new live
+owner-mutation campaign or a universal logging claim.
+
+W2's compatible stream-enable repair still needs installed custody. The
+synthetic browser/server remain retained obligations. The provider ownership
+repair and W5 consolidated delivery decision remain required; production is
+unchanged and the old terminal-target proposal remains unexecuted.
