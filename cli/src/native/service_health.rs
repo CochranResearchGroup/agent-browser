@@ -869,6 +869,42 @@ pub fn persist_service_browser_record_in_repository(
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
+        // Connecting to the same retained process observes its health; it does
+        // not launch a new browser. Keep its launch posture and display binding
+        // instead of replacing them with the CDP connection's empty metadata.
+        let retained_attachment = host == BrowserHost::AttachedExisting
+            && previous.as_ref().is_some_and(|browser| {
+                browser.boot_epoch.is_some()
+                    && browser.boot_epoch == crate::process_identity::current_boot_epoch()
+                    && browser.pid == pid
+                    && browser.cdp_endpoint.is_some()
+                    && browser.cdp_endpoint == cdp_endpoint
+                    && metadata.as_ref().is_none_or(|metadata| {
+                        metadata.profile_id.is_none() || metadata.profile_id == browser.profile_id
+                    })
+            })
+            && process_identity.as_ref().is_some_and(|observed| {
+                !observed.process_identity.start_token.is_empty()
+                    && observed.process_identity.executable_path.is_some()
+                    && Some(observed.process_identity.pid) == pid
+                    && service_state
+                        .browser_process_identities
+                        .get(&id)
+                        .is_some_and(|retained| {
+                            retained.process_identity == observed.process_identity
+                        })
+            });
+        if retained_attachment {
+            let mut browser = previous.clone().expect("retained attachment has a browser");
+            browser.health = health;
+            browser.last_error = last_error;
+            let details = browser_health_observation_details(&browser, None);
+            apply_browser_health_observation(&mut browser, Some(&details));
+            record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+            service_state.browsers.insert(id, browser);
+            refresh_remote_view_attachability(service_state);
+            return Ok(());
+        }
         let profile_id = metadata
             .as_ref()
             .and_then(|metadata| metadata.profile_id.clone())

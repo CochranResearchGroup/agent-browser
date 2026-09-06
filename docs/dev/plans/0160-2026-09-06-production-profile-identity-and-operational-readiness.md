@@ -590,3 +590,71 @@ next_action_or_stop_reason: Resume the existing build recorded at
 campaigns/p160/census/x-display-release-build.log, qualify the exact release and
 publish within existing authority while preserving current browser owners.
 Repeat the required final-candidate production matrix, then complete W2–W5.
+
+## Execution checkpoint 9: display repair published; restart reuse fails
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete. Checkpoint 7's single production
+reuse pass does not prove continuity after a subsequent host replacement.
+
+progress_classification: regression
+
+evidence: Source `50540506` produced release binary SHA256
+`6ba6ba3a9d4dc9929bfde5a5e1191781b6e3ffa1027c97c7f0e510b9c6c8a3d3`.
+Exact-release disposable remote-headed control/close/reopen, shared-local reuse,
+two authenticated retained-handle clients after host interruption, foreign-handle
+denial and source-free installer fixtures passed. The retained-handle fixture's
+23 remaining synthetic processes were disposed by exact process identity;
+recovered handle connections deliberately use detach semantics, so this is
+separate fixture teardown, not proof of automatic browser destruction.
+
+The release is installed as generation `0.28.0-6ba6ba3a9d4d-9807bdc21eb8`.
+All three production executables matched its SHA256, and all four original
+browser process identities survived activation. The prior generation remains
+available for rollback. Evidence is private under campaigns/p160/publication-x-display;
+qualification receipts are under remote-headed-release-proof,
+shared-local-release-J0Wvn6 and retained-repair-06K3TH.
+
+The original-profile synthetic blank-tab request failed after this activation:
+access planning selected the existing browser, but execution attempted another
+launch against its occupied profile. The original browser remained alive. Its
+record now had host `attached_existing` and null display name/allocation.
+Source tracing found that shared-profile attachment persists that host together
+with replacement launch metadata; the next remote-headed selection rejects it.
+This newly exposed continuity defect is an A1 blocker. The failed request and
+its diagnostics are preserved in publication-x-display/original-reuse-open.json.
+No business submission was attempted and no production metadata was manually
+repaired to force acceptance.
+
+material_blockers: The returned failure still lacks a useful first predicate
+and causal identity comparison. A read-only audit of the earlier failure found
+one job and one journal record; its event had aged out of the 100-event window,
+so the missing event is explained by retention, not proven delivery loss.
+The journal's terminal details alone are insufficient for AX. Doctor, external
+presentation, monitor and timer acceptance remain open; the timer is inactive.
+
+next_action_or_stop_reason: Reproduce remote-headed metadata loss in an isolated
+runtime, preserve verified launch identity during reuse, and test a second host
+replacement. Diagnose failures through the existing durable journal and trusted
+request provenance. Continue remaining A1–A4 and AX without weakening identity
+checks or treating detached client connections as new lifecycle authority.
+
+### W1 restart-continuity repair qualification
+
+The isolated remote-headed shared-local fixture reproduced launch-record loss
+with the installed release: the first reuse succeeded, then its assertion found
+`attached_existing` instead of `remote_headed`. Its private evidence is in
+campaigns/p160/shared-headed-restart-XcM0ac. Exact fixture cleanup found no residue.
+
+The repair treats an attachment to the same current-boot process, endpoint and
+profile as a health observation. It preserves launch posture, display allocation,
+launch/session metadata and recorded profile path rather than replacing them with
+incomplete CDP manager metadata. This changes projection persistence, not profile
+admission or lifecycle authority. A changed process start identity receives fresh
+metadata. The focused persistence regression and all 87 health tests passed;
+workspace clippy, formatting, docs build and handoff documentation checks passed.
+An optimized candidate build is active in census/retained-launch-candidate-build.log;
+the prepared isolated probe covers two clients across two host replacements.
+Already-damaged production metadata still requires verified recovery. The separate
+display allocation remains present, but its existence alone is not live proof.

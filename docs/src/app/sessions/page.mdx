@@ -464,6 +464,12 @@ not refresh the old capability binding or grant it lifecycle authority.
 Restricted profiles, inconsistent profile identities and future-generation
 bindings still fail admission; registered clients must use guarded rejoin.
 
+Reattaching to the same verified browser preserves its original host, display
+allocation, launch metadata and recorded profile path. A CDP attachment is a
+connection to that browser, not a replacement launch. Preservation requires
+matching current-boot process identity, endpoint and profile; a changed process
+receives fresh metadata.
+
 Remote-headed Xvfb allocation checks both filesystem and Linux abstract X11
 sockets. A live abstract socket reserves its display even when PrivateTmp hides
 the pathname socket. An unreadable abstract-socket census remains unknown and
