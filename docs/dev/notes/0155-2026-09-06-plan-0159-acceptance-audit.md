@@ -56,3 +56,14 @@ separate delivery decision. The frozen candidate must not be deployed under
 Plan 0159 alone because its profile-policy writes cross the plan's explicit
 production ACL boundary. That pending decision is an outcome of the required
 review, not missing execution of the bounded proposal task.
+
+
+## Subsequent production reconciliation
+
+The original audit accepted bounded recovery on an earlier binary, not reliable
+profile use on the final production candidate. Subsequent production smoke
+failed and required repair `8bd7f58a`. The repaired release now has its own
+original-two-handle recovery proof and installed custom-profile continuity
+proof, including headless close/reopen. The delivery record and Plan 0159
+checkpoint 47 bind those results. Global production acceptance remains incomplete;
+the separate Xvfb failure and doctor findings are not covered by this correction.

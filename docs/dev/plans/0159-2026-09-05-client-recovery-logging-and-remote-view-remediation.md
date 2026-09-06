@@ -4,7 +4,7 @@ Date: 2026-09-05
 
 State: COMPLETE
 
-Execution state: `accepted_production_delivery_decision_pending`
+Execution state: `profile_repair_installed_production_acceptance_incomplete`
 
 Lane: P157
 
@@ -1951,3 +1951,24 @@ remain pending. No production replacement, ACL mutation, override retirement,
 formal release, whole-branch promotion or new external campaign occurred.
 Retained synthetic review obligations remain explicit under criterion 5.
 P158 historical failures and unexecuted endurance criteria remain unchanged.
+
+
+## Checkpoint 47: production profile usability repaired
+
+Progress: `outcome_progress`. The operator authorized production delivery and
+then prioritized resolving profile errors. Historical bounded acceptance did
+not establish profile usability on the final installed candidate. The installed
+smoke exposed conflicting planned defaults, path-only terminal lookup failure,
+and confusion between custom Service IDs and named runtime profiles.
+
+Repair `8bd7f58a` resolves those three causes without relaxing ownership gates.
+The exact release binary now passes the original two-client W1 recovery probe
+and production custom-profile control, session-only use, conflict rejection,
+and headless close/reopen. All three production services run the repaired
+release. See the [delivery record](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+for immutable generation identity, test evidence and rollback custody.
+
+This closes the reproduced profile failures. Ambient remote-headed reopen
+exposed a separate Xvfb startup failure, and global doctor/operator-journey
+acceptance remains incomplete. These findings remain explicit; the historical
+COMPLETE state applies to the bounded plan contract, not whole-runtime readiness.

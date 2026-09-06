@@ -245,3 +245,46 @@ processes remain original, foreign-handle control is denied, and final Service
 browsers/sessions/tabs are zero. Evidence is in private
 `retained-repair-NaKZpp/` and the custom-profile smoke receipts. Rust presubmit and
 production publication are still pending at this checkpoint.
+
+
+## Profile repair installed and verified
+
+Source `8bd7f58a` is installed as production generation
+`0.28.0-e4243235af0c-072303ae3e67`, binary SHA-256
+`e4243235af0cfe007ef09c7c10ab55c1142deea43bfaecfafe0386f286cbb3eb`.
+The runtime host and both dashboard processes match that exact binary. The
+previous generation remains available for rollback. Bundled provider/controller
+assets and unit templates were unchanged and hash-verified; the direct package
+publication changed the binary binding and generation metadata. No synthetic
+acceptance receipt substitutes for the still-missing operator journey.
+
+Production verification through the normal installed CLI passed explicit
+custom-profile and session-only control, click and asserted text readback,
+conflicting-profile rejection followed by continued original-profile use, and
+headless close/reopen. PID, profile and tab identity stayed unchanged during live
+control. The exact disposable supervisor was removed after successful close;
+its browser and session records are absent. The preexisting independently owned
+browser retained its exact process start identity throughout publication.
+
+The initial production attempt used ambient remote-headed defaults. Profile
+control passed, but reopening failed at Xvfb display `:91` startup. Its failed
+receipt is preserved. Repeating the same profile workflow with explicitly
+requested `local_headless` passed. This proves profile continuity and does not
+accept remote-headed display allocation or conceal the failed attempt.
+
+The final release binary also passed the isolated original W1 test: both
+independently authenticated clients resumed their original handles and Chrome
+processes after host interruption, and foreign-client control was denied.
+Private evidence is `retained-repair-AuAeMW/`; its final Service browser/session/
+tab counts are zero and six exact ancillary helpers were terminated by pidfd.
+The optimized candidate's corresponding evidence is `retained-repair-NaKZpp/`.
+The focused runtime suite passed 93 tests; workspace clippy, formatting, docs
+build, handoff docs, and the source-free release installer fixture passed.
+
+Private `profile-continuity-repair/evidence-manifest.json` binds deployment,
+validation and cleanup receipts. The repaired profile paths are verified on
+production. Whole-runtime acceptance remains incomplete: doctor still reports
+operator-journey and selected-generation acceptance bookkeeping, historical
+profile-lease/ownership findings and the stopped runtime monitor. The production
+reconciliation timer remains stopped. Remote-headed Xvfb startup is a separate
+remaining operational failure.
