@@ -516,6 +516,22 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     if let Some(display_isolation) = display_isolation {
         request_params.insert("displayIsolation".to_string(), display_isolation);
     }
+    if profile_reuse
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        == Some("reuse_existing_browser")
+    {
+        // Selection intentionally ignores replacement defaults for retained
+        // browsers. Do not turn those defaults into new caller constraints
+        // when the generated request is admitted against the same state.
+        request_params.retain(|key, _| match key.as_str() {
+            "browserHost" | "headless" => request.browser_host.is_some(),
+            "viewStreamProvider" => request.view_stream_provider.is_some(),
+            "controlInputProvider" => request.control_input_provider.is_some(),
+            "displayIsolation" => request.display_isolation.is_some(),
+            _ => true,
+        });
+    }
     if !request_params.is_empty() {
         service_request.insert("params".to_string(), Value::Object(request_params));
     }

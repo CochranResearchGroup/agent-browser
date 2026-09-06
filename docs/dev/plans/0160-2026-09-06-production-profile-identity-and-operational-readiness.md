@@ -697,3 +697,34 @@ next_action_or_stop_reason: Implement and qualify recovery of the damaged
 launch projection without granting new profile or lifecycle authority, then
 publish the combined repair and repeat final-candidate production acceptance.
 Continue causal diagnostics and W2–W5 under the existing goal authority.
+
+### W1 bounded recovery implementation and admission mismatch
+
+A focused recovery module now restores only erased host, display name and
+allocation ID for an explicitly selected retained route. It requires a unique
+current-boot allocation with reciprocal browser/profile/session/PID linkage,
+current lifecycle owner authorization, fresh process digest and endpoint digest,
+a process-bound X11 window observation, a second process check and a locked state
+comparison. It does not promote permissions, change readiness, assert display
+exclusivity, navigate pages or replace processes. Its typed error names the failed
+predicate. Allocation mismatch and ambiguity tests passed.
+
+The synthetic damaged-record fixture on the prior prevention-only candidate
+failed earlier than daemon launch with `service_access_plan_route_browser_conflict`.
+Its access plan selected the original browser but its generated request copied
+replacement posture defaults into explicit constraints, changing admission's
+answer against the same state. The generator now preserves only caller-supplied
+posture constraints for reuse. The existing route-hint test now covers this
+round trip and passed; explicit route-conflict tests remain in place.
+
+The failed fixture and cleanup receipts remain private in
+campaigns/p160/shared-headed-recovery-QeTms3 and census/retained-recovery-red-cleanup.json.
+No fixture residue remained. Broad access tests and an optimized candidate build
+are active; no production recovery or publication has occurred in this slice.
+
+The 66 access-planning tests, service-client suite, final workspace clippy,
+formatting, docs build and handoff documentation checks passed. The final
+candidate rebuild includes the synchronized help text; installed recovery proof
+is still pending. A negative X11 observation currently returns its named
+predicate; preserving its underlying cause and complete trusted request/build
+context remains part of AX and must not be inferred from these focused tests.

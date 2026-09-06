@@ -4443,6 +4443,28 @@ mod tests {
         apply_shared_profile_route_hints_for_service_request(&state, &mut command)
             .expect("an exact planned route should remain idempotently valid");
 
+        let mut retained = state.clone();
+        retained.browsers.get_mut("browser-x").unwrap().host = BrowserHost::AttachedExisting;
+        retained
+            .profiles
+            .get_mut("x-social")
+            .unwrap()
+            .default_browser_host = Some(BrowserHost::RemoteHeaded);
+        let request = ServiceAccessPlanRequest {
+            runtime_profile: Some("x-social".to_string()),
+            service_name: Some("reuse-service".to_string()),
+            agent_name: Some("reuse-agent".to_string()),
+            task_name: Some("reuse-task".to_string()),
+            ..ServiceAccessPlanRequest::default()
+        };
+        let planned = service_access_plan_for_state(&retained, request);
+        let mut generated = planned["decision"]["serviceRequest"]["request"].clone();
+        assert_eq!(generated["browserId"], "browser-x");
+        assert!(generated["params"]["browserHost"].is_null());
+        assert!(generated["params"]["displayIsolation"].is_null());
+        apply_shared_profile_route_hints_for_service_request(&retained, &mut generated)
+            .expect("replacement defaults must not contradict the selected reusable browser");
+
         let mut contradictory_complete_route = json!({
             "action": "tab_new",
             "runtimeProfile": "x-social",

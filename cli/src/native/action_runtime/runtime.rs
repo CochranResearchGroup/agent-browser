@@ -18,6 +18,7 @@ pub(crate) use remote_headed::*;
 mod profile_lease;
 pub(crate) use profile_lease::*;
 mod recovery;
+mod retained_launch;
 pub(crate) use recovery::*;
 mod launch;
 pub(crate) use launch::*;

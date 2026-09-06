@@ -5202,6 +5202,14 @@ connection to that browser, not a replacement launch. Preservation requires
 matching current-boot process identity, endpoint and profile; a changed process
 receives fresh metadata.
 
+Reuse requests keep caller-supplied posture constraints without adding defaults
+intended for a replacement launch. For older records whose CDP attachment erased
+the headed host and display fields, an explicitly selected route can recover
+those fields from one matching retained allocation after current owner, process,
+endpoint and X11 window proof. Recovery compares state again before writing and
+leaves permissions, readiness and display-isolation claims unchanged. A failure
+names the predicate as `retained_launch_recovery_failed`.
+
 Remote-headed Xvfb allocation checks both filesystem and Linux abstract X11
 sockets. A live abstract socket reserves its display even when PrivateTmp hides
 the pathname socket. An unreadable abstract-socket census remains unknown and
