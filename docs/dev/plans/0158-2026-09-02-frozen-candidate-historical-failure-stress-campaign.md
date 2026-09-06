@@ -6415,3 +6415,25 @@ frame failures remain unresolved. Reconcile exact target ownership and the
 supported recovery surface before external observation; refresh synthetic
 identity/capture bindings only for the selected authorized probe. Calibration
 remains deferred, and all original incomplete Plan 0158 criteria remain open.
+
+
+### Priority Remote-View: Retained Target Read-Only Reconciliation
+
+The next slice begins with the exact handoff ID from the retained repair's
+one-request ledger. Current readback finds that handoff still stored as ready,
+but its referenced browser ID is absent from current Service state. No browser
+process identity can be inferred from that absent row. This is not evidence of
+permanent process loss, current visibility, or permission to replace the target.
+All three isolated P158 units are active, with executable and process-start
+identity retained privately in remote-view-current-rxergfag/readback.json.
+
+The source distinguishes profile recovery planning from lease recovery:
+service_profile_recovery_plan authenticates an exact Profile capability and
+calls terminal-owner planning; the separate lease recover plan/apply adapter
+fails closed pending its protected authority surface. Do not misclassify that
+lease adapter restriction as a blanket absence of Profile recovery planning.
+Next reconcile the retained Profile's owner, lifecycle, process identity, and
+available capability binding, then use the supported Profile recovery plan if
+its authentication preconditions hold. No recovery apply, browser launch,
+replacement URL, provider mutation, external workflow, or calibration ran in
+this read-only reconciliation. Original working-link acceptance remains open.
