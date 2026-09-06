@@ -2232,7 +2232,9 @@ export function WorkspaceRemoteViewport({
       });
       streamFrameRetryRef.current = 0;
       setFrameIssue(null);
-      setStreamRefreshNonce(Date.now());
+      // Observer admission does not change the desktop transport. Remounting
+      // here can disconnect an in-flight primary or discard a redeemed share
+      // key while its lease request is completing.
       setFocusMessage("Reconnected the service-owned observer lease.");
       void refreshProjection();
     } catch (err) {

@@ -4108,6 +4108,10 @@ state. If the caller instead passes a runtime profile that is not a known
 service profile, the response includes `oneTimeProfileWarning` with the
 requested profile as `operator_supplied`, a recommended `managed_one_time`
 profile class, and a deterministic recommended profile id.
+Observer-lease acknowledgement preserves the current embedded desktop frame,
+including a frame that is still connecting. Use **Reload view** under Advanced
+connection controls when an explicit frame reload is needed.
+
 Successful non-dry-run opens return an authenticated durable URL in
 `externalUrl` and `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Keep
 `providerExternalUrl` and URLs under `routeBinding` only as evidence for the

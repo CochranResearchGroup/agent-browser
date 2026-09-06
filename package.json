@@ -66,6 +66,7 @@
     "test:runtime-host-convergence-no-launch": "node scripts/smoke-runtime-host-convergence-no-launch.js",
     "test:runtime-host-hot-handoff": "node scripts/smoke-runtime-host-hot-handoff.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",
+    "test:dashboard-observer-frame-lifecycle": "node scripts/test-dashboard-observer-frame-lifecycle.mjs",
     "test:dashboard-guacamole-connection-sharing": "node --no-warnings --experimental-strip-types scripts/test-dashboard-guacamole-connection-sharing.ts",
     "test:dashboard-workspace-view-projection": "node --no-warnings --experimental-strip-types scripts/test-dashboard-workspace-view-projection.js",
     "test:dashboard-auth-status": "node --no-warnings --experimental-strip-types scripts/test-dashboard-auth-status.ts",

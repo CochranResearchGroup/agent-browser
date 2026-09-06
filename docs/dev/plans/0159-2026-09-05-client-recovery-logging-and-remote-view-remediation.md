@@ -201,3 +201,48 @@ do not repeat it. Genuine owner/identity counterexamples and comprehensive W1/W2
 acceptance still require scope review. W3 ordinary external pixels/input/reopen
 and W5 delivery remain unaccepted. Next: inspect the recorded presentation
 failures and the duplicate stream-enable caller before selecting the next repair.
+
+## Checkpoint 2: observer admission detached the presentation frame
+
+Date: 2026-09-06 UTC. Progress: `blocker_reduction`.
+Execution remains `recovery_verified_logging_and_presentation_active`.
+
+Re-read P/Q/K/W artifacts rather than repeating their live diagnostics. P showed
+correct primary/shared pixels and failed reconnect; Q detached its initial frame.
+Both P and Q retained the observer-lease success message. K's missing reconnect
+iframe and W's public transport failures remain distinct observations, not a
+single proven cause.
+
+A mounted React/Chrome regression now demonstrates a specific current source
+cause: automatic observer admission runs concurrently with Guacamole frame
+connection. When its response arrives, `reconnectWorkspaceViewer` changed the
+iframe key through `streamRefreshNonce`, destroying the existing frame despite
+unchanged browser, route and URL. Removing that nonce change preserves the exact
+frame node. Explicit Reload view still replaces it. No timeout increase, extra
+anchor, broader retry or replacement target is part of this fix.
+
+`pnpm test:dashboard-observer-frame-lifecycle` mounts the actual component with
+real React reconciliation and synthetic provider/Service responses. The original
+remount was restored temporarily to prove the final regression red, then removed
+to prove green. Private receipts and source/test hashes are retained under
+`campaigns/p159/observer-frame-regression/`. Decorative UI/store atoms are mocked;
+connection planning, effects and iframe rendering execute from current source.
+This is a deterministic product regression, not proof that every historical
+external failure had this cause or that ordinary external reconnect now passes.
+
+Dashboard sharing, view-stream, navigator and handoff-doc checks pass. Dashboard
+and docs builds, Rust format and workspace clippy with warnings denied pass.
+README, help, repository skill, remote-view docs and inline behavior comments
+are updated. Validation-selector installer/release recommendations stem from
+broad help/package mappings; installer and release behavior did not change.
+Production/default-dashboard publication and shared-skill overwrite suggestions
+are superseded by the explicit isolated-development boundary.
+
+W3 remains unaccepted pending source-bound isolated installation and the one
+protected ordinary external verification of pixels, input and same-URL reopen.
+Do not repeat P/Q unchanged or dispatch calibration. W2's duplicate stream-enable
+logging gap and negative-owner recourse scope remain open. Next: bind the built
+candidate and served dashboard asset to this repair, reconcile the isolated
+provider/target state, and prepare the ordinary external verification within the
+existing synthetic capture and no-retry controls. The terminal-target replacement
+proposal remains unexecuted and is not the continuity oracle.

@@ -1232,6 +1232,8 @@ recipe when a software client should confirm the broker-selected profile,
 request one service-owned tab, read URL and title through queued service
 requests, evaluate bounded expectations, and call
 `verifyServiceProfileSeeding()`.
+Observer-lease acknowledgement preserves the embedded frame while it connects
+or displays the desktop. **Reload view** remains an explicit frame reload.
 
 When automating a site that requires login, choose the approach that fits:
 

@@ -5848,7 +5848,9 @@ automatically chooses a ready source, performs at most one safe route recovery
 or observer reconnect for the current binding, and keeps the live browser in
 Active. Normal recovery uses one connection status and one Retry connection
 fallback. Explicit Take control and lower-level route, viewer, reload, release,
-and Guacamole settings remain under Advanced connection controls. Automatic
+and Guacamole settings remain under Advanced connection controls. Observer-lease
+acknowledgement preserves the embedded frame while connecting or displaying the
+desktop; Reload view explicitly reloads it. Automatic
 recovery never takes controller ownership, releases a viewer, launches another
 browser, or mutates the profile.
 Detected non-owned browsers with reachable page CDP targets provide Screenshot
