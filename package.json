@@ -118,6 +118,7 @@
     "test:p158-external-handoff-oracle": "node scripts/test-p158-external-handoff-oracle.js",
     "test:p158-dashboard-oracle": "node scripts/test-p158-dashboard-oracle.js",
     "test:p158-campaign-preparation": "node scripts/test-p158-campaign-preparation.js",
+    "test:p159-synthetic-remote-input": "node scripts/test-p159-synthetic-remote-input.js",
     "test:p158-external-vantage-runner": "node scripts/test-p158-external-vantage-runner.js",
     "test:p158-retained-authenticated-anchor": "node scripts/test-p158-retained-authenticated-anchor.js",
     "test:p158-retained-anchor-coordinator": "node scripts/test-p158-retained-anchor-coordinator.js",

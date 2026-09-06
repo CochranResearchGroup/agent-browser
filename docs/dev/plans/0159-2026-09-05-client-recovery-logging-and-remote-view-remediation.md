@@ -502,3 +502,38 @@ interaction-coordinate helpers have no production callers. Do not dispatch
 that manifest and count its projected interaction as accepted remote input.
 The next W3 change must exercise actual synthetic desktop input and verify a
 target-side response, then bind the interaction receipt to that observation.
+
+## Checkpoint 8: remote input verification implemented
+
+Progress: `blocker_reduction`. W3 remains unaccepted externally.
+
+The synthetic fixture now acknowledges a trusted marker click by turning the
+marker white and acknowledges a subsequent trusted Enter key by restoring its
+original pixels. Scripted DOM events cannot advance the acknowledgment. The
+attestation binds this opt-in protocol. Only the readiness human-controller lane
+uses it; calibration and the concurrent observer do not inject input.
+
+After Service confirms controller takeover, the external runner clicks inside
+the frozen synthetic marker region and requires all-white rendered pixels. It
+then sends Enter and requires the original exact pixel hash. Separate mouse and
+keyboard screenshot receipts become `remoteInteraction` in the human receipt.
+No remote DOM mutation or direct target API supplies the acknowledgment. A
+rejected Service takeover stops before input even when HTTP status is 200.
+The cursor is moved outside the crop before visual comparison.
+
+`pnpm test:p159-synthetic-remote-input` exercises the actual fixture and verifier
+in disposable real Chrome. Removing the fixture acknowledgment reproduced a
+missing-mouse failure; the completed implementation passes. Blocked mouse input,
+blocked keyboard input, wrong baseline pixels and scripted clicks cannot pass.
+The external-runner and synthetic-fixture suites also pass. This proves the
+verification mechanism locally, not remote transport acceptance. Private logs
+and source hashes are retained under
+`campaigns/p159/custody-outcome/input-verifier/`.
+
+No installed runtime, current retained browser, fixture server or protected
+secret has changed in this slice. The existing server still serves its earlier
+fixture bytes. Next: refresh that exact owned synthetic server/page, bind the new
+attestation and unchanged browser identity, and perform one protected verification
+with the new diagnostic custody and actual input oracle. This is a changed
+verification seam; historical external failure remains unaccepted. W2 logging,
+owner counterexamples and W5 delivery work remain open.

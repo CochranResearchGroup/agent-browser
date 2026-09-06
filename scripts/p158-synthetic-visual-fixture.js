@@ -109,6 +109,7 @@ export function buildSyntheticFixtureHtml() {
     #fixture { position: relative; width: 1440px; height: 1000px; }
     #page-marker { position: absolute; left: 24px; top: 18px; font: 700 20px/1 monospace; }
     #pixel-marker { position: absolute; left: 240px; top: 120px; width: 960px; height: 320px; image-rendering: pixelated; }
+    #pixel-marker[data-input-state="clicked"] { filter: brightness(0) invert(1); }
     #secondary-solid-region { position: absolute; left: 80px; top: 480px; width: 1280px; height: 96px; background: #df7226; }
     #controls { position: absolute; left: 80px; top: 620px; width: 1280px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
     button, input, a { min-height: 44px; font: inherit; }
@@ -125,7 +126,7 @@ export function buildSyntheticFixtureHtml() {
 <body>
   <main id="fixture" aria-labelledby="page-marker">
     <h1 id="page-marker">${P158_SYNTHETIC_PAGE_MARKER}</h1>
-    <img id="pixel-marker" src="/pixel-marker.png" width="960" height="320" alt="Deterministic solid pixel marker">
+    <img id="pixel-marker" tabindex="0" data-input-state="ready" src="/pixel-marker.png" width="960" height="320" alt="Deterministic solid pixel marker">
     <div id="secondary-solid-region" aria-label="Secondary deterministic solid pixel region"></div>
     <section id="controls" aria-label="Synthetic interaction surfaces">
       <button id="focus-action" type="button">Focus action</button>
@@ -155,6 +156,18 @@ export function buildSyntheticFixtureHtml() {
   <script>
     const status = document.getElementById('status');
     const dialog = document.getElementById('prompt-like');
+    // Only delivered mouse/keyboard input may advance this visual acknowledgment.
+    const inputMarker = document.getElementById('pixel-marker');
+    inputMarker.addEventListener('click', (event) => {
+      if (!event.isTrusted) return;
+      inputMarker.dataset.inputState = 'clicked';
+      inputMarker.focus({ preventScroll: true });
+    });
+    inputMarker.addEventListener('keydown', (event) => {
+      if (!event.isTrusted || event.key !== 'Enter' || inputMarker.dataset.inputState !== 'clicked') return;
+      event.preventDefault();
+      inputMarker.dataset.inputState = 'ready';
+    });
     let socket;
     let modalReturnTarget;
     const connect = () => {
@@ -188,6 +201,7 @@ export function buildSyntheticVisualAttestation({ sourceBytes = readFileSync(SCR
     planId: 'P158',
     fixtureId: P158_SYNTHETIC_FIXTURE_ID,
     syntheticOnly: true,
+    interactionProtocol: 'trusted-marker-click-white-enter-reset-v1',
     forbiddenPrivateFieldsExcluded: true,
     source: { path: SCRIPT_RELATIVE_PATH, sha256: sha256(sourceBytes) },
     viewport: P158_SYNTHETIC_VIEWPORT,

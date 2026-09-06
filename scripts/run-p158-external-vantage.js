@@ -7,6 +7,7 @@ import { connect as tlsConnect } from 'node:tls';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { SYNTHETIC_INPUT_PROTOCOL, verifySyntheticRemoteInput } from './lib/p159-synthetic-remote-input.js';
 import {
   EXTERNAL_HANDOFF_FINDING_CODES,
   EXTERNAL_URL_ROLES,
@@ -146,6 +147,10 @@ export function validateExternalVantageConfiguration({ env, clientId, paceProfil
     !/^[a-f0-9]{64}$/.test(visualFixtureAttestation.redactionReceiptSha256 || '')
   ) {
     throw new Error('Visual fixture attestation does not prove the synthetic redaction boundary');
+  }
+  if (visualFixtureAttestation.interactionProtocol !== undefined &&
+      visualFixtureAttestation.interactionProtocol !== SYNTHETIC_INPUT_PROTOCOL) {
+    throw new Error('Unsupported synthetic input acknowledgment protocol');
   }
   let calibrationDescriptor = null;
   if (mode === 'calibration') {
@@ -1100,6 +1105,16 @@ async function executeExternalVantageProbe({
       pixelMarkerRegion,
       performHumanAction: mode === 'readiness',
     });
+    let remoteInteraction = null;
+    if (mode === 'readiness' && paceProfile === 'human_controller' &&
+        visualFixtureAttestation.interactionProtocol === SYNTHETIC_INPUT_PROTOCOL) {
+      await acquireSyntheticRemoteController(page);
+      remoteInteraction = await verifySyntheticRemoteInput(page, {
+        region: pixelMarkerRegion,
+        expectedPixelHash: configuredIdentity.pixelHash,
+        outputDir,
+      });
+    }
     let concurrency = null;
     let concurrentPage = null;
     if (paceProfile === 'slow_concurrency') {
@@ -1321,6 +1336,7 @@ async function executeExternalVantageProbe({
       workflowRunAttempt: Number(env.GITHUB_RUN_ATTEMPT),
       w8ActionManifestSha256: env.P158_W8_ACTION_MANIFEST_SHA256 || null,
       w8ActionObservations,
+      remoteInteraction,
       runner: runnerEvidence(env),
       runnerIdentity: distributedRunnerIdentity(env),
       outsideServiceHost: true,
@@ -1971,13 +1987,15 @@ export async function acquireSyntheticRemoteController(page) {
       }
     }, { timeout: 15_000 }),
     (async () => {
-      await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+      await page.getByRole('button', { name: 'Advanced connection controls', exact: true }).click();
       await page.getByRole('menuitem', { name: 'Take control', exact: true }).click();
     })(),
   ]);
   if (!response.ok()) {
     throw new Error(`Controller lease takeover failed with HTTP ${response.status()}`);
   }
+  const envelope = await response.json();
+  if (envelope.success !== true) throw new Error('Controller lease takeover was rejected by Service');
   await page.waitForTimeout(1_000);
 }
 

@@ -108,7 +108,7 @@ assert.doesNotMatch(runnerSource, /data-operator-visible-state/);
 assert.doesNotMatch(runnerSource, /frameLocator\([^)]*\)\.locator/);
 assert.doesNotMatch(runnerSource, /recordHar/);
 assert.doesNotMatch(runnerSource, /jsonBodies/);
-assert.equal((runnerSource.match(/response\.json\(\)/g) || []).length, 1);
+assert.equal((runnerSource.match(/response\.json\(\)/g) || []).length, 2);
 assert.match(runnerSource, /responsePath === '\/api\/service\/request'/);
 assert.match(runnerSource, /requestPayload\?\.action !== 'service_remote_view_handoff_resolve'/);
 assert.match(runnerSource, /application\/x-content-excluded-at-capture/);
@@ -357,6 +357,7 @@ assert.equal(
 );
 const controllerEvents = [];
 const takeoverResponse = {
+  json: async () => ({ success: true }),
   url: () => 'https://external.example.test/api/service/request',
   request: () => ({
     method: () => 'POST',
@@ -377,7 +378,12 @@ await acquireSyntheticRemoteController({
   },
   async waitForTimeout() {},
 });
-assert.deepEqual(controllerEvents, ['button:Advanced', 'menuitem:Take control']);
+assert.deepEqual(controllerEvents, ['button:Advanced connection controls', 'menuitem:Take control']);
+await assert.rejects(acquireSyntheticRemoteController({
+  waitForResponse: async () => ({ ...takeoverResponse, json: async () => ({ success: false }) }),
+  getByRole: () => ({ click: async () => {} }),
+  waitForTimeout: async () => assert.fail('rejected controller cannot proceed'),
+}), /rejected by Service/);
 let iframeWaitCount = 0;
 await waitForGuacamoleIframe({
   locator() {
