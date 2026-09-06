@@ -4,7 +4,7 @@ Date: 2026-09-05
 
 State: OPEN
 
-Execution state: `recovery_verified_logging_and_presentation_active`
+Execution state: `selected_outcomes_verified_delivery_preparation_active`
 
 Lane: P157
 
@@ -1732,3 +1732,55 @@ No fresh synthetic browser or external run was started in this checkpoint.
 W3 and W5 remain open; the synthetic server and restored warm provider are
 retained. The repair delivery inventory now names this installed composition and
 the verified extension, while the production proposal remains incomplete.
+
+## Checkpoint 40: external mouse, keyboard and same-URL reopening accepted
+
+Progress: `outcome_progress`. W3's selected ordinary retained-browser outcome
+is accepted in isolated P158. Protected run
+[34022233372](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34022233372)
+completed successfully for both independent clients and the aggregate. Producer
+commit was `49034e95d03775ec7425f541a20964a97deb0af6`, installed runtime
+`b52f748e` with the binary and extension hashes recorded in checkpoint 39.
+No calibration anchor, automatic retry, or terminal-target replacement was used.
+
+A fresh synthetic acquisition reported operator-visible readiness and original
+handle success. The primary precheck stopped before effects because one warm
+viewer connection already existed; its old zero-connection assumption did not
+describe the restored warm provider. The exact owned warm viewer was reconciled
+with its route. One supported ensure then established the distinct backend-owned
+primary, without closing or claiming the warm connection as that primary.
+The stopped precheck remains evidence, not a failed external interaction attempt.
+
+The human client's baseline matched the fixed historical blue PNG. Trusted
+remote click produced the expected white acknowledgment; Enter restored the
+exact historical blue PNG. Both clients reopened the same durable URL with
+unchanged browser, Profile, session, tab and target identities. The slow client
+also preserved those identities and blue pixels during concurrent viewing.
+Each client reports zero replacement launches, retries and internal URL leaks.
+All eleven artifacts for each client were independently checked for byte count
+and SHA-256. Screenshot review confirmed the synthetic browser and white-to-blue
+interaction. Recomputed aggregation matches the downloaded sealed receipt,
+aggregate SHA-256
+`81dd7d3b67345acf8b2d7ee467af548b90365ab94e0f4456e98f21f943d1a98b`.
+
+Afterward the original handle still worked with input state ready, and its exact
+Chrome PID/start identity was unchanged. The original backend primary remained
+connectable; the exact browser's primary-owner journal has zero terminal records.
+Private evidence is durable under `keyboard-focus-live/external-geometry/`, with
+post-run handle, process and primary observations in `keyboard-focus-live/`.
+Production's binary hash remains unchanged.
+
+Screenshots also retain runtime-convergence notices and a workspace attention
+message while the selected view is ready and functional. These are explicit
+delivery-review findings, not proof of a clean dashboard or permission for a new
+general diagnostic queue. Earlier failed primary and input runs remain recorded;
+this bounded pass does not establish P158 endurance or every untested transition.
+
+The fresh synthetic browser is retained for the production-delivery review,
+bound to its private open receipt and process readback. Close that exact fixture
+through Service after the review or before another installation, then separately
+verify its captured processes are gone. The synthetic server and owned warm
+provider remain explicit retained obligations. W5 now owns the next work:
+complete the exact production candidate/support bundle, compatibility and
+override disposition, rollback custody, and acceptance-by-acceptance audit before
+presenting the concrete delivery decision. No further external rerun is queued.

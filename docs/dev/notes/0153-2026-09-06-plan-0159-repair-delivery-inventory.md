@@ -17,8 +17,8 @@ The frozen executable and installation receipts are private under
 `campaigns/p159/terminal-placeholder-candidate/`. That binary is installed only
 in P158. The supported reconciliation removed the two proven terminal degraded
 viewer placeholders and preserved their failure events. Provider recovery
-completed after that changed state, with production unchanged. No fresh external
-keyboard/reopen proof has been run against this candidate. The production binary
+completed after that changed state, with production unchanged. Protected run `34022233372` now proves the selected ordinary external mouse,
+keyboard, concurrent-view and same-URL reopen outcome against this candidate. The production binary
 remains `4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`.
 
 This optimized binary is not a final production release-profile candidate.
@@ -54,7 +54,7 @@ composition history, not a new behavioral test or production-installation claim.
 | Primary terminal logging | `e0bccc38`, `b5faee54`, `3428a7a7` | Owner-to-endpoint occurrence linkage and typed guard causes verified at selected seams. External HAR does not prove response-body occurrence custody. |
 | Route revalidation continuity | `13706923`, `3ad29c44`, `d0b5f298` | Exact owner/route guards, pending acquisition overlay and retained capacity belong together. Local combined transition passed; historical external primary failure is not erased. |
 | Restore-bubble obstruction | `7d6ac6dc` | Focused launch regression and disposable native desktop comparison passed; installed process flag verified. External ordinary input/reopen remains a separate gate. |
-| Trusted display keyboard focus | `593cc6ee` | Cross-origin real-Chrome red/green passes; packaged extension verified loaded in P158. Actual remote keyboard acknowledgment remains unaccepted. |
+| Trusted display keyboard focus | `593cc6ee` | Cross-origin real-Chrome red/green passes; packaged extension verified loaded in P158. Protected run `34022233372` also proves actual remote mouse/keyboard acknowledgment and same-URL reopen. |
 | Loaded provider extension readiness | `c636aedf` | Stale served extension fails readiness; changed reconciliation now loads the exact staged source. Container health alone is insufficient. |
 | Historical degraded close residue | `b52f748e` | 36 focused reconciliation tests pass; installed reconciliation removes exactly the two historical viewer rows with failure and lifecycle evidence retained. Identity admission guard is unchanged. |
 
@@ -67,8 +67,8 @@ params-only form. It is not silently included as a completed repair.
 
 ## Production decision still to make concrete
 
-Before requesting approval, finish ordinary external input/reopen acceptance,
-review the complete proposed runtime/support composition and compatibility,
+Ordinary external input/reopen acceptance is recorded in Plan checkpoint 40.
+Before requesting approval, review the complete proposed runtime/support composition and compatibility,
 build the exact final release-profile artifact, and seal its support manifest
 and selected validation evidence. A passing isolated binary does not identify
 the full production update bundle by itself.
@@ -97,3 +97,21 @@ rollback custody. Existing private or active production targets require the
 appropriate authority and privacy boundary; synthetic proof does not authorize
 capturing them. Separately finish or explicitly retain each fixture process
 and Service-resource obligation.
+
+## Selected external outcome and retained review findings
+
+Protected readiness run [34022233372](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34022233372)
+passed for both off-host clients and the sealed aggregate. All 22 client
+artifacts were independently verified. Trusted mouse changed the marker to
+white; Enter restored the fixed historical blue oracle. Both clients reopened
+the same URL, with selected concurrent identity preserved and zero replacement
+launches. The original process, target and backend primary remained available
+in the post-run readbacks. This accepts the bounded W3 outcome, not endurance or
+all historical transition failures.
+
+Runtime-convergence notices and a retained workspace attention message remain
+visible in screenshots. The production compatibility review must disposition
+these observed notices alongside the checkpoint 29 client-helper envelope risk.
+They are not silently accepted as absent or turned into an automatic broad
+experiment queue. The synthetic browser, server and warm provider remain retained
+for this delivery review with exact private identity receipts and cleanup duties.
