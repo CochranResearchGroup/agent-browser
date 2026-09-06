@@ -828,3 +828,36 @@ stream-enable readbacks. W3 still requires a new explicitly scoped synthetic
 fixture, actual provider primary/peer-departure/input evidence and the protected
 external outcome. No new external dispatch was made. W5 repair inventory,
 production-update decision and final cleanup remain open.
+
+## Checkpoint 15: live adapter finding and authentication-source correction
+
+A new synthetic fixture was acquired through a fresh broker access plan on the
+installed candidate. An invented explicit session alias was rejected during
+read-only planning; the executable broker-selected session was used instead.
+The fixture is operator-ready and its original authorized handle answers before
+and after the provider startup rejection below. It remains a retained cleanup
+obligation under private `primary-owner-live/`.
+
+The first diagnostic ownership request supplied HTTP Basic authentication,
+which this dashboard does not accept; the next used the wrong login path.
+Both stopped at dashboard authentication. Using the actual dashboard login
+endpoint and returned session cookie reached the primary endpoint. The route
+had zero matching provider connections before this request. Startup failed
+`guacamole_primary_provider_auth_identity_mismatch` before WebSocket creation.
+No unchanged owner restart or external dispatch followed.
+
+The live header-auth response has the correct username, `dataSource=header`,
+and `availableDataSources=[postgresql,postgresql-shared]`. The adapter had
+incorrectly required the authentication extension itself to be `postgresql`.
+It now keeps the exact username check and independently requires `postgresql`
+among available connection directories. The connection query remains pinned to
+that directory and the exact Service connection ID. Missing directory access
+returns `guacamole_primary_provider_data_source_unavailable`.
+
+The protocol-boundary regression was red on the actual header-auth shape before
+the correction and is green afterward, including foreign-principal and missing-
+directory negatives. All twelve focused Rust tests and workspace clippy with
+warnings denied pass. Red/green/clippy evidence is preserved in private
+`primary-owner-auth-source-repair/`. The next step is a corrected candidate build
+and isolated publication with explicit retained-fixture disposition. Real
+primary lifetime, peer departure and external input acceptance remain open.

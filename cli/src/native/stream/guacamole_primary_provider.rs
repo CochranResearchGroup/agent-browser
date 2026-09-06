@@ -64,10 +64,21 @@ async fn connect_with_principal(
     }
     let auth: serde_json::Value =
         serde_json::from_slice(&body).map_err(|_| "guacamole_primary_provider_auth_invalid")?;
-    if auth["username"].as_str() != Some(principal.as_str())
-        || auth["dataSource"].as_str() != Some("postgresql")
-    {
+    if auth["username"].as_str() != Some(principal.as_str()) {
         return Err("guacamole_primary_provider_auth_identity_mismatch");
+    }
+    // dataSource identifies the authentication extension (e.g. header), not
+    // the connection directory. Require the exact PostgreSQL directory among
+    // the data sources available to this authenticated principal.
+    if !auth["availableDataSources"]
+        .as_array()
+        .is_some_and(|sources| {
+            sources
+                .iter()
+                .any(|source| source.as_str() == Some("postgresql"))
+        })
+    {
+        return Err("guacamole_primary_provider_data_source_unavailable");
     }
     let token = auth["authToken"]
         .as_str()
@@ -133,7 +144,7 @@ mod tests {
 
     #[tokio::test]
     async fn header_authentication_binds_the_exact_websocket_and_rejects_foreign_principal() {
-        for foreign in [false, true] {
+        for (foreign, postgres_available) in [(false, true), (true, true), (false, false)] {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let mut binding = PrimaryBinding::synthetic_fixture();
             binding.provider_base = reqwest::Url::parse(&format!(
@@ -154,7 +165,8 @@ mod tests {
                     .to_ascii_lowercase()
                     .contains("remote-user: synthetic-operator\r\n"));
                 let body = serde_json::json!({
-                    "authToken": "synthetic-token", "dataSource": "postgresql",
+                    "authToken": "synthetic-token", "dataSource": "header",
+                    "availableDataSources": if postgres_available { vec!["postgresql", "postgresql-shared"] } else { vec!["postgresql-shared"] },
                     "username": if foreign { "foreign-operator" } else { "synthetic-operator" }
                 })
                 .to_string();
@@ -162,7 +174,7 @@ mod tests {
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(), body).as_bytes()).await.unwrap();
                 drop(http);
-                if foreign {
+                if foreign || !postgres_available {
                     return;
                 }
                 let (tcp, _) = listener.accept().await.unwrap();
@@ -214,6 +226,11 @@ mod tests {
                 assert_eq!(
                     owner.ready().await,
                     Err("guacamole_primary_provider_auth_identity_mismatch")
+                );
+            } else if !postgres_available {
+                assert_eq!(
+                    owner.ready().await,
+                    Err("guacamole_primary_provider_data_source_unavailable")
                 );
             } else {
                 owner.ready().await.unwrap();
