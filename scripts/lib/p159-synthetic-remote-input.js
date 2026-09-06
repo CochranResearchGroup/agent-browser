@@ -16,12 +16,12 @@ export async function verifySyntheticRemoteInput(page, { region, expectedPixelHa
     throw new Error('Synthetic input region does not fit the remote frame');
   }
   const clip = { x: box.x + region.x, y: box.y + region.y, width: region.width, height: region.height };
-  const before = await page.screenshot({ clip });
-  if (digest(before) !== expectedPixelHash) throw new Error('Synthetic input baseline pixels do not match');
   const waitForPixels = async (label, accept) => {
     const deadline = Date.now() + timeoutMs;
+    let lastBytes;
     do {
       const bytes = await page.screenshot({ clip });
+      lastBytes = bytes;
       if (await accept(bytes)) {
         const file = `remote-input-${label}.png`;
         writeFileSync(join(outputDir, file), bytes);
@@ -29,8 +29,16 @@ export async function verifySyntheticRemoteInput(page, { region, expectedPixelHa
       }
       await page.waitForTimeout(100);
     } while (Date.now() < deadline);
-    throw new Error(`Synthetic remote input acknowledgment missing: ${label}`);
+    const file = `remote-input-${label}-failed.png`;
+    if (lastBytes) writeFileSync(join(outputDir, file), lastBytes);
+    await page.screenshot({ path: join(outputDir, `remote-input-${label}-failed-page.png`) });
+    const error = new Error(`Synthetic remote input acknowledgment missing: ${label}`);
+    error.code = `synthetic_remote_input_${label}_missing`;
+    throw error;
   };
+  // Controller takeover can reconnect the presentation. Wait for the exact
+  // baseline before the first input; polling pixels does not repeat an action.
+  const baseline = await waitForPixels('baseline', (bytes) => digest(bytes) === expectedPixelHash);
   await page.mouse.click(clip.x + clip.width / 2, clip.y + clip.height / 2);
   // Keep a provider-rendered cursor outside the acknowledgment crop.
   await page.mouse.move(box.x + 10, box.y + 10);
@@ -47,5 +55,5 @@ export async function verifySyntheticRemoteInput(page, { region, expectedPixelHa
   }, bytes.toString('base64')));
   await page.keyboard.press('Enter');
   const keyboard = await waitForPixels('keyboard', (bytes) => digest(bytes) === expectedPixelHash);
-  return { protocol: SYNTHETIC_INPUT_PROTOCOL, success: true, mouse, keyboard };
+  return { protocol: SYNTHETIC_INPUT_PROTOCOL, success: true, baseline, mouse, keyboard };
 }

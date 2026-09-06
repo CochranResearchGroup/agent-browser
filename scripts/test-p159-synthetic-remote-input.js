@@ -24,6 +24,10 @@ try {
   const expectedPixelHash = createHash('sha256').update(before).digest('hex');
   await marker.evaluate((element) => element.click());
   assert.equal(await marker.getAttribute('data-input-state'), 'ready', 'untrusted click must not acknowledge remote input');
+  await marker.evaluate((element) => {
+    element.style.filter = 'grayscale(1)';
+    setTimeout(() => { element.style.filter = ''; }, 500);
+  });
   const result = await verifySyntheticRemoteInput(page, { region, expectedPixelHash, outputDir });
   assert.equal(result.success, true);
   assert.notEqual(result.mouse.sha256, expectedPixelHash);
@@ -31,7 +35,7 @@ try {
   assert.equal(await marker.getAttribute('data-input-state'), 'ready');
   await marker.evaluate((element) => { element.style.pointerEvents = 'none'; });
   await assert.rejects(verifySyntheticRemoteInput(page, { region, expectedPixelHash, outputDir, timeoutMs: 200 }), /acknowledgment missing: mouse/);
-  await assert.rejects(verifySyntheticRemoteInput(page, { region, expectedPixelHash: '0'.repeat(64), outputDir }), /baseline pixels do not match/);
+  await assert.rejects(verifySyntheticRemoteInput(page, { region, expectedPixelHash: '0'.repeat(64), outputDir, timeoutMs: 200 }), /acknowledgment missing: baseline/);
   await marker.evaluate((element) => {
     element.style.pointerEvents = '';
     element.ownerDocument.addEventListener('keydown', (event) => event.stopImmediatePropagation(), true);

@@ -537,3 +537,43 @@ attestation and unchanged browser identity, and perform one protected verificati
 with the new diagnostic custody and actual input oracle. This is a changed
 verification seam; historical external failure remains unaccepted. W2 logging,
 owner counterexamples and W5 delivery work remain open.
+
+## Checkpoint 9: concurrent viewing passes; controller input remains unproven
+
+Progress: `outcome_progress` for the selected concurrent-view transitions;
+overall W3 remains unaccepted.
+
+The exact synthetic server was refreshed and the original authorized handle
+reloaded its existing fixture page. Current owner generation and process digest
+still match the retained browser. Served fixture attestation matched the new
+source bytes before updating the protected attestation secret. No replacement
+browser or handoff was acquired. The installed binary remains `7df13c4085f9`.
+
+Protected readiness run
+[34010337271](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34010337271)
+finished with failure against verifier commit `d75d79ca`. The concurrent client
+passed initial, concurrent and reconnect observations with unchanged expected
+identity and zero physical launch delta. The prior console error did not recur;
+this is not proof that its unknown cause was repaired.
+
+The human client passed initial pixels and received successful controller
+takeover, then failed the verifier's immediate baseline-pixel comparison before
+any mouse or keyboard action. Its receipt records a second WebSocket connection.
+The old verifier neither waited for post-takeover pixels nor retained the failing
+crop, so transient reconnection is a hypothesis, not an established cause.
+No input acceptance or overall external pass is claimed. Both clients report
+zero retries; original failed artifacts remain under
+`campaigns/p159/custody-outcome/input-external/`.
+
+A real-Chrome regression with delayed baseline restoration reproduces the
+premature failure. The verifier now waits within its existing deadline for the
+exact baseline before sending the first input. On failure it retains the last
+crop, full page screenshot and a phase-specific failure code. Pixel polling
+does not repeat controller takeover or input. The real-Chrome verifier and
+external-runner suites pass. This is a scoped diagnostic/readiness correction,
+not proof that the failed external transition is repaired.
+
+The selected fixture server is now PID 26061, start token 2313714, captured in
+the private post-run owned-state receipt; revalidate before cleanup. The original
+synthetic browser and server remain explicit cleanup obligations. W2 repair is
+underway independently; no candidate publication accompanied this external run.
