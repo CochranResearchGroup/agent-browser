@@ -3759,6 +3759,9 @@ revision; its recovery action is to inspect Profile access policy. Use the
 same credential when following that read-only action. Do not change caller
 labels, seed a profile, or retry a denied operation to bypass its policy.
 Pre-dispatch denials have no job; join their request ID to the failure journal.
+Authenticated service requests record the validated principal and its assurance
+in job and terminal provenance, including profile policy mutations. Service,
+agent, and task labels remain attribution and cannot replace that actor.
 An oversized decision is explicitly marked
 `profileAccessDecisionOmitted: record_size_limit` in journal details.
 

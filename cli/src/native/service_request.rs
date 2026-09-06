@@ -17,7 +17,7 @@ use crate::native::service_failure_journal::{
     ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
 };
 use crate::native::service_model::ServiceState;
-use crate::native::service_principal::AuthenticatedServicePrincipal;
+use crate::native::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
 use crate::native::service_profile_access_policy::ServiceProfileAccessDecision;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
@@ -740,6 +740,15 @@ pub(crate) fn normalize_service_request(
 
     let principal_authority = input.authenticated_principal.cloned();
     if let Some(authority) = &principal_authority {
+        // Queue provenance must identify the same validated actor as authorization,
+        // including service actions that do not acquire a browser route. Attribution
+        // labels remain separate; public subject/assurance hints cannot override proof.
+        command["clientSubjectId"] = json!(authority.principal_id);
+        command["identityAssurance"] = json!(match authority.provenance {
+            ServicePrincipalProvenance::RegisteredCapability => "registered-capability",
+            ServicePrincipalProvenance::AuthenticatedTransport => "authenticated-ingress",
+            ServicePrincipalProvenance::UnprovenLegacy => "unknown",
+        });
         command["servicePrincipalId"] = json!(authority.principal_id);
         command["servicePrincipalProvenance"] = json!(authority.provenance.as_str());
         command["serviceProfileCapabilityId"] = json!(authority.capability_id);
@@ -2180,10 +2189,12 @@ mod tests {
         };
 
         let request = json!({
-            "action": "navigate",
+            "action": "service_profile_policy_mutate",
             "serviceName": "CallerSuppliedLabel",
             "agentName": "caller-agent",
-            "taskName": "caller-task"
+            "taskName": "caller-task",
+            "clientSubjectId": "client:caller-label",
+            "identityAssurance": "self-declared"
         });
         let authority = AuthenticatedServicePrincipal {
             principal_id: "principal:registered-service".to_string(),
@@ -2216,6 +2227,23 @@ mod tests {
             "registered_capability"
         );
         assert!(normalized.command.get("profileCapability").is_none());
+        let provenance =
+            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+                &normalized.command,
+                "request-with-registered-authority",
+                "job-with-registered-authority",
+                "connection-registered",
+                "lane-registered",
+            );
+        assert_eq!(
+            provenance.client_subject_id.as_deref(),
+            Some(authority.principal_id.as_str())
+        );
+        assert_eq!(provenance.identity_assurance, "registered-capability");
+        assert_eq!(
+            provenance.service_name.as_deref(),
+            Some("CallerSuppliedLabel")
+        );
 
         let forged = normalize(json!({
             "action": "navigate",
