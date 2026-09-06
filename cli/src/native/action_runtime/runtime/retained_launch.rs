@@ -59,14 +59,7 @@ fn allocation_for_recovery(
     }
 }
 
-pub(super) async fn recover(
-    session: &str,
-    host: BrowserHost,
-    command: &Value,
-) -> Result<(), String> {
-    if host != BrowserHost::RemoteHeaded {
-        return Ok(());
-    }
+pub(super) async fn recover(session: &str, command: &Value) -> Result<(), String> {
     let id = super::capability::service_browser_id(session);
     // Recovery is confined to an explicitly selected existing browser route.
     if command.get("browserId").and_then(Value::as_str) != Some(id.as_str())

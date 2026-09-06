@@ -866,8 +866,7 @@ async fn auto_launch_with_authority(
     apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
     if !protected {
-        super::retained_launch::recover(&state.session_id, service_host, &effective_command)
-            .await?;
+        super::retained_launch::recover(&state.session_id, &effective_command).await?;
         if let Some(target) = shared_profile_attach_target_for_auto_launch(
             &metadata,
             &effective_command,

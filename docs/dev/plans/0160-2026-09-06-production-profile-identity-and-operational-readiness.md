@@ -728,3 +728,16 @@ candidate rebuild includes the synchronized help text; installed recovery proof
 is still pending. A negative X11 observation currently returns its named
 predicate; preserving its underlying cause and complete trusted request/build
 context remains part of AX and must not be inferred from these focused tests.
+
+The first recovery candidate `c8dac8ee` admitted and executed synthetic reuse,
+but failed the assertion that the damaged host field was restored. Receipt root:
+campaigns/p160/shared-headed-recovery-pv8KEp. Exact teardown found no residue.
+The recovery entry point still depended on the replacement launch's resolved
+host, which can be headless after removing default constraints from reuse.
+Recovery now keys solely on the explicitly selected route and the damaged
+retained-record pattern; all allocation, process, owner and display proof gates
+remain. This is the third distinct verification attempt for this work unit;
+failure will trigger local reframe rather than another unchanged retry.
+All 92 route/host tests passed before this small entry-gate correction. The
+corrected optimized candidate build is active in
+census/retained-recovery-route-gate-build.log.
