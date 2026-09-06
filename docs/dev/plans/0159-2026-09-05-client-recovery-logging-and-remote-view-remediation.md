@@ -493,3 +493,12 @@ dashboard-oracle and external-handoff-oracle provider-free checks pass. Private
 red/green logs are retained under `custody-outcome/console-custody-repair/`.
 This closes a demonstrated evidence-loss seam, not W3's runtime failure or input
 acceptance. No external rerun or runtime publication accompanies this change.
+
+Input-path review found that the optional H01 manifest does not supply the
+missing remote-control proof: `buildW8H01ActionObservations` derives its interact
+observation from `initial.firstUsablePixelsAt`, while `humanPacedObservation`
+only traverses dashboard focus and moves the mouse. The existing controller and
+interaction-coordinate helpers have no production callers. Do not dispatch
+that manifest and count its projected interaction as accepted remote input.
+The next W3 change must exercise actual synthetic desktop input and verify a
+target-side response, then bind the interaction receipt to that observation.
