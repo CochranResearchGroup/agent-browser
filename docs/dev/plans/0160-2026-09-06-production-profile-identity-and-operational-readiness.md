@@ -502,3 +502,41 @@ No lock was removed and no X server or browser was changed by this diagnosis.
 Next W2 repair must account for abstract socket occupancy, preserve unknown
 owners and retain useful Xvfb startup diagnostics. This evidence does not close
 remote-headed launch/reopen or operator presentation acceptance.
+
+## Execution checkpoint 7: original production profile reuse passes
+
+state_transition: active → active
+
+acceptance_state: Original occupied-profile blank-tab reproduction passes; A1–A4
+and AX remain incomplete
+
+progress_classification: outcome_progress
+
+evidence: Full release build completed in 11m 41s. Binary SHA256
+`c1b4ca7fe648d6bc56b3a82c892fe14554bdf80502c944f71a724342d3e56667`
+passed the shared-local retained-browser fixture, two authenticated clients'
+original-handle recovery after disposable host interruption, and source-free
+installer fixture. Production generation `0.28.0-c1b4ca7fe648-711195022d0a` was
+installed with all four browser process identities preserved. Host and both
+dashboard executables independently matched that binary hash.
+
+The original profile's authenticated dashboard API request reused its exact
+retained browser, created only an owned blank tab, evaluated the expected
+synthetic result and released the handle successfully. This follows the prior
+no-effect `existing_session_profile_identity_inconsistent` failure on the old
+binary. The older registered capability binding was not refreshed or deleted.
+Receipts and reproducible probe source are in campaigns/p160/publication-shared-local.
+No internal submission or other client business operation was performed.
+
+material_blockers: Doctor remains nonzero for the operator journey, upgrade
+readiness, monitor and resource-ownership findings; principal-binding warnings
+also remain for separate disposition. The timer remains inactive. The release
+fixtures required explicit exact-identity disposal of 27 still-present synthetic
+processes after their API checks, with no signaled processes remaining. That
+teardown is recorded separately and does not establish automatic residue-free
+cleanup acceptance. Full remote-headed reopen and A2–A4 remain unproved.
+
+next_action_or_stop_reason: Repair abstract X11 socket occupancy handling with a
+red/green allocation regression and useful bounded Xvfb startup diagnostics.
+Validate remote-headed launch/reopen, then complete the current profile/doctor
+finding dispositions, causal-tracing contract and remaining W2–W5 acceptance.
