@@ -1,8 +1,9 @@
 # Plan 0159 production delivery proposal
 
-Date: 2026-09-06. Decision: pending. Recommendation: retain the current production
-generation until the profile-policy materialization below is explicitly reviewed.
-This proposal does not authorize production replacement or whole-branch promotion.
+Date: 2026-09-06. Decision: operator approved the exact production delivery
+proposal with “ok go”, then explicitly directed full production runtime shutdown.
+Production is stopped; the candidate is not activated. Whole-branch promotion
+and formal release remain outside this delivery.
 
 ## Exact proposed composition
 
@@ -139,3 +140,26 @@ verify each captured PID/start identity separately. If its PID is reused, do not
 signal it. Isolated materialization and migration-review roots are private
 rollback/review evidence and launch no browser. Earlier cleanup receipts remain
 part of the acceptance audit; no foreign cleanup is authorized.
+
+## Authorized delivery execution: shutdown complete
+
+The fresh preflight matched the reviewed 77-policy diff and exact candidate,
+rollback copy and compatibility drop-in. The preserve-runtime installer stopped
+at `blocked_ambiguous_runtime` before activation, with two prior-boot browser
+records lacking current identity evidence. Both recorded browser PIDs were
+absent. The subsequent full-shutdown planner also depended on stale host and
+supervisor evidence. No unchanged installer retry was performed.
+
+The operator explicitly directed full production shutdown. Actual production
+systemd ownership was used to stop the runtime host, dashboard ingress/backend,
+and reconciliation service/timer. The exact production Guacamole, guacd and
+PostgreSQL containers were stopped cleanly. Readback proves those units inactive,
+containers stopped, zero production-generation executable processes and zero
+browser processes under the production runtime-profile root. Profile directories
+and database volumes were preserved. The isolated P158 units remain active.
+
+Private `production-delivery-approved/` retains the plans, blocked transaction,
+shutdown intent, before/after ownership and final readback. Candidate payload
+staging occurred, but the production generation selector was not switched and
+profile-policy migration was not committed. A cold activation of the approved
+candidate remains unfinished; do not claim deployment from shutdown alone.
