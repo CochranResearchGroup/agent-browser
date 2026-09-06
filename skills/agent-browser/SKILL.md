@@ -1102,6 +1102,8 @@ equals the new local diagnostic URL and every remaining provider identity is
 unchanged. Staging and preflight admit that exact additive transition, but
 status remains drifted until explicit apply writes v2 authority. Any other
 manifest drift remains blocking.
+In embedded Guacamole text-input mode, clicking the remote display directs subsequent keyboard input into the browser. Opening the view leaves dashboard focus unchanged; synthetic mouse events cannot claim keyboard focus.
+
 For Plan 0158 E2 evidence, use only the manually dispatched **Plan 0158
 External Vantage** GitHub Actions workflow after the durable handoff and exact
 retained identity are frozen. The protected `p158-external-vantage` environment

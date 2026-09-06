@@ -1578,3 +1578,35 @@ composition, isolated installation, existing scoped proofs, and the remaining
 production bundle/rollback/override gates. It is preparation, not an approval-
 ready production proposal. W3 keyboard/reopen and W5 remain open; the new
 synthetic browser and fixture server are retained obligations.
+
+## Checkpoint 36: trusted display click transfers keyboard focus
+
+The installed Guacamole source forwards display mouse input while cancelling
+the native mouse event. A real-Chrome cross-origin iframe regression reproduces
+the consequence: a trusted click is forwarded, but Enter afterward remains in
+the host document. On the unchanged extension, the remote-frame key list is
+empty instead of containing Enter. This is a browser focus seam, not a simulated
+RDP or keyboard acknowledgment pass.
+
+The owned extension now transfers focus to Guacamole's text-input target during
+a trusted display mousedown, before its default is cancelled. It does not focus
+on initialization, accept synthetic events as focus authority, alter provider
+input permissions, or change the manual input-method preference. The regression
+passes and verifies that explicit later dashboard interaction returns keyboard
+focus normally. Existing extension checks still cover suppression of startup
+focus and restoration of the original focus method.
+
+`pnpm test:guacamole-display-keyboard-focus`, workstation asset/hash validation,
+development presentation-provider fixtures, handoff documentation checks, docs
+build, Rust format and workspace clippy with warnings denied pass. The extension
+manifest digest and all five guidance surfaces are updated. The new regression
+is a focused local browser check; it is not added to provider-free default tests.
+
+This source repair is not yet installed. Guacamole loads the packaged extension
+JAR, so updating a loose JavaScript file or the CLI alone cannot establish
+delivery. Next prepare the isolated P158 provider change through its supported
+plan/stage/preflight/apply path, with exact fixture disposition before any
+provider restart. Verify the loaded asset and trusted focus behavior before the
+changed external verification. Preserve the current white acknowledgment state
+until that disposition; no remote DOM reset or unchanged retry is authorized.
+W3 keyboard/reopen and W5 production delivery remain open.

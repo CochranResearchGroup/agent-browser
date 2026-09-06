@@ -134,6 +134,8 @@ and cannot create false production multiplicity drift.
 The skill commands publish and verify guidance only inside the development
 pseudo-home. They do not replace the shared user-scoped production skill.
 
+In embedded Guacamole text-input mode, clicking the remote display directs subsequent keyboard input into the browser. Opening the view leaves dashboard focus unchanged; synthetic mouse events cannot claim keyboard focus.
+
 Plan 0158 external ingress evidence uses the manual **Plan 0158 External
 Vantage** GitHub Actions workflow. Configure the protected
 `p158-external-vantage` environment with `P158_DEV_HANDOFF_URL`,

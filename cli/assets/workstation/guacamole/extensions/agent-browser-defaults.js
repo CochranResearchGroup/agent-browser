@@ -130,6 +130,29 @@
 }());
 
 /*
+ * Guacamole forwards and cancels display mouse events. That cancellation can
+ * leave focus on the host dashboard even after a real remote click. Transfer
+ * keyboard focus to the text-input target only during the trusted gesture;
+ * initial loading and synthetic events must not steal host focus.
+ */
+(function installAgentBrowserDisplayKeyboardFocus() {
+    'use strict';
+
+    if (window.parent === window || !window.angular || !window.document)
+        return;
+
+    window.document.addEventListener('mousedown', function focusDisplayKeyboard(event) {
+        if (!event.isTrusted || !event.target || typeof event.target.closest !== 'function'
+                || !event.target.closest('.client-main .display'))
+            return;
+
+        var target = window.document.querySelector('.text-input textarea.target');
+        if (target && !target.disabled)
+            target.focus({ preventScroll: true });
+    }, true);
+}());
+
+/*
  * A restricted sharing key is redeemed inside the sibling Guacamole origin,
  * which the dashboard cannot inspect. Report only the attempt identity and
  * bounded outcome so the parent can discard a rejected key and run a fresh

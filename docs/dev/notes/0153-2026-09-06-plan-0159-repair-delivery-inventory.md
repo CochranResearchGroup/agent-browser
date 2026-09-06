@@ -27,6 +27,11 @@ generation label. Current production generation is
 `0.28.0-4a92c42517e1-6121fd69672b`; retain its binary, support tree and unit
 custody as rollback inputs.
 
+The subsequent trusted-display keyboard-focus repair in Plan checkpoint 36 is
+source-verified but is not part of this installed candidate. Its Guacamole
+extension JAR and manifest must be included in the eventual delivery bundle;
+installing a CLI binary alone does not deliver that repair.
+
 ## Repair composition and proof boundaries
 
 All commits below are verified ancestors of the candidate. Ancestry establishes
