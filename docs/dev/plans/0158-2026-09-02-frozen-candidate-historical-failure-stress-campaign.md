@@ -6437,3 +6437,44 @@ available capability binding, then use the supported Profile recovery plan if
 its authentication preconditions hold. No recovery apply, browser launch,
 replacement URL, provider mutation, external workflow, or calibration ran in
 this read-only reconciliation. Original working-link acceptance remains open.
+
+
+### Priority Remote-View: Recovery Eligibility And Explicit Reopen Proposal
+
+The authoritative repository load overlays runtime-owner-registry.json and
+runtime-lifecycle-registry.json onto state.json. An initial raw state.json read
+omitted lifecycle evidence; the corrected sidecar readback supersedes that
+incomplete observation. The exact retained owner is generation 5, its lifecycle
+is terminal, and cleanup is satisfied. Its recorded boot differs from the
+current boot. Evidence names process-group absence, stale profile-lock PID
+absence, and absent browser projection. A current exact user-data-directory
+process scan finds no matching process. Dangling lock symlinks remain and were
+not deleted. No principal binding was found in the owner registry.
+
+The supported installed no-launch access plan independently reports
+processAbsenceProven=true, replacementEligible=true,
+requiredAction=supersede_terminal_owner, and zero active Profile lease sessions.
+That eligibility permits a separately authorized replacement; it does not turn
+ordinary retained-target adoption into a working link or authorize substitution
+silently. The profile recovery planner's literal terminal-evidence preconditions
+are distinct from this access-plan replacement decision; no capability was
+registered merely to invoke it.
+
+The original synthetic target is the reviewed loopback fixture, whose listener
+is currently absent. The existing synthetic fixture source and generated
+attestation match that target endpoint. A private reopen-proposal.json in
+remote-view-current-rxergfag fixes one service_remote_view_handoff_resolve request
+with allowReopenClosed=true, the retained handoff, exact Profile, fixture source
+and document hashes, fresh ownership preconditions, and one attempt. It keeps
+the durable URL but may create a replacement browser/target. It requires explicit
+operator reopening confirmation under the public remote-view contract in
+cli/src/output.rs and docs/src/app/remote-view/page.mdx. The prior repair was
+expressly retained-target-only and did not supply that confirmation.
+
+The proposal remains unexecuted. No fixture service, browser, provider, external
+workflow, or calibration was started. After confirmation, restore the reviewed
+synthetic fixture, revalidate exact terminal eligibility, execute once with
+durable evidence, and bind any subsequent protected external readiness probe
+to the resulting new identity. Preserve every previous target and failed P/Q
+receipt as history; new-target visibility cannot count as preservation of the
+old process. Full Plan 0158 remains open.
