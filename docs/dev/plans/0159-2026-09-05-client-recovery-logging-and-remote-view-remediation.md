@@ -774,3 +774,24 @@ real provider peer-departure/input proof. No new external dispatch, provider
 mutation or candidate publication accompanied this checkpoint. Production and
 the retained browser/server remain unchanged by this slice. W2 installed
 verification and W5 delivery/cleanup obligations remain open.
+
+## Checkpoint 13: provider and registry boundaries verified
+
+Twelve focused Rust tests pass. A disposable loopback HTTP/WebSocket server now
+verifies the real adapter's header principal, exact connection/data-source query,
+Guacamole subprotocol and tunnel UUID readiness. A foreign authenticated
+principal is rejected before WebSocket startup. The provider receives only
+protocol acknowledgements/keepalive, with no desktop input. The registry test
+uses concurrent admissions: both receive the same pending task, a failed owner
+does not restart for the same binding, and reassignment cannot start a new task
+until the old task closes. This is synthetic protocol-boundary proof, not a
+real Guacamole or RDP acceptance result. Workspace clippy with warnings denied
+also passes.
+
+Read-only development status still selects `0.28.0-7df13c4085f9` and reports ready.
+The retained synthetic Chrome and fixture-server PIDs still exist; that alone
+does not re-prove their start tokens, handles or cleanup. The next operation is
+candidate build, followed by exact fixture disposition and isolated installation.
+Status custody is under private `primary-owner-candidate/`; boundary proof logs
+are preserved under `primary-owner-boundary/`. No installation or live provider
+effect has occurred at this checkpoint.

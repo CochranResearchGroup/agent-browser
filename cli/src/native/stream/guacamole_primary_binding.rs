@@ -20,6 +20,10 @@ pub(super) struct PrimaryBinding {
 }
 
 impl PrimaryBinding {
+    #[cfg(test)]
+    pub fn synthetic_fixture() -> Self {
+        Self::resolve(&tests::repository(), "route", "1").unwrap()
+    }
     pub fn resolve(
         repository: &impl ServiceStateRepository,
         route_id: &str,
@@ -157,7 +161,7 @@ mod tests {
     use crate::native::service_model::ServiceState;
     use serde_json::json;
 
-    struct Repository(ServiceState);
+    pub(super) struct Repository(ServiceState);
 
     impl ServiceStateRepository for Repository {
         fn load_snapshot(&self) -> Result<ServiceState, String> {
@@ -172,7 +176,7 @@ mod tests {
         }
     }
 
-    fn repository() -> Repository {
+    pub(super) fn repository() -> Repository {
         let process =
             crate::process_identity::capture_process_identity(std::process::id(), None, None)
                 .unwrap();
