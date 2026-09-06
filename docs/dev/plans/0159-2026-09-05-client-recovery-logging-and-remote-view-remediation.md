@@ -901,3 +901,36 @@ verify primary/peer continuity and actual input through the intended installed
 surface. Review selected primary-endpoint failure custody before claiming W2
 complete. W3 external outcome evidence and W5 production proposal/final cleanup
 remain open. Production was not changed by this repair.
+
+
+## Checkpoint 17: installed primary startup passes through stable ingress
+
+Candidate `9b975aec` is installed only in P158 as `0.28.0-0552574f397a`,
+SHA-256 `0552574f397a95b63b561a5454ddf34b6c77fd72e1513da4c84546090e654c39`.
+The optimized build, isolated installer, doctor and three disposable launch
+smokes pass. The installer retains production and default-development custody.
+
+Before publication, the previous synthetic browser answered through its
+original authorized handle. Its exact process identity and target inventory
+were checked, then Service closed that browser. The Service row is absent and
+all fourteen captured process start identities are gone. This captured-tree
+receipt does not claim namespace-wide ancillary cleanup. Evidence is under
+private `primary-owner-ingress-candidate/`.
+
+A fresh broker access plan selected the next synthetic session; remote-view
+open returned operator-ready and its original handle answered. Before the one
+primary-start POST, the provider had zero matching connections. Through stable
+ingress port 5148, that POST returned HTTP 200, `primaryOwned=true` and
+`granted=false`. The returned UUID matches the provider's active connection.
+The durable ledger records 2.610 seconds from intent to response, exceeding
+the former two-second ingress limit. No retry was used. Evidence, full handles
+and the retained synthetic fixture obligation are private under
+`primary-owner-ingress-live/`.
+
+This closes the installed primary-start response defect. It does not establish
+shared-viewer lifetime, actual pixels/input, same-URL reopening or W3 acceptance.
+Next bind the retained synthetic fixture and exact candidate to the protected
+external readiness proof, preserving prior failed attempts and the frozen pixel
+oracle. No external workflow was dispatched in this checkpoint. The selected
+primary-endpoint failure-custody review and W5 production proposal/final cleanup
+remain open.
