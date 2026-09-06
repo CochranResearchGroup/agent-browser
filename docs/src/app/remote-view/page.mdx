@@ -87,7 +87,9 @@ flow. Recovery may request a fresh key from the same healthy primary. It cannot
 elect a viewer as primary or restart a failed backend owner. Provider failures
 remain explicit until reconciled; binding invalidation closes the owned tunnel.
 Backend startup requires the installed provider's trusted header principal and
-literal loopback Guacamole origin. Connection readiness does not establish
+literal loopback Guacamole origin. Dashboard ingress allows up to 21 seconds
+for the bounded primary-start response. An uncertain startup outcome requires
+reconciliation before another attempt. Connection readiness does not establish
 visible pixels or successful input; those require separate outcome evidence.
 
 Observer-lease acknowledgement preserves the current embedded desktop frame,

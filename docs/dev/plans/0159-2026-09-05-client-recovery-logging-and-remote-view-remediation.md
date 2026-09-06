@@ -861,3 +861,43 @@ warnings denied pass. Red/green/clippy evidence is preserved in private
 `primary-owner-auth-source-repair/`. The next step is a corrected candidate build
 and isolated publication with explicit retained-fixture disposition. Real
 primary lifetime, peer departure and external input acceptance remain open.
+
+
+## Checkpoint 16: primary startup survives the dashboard ingress budget
+
+The authentication-source correction from `40023d88` was built and installed
+only in P158 as `0.28.0-a2aa0e84cf34`, SHA-256
+`a2aa0e84cf3415b28badbaa50b5cf5b2b1d39d5a74fa4614879770d9b6e06ef3`.
+Its installation, doctor and disposable launch receipts are retained under
+private `primary-owner-auth-fix-candidate/`. The preceding synthetic browser
+was deliberately closed before installation; the new fixture and its startup
+ledger are under `primary-owner-verified-live/`.
+
+The authenticated primary request returned HTTP 502 `mutation_outcome_unknown`
+with `retrySafe=false`. Provider reconciliation found one connectable primary;
+a fresh readback during this repair still shows the same UUID and start time.
+No unchanged startup POST was repeated. This proves retained provider connection
+identity, not visible pixels, input or healthy original-handle recovery.
+
+The cause is a mismatched timeout contract: `PrimaryTask::ready` can wait sixteen
+seconds, while ingress gave this POST the generic two-second first-response
+budget. The existing request-specific ingress policy now allows twenty-one
+seconds for the exact primary endpoint, including five seconds of response
+grace. Mutation retry/fallback rules are unchanged. This does not extend pixel
+verification or authorize another protected external attempt.
+
+The existing delayed-presentation proxy test now covers both durable-handoff
+resolution and primary startup through the real ingress. It reproduced the
+502 before the repair and passes afterward. All 29 focused ingress tests pass,
+including delivered-mutation uncertainty and no-fallback-replay cases. Workspace
+clippy with warnings denied, format check and docs build pass. Private
+`primary-owner-ingress-repair/` retains red, green, clippy and docs logs. Help,
+README, the repository skill, remote-view docs and inline guidance describe the
+bounded startup response and reconciliation requirement.
+
+This source repair has not yet been installed. Next, build the corrected
+candidate, disposition the exact retained fixture before publication, and
+verify primary/peer continuity and actual input through the intended installed
+surface. Review selected primary-endpoint failure custody before claiming W2
+complete. W3 external outcome evidence and W5 production proposal/final cleanup
+remain open. Production was not changed by this repair.

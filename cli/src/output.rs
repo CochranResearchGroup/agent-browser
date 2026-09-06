@@ -6092,6 +6092,8 @@ oneTimeProfileWarning recommends a managed one-time profile id.
 Dry runs return operatorVisible.state=not_checked.
 Simultaneous Guacamole viewers share a backend-owned primary connection bound
 to the exact browser and display. Closing a viewer preserves that primary.
+Dashboard ingress allows up to 21 seconds for the primary-start response;
+reconcile an uncertain startup outcome before another attempt.
 A failed primary remains an explicit failure requiring provider reconciliation;
 reopening the durable URL does not elect another viewer as primary.
 

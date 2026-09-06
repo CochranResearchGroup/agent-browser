@@ -17,6 +17,8 @@ use tokio::time::timeout;
 
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
 const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+// PrimaryTask::ready bounds startup at 16 seconds; retain five seconds for delivery.
+const DASHBOARD_INGRESS_PRIMARY_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(21);
 const DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(65);
 const DASHBOARD_INGRESS_DEFAULT_SERVICE_JOB_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1311,6 +1313,9 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
         // but must not be declared unavailable before the selected backend's
         // own bounded read budget can finish.
         return DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT;
+    }
+    if request.starts_with(b"POST /api/guacamole-primary-claim ") {
+        return DASHBOARD_INGRESS_PRIMARY_FIRST_RESPONSE_TIMEOUT;
     }
     if !request.starts_with(b"POST /api/service/request ") {
         return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
@@ -2739,53 +2744,69 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn durable_handoff_resolution_waits_for_the_bounded_backend_response() {
-        let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let backend_port = backend_listener.local_addr().unwrap().port();
-        let registry = DashboardIngressRegistry::new(DashboardBackend::new(
-            "generation-selected",
-            backend_port,
-            "selected-manifest",
-        ));
-        let backend = tokio::spawn(async move {
-            let (mut connection, _) = backend_listener.accept().await.unwrap();
-            let request = read_initial_http_request(&mut connection).await.unwrap();
-            assert!(request.starts_with(b"POST /api/service/request "));
-            tokio::time::sleep(Duration::from_millis(2_100)).await;
-            let _ = connection
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready",
-                )
-                .await;
-        });
-        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let ingress_port = ingress_listener.local_addr().unwrap().port();
-        let ingress = tokio::spawn(async move {
-            let (mut connection, _) = ingress_listener.accept().await.unwrap();
-            proxy_ingress_request(&mut connection, &registry).await;
-        });
-        let body = serde_json::json!({
-            "action": "service_remote_view_handoff_resolve",
-            "params": {"handoffId": "handoff-a"},
-            "jobTimeoutMs": 90_000,
-        })
-        .to_string();
-        let request = format!(
-            "POST /api/service/request HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
-            .await
-            .unwrap();
-        client.write_all(request.as_bytes()).await.unwrap();
-        client.shutdown().await.unwrap();
-        let mut response = Vec::new();
-        client.read_to_end(&mut response).await.unwrap();
+    async fn presentation_startup_waits_for_the_bounded_backend_response() {
+        for (path, payload) in [
+            (
+                "/api/service/request",
+                serde_json::json!({
+                    "action": "service_remote_view_handoff_resolve",
+                    "params": {"handoffId": "handoff-a"},
+                    "jobTimeoutMs": 90_000,
+                }),
+            ),
+            (
+                "/api/guacamole-primary-claim",
+                serde_json::json!({
+                    "operation": "ensure", "routeId": "route-a", "connectionId": "1",
+                }),
+            ),
+        ] {
+            let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let backend_port = backend_listener.local_addr().unwrap().port();
+            let registry = DashboardIngressRegistry::new(DashboardBackend::new(
+                "generation-selected",
+                backend_port,
+                "selected-manifest",
+            ));
+            let backend = tokio::spawn(async move {
+                let (mut connection, _) = backend_listener.accept().await.unwrap();
+                let request = read_initial_http_request(&mut connection).await.unwrap();
+                assert!(request.starts_with(format!("POST {path} ").as_bytes()));
+                tokio::time::sleep(Duration::from_millis(2_100)).await;
+                let _ = connection
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready",
+                    )
+                    .await;
+            });
+            let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let ingress_port = ingress_listener.local_addr().unwrap().port();
+            let ingress = tokio::spawn(async move {
+                let (mut connection, _) = ingress_listener.accept().await.unwrap();
+                proxy_ingress_request(&mut connection, &registry).await;
+            });
+            let body = payload.to_string();
+            let request = format!(
+                "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+                .await
+                .unwrap();
+            client.write_all(request.as_bytes()).await.unwrap();
+            client.shutdown().await.unwrap();
+            let mut response = Vec::new();
+            client.read_to_end(&mut response).await.unwrap();
 
-        backend.await.unwrap();
-        ingress.await.unwrap();
-        assert!(response.ends_with(b"ready"));
+            backend.await.unwrap();
+            ingress.await.unwrap();
+            assert!(
+                response.ends_with(b"ready"),
+                "{path}: {}",
+                String::from_utf8_lossy(&response)
+            );
+        }
     }
 
     #[test]
