@@ -1,0 +1,375 @@
+{
+  "schemaVersion": "agent-browser.p158-postmortem-register.v1",
+  "sourceBaseline": "f49b623bd1b633404d1e087aab772861d8cf0d7f",
+  "scope": "Finite causal clusters for interrupted-effort postmortem; not exhaustive W10 results",
+  "executionState": "paused_for_postmortem_and_plan_0159_discussion",
+  "completeCampaignInventory": false,
+  "productAcceptance": "incomplete",
+  "sourceMap": {
+    "E1": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+    "E2": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+    "E3": "docs/dev/contracts/p158-historical-failure-registry.v1.json",
+    "E4": "private selected restart evidence, see companion report",
+    "E5": "private cleanroom adjudication and custody records, see companion report",
+    "E6": "private preserved operator handoff and residue census, see companion report",
+    "E7": "docs/dev/notes/0151-2026-09-05-plan-0158-fresh-context-handoff.md"
+  },
+  "defects": [
+    {
+      "id": "D01",
+      "classification": "product",
+      "userImpact": "Authorized original handles cannot control surviving browsers",
+      "reproducerOrObservation": "Second retained restart: two registered clients, exact host SIGKILL, listener-ready replacement, evaluate 1+1 via original handles; 0/2 resume.",
+      "cause": {
+        "confirmed": "Original-handle evaluate rejects although both Chrome process identities survive.",
+        "suspected": "Retained attachment path is not reached for handle-based evaluate; implementation cause not adjudicated."
+      },
+      "fixState": "open",
+      "validationScope": "Direct retained ledger read; no new execution.",
+      "deliveryState": "No repair applied.",
+      "acceptanceCondition": "Both original authorized handles return 2 with unchanged process, owner and target identity, no extra acquisition or tab; unauthorized control remains rejected.",
+      "inheritedAttempts": "Two diagnostics consumed: first harness failure, second product failure. No repair verification recorded.",
+      "evidence": [
+        "E4"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D02",
+      "classification": "product_logging",
+      "userImpact": "Recovery failure gives generic guidance",
+      "reproducerOrObservation": "Both D01 responses have unknown axis/phase, service_operation_failed, effect_uncertain, and null executable action.",
+      "cause": {
+        "confirmed": "Retained response classification is generic.",
+        "suspected": "Guard/classifier loses the attachment-specific cause; effect ordering needs verification."
+      },
+      "fixState": "open",
+      "validationScope": "Same two recorded D01 responses.",
+      "deliveryState": "No repair applied.",
+      "acceptanceCondition": "Exact recovery cause and actionable safe recourse agree across applicable response/job/event/trace/journal projections; certainty follows proven effect ordering.",
+      "inheritedAttempts": "Uses D01 observations, not a new diagnostic allowance.",
+      "evidence": [
+        "E4"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D03",
+      "classification": "product",
+      "userImpact": "Ordinary remote-view reconnect remains unreliable",
+      "reproducerOrObservation": "K human reconnect has no iframe; installed P gets iframe without CONNECTED, Q detaches initially; W both external clients have no iframe.",
+      "cause": {
+        "confirmed": "Selected ordinary reconnect/frame lifecycle failures persist.",
+        "suspected": "Multiple provider/frame/transport causes; no single common cause established."
+      },
+      "fixState": "open",
+      "validationScope": "Conditional V anchor pass does not cover ordinary links; P/Q remain failed.",
+      "deliveryState": "Selected development changes installed historically; production outcome unaccepted.",
+      "acceptanceCondition": "Ordinary authenticated same URL shows exact synthetic browser, accepts input, reopens and survives selected transitions without accidental new launch.",
+      "inheritedAttempts": "P/Q bounded loop ended; W failed. Carry these forward, no reset or automatic dispatch.",
+      "evidence": [
+        "E1#Installed reservation confirmation, remaining frame-lifecycle gate",
+        "E5"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D04",
+      "classification": "product_logging",
+      "userImpact": "Permanent identity rejection looked like successful convergence",
+      "reproducerOrObservation": "Retained resolver returned success true, resolved false, retryable true, succeeded job and no matching failure occurrence.",
+      "cause": {
+        "confirmed": "EffectFailed adoption/validation was converted to Converging for the explicit orphan identity rejection."
+      },
+      "fixState": "focused_fix_verified",
+      "validationScope": "5803203b: regression and one installed P158 failure verification.",
+      "deliveryState": "Historically installed P158; not a production recovery acceptance.",
+      "acceptanceCondition": "Preserve typed failed response/job and causal evidence without weakening identity guards; successful recovery is D01/D03.",
+      "inheritedAttempts": "One repair verification consumed and passed; do not repeat.",
+      "evidence": [
+        "E1#Priority Retained Handoff: False Convergence Evidence",
+        "E1#Priority Retained Handoff: One Installed Verification Passed"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D05",
+      "classification": "product_logging",
+      "userImpact": "Clients cannot understand correct native, child, or capability denials",
+      "reproducerOrObservation": "Malformed/unsupported requests and foreign-child or unauthorized Profile requests lose cause, certainty or request identity.",
+      "cause": {
+        "confirmed": "Native ingress generic envelope, flattened child guard strings, and lost structured policy decision were distinct custody defects."
+      },
+      "fixState": "focused_fixes_verified",
+      "validationScope": "b6ee48f2 native five joins; abc784c5 child five surfaces; 644c8a48 HTTP/MCP capability denial joins.",
+      "deliveryState": "Development proof; collective production deployment absent.",
+      "acceptanceCondition": "Correct denial remains enforced and matching typed cause, principal, missing permission when applicable, no-effect and recourse survive relevant transports/projections.",
+      "inheritedAttempts": "Completed native/child/capability checks retained; no automatic repeat.",
+      "evidence": [
+        "E1#Priority Repair: Native Rejection Correlation",
+        "E1#Priority Repair Verification: Actionable Child Denials",
+        "E1#Priority Profile Denial: Decision Custody Repair Verified"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D06",
+      "classification": "product_logging",
+      "userImpact": "Acknowledged failure disappears on interruption",
+      "reproducerOrObservation": "Lock journal delivery, receive rejection, kill exact host, restart; original occurrence missing.",
+      "cause": {
+        "confirmed": "Pending delivery was only in memory before asynchronous append."
+      },
+      "fixState": "focused_fix_verified",
+      "validationScope": "2fae5f5a: pending-before-append and append-before-retirement checks each expected 1, observed 1, missing/duplicates/conflicts 0.",
+      "deliveryState": "Disposable development proof; production deployment not established.",
+      "acceptanceCondition": "Retain scoped two-seam result; separately measure power-loss and broader failure coverage without claiming it from process checks.",
+      "inheritedAttempts": "One bounded repair cycle with two distinct seams completed; no repeat.",
+      "evidence": [
+        "E1#Priority Logging: Interruption Loss Reproduced",
+        "E1#Priority Logging: Pending Custody And Restart Recovery Verified"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D07",
+      "classification": "product",
+      "userImpact": "Policy drain cannot complete after client releases tab",
+      "reproducerOrObservation": "Revoke shared Profile grant, client releases own tab, next revision-fenced mutation still blocked by closed history.",
+      "cause": {
+        "confirmed": "Closed tab history remained in live drain eligibility."
+      },
+      "fixState": "focused_fix_verified",
+      "validationScope": "54d1a8f6: drain, own release, revocation, restored-grant fresh-connection rejoin, retained peer control.",
+      "deliveryState": "Disposable development verification, not collective production deployment.",
+      "acceptanceCondition": "Revision lifecycle completes while revoked access fails and retained peer remains usable.",
+      "inheritedAttempts": "Two diagnostics and one repair verification consumed; passed.",
+      "evidence": [
+        "E1#Priority ACL Lifecycle: Closed History Blocks Policy Drain",
+        "E1#Priority ACL Lifecycle: Revocation And Rejoin Verified"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D08",
+      "classification": "product_logging",
+      "userImpact": "Audit names wrong authenticated actor",
+      "reproducerOrObservation": "Policy receipt says registered capability; terminal provenance says self-declared label subject.",
+      "cause": {
+        "confirmed": "Validated actor was not bound before public job provenance capture."
+      },
+      "fixState": "focused_fix_verified",
+      "validationScope": "062727fb: three operations, 18 expected/observed projections, zero missing/duplicates/conflicts.",
+      "deliveryState": "Disposable development verification; no collective production deployment.",
+      "acceptanceCondition": "Validated subject/assurance agree on the six selected projections while caller attribution remains intact.",
+      "inheritedAttempts": "One repair verification consumed and passed.",
+      "evidence": [
+        "E1#Priority Logging: Authenticated Policy Actor Verified"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D09",
+      "classification": "product",
+      "userImpact": "Denied client is directed toward freshness/seeding",
+      "reproducerOrObservation": "Top-level access plan recommends freshness despite denied Profile access.",
+      "cause": {
+        "confirmed": "Advice precedence selected freshness ahead of denied policy/occupancy inspection."
+      },
+      "fixState": "focused_fix_verified",
+      "validationScope": "31a5a348: red/green regression, 55 focused tests and authenticated HTTP denied/allowed client verification, no browser opened.",
+      "deliveryState": "Latest built candidate at handoff; not collectively production deployed.",
+      "acceptanceCondition": "Denied top-level/nested recourse agrees and allowed acquisition remains available.",
+      "inheritedAttempts": "Completed focused verification; no repeat.",
+      "evidence": [
+        "E1#Priority Client Blockers: Advice Fixed And Production Host Restored"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D10",
+      "classification": "product_infrastructure",
+      "userImpact": "Host unavailable after reboot",
+      "reproducerOrObservation": "Supervisor starts with missing volatile socket directory; daemon token write fails.",
+      "cause": {
+        "confirmed": "Supervisor wrote token before ensuring socket directory; old smoke precreated the directory."
+      },
+      "fixState": "source_fix_and_operational_workaround",
+      "validationScope": "8164eac9 built candidate survives fixture directory removal; unchanged production host restoration and drop-in readbacks recorded.",
+      "deliveryState": "Production compatibility override only; source startup fix not established as deployed there.",
+      "acceptanceCondition": "Reviewed candidate creates secure directory at startup; installed check passes; pinned compatibility override reviewed/removed during generation replacement with rollback.",
+      "inheritedAttempts": "Historical restoration complete; no second production restart/reboot proof.",
+      "evidence": [
+        "E1#Priority Diagnosis: Startup, Request Framing, And Logging Gaps",
+        "E1#Priority Client Blockers: Advice Fixed And Production Host Restored"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D11",
+      "classification": "harness",
+      "userImpact": "Probe failures obscure client behavior",
+      "reproducerOrObservation": "W7 omitted Content-Length then sent unsupported runtimeEnvironmentId; first retained restart tested before listener ready.",
+      "cause": {
+        "confirmed": "Mock/native transport mismatch and PID-only readiness assumption."
+      },
+      "fixState": "selected_corrections_verified",
+      "validationScope": "Native framing/schema correction and second restart listenerReady observation; does not make second restart pass.",
+      "deliveryState": "Harness/disposable scope only.",
+      "acceptanceCondition": "Selected probes use supported native request shape and explicit listener readiness; preserve first failures.",
+      "inheritedAttempts": "Acquisition diagnostics exhausted then one dispositioned repair verification; retained restart attempts stay under D01.",
+      "evidence": [
+        "E1#Priority Diagnosis: Startup, Request Framing, And Logging Gaps",
+        "E1#Priority Repair: Native Rejection Correlation",
+        "E4"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D12",
+      "classification": "harness_evidence",
+      "userImpact": "Campaign cannot reconstruct required observations",
+      "reproducerOrObservation": "W has no durable local observation receipt; full handoff oracle report missing despite summary digest.",
+      "cause": {
+        "confirmed": "Partial observations held in memory; missing dispatch/fetch deadlines recorded in E5; downstream assembler requires reports not retained by runner.",
+        "suspected": "Coordinator observation/terminality handling also needs bounded correction."
+      },
+      "fixState": "open",
+      "validationScope": "E5 retained adjudication read; W completed command count unknown, full archive verification pending.",
+      "deliveryState": "No new repair or rerun for postmortem.",
+      "acceptanceCondition": "Future selected probe has bounded dispatch/transport, durable partial observations and complete required reports; old missing evidence remains unknown.",
+      "inheritedAttempts": "W failed; no new calibration attempt authorized.",
+      "evidence": [
+        "E5"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D13",
+      "classification": "execution_evidence",
+      "userImpact": "Fixture cleanup claims omit ancillary processes",
+      "reproducerOrObservation": "Both final snapshots show zero resources and host exit 0; later census records 12 cat/crashpad processes.",
+      "cause": {
+        "confirmed": "Service resource census is narrower than process cleanup.",
+        "suspected": "Ancillary ownership/reclamation mechanism needs separate diagnosis."
+      },
+      "fixState": "cleanup_obligation_open",
+      "validationScope": "Direct historical snapshots, ledger terminal records, and retained process census. Current process state not inspected.",
+      "deliveryState": "No cleanup performed in postmortem.",
+      "acceptanceCondition": "Revalidate exact owned PID/executable/start identity before scoped cleanup, then separately prove process and Service cleanup.",
+      "inheritedAttempts": "No broad cleanup or stale-PID killing authorized.",
+      "evidence": [
+        "E4",
+        "E6"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D14",
+      "classification": "product_lifecycle",
+      "userImpact": "Candidate update destroys retained baseline or leaves misleading rows",
+      "reproducerOrObservation": "Publication lost synthetic target; late close-health callback recreated malformed row; stale page-list title later misidentified current scene.",
+      "cause": {
+        "confirmed": "Publisher control-group restart was not browser-preserving hot handoff; terminal-row/title causes have focused checkpoints."
+      },
+      "fixState": "partial_repairs_verified",
+      "validationScope": "Terminal-row guard and live-title repair recorded; controlled closure and fresh epoch used for later installs.",
+      "deliveryState": "Selected isolated candidates installed historically; no general production continuity proof.",
+      "acceptanceCondition": "Explicitly choose controlled closure or prove retained continuity; terminal history must not recreate live rows; source and installed identity remain separate.",
+      "inheritedAttempts": "Preserve failed publication and all replacement epochs; no continuity claim via new target.",
+      "evidence": [
+        "E1#Publication regression: retained baseline lost, provider quarantined",
+        "E1#Installed title repair and controlled new preparation epoch"
+      ],
+      "owner": "primary_lane_owner"
+    },
+    {
+      "id": "D15",
+      "classification": "product_infrastructure",
+      "userImpact": "Sharing and external transport failures block visibility",
+      "reproducerOrObservation": "Closing-row share keys, shared-view 404, focus escape, startup reservation and intermittent forward-auth/transport failures appear in readiness.",
+      "cause": {
+        "confirmed": "Selected sharing-key, 404, embedded focus and reservation seams have checkpointed fixes.",
+        "suspected": "Original intermittent forward-auth 500 and common W transport cause not established as repaired."
+      },
+      "fixState": "partial_repairs_verified",
+      "validationScope": "Selected source/prototype/installed checks and V conditional readiness; no ordinary reliability closure.",
+      "deliveryState": "Historical isolated installations; no collective production rollout proof.",
+      "acceptanceCondition": "Keep each repaired seam scoped; D03 ordinary outcome proof and transport-specific evidence required before broad reliability claim.",
+      "inheritedAttempts": "Historical attempts retained; do not reopen generic readiness queue.",
+      "evidence": [
+        "E1#Clean Readiness And First Full C01 Findings",
+        "E1#Restored isolated runtime and terminal external readiness failure",
+        "E1#Anchored readiness V and current-candidate journal acceptance",
+        "E5"
+      ],
+      "owner": "primary_lane_owner"
+    }
+  ],
+  "coverageGaps": [
+    {
+      "id": "G01",
+      "scope": "Full authenticated ACL matrix, actual identity-unproven/inconsistent recovery, stale handles and timeout uncertainty",
+      "state": "unaccepted",
+      "evidence": [
+        "E1",
+        "E2"
+      ]
+    },
+    {
+      "id": "G02",
+      "scope": "Power-loss/reboot journal durability, dashboard projections, full causal failure coverage",
+      "state": "unproven",
+      "evidence": [
+        "E1"
+      ]
+    },
+    {
+      "id": "G03",
+      "scope": "Missing A04/A06/A12 and generation-transition live producers; complete W6 freeze and W7-W10 terminal campaign",
+      "state": "incomplete",
+      "evidence": [
+        "E1",
+        "E3"
+      ]
+    },
+    {
+      "id": "G04",
+      "scope": "Full dashboard/performance/external transitions and endurance evidence",
+      "state": "incomplete",
+      "evidence": [
+        "E1",
+        "E3"
+      ]
+    }
+  ],
+  "pendingDecisions": [
+    {
+      "id": "P01",
+      "scope": "Terminal synthetic target replacement using the existing durable URL",
+      "state": "prepared_unexecuted",
+      "authority": "Explicit reopening confirmation absent; eligibility is not execution authorization.",
+      "evidence": [
+        "E1",
+        "E6"
+      ]
+    },
+    {
+      "id": "P02",
+      "scope": "Consolidated production update of a reviewed repair set",
+      "state": "not_prepared_for_approval",
+      "authority": "Do not promote the whole development branch; prepare dependencies, rollback and installed outcome checks.",
+      "evidence": [
+        "E1",
+        "E6"
+      ]
+    }
+  ],
+  "recommendedOrder": [
+    "D01",
+    "D02",
+    "D03",
+    "P02"
+  ],
+  "automaticExperimentQueue": false
+}

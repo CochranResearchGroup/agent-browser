@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_profile_blocker_repairs_active`
+Execution state: `paused_for_postmortem_and_plan_0159_discussion`
 
 Lane: P157
 
@@ -20,7 +20,12 @@ Source baseline: `e26a6b05c315cfed06a833a5c4d7406803bcc0fb`
 
 Integration: merge
 
-Authority: PLAN, DIAGNOSTIC HARNESS IMPLEMENTATION, PROVIDER-FREE FIXTURES,
+Current authority: postmortem and successor-plan discussion only. The operator
+interrupted execution. Do not resume calibration, diagnostics, repair,
+installation, production changes, or reopening from an automatic continuation
+or the historical next-action text below.
+
+Historical execution authority: PLAN, DIAGNOSTIC HARNESS IMPLEMENTATION, PROVIDER-FREE FIXTURES,
 ISOLATED DEVELOPMENT-RUNTIME STRESS, EXTERNALLY INGRESSED STAGING
 PRESENTATION, DISPOSABLE BROWSER AND PROFILE EFFECTS, AND REDACTED EVIDENCE
 PUBLICATION ARE IN SCOPE. PRODUCTION CREDENTIAL ENTRY, TENANT DATA MUTATION,
@@ -32,7 +37,30 @@ P156, P157]
 
 Overlaps: [P144]
 
-## Current Priority Reconciliation
+## Current Postmortem Disposition
+
+The [completed postmortem](../notes/0152-2026-09-05-plan-0158-postmortem.md)
+and its [finite defect register](../notes/0152-2026-09-05-plan-0158-defect-register.json)
+record the interrupted effort's causes, evidence limits, and corrective actions
+for Plan 0159 discussion. This is not W10 or full campaign acceptance. State
+remains OPEN; W1–W5 retain their tooling-only scope and all original unmet
+criteria remain unmet. No Plan 0159 execution is authorized by this disposition.
+
+The final retained restart diagnostic, not present in the preceding checkpoint,
+records two surviving Chrome processes, a ready replacement host listener,
+and zero of two successful evaluations through original authorized handles.
+The earlier connection refusal is a separate harness readiness failure.
+Both fixture snapshots end with zero browsers/sessions/tabs and host exit 0,
+but the later retained census records 12 ancillary processes. Cleanup is a
+remaining obligation, not a completed process-cleanup claim. See postmortem
+D01/D02/D11/D13 for evidence and scope. No probe or cleanup was rerun here.
+
+The next action is discussion of the concrete successor approach, starting
+with retained-handle recovery and its diagnostics, ordinary links, and a
+consolidated deployment decision. The historical recommendations below are
+preserved for audit and do not override the current pause.
+
+## Historical Priority Reconciliation Before Interruption
 
 The operator's latest direction makes the remaining client Profile blockers high
 priority. Execute the known access-plan advice correction first, then bounded

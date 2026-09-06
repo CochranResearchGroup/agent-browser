@@ -147,6 +147,22 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
+Plan 0158 execution is paused following the operator's interruption. The
+[completed postmortem](docs/dev/notes/0152-2026-09-05-plan-0158-postmortem.md)
+and [finite defect register](docs/dev/notes/0152-2026-09-05-plan-0158-defect-register.json)
+now govern the successor discussion. Plan 0158 remains OPEN and incomplete;
+postmortem completion is not W10 acceptance. Do not resume its historical
+diagnostic, calibration, repair, installation, or reopen sequence automatically.
+
+Discuss Plan 0159 around original authorized-handle recovery with diagnostic
+evidence, ordinary durable remote-view behavior, and a consolidated production
+delivery decision. The final retained restart has 0/2 resumed original handles
+despite surviving Chrome processes and listener readiness. Historical zero
+Service-resource cleanup did not eliminate ancillary process residue. Source,
+installed, production, and user-outcome acceptance remain distinct.
+
+### Historical Priority Checkpoints Before Interruption
+
 Plan 0158 is reconciled around usable authenticated Profile leases/ACLs,
 postmortem-quality logging, and ordinary durable remote-view links. Current
 proof is partial: authenticated own-Profile acquisition and actionable denials
