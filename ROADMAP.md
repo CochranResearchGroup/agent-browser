@@ -160,13 +160,21 @@ unchanged browser/session/tab/handoff records. Source is 5803203b; installed
 generation is 0.28.0-75f7d4a2caab. This proves truthful failure, not recovery or
 working links. The bounded verification is complete; do not repeat it.
 
-Next address authenticated Profile access and identity-denial lifecycle with
-logging attached, and separately prove logging interruption durability. Then
-run ordinary external same-URL pixel/input acceptance with current synthetic
-bindings. The renewed Plan 0158 reconciliation governs. Calibration remains
-deferred; W6 and W7–W10, original workload, freeze gate, and full acceptance
-criteria remain open. Anchored readiness does not prove ordinary links or
-production reliability.
+Two independent registered-capability clients now pass focused acquisition of
+their own restricted Profiles, including after a disposable host restart with
+persisted capabilities and closed browsers. An unauthorized cross-profile
+operation is denied before effects and joins one journal entry, but its
+profile_access_denied cause becomes route_hint_failure with misleading request-
+schema guidance. Next preserve the actual denied decision and useful recourse
+at request normalization, then verify that finding once. Live-browser restart,
+revocation/rejoin, identity-unproven recovery, and full authenticated ACL
+acceptance remain open.
+
+Keep logging interruption durability as a separate ready slice and ordinary
+external same-URL pixel/input proof as an unmet outcome. The renewed Plan 0158
+reconciliation governs. Calibration remains deferred; W6 and W7–W10, original
+workload, freeze gate, and full acceptance criteria remain open. Anchored
+readiness does not prove ordinary links or production reliability.
 
 ## P156 | Full Runtime Shutdown Replacement
 

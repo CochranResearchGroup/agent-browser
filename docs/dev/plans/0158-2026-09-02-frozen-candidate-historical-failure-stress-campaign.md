@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_retained_handoff_failure_verified_acl_and_durability_next`
+Execution state: `priority_authenticated_profile_access_proven_denial_recourse_gap`
 
 Lane: P157
 
@@ -5993,3 +5993,61 @@ logging attached. Keep the independent interruption-durability slice explicit.
 Ordinary external same-URL pixels/input, P/Q frame failures, authenticated ACL
 lifecycle, full logging durability, W6, and W7–W10 remain unmet. Calibration
 stays deferred and production mutation remains outside scope.
+
+### Priority Authenticated Profiles: Live Access And Denial Diagnosis
+
+Two disposable restricted Profiles grant permissions only to their own
+registered principal. Two independent HTTP connections authenticate with
+capabilities registered through the supported Service leases command. Using
+candidate 0.28.0-75f7d4a2caab (source 5803203b), both clients obtain the access
+plan and successfully open their own Profile. Durable job provenance contains
+the distinct expected principal IDs and registered-capability assurance.
+This improves on the earlier self-declared shared-client proof.
+
+The first isolated host is closed after exact Profile browser cleanup. A
+second bounded episode starts a new host against the same persisted Profile
+and capability registry, with a fresh isolated socket directory. Both
+capabilities again authorize their own Profile acquisition. This proves
+persistence across host restart with closed browsers; it does not prove
+retained live-browser restart, connection rejoin, policy revocation, or the
+full A04/A06 matrix.
+
+The second episode first submits client A's capability against Profile B as an
+explicit unauthorized control. HTTP 400 rejects the request before browser or
+tab creation. Expected durable jobs are zero and observed jobs are zero. One
+expected rejection journal entry is observed with zero duplicates and zero
+response/journal code conflicts. The response correctly reports no_effect.
+The access-plan decision also denies tab_create and records the authenticated
+subject, policy revision, and missing permission.
+
+A concrete recourse defect remains: the operation's underlying
+service_access_plan_request_unavailable:profile_access_denied message becomes
+route_hint_failure on the request axis, with correct_service_request and
+inspect_service_request_schema advice. Subject and missingPermission are null.
+ServiceRequestIssue::code handles this as generic RouteHintFailure, and
+ServiceRequestRejection::response supplies generic schema-repair recourse.
+The access-plan top-level recommendedAction instead points to freshness while
+its nested access decision denies permission. Do not interpret that freshness
+recommendation as permission to seed or bypass authorization.
+
+Private evidence directories auth-profile-uxSCKX and auth-profile-oLdl8G under
+the P158 campaign root retain fsynced ledgers, exact scratch probe sources,
+registration receipts, before/after state, traces, journal copies, and hashed
+checkpoints. Raw capabilities remain private and are excluded from checkpoint
+artifact hashing. Both episodes finish with zero browsers/sessions/tabs, exact
+host exit zero, and no matching fixture process at readback. The installed
+P158 services, provider, production and default-development runtimes were not
+replaced or restarted by these disposable-host tests. No calibration or external
+viewer workflow was dispatched.
+
+Classification: outcome_progress for authenticated own-Profile access and
+capability persistence, plus blocker_reduction for the actual denial-recourse
+failure. The selected diagnostic is sealed; no unchanged retry is needed.
+Next use the existing request-admission regression seam to preserve the denied
+access decision and actionable recourse across response and journal, without
+weakening grants or inventing authority from caller labels. Bound that finding
+to one repair/verification cycle. Distinguish the top-level access-plan advice
+from the operation-rejection repair when adjudicating scope. Interruption
+logging durability remains a separate ready unit. Missing A-family producers,
+revocation/rejoin/live-browser restart, identity-unproven recovery, ordinary
+external pixels/input, P/Q frame behavior, W6 and W7–W10 remain outstanding.
