@@ -131,32 +131,32 @@ impl PrimaryBinding {
 
     /// Record terminal provider custody at the backend owner, independently of
     /// whether a viewer is still present to report the failed connection.
-    pub fn record_terminal(&self, code: &'static str, elapsed_ms: u64) {
+    pub fn record_terminal(&self, occurrence_id: &str, code: &'static str, elapsed_ms: u64) {
         use crate::native::service_failure_journal::{
             append_service_failure_best_effort, ServiceFailureCategory, ServiceFailureRecord,
             ServiceFailureReferences,
         };
-        append_service_failure_best_effort(
-            &ServiceFailureRecord::new(
-                ServiceFailureCategory::GuacamoleLoad,
-                "guacamole_primary_owner",
-                "terminal",
-                code,
-                "The backend-owned Guacamole primary connection ended.",
-            )
-            .with_action("guacamole_primary_ensure")
-            .with_references(ServiceFailureReferences {
-                route_id: Some(self.route_id.clone()),
-                session_id: Some(self.session_id.clone()),
-                display_id: Some(self.display_id.clone()),
-                ..ServiceFailureReferences::default()
-            })
-            .with_details(serde_json::json!({
-                "elapsedMs": elapsed_ms,
-                "retrySafe": false,
-                "recourse": "inspect_remote_view_provider",
-            })),
-        );
+        let mut record = ServiceFailureRecord::new(
+            ServiceFailureCategory::GuacamoleLoad,
+            "guacamole_primary_owner",
+            "terminal",
+            code,
+            "The backend-owned Guacamole primary connection ended.",
+        )
+        .with_action("guacamole_primary_ensure")
+        .with_references(ServiceFailureReferences {
+            route_id: Some(self.route_id.clone()),
+            session_id: Some(self.session_id.clone()),
+            display_id: Some(self.display_id.clone()),
+            ..ServiceFailureReferences::default()
+        })
+        .with_details(serde_json::json!({
+            "elapsedMs": elapsed_ms,
+            "retrySafe": false,
+            "recourse": "inspect_remote_view_provider",
+        }));
+        record.occurrence_id = occurrence_id.to_owned();
+        append_service_failure_best_effort(&record);
     }
 
     pub fn is_current(&self, repository: &impl ServiceStateRepository) -> bool {

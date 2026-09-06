@@ -383,7 +383,13 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
 
     if method == "POST" && path == "/api/guacamole-primary-claim" {
         let body_str = read_post_body(&mut stream, &buf, n).await;
-        let (status, value) = guacamole_primary_claim_response(&body_str).await;
+        let (status, mut value) = guacamole_primary_claim_response(&body_str).await;
+        observe_primary_response_failure(
+            &body_str,
+            authenticated_dashboard_user.as_deref().unwrap_or("unknown"),
+            &mut value,
+            append_service_failure_best_effort,
+        );
         write_json_value(&mut stream, status, value).await;
         return;
     }
@@ -1764,6 +1770,44 @@ fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCach
     CACHE.get_or_init(|| Mutex::new(DashboardServiceStatusCache::default()))
 }
 
+/// Persist one authenticated request failure before exposing its occurrence ID.
+/// A terminal occurrence is a separate owner event; repeated requests reference
+/// that same event without duplicating or restarting the failed owner.
+fn observe_primary_response_failure(
+    body: &str,
+    authenticated_actor: &str,
+    response: &mut Value,
+    observe: impl FnOnce(&ServiceFailureRecord),
+) {
+    if response["success"] != false {
+        return;
+    }
+    let input = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let record = ServiceFailureRecord::new(
+        ServiceFailureCategory::GuacamoleLoad,
+        "guacamole_primary_endpoint",
+        "ensure",
+        response["code"]
+            .as_str()
+            .unwrap_or("guacamole_primary_failed"),
+        "The authenticated dashboard could not obtain a ready Guacamole primary.",
+    )
+    .with_action("guacamole_primary_ensure")
+    .with_references(ServiceFailureReferences {
+        route_id: input["routeId"].as_str().map(str::to_owned),
+        ..ServiceFailureReferences::default()
+    })
+    .with_details(json!({
+        "authenticatedActorHash": opaque_identifier_hash(authenticated_actor),
+        "terminalOccurrenceId": response["terminalOccurrenceId"],
+        "retrySafe": false,
+        "recourse": "inspect_remote_view_provider",
+    }));
+    observe(&record);
+    response["occurrenceId"] = json!(record.occurrence_id);
+    response["retrySafe"] = json!(false);
+}
+
 async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
     let Ok(value) = serde_json::from_str::<Value>(body) else {
         return (
@@ -1797,10 +1841,12 @@ async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
                 "success": true, "granted": false, "primaryOwned": true, "activeConnectionId": id
             }),
         ),
-        Err(code) => (
+        Err(failure) => (
             "503 Service Unavailable",
             json!({
-                "success": false, "code": code, "recourse": "inspect_remote_view_provider"
+                "success": false, "code": failure.code,
+                "terminalOccurrenceId": failure.terminal_occurrence_id,
+                "recourse": "inspect_remote_view_provider"
             }),
         ),
     }
@@ -3676,6 +3722,47 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn guacamole_primary_failures_correlate_requests_without_duplicating_owner_events() {
+        let mut records = Vec::new();
+        let mut ids = Vec::new();
+        for _ in 0..2 {
+            let mut response = json!({
+                "success": false, "code": "guacamole_primary_provider_closed",
+                "terminalOccurrenceId": "owner-terminal-1",
+            });
+            observe_primary_response_failure(
+                r#"{"routeId":"route-a","token":"private-token"}"#,
+                "private-actor",
+                &mut response,
+                |record| records.push(record.clone()),
+            );
+            let record = records.last().unwrap();
+            assert_eq!(response["occurrenceId"], record.occurrence_id);
+            assert_eq!(
+                record.details.as_ref().unwrap()["terminalOccurrenceId"],
+                "owner-terminal-1"
+            );
+            assert_eq!(record.references.route_id.as_deref(), Some("route-a"));
+            assert_eq!(response["retrySafe"], false);
+            let encoded = serde_json::to_string(record).unwrap();
+            assert!(!encoded.contains("private-token"));
+            assert!(!encoded.contains("private-actor"));
+            ids.push(record.occurrence_id.clone());
+        }
+        assert_ne!(ids[0], ids[1]);
+        let (_, mut invalid) = guacamole_primary_claim_response("{}").await;
+        observe_primary_response_failure("{}", "actor", &mut invalid, |record| {
+            records.push(record.clone())
+        });
+        assert_eq!(invalid["code"], "invalid_guacamole_primary_claim");
+        assert_eq!(records.len(), 3);
+        assert!(records[2].details.as_ref().unwrap()["terminalOccurrenceId"].is_null());
+        observe_primary_response_failure("{}", "actor", &mut json!({"success":true}), |_| {
+            panic!("success recorded as failure")
+        });
+    }
 
     #[tokio::test]
     async fn guacamole_primary_endpoint_rejects_legacy_viewer_election_before_effects() {

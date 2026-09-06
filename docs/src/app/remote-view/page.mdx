@@ -88,7 +88,9 @@ elect a viewer as primary or restart a failed backend owner. Provider failures
 remain explicit until reconciled; binding invalidation closes the owned tunnel.
 The backend records primary termination in the private failure journal with its
 typed cause, elapsed lifetime and route/session/display references, even when
-no viewer remains to report the failure.
+no viewer remains to report the failure. Failed primary requests return an
+`occurrenceId` for their authenticated journal record and, when known, a
+`terminalOccurrenceId` referencing the owner event. They retain `retrySafe=false`.
 Backend startup requires the installed provider's trusted header principal and
 literal loopback Guacamole origin. Dashboard ingress allows up to 21 seconds
 for the bounded primary-start response. An uncertain startup outcome requires

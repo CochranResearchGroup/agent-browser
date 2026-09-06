@@ -1007,3 +1007,32 @@ remote-view handoff documentation checks pass. Logs are retained privately in
 `primary-terminal-custody/`. Next bind the terminal record to the endpoint's
 failed response and complete the selected custody regression before building
 and installing another candidate. No live lifetime repair is claimed here.
+
+
+## Checkpoint 20: primary responses correlate to endpoint and owner custody
+
+Each failed authenticated primary request now persists a request observation
+before returning its `occurrenceId`. The record retains the typed code, route
+reference, authenticated actor hash, reconciliation recourse and `retrySafe=false`.
+Invalid or retired admission requests also receive records. Successful responses
+do not create failures, and request credentials or raw actor names are excluded.
+
+A backend owner allocates one terminal occurrence ID before startup. Its
+terminal observer uses that ID, and responses from the failed owner include it
+as `terminalOccurrenceId`. Separate requests get separate request occurrence IDs
+while referring to the same owner event. A waiter timeout does not assert owner
+termination. Existing failed-owner admission remains sticky without restart.
+
+All thirteen focused primary tests pass. The extended lifetime test matches the
+observer's ID to its owner, and the endpoint custody test covers repeated request
+correlation, malformed admission, success exclusion and private-field exclusion.
+Workspace clippy with warnings denied, format check, docs build and remote-view
+handoff documentation checks pass. Private `primary-response-correlation/`
+retains validation logs. All five documentation surfaces describe the correlation
+fields. No new live request, candidate publication or external retry occurred.
+
+Next build and install this combined custody candidate after exact disposition
+of the retained synthetic browser, then perform one bounded isolated primary
+lifetime observation. Use the owner record to adjudicate any closure before a
+new external run. The real disconnect's cause and W3 acceptance remain unresolved;
+W2 installed custody verification and W5 delivery/final cleanup remain open.

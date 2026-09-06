@@ -6098,6 +6098,8 @@ A failed primary remains an explicit failure requiring provider reconciliation;
 reopening the durable URL does not elect another viewer as primary.
 Primary termination records retain the typed cause, elapsed lifetime and
 route/session/display references in the private failure journal.
+Failed primary responses include occurrenceId and, when known, terminalOccurrenceId
+for journal correlation; retrySafe remains false.
 
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook

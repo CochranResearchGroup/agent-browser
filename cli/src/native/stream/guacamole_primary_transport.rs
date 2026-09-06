@@ -19,20 +19,23 @@ pub(super) enum PrimaryStatus {
 }
 
 pub(super) struct PrimaryTask {
+    pub occurrence_id: String,
     status: watch::Receiver<PrimaryStatus>,
     shutdown: watch::Sender<bool>,
     task: JoinHandle<()>,
 }
 
-struct TerminalObserver<F: FnOnce(&'static str, u64)> {
+struct TerminalObserver<F: FnOnce(&str, &'static str, u64)> {
+    occurrence_id: String,
     started: Instant,
     callback: Option<F>,
 }
 
-impl<F: FnOnce(&'static str, u64)> TerminalObserver<F> {
+impl<F: FnOnce(&str, &'static str, u64)> TerminalObserver<F> {
     fn record(&mut self, code: &'static str) {
         if let Some(callback) = self.callback.take() {
             callback(
+                &self.occurrence_id,
                 code,
                 self.started.elapsed().as_millis().min(u64::MAX as u128) as u64,
             );
@@ -40,7 +43,7 @@ impl<F: FnOnce(&'static str, u64)> TerminalObserver<F> {
     }
 }
 
-impl<F: FnOnce(&'static str, u64)> Drop for TerminalObserver<F> {
+impl<F: FnOnce(&str, &'static str, u64)> Drop for TerminalObserver<F> {
     fn drop(&mut self) {
         // Cancellation and unwinding must not silently bypass terminal custody.
         // This cannot run after SIGKILL or process abort.
@@ -64,7 +67,7 @@ impl PrimaryTask {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         F: Future<Output = Result<WebSocketStream<S>, &'static str>> + Send + 'static,
     {
-        Self::connect_observed(connection, is_current, |_, _| {})
+        Self::connect_observed(connection, is_current, |_, _, _| {})
     }
 
     /// Preserve the terminal cause before publishing Closed to waiting callers.
@@ -72,7 +75,7 @@ impl PrimaryTask {
     pub fn connect_observed<S, F>(
         connection: F,
         is_current: Arc<dyn Fn() -> bool + Send + Sync>,
-        on_closed: impl FnOnce(&'static str, u64) + Send + 'static,
+        on_closed: impl FnOnce(&str, &'static str, u64) + Send + 'static,
     ) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -80,7 +83,9 @@ impl PrimaryTask {
     {
         let (status_tx, status) = watch::channel(PrimaryStatus::Starting);
         let (shutdown, shutdown_rx) = watch::channel(false);
+        let occurrence_id = uuid::Uuid::new_v4().to_string();
         let mut observer = TerminalObserver {
+            occurrence_id: occurrence_id.clone(),
             started: Instant::now(),
             callback: Some(on_closed),
         };
@@ -90,6 +95,7 @@ impl PrimaryTask {
             let _ = status_tx.send(PrimaryStatus::Closed(outcome));
         });
         Self {
+            occurrence_id,
             status,
             shutdown,
             task,
@@ -272,8 +278,10 @@ mod tests {
         let mut owner = PrimaryTask::connect_observed(
             async move { connected_rx.await.map_err(|_| "fixture_connection_closed") },
             Arc::new(move || guard.load(Ordering::SeqCst)),
-            move |code, elapsed_ms| {
-                terminal_tx.send((code, elapsed_ms)).unwrap();
+            move |occurrence_id, code, elapsed_ms| {
+                terminal_tx
+                    .send((occurrence_id.to_owned(), code, elapsed_ms))
+                    .unwrap();
             },
         );
         // Cancel an actual pending viewer wait before the first provider frame.
@@ -328,7 +336,8 @@ mod tests {
             PrimaryStatus::Closed("guacamole_primary_binding_changed")
         );
         // Closed is observable only after the terminal sink has accepted custody.
-        let (code, elapsed_ms) = terminal_rx.await.unwrap();
+        let (occurrence_id, code, elapsed_ms) = terminal_rx.await.unwrap();
+        assert_eq!(occurrence_id, owner.occurrence_id);
         assert_eq!(code, "guacamole_primary_binding_changed");
         assert!(elapsed_ms >= 5_000);
         owner.close().await;
@@ -343,7 +352,7 @@ mod tests {
         let owner = PrimaryTask::connect_observed(
             async move { Ok(client) },
             Arc::new(|| true),
-            move |code, _| {
+            move |_, code, _| {
                 terminal_tx.send(code).unwrap();
             },
         );

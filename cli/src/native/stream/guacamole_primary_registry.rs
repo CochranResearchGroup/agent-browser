@@ -13,7 +13,21 @@ struct Registry {
     owners: HashMap<(String, String), (PrimaryBinding, Arc<PrimaryTask>)>,
 }
 
-pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String, &'static str> {
+pub(super) struct PrimaryFailure {
+    pub code: &'static str,
+    pub terminal_occurrence_id: Option<String>,
+}
+
+impl From<&'static str> for PrimaryFailure {
+    fn from(code: &'static str) -> Self {
+        Self {
+            code,
+            terminal_occurrence_id: None,
+        }
+    }
+}
+
+pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String, PrimaryFailure> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     let repository = LockedServiceStateRepository::default_json()
         .map_err(|_| "guacamole_primary_state_unavailable")?;
@@ -31,16 +45,23 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
             PrimaryTask::connect_observed(
                 guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
                 is_current,
-                move |code, elapsed_ms| evidence_binding.record_terminal(code, elapsed_ms),
+                move |occurrence_id, code, elapsed_ms| {
+                    evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
+                },
             )
         })?
     };
-    task.ready().await?;
-    match task.status() {
+    let result = task.ready().await.and_then(|()| match task.status() {
         PrimaryStatus::Ready(id) => Ok(id),
         PrimaryStatus::Closed(code) => Err(code),
         PrimaryStatus::Starting => Err("guacamole_primary_not_ready"),
-    }
+    });
+    result.map_err(|code| PrimaryFailure {
+        code,
+        // A waiter timeout does not prove the owner has terminated.
+        terminal_occurrence_id: matches!(task.status(), PrimaryStatus::Closed(_))
+            .then(|| task.occurrence_id.clone()),
+    })
 }
 
 impl Registry {
