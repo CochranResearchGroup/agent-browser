@@ -1036,3 +1036,41 @@ of the retained synthetic browser, then perform one bounded isolated primary
 lifetime observation. Use the owner record to adjudicate any closure before a
 new external run. The real disconnect's cause and W3 acceptance remain unresolved;
 W2 installed custody verification and W5 delivery/final cleanup remain open.
+
+
+## Checkpoint 21: installed custody isolates handoff resolution as the trigger
+
+Candidate `b5faee54` is installed only in P158 as `0.28.0-3161b1e55833`,
+SHA-256 `3161b1e5583344b27a96ae2dd828c97f39fd5d6b80351429988fd77f6babe5aa`.
+The build, isolated installer, doctor and three launch smokes pass. Before
+publication, the preceding retained browser answered its original handle, then
+was closed through Service after exact identity/target checks. Its row is absent
+and all fourteen captured process identities are gone. This is captured-tree
+cleanup, not namespace-wide ancillary clearance. Receipts are private under
+`primary-custody-candidate/`.
+
+The fresh broker-selected synthetic browser and original handle passed. Its
+one primary startup returned HTTP 200 with an exact provider UUID. A bounded
+read-only provider/journal observation retained that UUID as connectable for
+150299 milliseconds, with no terminal record. Thus idle time alone did not
+reproduce the preceding disconnect.
+
+One supported resolution of the same live durable handoff then returned ready
+with the same browser and target identities. During that operation, the primary
+terminated. Provider readback found it absent, and the new private owner record
+reports `guacamole_primary_binding_changed`, lifetime 206720 milliseconds.
+Expected terminal records: 1; observed: 1; missing: 0; duplicates: 0. This is
+installed terminal-custody evidence. Endpoint response correlation still needs
+its selected installed check.
+
+The temporal comparison now points to handoff resolution invalidating the primary
+binding, rather than elapsed idle time. The exact changed/rejected binding field
+is not yet adjudicated; final route/display summaries retain the same identity.
+Inspect resolution's intermediate authority and route mutations before changing
+the guard. Preserve exact owner/process/display protections; do not waive the
+binding check or restart the sticky owner to hide this failure.
+
+Private `primary-custody-live/` retains open/start receipts, the 150-second
+observation ledger, same-handoff resolve intent/response, terminal record and
+adjudication. No external dispatch or startup retry occurred. The new synthetic
+browser remains retained for exact disposition; W3 and W5 remain open.
