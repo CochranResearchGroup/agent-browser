@@ -1212,3 +1212,69 @@ through Service after exact current process and synthetic target checks. Its
 row is absent and all fourteen captured process identities are gone. Receipts
 are under `primary-capacity-candidate/`. This is captured-tree disposition;
 the fixture server and other retained cleanup obligations remain explicit.
+
+## Checkpoint 26: installed resolution and shared primary continuity pass
+
+Source `d0b5f298` is installed only in P158 with binary SHA-256
+`e12e7f4da2dcdc61d1d89d0048bbef8d4d6c72d399dc27a080c8c9f18a1b0a0e`.
+The optimized build, isolated installer, doctor and three launch smokes pass.
+Private `primary-capacity-candidate/` retains the exact candidate and receipts.
+
+Fresh broker-selected synthetic acquisition, operator readiness and the original
+handle pass. One primary startup returned HTTP 200. One resolution of the same
+live durable handoff returned ready with the same browser and target. Provider
+readback retained the original connection UUID as connectable; two concurrent
+authenticated primary requests then reused that exact UUID. There are zero
+owner terminal records for the selected session. This passes the combined
+installed resolution/primary-continuity gate, not external pixels or input.
+
+The next protected readiness attempt is run
+[34017270853](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34017270853),
+dispatched once against exact source `d0b5f298` after that installed proof.
+Its bindings retain the historical pixel oracle, exact synthetic identity,
+synthetic-only capture attestation and readiness mode without a calibration
+anchor. Six protected-environment secrets were updated privately. Dispatch
+intent and readback are under `primary-capacity-live/external/`. Its initial
+readback was queued; external acceptance remains pending both clients and the
+aggregate receipt. The browser and synthetic server are intentionally retained
+for this run. No production replacement or calibration occurred.
+
+## Checkpoint 27: initial external pixels pass; takeover/concurrent transition fails
+
+Protected run 34017270853 completed with both client jobs and the aggregate
+failed, with zero runner retries or repairs. Both clients initially rendered
+the historical pixel marker exactly: SHA-256
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+All five human and seven slow-client artifact digests and sizes match their
+receipts. Direct review of the human initial screenshot shows the synthetic
+browser inside the ordinary authenticated dashboard. Initial visibility passed;
+the full W3 outcome did not.
+
+The primary terminated at 06:45:36.912 UTC, lifetime 146161 milliseconds, with
+`guacamole_primary_binding_changed`. This falls during the human controller
+takeover request and the slow client's second-page handoff resolution. The
+human then failed with `Synthetic input requires exactly one remote frame`;
+the slow client failed to embed its concurrent page. Provider readback afterward
+has no matching primary. Input, concurrent continuity and reopen remain
+unaccepted. No unchanged dispatch or sticky-owner restart followed the failure.
+
+The retained acquisition timestamps do not show overlapping pending leases at
+termination: the preceding acquisition completed at 06:45:31.402 and the next
+began at 06:45:37.755. Do not attribute this failure to nested reservations.
+Controller takeover normally changes viewer/controller authority, which the
+binding contract excludes from primary identity. The exact rejected guard
+condition remains unknown. In particular, `is_current` currently collapses
+repository-read errors and identity rejection into the same boolean; the
+repository has a one-second default lock budget. Contention is a hypothesis,
+not a confirmed cause or permission to waive guards or increase timeouts.
+
+The journal retains exactly one owner terminal occurrence and two distinct
+endpoint occurrences referencing it. This is installed owner-to-endpoint
+causal custody; the redacted external HAR does not retain response occurrence
+fields, so it is not a full external response-body correlation proof.
+
+Private `primary-capacity-live/external/` retains the two client artifacts,
+aggregate, owner/endpoint records, provider readbacks and hash verification.
+Next distinguish typed primary guard rejection causes with a local regression
+before selecting another live repair verification. The synthetic browser and
+fixture server remain retained cleanup obligations. W3 and W5 remain open.
