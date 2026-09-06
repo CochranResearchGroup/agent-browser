@@ -395,11 +395,20 @@ export function normalizeExternalDashboardEvidence({ consoleEntries = [], networ
     return {
       entryId: entry.entryId ?? `console-${index + 1}`,
       level,
+      pageId: safeEvidenceId(entry.pageId),
       message: `sha256:${textSha256}`,
       timestamp: entry.timestamp ?? null,
       messageClass: entry.messageClass ?? null,
       locationPathClass: entry.locationPathClass ?? null,
       locationUrlSha256: entry.locationUrlSha256 ?? null,
+      locationLineNumber: Number.isSafeInteger(entry.locationLineNumber) && entry.locationLineNumber >= 0
+        ? entry.locationLineNumber : null,
+      locationColumnNumber: Number.isSafeInteger(entry.locationColumnNumber) && entry.locationColumnNumber >= 0
+        ? entry.locationColumnNumber : null,
+      transportUrlSha256: /^[a-f0-9]{64}$/.test(entry.transportUrlSha256 ?? '')
+        ? entry.transportUrlSha256 : null,
+      failureReason: ['closed_before_established', 'handshake_rejected', 'connection_failed'].includes(entry.failureReason)
+        ? entry.failureReason : null,
       classification: entry.classification ?? (lifecycleNetworkEntry
         ? {
             disposition: 'expected_lifecycle_noise',
@@ -1654,21 +1663,39 @@ function redirectChainLength(request) {
   return count;
 }
 
-function attachCapture(page, capture) {
+export function attachCapture(page, capture) {
   capture.pageCounter += 1;
   const pageId = `page-${capture.pageCounter}`;
   page.on('console', (message) => {
     const messageText = message.text();
-    const locationUrl = message.location()?.url ?? '';
+    const location = message.location() ?? {};
+    const locationUrl = location.url ?? '';
+    // Retain a bounded reason and source join without recording token-bearing URLs
+    // or arbitrary console text. Classification never downgrades an error.
+    const socketUrl = /^WebSocket connection to ['"](wss?:[^'"]+)['"] failed:/i.exec(messageText)?.[1];
+    const socketFailure = socketUrl
+      ? /WebSocket is closed before the connection is established/i.test(messageText)
+        ? 'closed_before_established'
+        : /Error during WebSocket handshake/i.test(messageText)
+          ? 'handshake_rejected'
+          : 'connection_failed'
+      : null;
     capture.consoleEntries.push({
       entryId: `console-${capture.consoleEntries.length + 1}`,
       type: message.type(),
+      pageId,
+      locationLineNumber: location.lineNumber,
+      locationColumnNumber: location.columnNumber,
+      transportUrlSha256: socketUrl ? hashText(socketUrl) : null,
+      failureReason: socketFailure,
       textSha256: hashText(messageText),
       messageClass: /Failed to load resource/i.test(messageText)
         ? 'resource_load_failed'
         : /WebSocket connection.*\/api\/stream\//i.test(messageText)
           ? 'cdp_stream_websocket_handshake_failed'
-          : 'unclassified',
+          : socketUrl && safeNetworkPathClass(socketUrl) === 'guacamole_transport'
+            ? 'guacamole_websocket_failed'
+            : 'unclassified',
       locationPathClass: locationUrl ? safeNetworkPathClass(locationUrl) : null,
       locationUrlSha256: locationUrl ? hashText(locationUrl) : null,
       timestamp: new Date().toISOString(),

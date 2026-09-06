@@ -474,3 +474,22 @@ stream-enable failure and owner-counterexample scope, and W5's concrete
 production proposal, remain open. Next: resolve the selected console evidence
 gap before any changed-seam external verification, while continuing independent
 logging work. Production replacement remains pending.
+
+### Checkpoint 7 diagnostic custody repair
+
+The actual external-runner console callback now preserves page ID, numeric
+source coordinates, a hashed WebSocket endpoint and a bounded failure reason.
+Guacamole WebSocket failures are distinguishable from other console errors;
+raw console text and token-bearing URLs remain excluded. Normalization retains
+these fields through artifact projection. Every error still fails the dashboard
+oracle unless an existing, independently supported classification applies.
+This does not identify the historical hash-only error as a WebSocket failure.
+
+A regression invokes the actual capture callback and final normalizer. It failed
+on missing page attribution before the repair, then passed source coordinates,
+endpoint hashing, reason custody, normalization idempotence, unknown-error
+rejection and secret-exclusion assertions. The full external-runner,
+dashboard-oracle and external-handoff-oracle provider-free checks pass. Private
+red/green logs are retained under `custody-outcome/console-custody-repair/`.
+This closes a demonstrated evidence-loss seam, not W3's runtime failure or input
+acceptance. No external rerun or runtime publication accompanies this change.

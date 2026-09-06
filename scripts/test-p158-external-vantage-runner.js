@@ -12,6 +12,7 @@ import {
   EXTERNAL_VANTAGE_AGGREGATE_SCHEMA,
   EXTERNAL_VANTAGE_RECEIPT_SCHEMA,
   PINNED_PLAYWRIGHT_VERSION,
+  attachCapture,
   aggregateExternalVantageReceipts,
   aggregateExternalVantageDirectory,
   acquireSyntheticRemoteController,
@@ -940,6 +941,34 @@ const captureVisitSource = runnerSource.slice(
   runnerSource.indexOf('async function captureVisit'),
   runnerSource.indexOf('async function waitForExpectedPixelMarker'),
 );
+
+// Exercise the actual Playwright console callback, including redaction and final projection.
+const consoleListeners = new Map();
+const consoleCapture = { pageCounter: 0, consoleEntries: [] };
+attachCapture({ on: (event, callback) => consoleListeners.set(event, callback) }, consoleCapture);
+const socketSecretUrl = 'wss://example.test/guacamole/websocket-tunnel?token=private-token';
+const socketError = `WebSocket connection to '${socketSecretUrl}' failed: WebSocket is closed before the connection is established.`;
+consoleListeners.get('console')({
+  text: () => socketError,
+  type: () => 'error',
+  location: () => ({ url: 'https://example.test/guacamole/guacamole-common-js/all.min.js', lineNumber: 12, columnNumber: 34 }),
+});
+const capturedConsole = normalizeExternalDashboardEvidence(consoleCapture).consoleEntries[0];
+assert.equal(capturedConsole.pageId, 'page-1');
+assert.equal(capturedConsole.messageClass, 'guacamole_websocket_failed');
+assert.equal(capturedConsole.failureReason, 'closed_before_established');
+assert.equal(capturedConsole.locationLineNumber, 12);
+assert.equal(capturedConsole.locationColumnNumber, 34);
+assert.equal(capturedConsole.transportUrlSha256, campaignSha256(socketSecretUrl));
+assert.equal(capturedConsole.classification.disposition, 'actionable_failure');
+assert.doesNotMatch(JSON.stringify(consoleCapture), /private-token|wss:\/\/|connection is established/);
+assert.deepEqual(normalizeExternalDashboardEvidence({ consoleEntries: [capturedConsole] }).consoleEntries[0], capturedConsole);
+consoleListeners.get('console')({ text: () => 'unknown private payload', type: () => 'error', location: () => ({}) });
+const unknownConsole = normalizeExternalDashboardEvidence(consoleCapture).consoleEntries[1];
+assert.equal(unknownConsole.messageClass, 'unclassified');
+assert.equal(unknownConsole.failureReason, null);
+assert.equal(unknownConsole.classification.disposition, 'actionable_failure');
+assert.doesNotMatch(JSON.stringify(consoleCapture), /unknown private payload/);
 
 const dashboardEvidence = normalizeExternalDashboardEvidence({
   consoleEntries: [
