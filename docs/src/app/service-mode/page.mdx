@@ -1659,6 +1659,8 @@ subject can continue a consistent shared-local session without strict
 runtime-owner proof. Human-facing changes use the administrator, participant,
 or observer preset with revision fencing. Narrowing first drains incompatible
 occupancy, and exact tab eviction requires a persisted authorization.
+Successfully closed tabs remain as history and no longer block drain completion.
+Disconnected or otherwise nonterminal tabs still count as occupancy.
 
 Authenticated access-plan execution carries an internal route authorization
 receipt from the broker to the daemon. The daemon revalidates the capability ID

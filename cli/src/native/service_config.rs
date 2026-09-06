@@ -994,6 +994,9 @@ pub(crate) fn mutate_profile_policy_in_repository(
         let incompatible_occupancy = state
             .tabs
             .values()
+            // A successful release retains child ACL history on the closed row.
+            // Disconnection alone is not terminal and must still fence narrowing.
+            .filter(|tab| tab.lifecycle != super::service_model::TabLifecycle::Closed)
             .filter(|tab| service_tab_uses_profile(state, tab, input.profile_id))
             .filter_map(|tab| {
                 let child = tab.profile_access.as_ref()?;
@@ -1870,7 +1873,7 @@ mod tests {
                         subject_id: Some("client:fieldwork".to_string()),
                         identity_assurance: ProfileIdentityAssurance::SelfDeclared,
                         connection_instance_id: Some("connection:fieldwork".to_string()),
-                        connection_state: ProfileConnectionState::Active,
+                        connection_state: ProfileConnectionState::Disconnected,
                         permissions: vec![ProfilePermission::TabControlOwn],
                         ..ProfileChildAccess::default()
                     }),
@@ -1929,7 +1932,9 @@ mod tests {
 
         repository
             .mutate(|state| {
-                state.tabs.remove("tab:fieldwork");
+                // Runtime release retains the historical tab and its child ACL.
+                state.tabs.get_mut("tab:fieldwork").unwrap().lifecycle =
+                    super::super::service_model::TabLifecycle::Closed;
                 Ok(())
             })
             .unwrap();
@@ -1949,6 +1954,7 @@ mod tests {
         .expect("drained narrowing should commit");
         assert_eq!(completed.policy.revision, 8);
         assert_eq!(completed.policy.state, ProfileAccessPolicyState::Active);
+        assert!(store.load().unwrap().tabs.contains_key("tab:fieldwork"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }
