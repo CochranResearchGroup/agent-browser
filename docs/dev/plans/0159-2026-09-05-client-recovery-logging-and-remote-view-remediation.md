@@ -1519,3 +1519,10 @@ That controlled replacement is not retained-browser upgrade acceptance. Keep
 the historical pixel oracle and failed runs. Production replacement and W5
 delivery review remain pending; no current browser or production runtime was
 changed in this slice.
+
+The optimized candidate subsequently built successfully in 2m10s from
+`7d6ac6dc850f4df5401eac9746222f1e1d143f06`, SHA-256
+`9e6280975da3e1067d352e4237791b33df7d95ea0f5e11e810cbb69f04a23706`.
+Private `restore-bubble-candidate/` retains a frozen executable, source/hash
+receipt and build log. Installation and fixture replacement have not occurred;
+continue with exact retained-fixture disposition before publication.
