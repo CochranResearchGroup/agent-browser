@@ -10,15 +10,16 @@ every failed live attempt.
 
 ## Exact candidate and installed state
 
-Candidate source: `7d6ac6dc850f4df5401eac9746222f1e1d143f06`.
+Candidate source: `b52f748e48f578dbf31cfb2dbdaa02d727f6d69e`.
 Optimized `ci` binary SHA-256:
-`9e6280975da3e1067d352e4237791b33df7d95ea0f5e11e810cbb69f04a23706`.
-The frozen executable and build receipt are private under
-`campaigns/p159/restore-bubble-candidate/`. That binary is installed only in
-P158. Installer, exact doctor and three launch smokes passed. A newly launched
-synthetic browser reports the suppression switch in its live command line and
-accepts its original handle. The production binary remains
-`4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`.
+`ea863227191a3a7186e6b69aa68a2d29e7ef9a5cda63fea2d276dbba18a2d777`.
+The frozen executable and installation receipts are private under
+`campaigns/p159/terminal-placeholder-candidate/`. That binary is installed only
+in P158. The supported reconciliation removed the two proven terminal degraded
+viewer placeholders and preserved their failure events. Provider recovery
+completed after that changed state, with production unchanged. No fresh external
+keyboard/reopen proof has been run against this candidate. The production binary
+remains `4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7`.
 
 This optimized binary is not a final production release-profile candidate.
 The installed production metadata does not identify its source commit, so this
@@ -27,10 +28,13 @@ generation label. Current production generation is
 `0.28.0-4a92c42517e1-6121fd69672b`; retain its binary, support tree and unit
 custody as rollback inputs.
 
-The subsequent trusted-display keyboard-focus repair in Plan checkpoint 36 is
-source-verified but is not part of this installed candidate. Its Guacamole
-extension JAR and manifest must be included in the eventual delivery bundle;
-installing a CLI binary alone does not deliver that repair.
+The trusted-display keyboard-focus extension is now verified in Guacamole's
+served application. Extension source SHA-256:
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+Served application SHA-256:
+`8ddea040ddb0520f480ec5df24425a097f2beccc61e2520ed2e15314af04a4fc`.
+Its packaged JAR, manifest and loaded-extension readiness check belong in the
+eventual delivery bundle; installing a CLI alone does not deliver that repair.
 
 ## Repair composition and proof boundaries
 
@@ -50,6 +54,9 @@ composition history, not a new behavioral test or production-installation claim.
 | Primary terminal logging | `e0bccc38`, `b5faee54`, `3428a7a7` | Owner-to-endpoint occurrence linkage and typed guard causes verified at selected seams. External HAR does not prove response-body occurrence custody. |
 | Route revalidation continuity | `13706923`, `3ad29c44`, `d0b5f298` | Exact owner/route guards, pending acquisition overlay and retained capacity belong together. Local combined transition passed; historical external primary failure is not erased. |
 | Restore-bubble obstruction | `7d6ac6dc` | Focused launch regression and disposable native desktop comparison passed; installed process flag verified. External ordinary input/reopen remains a separate gate. |
+| Trusted display keyboard focus | `593cc6ee` | Cross-origin real-Chrome red/green passes; packaged extension verified loaded in P158. Actual remote keyboard acknowledgment remains unaccepted. |
+| Loaded provider extension readiness | `c636aedf` | Stale served extension fails readiness; changed reconciliation now loads the exact staged source. Container health alone is insufficient. |
+| Historical degraded close residue | `b52f748e` | 36 focused reconciliation tests pass; installed reconciliation removes exactly the two historical viewer rows with failure and lifecycle evidence retained. Identity admission guard is unchanged. |
 
 The external producer also requires the input acknowledgment, geometry and
 resized-sample corrections (`d75d79ca`, `9d825b1c`, `846ec620`, `80ef60ab`). They

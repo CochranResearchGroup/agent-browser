@@ -1694,3 +1694,41 @@ supported reconciliation removes only the proven stale rows, then reassess one
 provider apply against that changed state. W3 keyboard/reopen and W5 production
 delivery remain open. The synthetic server and quarantined provider remain
 retained obligations; no external run or production replacement was performed.
+
+## Checkpoint 39: installed reconciliation and loaded extension verified
+
+The optimized candidate from `b52f748e48f578dbf31cfb2dbdaa02d727f6d69e`
+built and is installed only in P158, SHA-256
+`ea863227191a3a7186e6b69aa68a2d29e7ef9a5cda63fea2d276dbba18a2d777`.
+Private `terminal-placeholder-candidate/` contains the frozen executable,
+validation logs/hashes, installation, process census and reconciliation ledger.
+Before installation the exact Service collection contained only the two degraded
+viewer rows without PID or endpoint; the scoped process census found no P158
+Chrome process. No additional browser closure or broad process cleanup occurred.
+
+Installed reconciliation reports zero browser rows. Exactly two
+`terminal_degraded_placeholder_removed` events identify the historical route 3
+and route 4 viewers and retain their close errors. The initial doctor failure is
+preserved: its failed checks were the quarantined provider, not a healthy-provider
+claim. One provider apply after the changed installation and reconciled state
+completed `provider_ready_ingress_pending`, including all four warm viewers and
+display access grants. Its receipt confirms production unchanged. Ingress was
+deferred under the existing reviewed binding, not republished.
+
+Direct Guacamole application readback contains the exact keyboard-focus extension
+source with SHA-256
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+The served application SHA-256 is
+`8ddea040ddb0520f480ec5df24425a097f2beccc61e2520ed2e15314af04a4fc`.
+Post-provider doctor and all three disposable launch smokes pass. This is
+installed blocker reduction and extension delivery proof; it does not establish
+remote keyboard or same-URL reopening acceptance.
+
+Next acquire a fresh attested synthetic fixture through the supported access
+plan, verify its exact primary/target and geometry, and run one changed protected
+external readiness attempt for actual keyboard acknowledgment and reopening.
+Preserve the prior failed external run and fixed independent pixel oracle.
+No fresh synthetic browser or external run was started in this checkpoint.
+W3 and W5 remain open; the synthetic server and restored warm provider are
+retained. The repair delivery inventory now names this installed composition and
+the verified extension, while the production proposal remains incomplete.
