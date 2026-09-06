@@ -388,3 +388,47 @@ The synthetic fixture HTTP server is intentionally retained for the next
 source-bound verification and remains an explicit final cleanup obligation.
 The failed URL is now terminal and will not count as successful original-handle
 recovery or be reopened without an explicit, applicable reopening decision.
+
+## Checkpoint 6: custody candidate installed and denial evidence joined
+
+Date: 2026-09-06 UTC. Progress: `outcome_progress` for selected failure custody;
+ordinary external presentation remains unaccepted.
+
+Runtime source `6efa26f1` built and installed only in the existing isolated P158
+lane as `0.28.0-7df13c4085f9`. Binary SHA-256:
+`7df13c4085f9b2bf235e0326be76d3171f83c7e6dcd9488efdc4bd7841c131c2`.
+Pre-install authority showed all 29 lifecycle records terminal with satisfied
+cleanup. The private Service backup and prior generation are retained under
+`campaigns/p159/child-candidate-install/`. Installation verified production and
+default development unchanged. Development doctor and the three disposable
+launch/URL-read/close/residue checks passed.
+
+One deliberately closed-handle admission request against that installed binary
+returned `profile_child_access_record_missing`, `child_admission`, and
+`no_effect`. This is an expected negative case, not an attempt to revive the
+terminal fixture. Response, trace job, terminal event, trace activity and journal
+each contain one matching occurrence: expected 1 each, missing 0, duplicates 0,
+conflicts 0. Actor matches response/job/event; the journal joins through request
+ID. Its code and effect certainty agree with the response and job. Receipts and
+hashes are in `closed-handle-correlation.json` beside the private raw projections.
+This accepts that selected installed failure projection only; the live
+reacquisition-preserves-grant repair verification is still required.
+
+The full Rust script passed its CDP, parallel-safe and preceding serial
+partitions, then hit a stack overflow in the long Service configuration action
+scenario. A debugger reproduced the failure during its first profile upsert.
+The test now boxes each real dispatcher future through a local test helper;
+all commands and assertions remain intact, and the default stack size is
+unchanged. The three configuration tests pass. The remaining 35 serial
+partitions then passed under the standard wrapper, with their exact filters and
+results retained in `child-custody-repair/remaining-rust-partitions.json`.
+The original failed run is preserved; this is completed partitioned validation,
+not a claim that the original uninterrupted invocation passed. The test-only
+change does not alter the installed runtime candidate.
+
+The local Guacamole login observation is not yet an external authentication
+failure: source shows that the public forward-auth route supplies the provider's
+`Remote-User` identity, while the localhost check bypassed that ingress. Treat
+that as a scope limitation and verify through the required protected public
+workflow; do not add a guessed authentication repair or repeat localhost as the
+external oracle. The synthetic HTTP server remains intentionally retained.
