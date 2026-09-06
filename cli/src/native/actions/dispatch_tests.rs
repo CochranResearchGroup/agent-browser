@@ -355,3 +355,205 @@ fn manual_seeding_lifecycle_denies_cdp_action_before_auto_launch() {
     assert!(blocker.starts_with("manual_seeding_cdp_action_denied:"));
     assert!(blocker.contains("manual-cdp-block"));
 }
+
+// Drives the same dispatcher as an original-handle request after host restart.
+// The websocket is a protocol fixture, not a Chrome process or launch substitute.
+#[tokio::test]
+async fn retained_handle_evaluate_reconnects_without_acquiring_a_tab() {
+    run_retained_handle_recovery_fixture(true).await;
+}
+
+#[tokio::test]
+async fn retained_handle_missing_target_never_creates_or_selects_a_peer() {
+    run_retained_handle_recovery_fixture(false).await;
+}
+
+async fn run_retained_handle_recovery_fixture(target_present: bool) {
+    use crate::native::runtime_lifecycle::{ManagedLaneRegistration, RuntimeLifecycleAuthority};
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let guard = EnvGuard::new(&[
+        "HOME",
+        "AGENT_BROWSER_HOME",
+        "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+    ]);
+    let home = std::env::temp_dir().join(format!(
+        "p159-retained-handle-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.as_path().to_str().unwrap());
+    // Opt into this exact disposable HOME instead of the process-shared test store.
+    guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+    guard.set(
+        "AGENT_BROWSER_HOME",
+        home.as_path().join(".agent-browser").to_str().unwrap(),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!(
+        "ws://{}/devtools/browser/retained",
+        listener.local_addr().unwrap()
+    );
+    let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let observed = methods.clone();
+    let peer = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+        while let Some(Ok(Message::Text(text))) = websocket.next().await {
+            let command: Value = serde_json::from_str(&text).unwrap();
+            let method = command["method"].as_str().unwrap();
+            observed.lock().unwrap().push(method.to_string());
+            let result = match method {
+                "Target.getTargets" => json!({"targetInfos": [{
+                    "targetId": if target_present { "retained-target" } else { "peer-target" }, "type": "page", "title": "fixture",
+                    "url": "about:blank", "attached": false
+                }]}),
+                "Target.attachToTarget" => json!({"sessionId": "retained-cdp-session"}),
+                "Runtime.evaluate" => json!({"result": {"type": "number", "value": 2}}),
+                _ => json!({}),
+            };
+            websocket
+                .send(Message::Text(
+                    json!({"id": command["id"], "result": result})
+                        .to_string()
+                        .into(),
+                ))
+                .await
+                .unwrap();
+        }
+    });
+    let repository = LockedServiceStateRepository::default_json().unwrap();
+    let identity =
+        crate::process_identity::capture_process_identity(std::process::id(), None, None).unwrap();
+    RuntimeLifecycleAuthority::new(&repository)
+        .register_managed_lane(ManagedLaneRegistration {
+            logical_browser_id: "session:retained-owner".to_string(),
+            profile_root: home.as_path().join("profile"),
+            daemon_session_route: "retained-owner".to_string(),
+            process_group_id: None,
+            process_identity: identity,
+            browser_family: "chrome".to_string(),
+            cdp_endpoint: endpoint.clone(),
+            target_ids: vec!["retained-target".to_string()],
+        })
+        .unwrap();
+    repository
+        .mutate(|service| {
+            service.browsers.insert(
+                "session:retained-owner".to_string(),
+                BrowserProcess {
+                    id: "session:retained-owner".to_string(),
+                    profile_id: Some("retained-profile".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    pid: Some(std::process::id()),
+                    cdp_endpoint: Some(endpoint.clone()),
+                    active_session_ids: vec!["retained-owner".to_string()],
+                    ..BrowserProcess::default()
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    // An exact-looking handle cannot authorize attachment to a changed endpoint.
+    repository
+        .mutate(|service| {
+            service
+                .browsers
+                .get_mut("session:retained-owner")
+                .unwrap()
+                .cdp_endpoint = Some("ws://127.0.0.1:1/foreign".to_string());
+            Ok(())
+        })
+        .unwrap();
+    let mut state = DaemonState::new();
+    state.session_id = "retained-owner".to_string();
+    let command = json!({
+        "id": "retained-evaluate", "action": "evaluate", "script": "1+1",
+        "timeoutMs": 1000, "maxReturnBytes": 256,
+        "serviceTabHandle": {"valid": true, "browserId": "session:retained-owner",
+            "sessionName": "retained-owner", "profileId": "retained-profile",
+            "targetId": "retained-target", "tabId": "target:retained-target"}
+    });
+    let rejected = execute_command(&command, &mut state).await;
+    assert!(
+        rejected["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("service_tab_recovery_identity_mismatch:"),
+        "{rejected}"
+    );
+    assert!(state.browser.is_none());
+    assert!(methods.lock().unwrap().is_empty());
+    repository
+        .mutate(|service| {
+            service
+                .browsers
+                .get_mut("session:retained-owner")
+                .unwrap()
+                .cdp_endpoint = Some(endpoint.clone());
+            Ok(())
+        })
+        .unwrap();
+    let mut unauthorized = command.clone();
+    unauthorized["serviceTabHandle"]["profileAccess"] = json!({"subjectId": "foreign"});
+    let rejected = execute_command(&unauthorized, &mut state).await;
+    assert_eq!(
+        rejected["error"],
+        "profile child access requires a service-generated connection"
+    );
+    assert!(state.browser.is_none());
+    assert!(methods.lock().unwrap().is_empty());
+    let response = execute_command(
+        &json!({
+            "id": "retained-evaluate", "action": "evaluate", "script": "1+1",
+            "timeoutMs": 1000, "maxReturnBytes": 256,
+            "serviceTabHandle": {"valid": true, "browserId": "session:retained-owner",
+                "sessionName": "retained-owner", "profileId": "retained-profile",
+                "targetId": "retained-target", "tabId": "target:retained-target"}
+        }),
+        &mut state,
+    )
+    .await;
+    peer.abort();
+    if !target_present {
+        assert_eq!(response["success"], false, "{response}");
+        let failure = crate::native::service_failure::classify_service_failure(
+            response["error"].as_str().unwrap(),
+        );
+        assert_eq!(failure.code, "service_tab_recovery_target_missing");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        assert!(failure.executable_next_action.is_some());
+        assert!(state.browser.is_none());
+        assert_eq!(*methods.lock().unwrap(), vec!["Target.getTargets"]);
+        std::fs::remove_dir_all(home).unwrap();
+        return;
+    }
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(response["data"]["result"], 2, "{response}");
+    let commands = methods.lock().unwrap();
+    assert!(commands
+        .iter()
+        .any(|method| method == "Target.attachToTarget"));
+    assert!(!commands.iter().any(|method| matches!(
+        method.as_str(),
+        "Target.createTarget" | "Browser.close" | "Target.closeTarget"
+    )));
+    assert!(!state
+        .browser
+        .as_ref()
+        .unwrap()
+        .owns_launched_browser_process());
+    drop(commands);
+    drop(state);
+    std::fs::remove_dir_all(home).unwrap();
+}

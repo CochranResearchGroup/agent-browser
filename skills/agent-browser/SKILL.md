@@ -460,6 +460,13 @@ acquisition. When a route-pool entry omits `displayAllocationId`, the derived
 allocation identity follows the route rather than its reusable X11 display
 number, preventing released historical display rows from capturing a new
 route checkout.
+
+After runtime-host interruption, bounded `evaluate`, `probe`, and permitted
+`cdp_attach` reconnect the exact original handle's retained target after child,
+owner, process and endpoint checks. Do not reacquire a tab to mask recovery
+failure. Missing original targets never fall back to a peer or create a tab.
+For `service_tab_recovery_*`, inspect the Service trace and returned recourse
+before retrying; a failed attachment may have uncertain effects.
 Repeated opens on the same route reuse a live same-origin target when one is
 available and return `tabAcquisitionDecision` plus `duplicateTargetCleanup`
 evidence so one-liners do not accumulate stale duplicate tabs.

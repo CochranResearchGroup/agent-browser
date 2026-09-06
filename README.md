@@ -1784,6 +1784,14 @@ can then return `reuse_existing_browser` with `browserId` and `sessionName`
 route hints. `external_observed` profiles are still process evidence only and
 are not reusable identity lanes.
 
+After a runtime-host interruption, reuse the original `serviceTabHandle` for
+bounded `evaluate`, `probe`, or permitted `cdp_attach`. The service reconnects
+the exact retained target after validating child access, runtime ownership,
+process identity, and endpoint identity. It does not acquire another tab or
+substitute a peer when the original target is missing. A typed
+`service_tab_recovery_*` failure directs the client to inspect the Service trace
+before retrying; attachment failures retain uncertain effect status.
+
 When a client has explicit auth evidence from a bounded probe, it can attach
 freshness metadata to the same registration call. `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt` generate

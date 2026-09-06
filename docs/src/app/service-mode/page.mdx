@@ -15,6 +15,15 @@ An oversized decision is explicitly marked
 
 ## Forensic failure journal
 
+After a runtime-host interruption, bounded <code>evaluate</code>,
+<code>probe</code>, and permitted <code>cdp_attach</code> requests can reuse the
+original <code>serviceTabHandle</code>. The service validates child access,
+runtime ownership, process identity, and endpoint identity before reconnecting
+the exact retained target. It never creates a tab or substitutes a peer when
+that target is missing. A <code>service_tab_recovery_*</code> failure includes
+typed recourse to inspect the Service trace before retrying. Attachment failures
+remain effect-uncertain because a CDP attachment may already have occurred.
+
 Access-plan permission and occupancy denials take priority over freshness or
 seeding advice. Follow the blocking policy or occupancy inspection action in
 `decision.recommendedAction` and the exact `profileAccess.decision.nextAction`.

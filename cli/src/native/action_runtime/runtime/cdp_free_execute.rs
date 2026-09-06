@@ -256,6 +256,7 @@ pub(crate) async fn handle_cdp_attach(
     state: &mut DaemonState,
 ) -> Result<Value, String> {
     validate_cdp_attach_request(cmd, state)?;
+    crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
     let browser_id = service_tab_handle_browser_id(state);
     let mgr = state.browser.as_mut().ok_or_else(|| {
         "Cannot attach CDP: target browser session is not running; request a service tab first"

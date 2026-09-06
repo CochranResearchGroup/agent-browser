@@ -83,6 +83,47 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    // These recovery guards run after child authorization and before target
+    // attachment. Transport/bootstrap failures may already have attached CDP;
+    // keep them uncertain rather than declaring the whole recovery effect-free.
+    if let Some((code, _)) = error.split_once(':') {
+        if matches!(
+            code,
+            "service_tab_recovery_owner_missing"
+                | "service_tab_recovery_identity_mismatch"
+                | "service_tab_recovery_process_unproven"
+                | "service_tab_recovery_endpoint_unproven"
+                | "service_tab_recovery_target_missing"
+                | "service_tab_recovery_attach_failed"
+        ) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::LifecycleOwner,
+                phase: ServiceFailurePhase::ChildAdmission,
+                effect_state: if code == "service_tab_recovery_attach_failed" {
+                    ServiceEffectState::EffectUncertain
+                } else {
+                    ServiceEffectState::NoEffect
+                },
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "inspect_service_trace".to_string(),
+                executable_next_action: Some(serde_json::json!({
+                    "action": "service_trace", "executable": true,
+                    "request": {"action": "service_trace"}
+                })),
+                safe_next_actions: vec![
+                    "inspect_service_trace".to_string(),
+                    "inspect_profile_recovery_plan".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "replace_original_service_tab".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
     // These exact compatibility messages originate from the child authority
     // guard before child reconnect or the guarded browser operation. Never
     // infer no-effect from a substring or an unrecognized policy reason.
@@ -504,6 +545,41 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn retained_recovery_failures_keep_guard_and_attachment_certainty_distinct() {
+        for code in [
+            "service_tab_recovery_owner_missing",
+            "service_tab_recovery_identity_mismatch",
+            "service_tab_recovery_process_unproven",
+            "service_tab_recovery_endpoint_unproven",
+            "service_tab_recovery_target_missing",
+            "service_tab_recovery_attach_failed",
+        ] {
+            let failure = classify_service_failure(&format!("{code}: recorded cause"));
+            assert_eq!(failure.code, code);
+            assert_eq!(failure.axis, ServiceFailureAxis::LifecycleOwner);
+            assert_eq!(failure.phase, ServiceFailurePhase::ChildAdmission);
+            assert_eq!(
+                failure.effect_state,
+                if code.ends_with("attach_failed") {
+                    ServiceEffectState::EffectUncertain
+                } else {
+                    ServiceEffectState::NoEffect
+                }
+            );
+            assert!(failure.executable_next_action.is_some());
+            assert_eq!(
+                failure.retry_disposition,
+                ServiceRetryDisposition::InspectBeforeRetry
+            );
+        }
+        assert_eq!(
+            classify_service_failure("wrapped service_tab_recovery_owner_missing: unknown")
+                .effect_state,
+            ServiceEffectState::EffectUncertain
+        );
+    }
 
     #[test]
     fn child_authority_denials_preserve_cause_without_claiming_unknown_errors_are_effect_free() {

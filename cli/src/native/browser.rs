@@ -698,6 +698,57 @@ impl BrowserManager {
         Self::connect_cdp_inner(url, false, None).await
     }
 
+    /// Reconnect only the already-authorized retained target. Unlike ordinary
+    /// discovery, this path never creates a tab or falls back to a peer target.
+    pub(crate) async fn connect_retained_service_tab(
+        url: &str,
+        target_id: &str,
+    ) -> Result<Self, String> {
+        let ws_url = resolve_cdp_url(url).await?;
+        let client = Arc::new(CdpClient::connect(&ws_url).await?);
+        let result: GetTargetsResult = client
+            .send_command_typed("Target.getTargets", &json!({}), None)
+            .await?;
+        let target = result
+            .target_infos
+            .into_iter()
+            .find(|target| target.target_id == target_id && should_track_target(target))
+            .ok_or_else(|| {
+                "service_tab_recovery_target_missing: original target is absent".to_string()
+            })?;
+        let attached: AttachToTargetResult = client
+            .send_command_typed(
+                "Target.attachToTarget",
+                &AttachToTargetParams {
+                    target_id: target.target_id.clone(),
+                    flatten: true,
+                },
+                None,
+            )
+            .await?;
+        let manager = Self {
+            client,
+            browser_process: None,
+            ws_url,
+            pages: vec![PageInfo {
+                target_id: target.target_id,
+                session_id: attached.session_id.clone(),
+                url: target.url,
+                title: target.title,
+                target_type: target.target_type,
+            }],
+            active_page_index: 0,
+            default_timeout_ms: 25_000,
+            download_path: None,
+            ignore_https_errors: false,
+            visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
+        };
+        manager.enable_domains(&attached.session_id).await?;
+        Ok(manager)
+    }
+
     pub async fn connect_cdp_for_handoff(
         url: &str,
         preferred_target_id: Option<&str>,
