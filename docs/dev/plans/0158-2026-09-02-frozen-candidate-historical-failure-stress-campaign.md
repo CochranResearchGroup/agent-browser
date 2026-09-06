@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_journal_interruption_loss_reproduced`
+Execution state: `priority_journal_interruption_recovery_verified`
 
 Lane: P157
 
@@ -32,27 +32,28 @@ P156, P157]
 
 Overlaps: [P144]
 
-## Current Priority Reconciliation At a874131e
+## Current Priority Reconciliation
 
 The operator requested handoff reconciliation before execution. Current repo
 checkpoints supersede the handoff's historical runtime snapshot and the older
-next-action sequence below. This revision is planning alignment only: no new
-runtime measurement, repair, installation, restart, or calibration is performed.
+next-action sequence below. The reconciliation preceded execution; subsequent
+bounded repairs and their evidence are recorded in the checkpoints below.
 
 | Priority | Recorded outcome evidence | Remaining acceptance gap |
 | --- | --- | --- |
 | Usable authenticated Profile leases and ACLs | Independent registered-capability clients acquired their own restricted Profiles, including after a disposable host restart with browsers closed. Cross-profile denial now retains the exact denied decision and actionable recourse in HTTP, MCP, and journal. | Revocation, rejoin, live-browser restart, actual identity-unproven recovery, and top-level access-plan advice remain open. |
-| Durable postmortem logging | Normal-operation joins pass focused checks. A controlled journal-lock and process-interruption probe proves one lost rejection: expected 1, observed 0, missing 1, duplicates 0, conflicts 0. | Durable custody before response and idempotent restart recovery are the immediate product defect. Dashboard projection, wider failure coverage, and reboot durability remain open. |
+| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
 | Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
 
-Next execute one bounded **product logging repair**: persist pending evidence
-before response, recover it idempotently, and bound journal contention waits.
-Verify the existing lock/interruption seam and append-before-retirement seam
-with exact missing/duplicate/conflicting counts. Preserve the failed epoch.
-This is the existing one-repair/verification cycle, not a reset of attempt bounds.
+The bounded product logging repair and its two distinct interruption checks
+are complete; preserve the original failed epoch and do not repeat this cycle.
+Next select the authenticated policy-revocation and rejoin diagnostic with two
+independent synthetic clients and durable logging attached. Establish exact
+expected permission and effect outcomes before changing the fixture policy.
 
-Then select the remaining authenticated lifecycle slice with logging attached,
-and the ordinary external synthetic same-URL slice through the protected manual
+Retain live-browser restart and actual identity-unproven recovery as explicit
+remaining lifecycle criteria, and the ordinary external synthetic same-URL
+slice through the protected manual
 lane. Infrastructure recovery is justified only by a selected outcome's actual
 dependency. Calibration measurement-tooling repairs are deferred. Checkpoint
 each outcome or blocker and within 60 minutes; do not expand a failure into an
@@ -6209,3 +6210,64 @@ request or calibration is authorized by the result. Full ACL lifecycle,
 identity-unproven recovery, top-level access-plan advice, missing A-family
 producers, dashboard logging projection, reboot durability, ordinary external
 pixels/input, P/Q frame behavior, W6, and W7–W10 remain open.
+
+
+### Priority Logging: Pending Custody And Restart Recovery Verified
+
+Source 2fae5f5a repairs the reproduced in-memory delivery interval. The journal
+owner now stages private record files, syncs their contents and directory entry
+on Unix, and only then returns to response construction. Journal projection
+uses one nonblocking lock attempt and a bounded batch; queue pressure retains
+disk custody. Daemon startup and background ticks recover pending records
+without resubmitting the failed operation. Recovery checks occurrence identity
+and content under the journal lock, syncs the journal before retiring pending
+files, and separates torn tails from later valid rows. Corrupt or conflicting
+pending evidence is retained with an explicit recovery failure. Readback adds
+pendingRecordCount; write and delivery counters remain process-local. A custody
+persistence failure is explicitly logged and never establishes durable custody.
+
+Two disposable-host checks use candidate SHA-256
+5063b91aac03f5f7a8c63dd72d19a54e2bed2ffb1243204fc71114095f1c5ce2:
+
+1. With an observer-held journal lock, one HTTP missing_action rejection reaches
+   the client and its exact pending record is already present. The observer
+   fsyncs its ledger, verifies the spawned process executable and start identity,
+   and SIGKILLs that host. After lock release, a fresh host using the same fixture
+   home and a fresh socket directory recovers the original occurrence without
+   another request. Expected 1, observed 1, missing 0, duplicates 0, conflicts 0;
+   pending publications are retired.
+2. A distinct fixture stages the same response-before-projection state. While
+   retaining the journal lock, the observer appends and fsyncs the exact pending
+   record to model the append-before-retirement cut. It then kills the exact
+   host. Restart preserves exactly one identical journal occurrence and retires
+   pending custody. Expected 1, observed 1, missing 0, duplicates 0, conflicts 0.
+   This is an observer-constructed filesystem seam, not a claim that a timed kill
+   intercepted the product worker between its append and retirement instructions.
+
+Both episodes have expected/observed jobs 0, browsers/sessions/tabs 0, SIGKILL
+exit -9, restart-host cleanup exit 0, and no remaining fixture processes at
+readback. Private campaign directories journal-custody-bj175178 and
+journal-custody-6x48t_o7 retain exact sources, fsynced ledgers, copied journal and
+state readbacks, and verified artifact hashes. The original failed directory
+journal-interruption-7sqtcob8 remains intact. No installed P158, provider,
+production, or default-development runtime was replaced, restarted, or cleaned;
+no browser or external workflow was started.
+
+Validation: 11 focused Rust journal tests pass, including actual filesystem
+contention, pending recovery, duplicate prevention, torn-line preservation,
+conflict retention, permissions, and explicit staging failure. Existing bounded
+dispatcher tests remain green. Workspace clippy with denied warnings, format
+check, journal/dashboard contract checks, optimized candidate build, and docs
+build pass. The contract check's old literal assertion requiring a blocking
+read lock was removed in favor of the Rust contention behavior test. The docs
+build reports the existing multiple-lockfile workspace-root warning. No full
+Rust suite, full campaign, host reboot, power-loss, or non-Unix runtime proof
+is claimed.
+
+Classification: outcome_progress for durable custody across the reproduced
+process-interruption boundary. The one repair/verification cycle is complete.
+Next is a bounded authenticated policy-revocation and rejoin diagnostic with
+logging attached. Full ACL lifecycle, live-browser restart, identity-unproven
+recovery, top-level access-plan advice, missing A-family producers, dashboard
+projection, reboot durability, ordinary external pixels/input, P/Q behavior,
+W6 and W7–W10 remain open. Calibration remains deferred.
