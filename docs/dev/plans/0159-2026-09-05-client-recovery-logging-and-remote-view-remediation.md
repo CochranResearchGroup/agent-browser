@@ -4,7 +4,7 @@ Date: 2026-09-05
 
 State: OPEN
 
-Execution state: `retained_handle_repair_active`
+Execution state: `recovery_verified_logging_and_presentation_active`
 
 Lane: P157
 
@@ -147,3 +147,57 @@ lifecycles. No new live attempt has run. The plan supersedes discussion-only
 successor instructions while preserving P158 history and action-specific gates.
 Next: trace handle-bearing dispatch to attachment, add the smallest real-seam
 regression and repair D01/D02 before the one source-bound live verification.
+
+## Checkpoint 1: original-handle recovery verified
+
+Date: 2026-09-06 UTC. Progress: `outcome_progress`.
+Transition: `retained_handle_repair_active -> recovery_verified_logging_and_presentation_active`.
+
+Source repair `894076b42bdbc013a5db8601f8ffb983218d80f8` reconnects only the
+original target after child authorization, exact owner/process/endpoint checks,
+and a second ownership fence. Missing targets do not select a peer or create a
+tab. Recovery failures have typed recourse and preserve uncertain attachment
+effects. Help, README, repository skill, service docs and inline comments changed
+with the implementation.
+
+The real-dispatch regression reproduced the original rejection before repair.
+Both recovery/absent-target tests then passed; the dispatch module passed 13
+cases, failure recourse 14, and bounded evaluation one. Workspace clippy with
+warnings denied, format check, docs build and remote-view handoff documentation
+checks passed. These are focused checks, not a full-suite claim.
+
+The one source-bound disposable repair verification passed: two authenticated
+clients evaluated through their ORIGINAL handles before and after supervisor
+SIGKILL; both original Chrome process identities remained unchanged. No extra
+acquisition masked recovery. The foreign-client attempt failed with
+`profile_child_subject_mismatch`, `child_admission`, `no_effect`, and own-handle
+recourse. Its response, trace job, terminal event and journal join each contain
+one expected occurrence: missing 0, duplicates 0, conflicts 0. Actor provenance
+matches across response/job/event; the journal joins it by request ID rather
+than embedding the actor. This is selected-denial evidence, not universal logging
+coverage or live negative-owner proof.
+
+Private source-bound evidence: operator state `campaigns/p159/retained-repair-HvlahC/`,
+including `evidence-manifest.json`, ledger, probe source, trace, journal, snapshots
+and cleanup receipt. Candidate SHA-256:
+`6439f9f866e7516ac1b29d2fd9e02d8b5f934ea3700d6fbeddaa87907b0e4602`.
+The top-level evidence scan found no raw capability matches. This candidate ran
+in a disposable supervisor; it was not published to the installed development
+runtime or production.
+
+Cleanup separately proves zero Service browsers/sessions/tabs, host exit 0,
+and eight captured ancillary identities terminal or absent through exact
+identity/pidfd accounting. A subsequent readable-process environment scan found
+zero fixture HOME matches; inaccessible foreign environments are not a global
+process absence proof. The inherited P158 ancillary obligation is separately
+accounted for by `campaigns/p159/inherited-residue-cleanup-v4.jsonl`; retain the
+preceding partial receipts. No broad process cleanup was used.
+
+Two additional journal failures preceded the interruption: automatic
+`stream_enable` reported already-enabled state as a generic uncertain failure,
+with unknown actor. They do not falsify the retained-handle outcome, but remain
+an explicit W2 logging gap to trace and adjudicate. D01's live loop is complete;
+do not repeat it. Genuine owner/identity counterexamples and comprehensive W1/W2
+acceptance still require scope review. W3 ordinary external pixels/input/reopen
+and W5 delivery remain unaccepted. Next: inspect the recorded presentation
+failures and the duplicate stream-enable caller before selecting the next repair.
