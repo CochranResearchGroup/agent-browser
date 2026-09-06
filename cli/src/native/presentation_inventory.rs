@@ -257,7 +257,7 @@ impl PresentationProviderInventory {
             .remote_view_routes
             .iter()
             .filter(|(_, route)| {
-                route.state == "ready"
+                (route.state == "ready" || has_current_acquisition_reservation(state, route))
                     && route
                         .browser_id
                         .as_ref()
@@ -280,7 +280,8 @@ impl PresentationProviderInventory {
             .route_pool
             .iter()
             .filter(|(_, entry)| {
-                entry.state == "checked_out" && checked_out_routes.contains_key(&entry.route_id)
+                matches!(entry.state.as_str(), "checked_out" | "pending")
+                    && checked_out_routes.contains_key(&entry.route_id)
             })
             .map(|(id, entry)| (id.clone(), entry.clone()))
             .collect::<BTreeMap<_, _>>();
@@ -332,6 +333,7 @@ impl PresentationProviderInventory {
                 ..DisplayAllocation::default()
             };
             if let Some(existing) = checked_out_displays.get(&display_id) {
+                display.state = existing.state.clone();
                 display.owner_browser_id = existing.owner_browser_id.clone();
                 display.owner_session_id = existing.owner_session_id.clone();
                 display.profile_id = existing.profile_id.clone();
@@ -366,6 +368,7 @@ impl PresentationProviderInventory {
                 ..RemoteViewRoute::default()
             };
             if let Some(existing) = checked_out_routes.get(&route_id) {
+                route.state = existing.state.clone();
                 route.browser_id = existing.browser_id.clone();
                 route.session_id = existing.session_id.clone();
                 route.route_source = existing.route_source.clone();
@@ -429,6 +432,47 @@ impl PresentationProviderInventory {
         state.presentation_capacity = Some(capacity);
         Ok(())
     }
+}
+
+/// Inventory describes provider availability; it must not erase an active
+/// Service reservation or promote that reservation to ready on a read.
+fn has_current_acquisition_reservation(state: &ServiceState, route: &RemoteViewRoute) -> bool {
+    if route.state != "pending"
+        || route.last_provider_event.as_deref() != Some("remote_view_open_acquisition_pending")
+    {
+        return false;
+    }
+    let Some(lease_id) = route
+        .readiness
+        .as_ref()
+        .filter(|value| value["component"] == "remote_view_open_acquisition")
+        .and_then(|value| value["leaseId"].as_str())
+    else {
+        return false;
+    };
+    state
+        .remote_view_acquisition_leases
+        .get(lease_id)
+        .is_some_and(|lease| {
+            lease.id == lease_id
+                && lease.state == "pending"
+                && matches!(
+                    lease.phase.as_str(),
+                    "reserved"
+                        | "display_ready"
+                        | "browser_attached"
+                        | "tab_acquired"
+                        | "proof_ready"
+                )
+                && lease.boot_epoch.is_some()
+                && lease.boot_epoch == crate::process_identity::current_boot_epoch()
+                && lease.route_id == route.id
+                && Some(&lease.browser_id) == route.browser_id.as_ref()
+                && Some(&lease.session_id) == route.session_id.as_ref()
+                && Some(&lease.display_allocation_id) == route.display_allocation_id.as_ref()
+                && lease.completed_at.is_none()
+                && lease.failed_at.is_none()
+        })
 }
 
 fn has_provider_inventory_readiness(readiness: Option<&serde_json::Value>) -> bool {

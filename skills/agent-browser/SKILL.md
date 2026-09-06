@@ -2966,6 +2966,8 @@ or sent as operator handoffs; use the same durable remote-view URL.
 During same-handoff revalidation, an existing primary can remain connected only
 when the active acquisition proves its previous ready route and exact browser,
 owner, process and display binding. A pending route cannot start a new primary.
+Provider inventory refresh preserves a current acquisition reservation and its
+pending state; provider availability alone does not make it ready.
 
 A rejected key is discarded and reported through the existing bounded recovery
 flow. Recovery may request a fresh key from the same healthy primary. It cannot

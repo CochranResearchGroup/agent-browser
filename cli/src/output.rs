@@ -6094,6 +6094,7 @@ Simultaneous Guacamole viewers share a backend-owned primary connection bound
 to the exact browser and display. Closing a viewer preserves that primary.
 Same-handoff revalidation preserves an existing primary only with exact retained
 acquisition proof; pending routes cannot start new primaries.
+Provider inventory refresh preserves current reservations as pending.
 Dashboard ingress allows up to 21 seconds for the primary-start response;
 reconcile an uncertain startup outcome before another attempt.
 A failed primary remains an explicit failure requiring provider reconciliation;

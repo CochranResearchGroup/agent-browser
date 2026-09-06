@@ -336,13 +336,24 @@ mod tests {
             std::env::temp_dir().join(format!("primary-reservation-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
         let store = JsonServiceStateStore::new(root.join("state.json"));
-        store.save(&repository().0).unwrap();
+        let mut initial = repository().0;
+        initial.route_pool.insert(
+            "slot".into(),
+            serde_json::from_value(json!({
+                "id":"slot", "routeId":"route", "state":"checked_out",
+                "provider":"rdp_gateway", "providerMode":"simultaneous_view",
+                "currentRouteAllocationId":"route"
+            }))
+            .unwrap(),
+        );
+        store.save(&initial).unwrap();
         let live = LockedServiceStateRepository::new(store);
         let binding = PrimaryBinding::resolve(&live, "route", "1").unwrap();
         let plan: RemoteViewAcquisitionPlan = serde_json::from_value(json!({
             "mode":"reuse", "reusePolicy":"reuse_existing", "tabPolicy":"reuse_existing",
             "requestedBrowserHost":"remote_headed", "requestedViewStreamProvider":"rdp_gateway",
             "requestedControlInput":"manual_attached_desktop", "selectedRouteId":"route",
+            "selectedRoutePoolEntryId":"slot",
             "displayAllocationId":"display", "displayName":":10",
             "routeBinding": {
                 "routeId":"route", "displayAllocationId":"display", "displayName":":10",
@@ -421,6 +432,67 @@ mod tests {
                 _ => unreachable!(),
             }
             assert!(!binding.is_current(&changed), "{case}");
+        }
+        // Installed repository reads overlay provider inventory after loading
+        // durable reservations. Exercise that boundary, not only the raw store.
+        let inventory = crate::native::presentation_inventory::PresentationProviderInventory::from_json(
+            &json!({
+                "schemaVersion":"agent-browser.development-presentation-inventory.v1",
+                "environment":"development",
+                "routes":[{
+                    "routeId":"route", "slotId":"slot", "connectionId":"1",
+                    "displayReservationId":"display", "displayName":":10", "state":"ready",
+                    "routeDescriptor":{"localEmbedUrl":"http://127.0.0.1:8193/guacamole/#/client/1"}
+                }]
+            }).to_string()
+        ).unwrap();
+        let config = crate::native::presentation_capacity::PresentationCapacityConfig {
+            warm_minimum: 1,
+            hard_maximum: 2,
+            human_priority_reserve: 1,
+            recovery_reserve: 1,
+            max_queue_depth: 64,
+        };
+        let mut overlaid = pending.clone();
+        inventory
+            .overlay_service_state(&mut overlaid, config.clone())
+            .unwrap();
+        let overlaid = Repository(overlaid);
+        assert!(
+            binding.is_current(&overlaid),
+            "provider inventory erased retained reservation custody"
+        );
+        assert!(PrimaryBinding::resolve(&overlaid, "route", "1").is_err());
+        assert_eq!(overlaid.0.remote_view_routes["route"].state, "pending");
+        assert_eq!(overlaid.0.display_allocations["display"].state, "pending");
+        assert_eq!(overlaid.0.route_pool["slot"].state, "pending");
+        for case in [
+            "missing",
+            "failed",
+            "stale_boot",
+            "foreign_session",
+            "terminal_phase",
+        ] {
+            let mut changed = pending.clone();
+            let current = changed
+                .remote_view_acquisition_leases
+                .get_mut(&lease.id)
+                .unwrap();
+            match case {
+                "missing" => changed.remote_view_acquisition_leases.clear(),
+                "failed" => current.failed_at = Some("2026-09-06T06:00:01Z".into()),
+                "stale_boot" => current.boot_epoch = Some("foreign-boot".into()),
+                "foreign_session" => current.session_id = "foreign".into(),
+                "terminal_phase" => current.phase = "rollback_incomplete".into(),
+                _ => unreachable!(),
+            }
+            inventory
+                .overlay_service_state(&mut changed, config.clone())
+                .unwrap();
+            assert!(
+                !binding.is_current(&Repository(changed)),
+                "overlay admitted {case} acquisition"
+            );
         }
         std::fs::remove_dir_all(root).unwrap();
     }

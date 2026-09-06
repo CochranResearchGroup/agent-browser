@@ -1110,3 +1110,62 @@ repair. Next build and install after exact fixture disposition, then verify the
 same primary UUID survives supported same-handoff resolution on the installed
 candidate. W3 external input/reopen evidence, selected installed W2 correlation,
 and W5 production delivery/final cleanup remain open.
+
+## Checkpoint 23: installed reservation repair fails at the inventory boundary
+
+Source `13706923` was built and installed only in P158 as
+`0.28.0-f9d0f9092662`, binary SHA-256
+`f9d0f90926620f747225a5aecf28a6970163887c8b9bd2ed05942283baeded38`.
+Private `primary-continuity-candidate/` retains installation, doctor and three
+successful launch smokes, plus the preceding fixture's exact disposition.
+
+Private `primary-continuity-live/` proves one authenticated malformed primary
+request returned HTTP 400 with exactly one matching journal occurrence:
+expected 1, observed 1, missing 0, duplicates 0. This accepts the selected
+installed admission-correlation check, not every W2 failure path.
+
+The new synthetic browser's primary startup succeeded. One same-handoff
+resolution returned ready with the same browser and target, but the owner
+terminated with `guacamole_primary_binding_changed` after 14285 milliseconds.
+The single terminal record falls between acquisition reservation and completion.
+The provider subsequently reported no matching connection. The installed
+continuity requirement therefore failed despite the preceding focused test pass.
+No new external dispatch or sticky-primary restart followed this failure.
+
+Source inspection found that JSON repository reads apply provider inventory
+after loading durable state. That overlay preserves browser/session custody
+only for ready routes; it rebuilds pending reservations as unowned ready routes.
+The previous regression exercised the actual reservation but omitted this
+installed read boundary. Extend that regression with the real inventory overlay
+before accepting another repair. This is a source-backed explanation to test,
+not yet a passing installed outcome. W3 and W5 remain open.
+
+## Checkpoint 24: inventory overlay regression and reservation repair
+
+The extended existing primary regression invoked the real acquisition and then
+the real provider inventory overlay. Before repair it failed in 0.02 seconds
+with `provider inventory erased retained reservation custody`. The initial
+invocation with an incomplete exact test name selected zero tests and is not
+counted as evidence; the corrected filtered invocation executed one failing test.
+
+Inventory refresh now preserves route ownership and pending state for an active
+current-boot acquisition whose browser/session/route/display and readiness
+locator match exactly. Terminal timestamps and unsupported phases reject that
+proof. The display and occupied pool slot retain their pending states as well.
+Provider availability cannot promote the reservation to ready. New-primary
+admission and the existing primary's owner/process/display guards remain intact.
+
+The final focused primary run passes all fourteen tests, including the actual
+reservation/overlay boundary, pending slot preservation and missing, failed,
+stale-boot, foreign-session and terminal-phase lease rejection. All eight
+inventory tests, workspace clippy with warnings denied, format check, docs build
+and handoff documentation check pass. All five guidance surfaces are updated.
+Private `primary-inventory-reservation/` retains validation receipts.
+
+A fresh read through the retained synthetic browser's original handle still
+returns the expected fixture and ready input marker after the primary failure.
+That isolates the observed failure to presentation continuity; it does not prove
+remote-view pixels or input. This repair is source-verified only. Next dispose
+of that exact fixture, publish the isolated candidate, and verify the same
+primary UUID survives same-handoff resolution before any external readiness
+attempt. W3 external input/reopen and W5 delivery/final cleanup remain open.
