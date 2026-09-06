@@ -5636,6 +5636,65 @@ mod tests {
     }
 
     #[test]
+    fn occupied_profile_explains_unavailable_browser_identity_cause() {
+        let mut state = ServiceState::default();
+        state.profiles.insert(
+            "synthetic-profile".into(),
+            BrowserProfile {
+                id: "synthetic-profile".into(),
+                ..BrowserProfile::default()
+            },
+        );
+        let mut browser = BrowserProcess {
+            id: "synthetic-browser".into(),
+            profile_id: Some("synthetic-profile".into()),
+            health: BrowserHealth::Degraded,
+            ..BrowserProcess::default()
+        };
+        crate::native::service_health::apply_browser_health_observation(
+            &mut browser,
+            Some(&json!({
+                "failureClass": "browser_process_identity_ambiguous",
+                "processIdentityAssessmentReason": "process_observation_failed",
+                "processObservationFailure": "linux_proc_exe_permission_denied; process_observer_timeout"
+            })),
+        );
+        state.browsers.insert(browser.id.clone(), browser);
+        state.sessions.insert(
+            "synthetic-session".into(),
+            BrowserSession {
+                id: "synthetic-session".into(),
+                profile_id: Some("synthetic-profile".into()),
+                browser_ids: vec!["synthetic-browser".into()],
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("synthetic-profile".into()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        let reuse = &plan["decision"]["profileReuse"];
+        assert_eq!(reuse["recommendedAction"], "wait_for_profile_lease");
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["browserId"],
+            "synthetic-browser"
+        );
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["processIdentityAssessmentReason"],
+            "process_observation_failed"
+        );
+        assert_eq!(
+            reuse["unavailableBrowsers"][0]["processObservationFailure"],
+            "linux_proc_exe_permission_denied; process_observer_timeout"
+        );
+        assert!(reuse["reusableBrowserId"].is_null());
+    }
+
+    #[test]
     fn service_access_plan_exposes_terminal_lifecycle_replacement_eligibility() {
         use crate::native::service_principal::{
             AuthenticatedServicePrincipal, ServicePrincipalProvenance,

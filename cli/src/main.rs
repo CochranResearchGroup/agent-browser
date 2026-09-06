@@ -1758,6 +1758,16 @@ fn exit_close_identity_failure(error: &str, json_mode: bool) -> ! {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if let Some(result) =
+        process_identity::run_namespace_observer_entry(&env::args().collect::<Vec<_>>())
+    {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            exit(1);
+        }
+        return;
+    }
     // Rust ignores SIGPIPE by default, causing println! to panic on broken pipes.
     // Reset to SIG_DFL so the OS terminates the process cleanly instead.
     #[cfg(unix)]

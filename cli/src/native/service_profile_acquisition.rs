@@ -1047,6 +1047,16 @@ fn profile_reuse_decision(input: ProfileReuseInput<'_>) -> Value {
         "compatibleLiveBrowserCount": reusable_browser_ids.len(),
         "sameProfileLiveBrowserCount": same_profile_live_browser_ids.len(),
         "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
+        "unavailableBrowsers": service_state.browsers.values()
+            .filter(|browser| browser.profile_id.as_deref() == Some(profile.id.as_str()) && !browser_has_live_health(browser))
+            .map(|browser| json!({
+                "browserId": browser.id,
+                "health": browser.health,
+                "failureClass": browser.last_health_observation.as_ref().and_then(|observation| observation.failure_class.as_deref()),
+                "processIdentityAssessmentReason": browser.last_health_observation.as_ref().and_then(|observation| observation.details.as_ref()).and_then(|details| details.get("processIdentityAssessmentReason")),
+                "processObservationFailure": browser.last_health_observation.as_ref().and_then(|observation| observation.details.as_ref()).and_then(|details| details.get("processObservationFailure")),
+                "recourse": "inspect_browser_health_and_identity_before_retry",
+            })).collect::<Vec<_>>(),
         "activeLeaseSessionIds": active_lease_session_ids,
         "activeLeaseCount": active_lease_count,
         "activeClaimId": active_claim.map(ActiveLeaseClaim::claim_id),

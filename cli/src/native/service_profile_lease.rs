@@ -1712,8 +1712,58 @@ fn bound_profile_lease(
         recourse,
         observation_only: !coherent,
     };
+    project_exact_terminal_history(state, &mut record, now);
     record.lease_revision = lease_revision(&record);
     record
+}
+
+/// Terminal owner history cannot block profile use. Only an exact, cleanup-
+/// satisfied generation without current work or a live browser projection is
+/// historical; the retained evidence never grants effect authority.
+fn project_exact_terminal_history(
+    state: &ServiceState,
+    record: &mut ProfileLeaseRecord,
+    now: &str,
+) {
+    let Some(owner) = record
+        .profile_identity_digest
+        .as_deref()
+        .and_then(|digest| state.runtime_owner_registry.owners.get(digest))
+    else {
+        return;
+    };
+    if owner.pending_transfer.is_some()
+        || state.browsers.contains_key(&owner.browser_id)
+        || sessions_for_profile(state, &record.profile_id)
+            .iter()
+            .any(|session| !inactive_or_expired(session.lease, session.expires_at.as_deref(), now))
+        || state
+            .tabs
+            .values()
+            .any(|tab| tab.browser_id == owner.browser_id && tab.lifecycle != TabLifecycle::Closed)
+    {
+        return;
+    }
+    let exact_terminal = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(&owner.browser_id)
+        .is_some_and(|lifecycle| {
+            lifecycle.logical_browser_id == owner.browser_id
+                && lifecycle.profile_identity_digest == owner.profile_identity_digest
+                && lifecycle.owner_generation == owner.owner_generation
+                && lifecycle.lifecycle_state
+                    == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
+                && lifecycle.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+                && !lifecycle.terminal_evidence.is_empty()
+        });
+    if exact_terminal {
+        record.state = "historical".to_string();
+        record.blocking_identity_axes.clear();
+        record.authorized_actions = READ_ACTIONS.map(ToString::to_string).to_vec();
+        record.observation_only = true;
+    }
 }
 
 fn unbound_capability_profile_lease(
@@ -1811,6 +1861,7 @@ fn unbound_capability_profile_lease(
         },
         observation_only: true,
     };
+    project_exact_terminal_history(state, &mut record, now);
     record.lease_revision = lease_revision(&record);
     record
 }
@@ -2471,6 +2522,59 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn terminal_bound_owner_is_history_only_with_exact_cleanup_and_no_work() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
+        };
+        let (mut state, _, lease_id) = state_with_lease();
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap();
+        owner.owner_generation += 1;
+        let record = RuntimeLifecycleRecord {
+            logical_browser_id: owner.browser_id.clone(),
+            profile_identity_digest: owner.profile_identity_digest.clone(),
+            owner_generation: owner.owner_generation,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        };
+        state
+            .runtime_owner_registry
+            .lifecycle_records
+            .insert(record.logical_browser_id.clone(), record);
+        let lease = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert_eq!(lease.state, "historical");
+        assert!(lease.blocking_identity_axes.is_empty());
+        assert!(lease.observation_only);
+        assert!(lease
+            .authorized_actions
+            .iter()
+            .all(|action| READ_ACTIONS.contains(&action.as_str())));
+        assert!(doctor_profile_leases(&state, NOW).healthy);
+
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Exclusive;
+        assert!(!doctor_profile_leases(&state, NOW).healthy);
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
+        state
+            .runtime_owner_registry
+            .lifecycle_records
+            .values_mut()
+            .next()
+            .unwrap()
+            .owner_generation -= 1;
+        assert!(!doctor_profile_leases(&state, NOW).healthy);
     }
 
     #[test]

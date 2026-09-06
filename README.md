@@ -5175,6 +5175,25 @@ Optional configuration via environment variables:
 
 When enabled, agent-browser connects to an AgentCore cloud browser session instead of launching a local browser. All commands work identically.
 
+## Retained process identity diagnostics
+
+Linux runtime services preserve PrivateTmp isolation when inspecting browsers
+retained across runtime generations. If that namespace blocks executable
+observation, a bounded read-only helper runs the same binary through the user
+service manager and verifies the PID, boot and process start identity before
+accepting the result. It does not change browser ownership or access grants.
+If observation still fails, browser health retains
+`processIdentityAssessmentReason` and `processObservationFailure`; access-plan
+`decision.profileReuse.unavailableBrowsers` carries those reasons instead of
+leaving an occupied profile explained only as no compatible browser. Inspect
+that evidence before retrying. A helper timeout or unavailable user manager
+leaves ownership unproven.
+
+Lease rows with an exact terminal owner generation, satisfied cleanup evidence,
+no browser projection and no active subordinate work remain visible as
+`historical` with read actions only. They do not create current lease blockers.
+Mismatched generations, pending transfers and current work remain blocking.
+
 ## License
 
 Apache-2.0

@@ -1,3 +1,6 @@
+#[cfg(target_os = "linux")]
+mod namespace_observer;
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 #[cfg(any(target_os = "macos", windows))]
@@ -14,7 +17,7 @@ pub struct RecordedProcessIdentity {
     pub browser_family: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservedProcessIdentity {
     pub pid: u32,
     pub start_token: Option<String>,
@@ -87,7 +90,7 @@ pub enum RuntimeProcessOwnership {
     AmbiguousLegacyBrowser,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ProcessObservation {
     Missing,
     Observed(ObservedProcessIdentity),
@@ -716,6 +719,11 @@ fn browser_launch_paths_match(
 
 #[cfg(target_os = "linux")]
 fn platform_process_identity(pid: u32) -> ProcessObservation {
+    linux_process_identity(pid, true)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process_identity(pid: u32, allow_namespace_observer: bool) -> ProcessObservation {
     let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
         Ok(stat) => stat,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -739,7 +747,22 @@ fn platform_process_identity(pid: u32) -> ProcessObservation {
         (Some(boot_id), Some(start_ticks)) => Some(format!("linux:{boot_id}:{start_ticks}")),
         _ => None,
     };
-    let executable_path = std::fs::read_link(format!("/proc/{pid}/exe")).ok();
+    let executable_path = match std::fs::read_link(format!("/proc/{pid}/exe")) {
+        Ok(path) => Some(path),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            if allow_namespace_observer {
+                return namespace_observer::observe(pid, start_token.as_deref());
+            }
+            return ProcessObservation::Failed {
+                reason: "linux_proc_exe_permission_denied".to_string(),
+            };
+        }
+        Err(error) => {
+            return ProcessObservation::Failed {
+                reason: format!("linux_proc_exe_read_failed: {error}"),
+            }
+        }
+    };
     let command_line = std::fs::read(format!("/proc/{pid}/cmdline"))
         .ok()
         .map(|bytes| {
@@ -1519,4 +1542,10 @@ mod tests {
         assert_eq!(linux_process_state(&stat), Some("S"));
         assert_eq!(linux_start_ticks(&stat), Some("4242"));
     }
+}
+
+/// Internal read-only entry point used by the namespace-neutral process observer.
+#[cfg(target_os = "linux")]
+pub(crate) fn run_namespace_observer_entry(args: &[String]) -> Option<Result<(), String>> {
+    namespace_observer::run_entry(args)
 }

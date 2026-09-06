@@ -2,9 +2,9 @@
 
 Date: 2026-09-06
 
-State: PLANNED
+State: OPEN
 
-Execution state: `ready_for_execution_not_started`
+Execution state: `active_profile_ownership_diagnosis`
 
 Lane: P157
 
@@ -28,8 +28,8 @@ and ownership reconciliation, and unattended operation. Profile ownership and
 identity proof blockers are the highest priority. Causal error tracing is part
 of repairing those blockers, starting with the first reproduction.
 
-The operator requested this plan. This checkpoint writes and reviews the plan;
-it does not start implementation or mutate production. Existing authorization
+The operator requested this plan and subsequently instructed execution. The
+primary now executes the work units under that authority. Existing authorization
 for candidate installation and the reviewed 77 policy writes remains recorded
 in the [delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md).
 During execution, apply that authority to its actual scope without requesting
@@ -235,7 +235,114 @@ OPEN execution status and name it; do not call production fully operational.
 
 ## Planning checkpoint
 
-All execution units are unstarted. This plan covers the four requested readiness
+At the planning checkpoint all execution units were unstarted. This plan covers the four requested readiness
 items and makes profile ownership proof and causal diagnosis the critical path.
 The next execution action is W0's current census followed immediately by W1's
 highest-impact reproducible ownership blocker.
+
+## Execution checkpoint 1
+
+state_transition: ready → active
+
+acceptance_state: A1–A4 and AX incomplete
+
+progress_classification: blocker_reduction
+
+evidence: Fresh private doctor, Service status, lease census and blocker ledger
+under the user-scoped `campaigns/p160/census` directory. The selected production
+unit still runs generation `0.28.0-e4243235af0c-072303ae3e67`. The interlock timer
+is enabled and inactive with a five-minute schedule. The stopped synthetic
+supervisor finding is absent from the fresh doctor.
+
+material_blockers: Seventeen lease findings remain. Thirteen affected lease
+rows have matching terminal lifecycle records with satisfied cleanup, while the
+projection still treats retained owner evidence as current. Two unbound
+capabilities and one live owner with two findings remain separate investigations.
+No classification has been changed in production.
+
+next_action_or_stop_reason: Run the deterministic terminal-owner projection
+regression, then repair the exact historical/current distinction with negative
+controls for active work and mismatched generation. Continue live-owner diagnosis
+and causal diagnostics; terminal history alone cannot satisfy A1.
+
+## Execution checkpoint 2: occupied profile without reusable browser
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete
+
+progress_classification: blocker_reduction
+
+evidence: The operator supplied an Odollo blocked-submission example. A read-only
+production access plan reproduced active lease conflict with zero compatible
+browsers. Persisted health says process identity is ambiguous while the Service
+status projection says ready. Disposable user-systemd probes isolated executable
+observation permission denial across PrivateTmp user namespaces: the isolated
+probe cannot read the retained browser executable; the namespace-neutral probe
+with NoNewPrivileges still enabled reads the exact recorded executable, boot
+and start identity. Private diagnosis and both probe receipts are in the census
+evidence manifest. No live profile, lease, browser or unit was changed.
+
+material_blockers: Process observation discards the underlying executable-read
+error; health then discards the assessment reason, and reuse reports only no
+compatible browser. These causal losses obstruct diagnosis. The terminal-lease
+regression separately went red at the real projection seam, reporting identity
+reconciliation instead of history despite exact terminal cleanup and no work.
+
+next_action_or_stop_reason: Prioritize the live occupied-profile case. Repair
+trusted process observation across namespaces without weakening runtime isolation
+or trusting PID alone. Carry typed observation failure and causal provenance
+through health and acquisition diagnostics. Keep terminal-history regression
+and its active-work/generation counterexamples in the same W1 repair queue.
+The internal submission itself and unrelated Ads operations are outside this
+Agent Browser repair; do not submit or mutate those workflows as a browser test.
+
+### W1 bounded implementation decision: namespace-neutral observation
+
+Keep runtime PrivateTmp isolation. On an executable-read permission denial only,
+use the same binary through a bounded read-only user-systemd helper outside the
+private namespace. The helper accepts one PID, reads only process identity,
+never loads runtime configuration or issues browser effects, and cannot recurse.
+Bind its answer to locally observed process start identity before and after the
+call. Do not cache effect authority. Helper failure retains the typed reason and
+leaves ownership unproven. Add adversarial identity-join tests and a disposable
+namespace integration probe before publication. This is an internal observation
+transport, not a new browser acquisition policy or a privileged helper.
+
+## Execution checkpoint 3: namespace observation repair qualified in development
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete; production publication pending
+
+progress_classification: outcome_progress
+
+evidence: Optimized candidate SHA256
+`4a9a4a41563747b2254967ffa5ee961448246686c5e4e4425a04c5f9502264a7`
+was installed in the separate p160 development namespace. Publisher readback
+proved production and default development unchanged. The disposable namespace
+smoke distinguishes the baseline's false browser absence from the candidate's
+exact match and rejects wrong-start and wrong-executable cases; its owned process
+was stopped with zero remaining MainPID. A read-only comparison also recognized
+the original retained production browser without changing its lease or process.
+The installed candidate passed disposable custom-profile continuity.
+
+Focused validation: 30 process-identity tests, 23 profile-lease tests, 44
+access-plan tests, one occupied-profile causal diagnostic regression, and 86
+Service health tests passed. Workspace clippy with warnings denied, format
+check, Service client suite, API/MCP parity, docs build and handoff docs checks
+passed. The terminal-history regression was red before the repair. The new
+namespace test uses a synthetic executable and does not claim browser or CDP
+authorization coverage. Private receipts remain under campaigns/p160.
+
+material_blockers: The standard development browser-launch smoke failed before
+launch because a provider-optional namespace exports an unstaged presentation
+inventory path. Preserve that fixture/bootstrap failure; the separate disposable
+custom-profile pass does not clear it. Production still runs the baseline. The
+live principal binding, unbound capabilities, Xvfb allocation and remaining
+acceptance axes are not cleared by these source/isolated results.
+
+next_action_or_stop_reason: Correct optional development bootstrap, finish
+installed profile proof, then build and publish the exact production candidate
+and verify the original occupied-profile workflow and all remaining W1 cases.
+Continue W2–W5; do not call the runtime operational from this checkpoint.

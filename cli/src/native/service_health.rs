@@ -2236,14 +2236,21 @@ async fn refresh_browser_record_health(
         if ownership == crate::process_identity::RuntimeProcessOwnership::AmbiguousLegacyBrowser {
             browser.health = BrowserHealth::Degraded;
             browser.last_error = Some(format!(
-                "Recorded browser PID {} is live but process ownership is ambiguous",
-                pid
+                "Recorded browser PID {} is live but process ownership is ambiguous ({})",
+                pid, assessment.reason
             ));
             let details = serde_json::json!({
                 "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
                 "failureClass": "browser_process_identity_ambiguous",
                 "processExitDetection": "persisted_process_identity",
                 "processExitPid": pid,
+                "processIdentityAssessmentReason": assessment.reason,
+                "processObservationFailure": match &assessment.observation {
+                    crate::process_identity::ProcessObservation::Failed { reason } => Some(reason.as_str()),
+                    _ => None,
+                },
+                "effectState": "no_effect",
+                "recourse": "inspect_process_observation_before_retry",
             });
             apply_browser_health_observation(browser, Some(&details));
             return;
