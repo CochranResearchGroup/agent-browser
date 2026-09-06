@@ -141,7 +141,7 @@ signal it. Isolated materialization and migration-review roots are private
 rollback/review evidence and launch no browser. Earlier cleanup receipts remain
 part of the acceptance audit; no foreign cleanup is authorized.
 
-## Authorized delivery execution: shutdown complete
+## Authorized delivery execution: shutdown checkpoint (superseded below)
 
 The fresh preflight matched the reviewed 77-policy diff and exact candidate,
 rollback copy and compatibility drop-in. The preserve-runtime installer stopped
@@ -163,3 +163,47 @@ shutdown intent, before/after ownership and final readback. Candidate payload
 staging occurred, but the production generation selector was not switched and
 profile-policy migration was not committed. A cold activation of the approved
 candidate remains unfinished; do not claim deployment from shutdown alone.
+
+
+## Cold installation and installed validation
+
+The operator clarified that shutdown was intended to bypass faulty upgrade
+machinery and explicitly directed candidate installation and testing. This
+superseded the proposal's transaction-only activation procedure for this cold
+installation. The candidate generation `0.28.0-367c10063188-27306db23f45` is now
+selected in production. Direct process readback verifies the runtime host,
+dashboard backend and dashboard ingress all execute binary SHA-256
+`367c1006318811324faa64a2bbf0c3e016a76902971fadde677ab39d9452337e`.
+
+The cold procedure preserved rollback custody, reconciled stale Service browser
+records with the candidate, rebound the production supervisor manifest, removed
+the obsolete socket-directory compatibility drop-in, and rebuilt ingress routing
+from observed current process identities. Supported browserless activation also
+failed because it demanded old-host identity after shutdown; those failures remain
+in transaction history. Routing repair does not constitute operator acceptance.
+
+Production Guacamole, guacd and PostgreSQL are running. Recreating Guacamole
+through the mutable selector still mounted the old extension. Recreating it using
+the immutable candidate Compose path corrected that binding. The served app now
+contains the exact candidate extension bytes, SHA-256
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+
+Installed validation is incomplete and has a failing browser smoke. Initial
+synthetic navigation succeeded. The next explicit-profile command failed with
+`explicit_profile_conflicts_with_current_owner`. After cleanup, an ordered
+reopen/read/interaction attempt failed with
+`existing_session_profile_identity_unproven`. Close succeeded and the disposable
+supervisor lane was removed. These results do not prove working retained control.
+
+Doctor confirms payload, selected generation, runtime convergence, dashboard
+ingress and rollback readiness. It remains nonzero: authenticated operator-journey
+proof is missing, and historical profile-lease warnings remain. No production
+external visual acceptance was performed and no acceptance receipt was fabricated.
+The production reconciliation timer remains stopped pending validation; isolated
+P158 resources and retained rollback data remain preserved.
+
+Private evidence under `production-delivery-approved/` includes
+`direct-cold-install/`, `installed-process-identity-final.json`,
+`installed-extension-check-current.json`, `installed-doctor-current.json`,
+`browser-smoke/installed-test/ordered-smoke.json` and the immutable-mount Compose
+log. Installation is achieved; full production acceptance is not achieved.
