@@ -975,3 +975,35 @@ Client.js confirms that its client uses five-second nop keepalives; matching
 that instruction alone does not prove our task continues delivering them.
 Relevant upstream source snapshots are retained with the private evidence.
 W3 remains unaccepted; W2 selected custody and W5 delivery/cleanup remain open.
+
+
+## Checkpoint 19: primary terminal custody and idle transport boundary
+
+The existing transport lifetime test now waits for two provider-visible nop
+keepalives after startup waiters have returned, with only the sync acknowledgement
+allowed alongside them. That idle boundary passes without an opcode or timing
+repair. This narrows the investigation: the transport can keep a quiet mocked
+provider alive, but the real 126-second disconnect is still unexplained.
+
+Production registry admission now installs a terminal observer on its owned
+task. Normal termination persists a private failure-journal record before
+publishing Closed. The record contains the static typed cause, elapsed lifetime,
+and route/session/display references. Provider credentials, URLs and display
+payloads are not included. The observer also records task cancellation or
+unwinding once; SIGKILL and process abort cannot run this observer. Existing
+failed-owner stickiness and binding invalidation semantics are unchanged.
+
+The lifetime test verifies terminal observation precedes Closed, and the
+existing aborted-owner test verifies cancellation custody alongside stale-ready
+rejection. No new live primary, installation or external retry occurred in this
+slice. The existing retained browser remains a cleanup obligation. This repair
+covers owner terminal custody; immediate endpoint admission failures and response
+correlation still require their selected W2 review. Installed idle lifetime,
+external W3 outcomes and W5 delivery remain open.
+
+All twelve focused primary tests pass, including the idle and cancellation
+boundaries. Workspace clippy with warnings denied, format check, docs build and
+remote-view handoff documentation checks pass. Logs are retained privately in
+`primary-terminal-custody/`. Next bind the terminal record to the endpoint's
+failed response and complete the selected custody regression before building
+and installing another candidate. No live lifetime repair is claimed here.

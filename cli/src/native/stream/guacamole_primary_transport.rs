@@ -24,6 +24,30 @@ pub(super) struct PrimaryTask {
     task: JoinHandle<()>,
 }
 
+struct TerminalObserver<F: FnOnce(&'static str, u64)> {
+    started: Instant,
+    callback: Option<F>,
+}
+
+impl<F: FnOnce(&'static str, u64)> TerminalObserver<F> {
+    fn record(&mut self, code: &'static str) {
+        if let Some(callback) = self.callback.take() {
+            callback(
+                code,
+                self.started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+            );
+        }
+    }
+}
+
+impl<F: FnOnce(&'static str, u64)> Drop for TerminalObserver<F> {
+    fn drop(&mut self) {
+        // Cancellation and unwinding must not silently bypass terminal custody.
+        // This cannot run after SIGKILL or process abort.
+        self.record("guacamole_primary_task_cancelled");
+    }
+}
+
 impl PrimaryTask {
     pub fn spawn<S>(
         socket: WebSocketStream<S>,
@@ -40,10 +64,29 @@ impl PrimaryTask {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         F: Future<Output = Result<WebSocketStream<S>, &'static str>> + Send + 'static,
     {
+        Self::connect_observed(connection, is_current, |_, _| {})
+    }
+
+    /// Preserve the terminal cause before publishing Closed to waiting callers.
+    /// The observer receives only a static code and elapsed time, never payloads.
+    pub fn connect_observed<S, F>(
+        connection: F,
+        is_current: Arc<dyn Fn() -> bool + Send + Sync>,
+        on_closed: impl FnOnce(&'static str, u64) + Send + 'static,
+    ) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        F: Future<Output = Result<WebSocketStream<S>, &'static str>> + Send + 'static,
+    {
         let (status_tx, status) = watch::channel(PrimaryStatus::Starting);
         let (shutdown, shutdown_rx) = watch::channel(false);
+        let mut observer = TerminalObserver {
+            started: Instant::now(),
+            callback: Some(on_closed),
+        };
         let task = tokio::spawn(async move {
             let outcome = connect_and_run(connection, is_current, &status_tx, shutdown_rx).await;
+            observer.record(outcome);
             let _ = status_tx.send(PrimaryStatus::Closed(outcome));
         });
         Self {
@@ -225,9 +268,13 @@ mod tests {
         let current = Arc::new(AtomicBool::new(true));
         let guard = current.clone();
         let (connected_tx, connected_rx) = tokio::sync::oneshot::channel();
-        let mut owner = PrimaryTask::connect(
+        let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
+        let mut owner = PrimaryTask::connect_observed(
             async move { connected_rx.await.map_err(|_| "fixture_connection_closed") },
             Arc::new(move || guard.load(Ordering::SeqCst)),
+            move |code, elapsed_ms| {
+                terminal_tx.send((code, elapsed_ms)).unwrap();
+            },
         );
         // Cancel an actual pending viewer wait before the first provider frame.
         // Connection ownership must remain with the backend task.
@@ -254,6 +301,20 @@ mod tests {
             owner.status(),
             PrimaryStatus::Ready("00000000-0000-4000-8000-000000000001".into())
         );
+        // A quiet display must still receive periodic client keepalives after
+        // every startup waiter has returned. A single initial nop is insufficient.
+        tokio::time::timeout(Duration::from_secs(7), async {
+            let mut keepalives = 0;
+            while keepalives < 2 {
+                match server.next().await.unwrap().unwrap() {
+                    Message::Text(text) if text == "3.nop;" => keepalives += 1,
+                    Message::Text(text) => assert_eq!(text, "4.sync,1.1;"),
+                    other => panic!("unexpected primary message: {other:?}"),
+                }
+            }
+        })
+        .await
+        .expect("primary stopped sending keepalives after startup");
         current.store(false, Ordering::SeqCst);
         tokio::time::timeout(Duration::from_secs(2), async {
             while !matches!(owner.status(), PrimaryStatus::Closed(_)) {
@@ -266,6 +327,10 @@ mod tests {
             owner.status(),
             PrimaryStatus::Closed("guacamole_primary_binding_changed")
         );
+        // Closed is observable only after the terminal sink has accepted custody.
+        let (code, elapsed_ms) = terminal_rx.await.unwrap();
+        assert_eq!(code, "guacamole_primary_binding_changed");
+        assert!(elapsed_ms >= 5_000);
         owner.close().await;
     }
 
@@ -274,7 +339,14 @@ mod tests {
         let (client, server) = tokio::io::duplex(4096);
         let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
         let mut server = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
-        let owner = PrimaryTask::spawn(client, Arc::new(|| true));
+        let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
+        let owner = PrimaryTask::connect_observed(
+            async move { Ok(client) },
+            Arc::new(|| true),
+            move |code, _| {
+                terminal_tx.send(code).unwrap();
+            },
+        );
         server
             .send(Message::Text(
                 "0.,36.00000000-0000-4000-8000-000000000001;4.sync,1.1;".into(),
@@ -291,6 +363,10 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(owner.ready().await, Err("guacamole_primary_task_closed"));
+        assert_eq!(
+            terminal_rx.await.unwrap(),
+            "guacamole_primary_task_cancelled"
+        );
     }
 
     #[tokio::test]

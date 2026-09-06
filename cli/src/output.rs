@@ -6096,6 +6096,8 @@ Dashboard ingress allows up to 21 seconds for the primary-start response;
 reconcile an uncertain startup outcome before another attempt.
 A failed primary remains an explicit failure requiring provider reconciliation;
 reopening the durable URL does not elect another viewer as primary.
+Primary termination records retain the typed cause, elapsed lifetime and
+route/session/display references in the private failure journal.
 
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook

@@ -3129,6 +3129,9 @@ A rejected key is discarded and reported through the existing bounded recovery
 flow. Recovery may request a fresh key from the same healthy primary. It cannot
 elect a viewer as primary or restart a failed backend owner. Provider failures
 remain explicit until reconciled; binding invalidation closes the owned tunnel.
+The backend records primary termination in the private failure journal with its
+typed cause, elapsed lifetime and route/session/display references, even when
+no viewer remains to report the failure.
 Backend startup requires the installed provider's trusted header principal and
 literal loopback Guacamole origin. Dashboard ingress allows up to 21 seconds
 for the bounded primary-start response. An uncertain startup outcome requires

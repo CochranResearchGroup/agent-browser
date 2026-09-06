@@ -27,9 +27,11 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
             let expected = binding.clone();
             let is_current: Arc<dyn Fn() -> bool + Send + Sync> =
                 Arc::new(move || expected.is_current(&repository));
-            PrimaryTask::connect(
+            let evidence_binding = binding.clone();
+            PrimaryTask::connect_observed(
                 guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
                 is_current,
+                move |code, elapsed_ms| evidence_binding.record_terminal(code, elapsed_ms),
             )
         })?
     };
