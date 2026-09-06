@@ -346,3 +346,30 @@ next_action_or_stop_reason: Correct optional development bootstrap, finish
 installed profile proof, then build and publish the exact production candidate
 and verify the original occupied-profile workflow and all remaining W1 cases.
 Continue W2–W5; do not call the runtime operational from this checkpoint.
+
+## Execution checkpoint 4: optional development bootstrap repaired
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete
+
+progress_classification: blocker_reduction
+
+evidence: The optional-provider installer regression reproduced missing inventory
+and passed after initialization of an empty inventory only for an unconfigured
+optional provider with no retained routes. Existing inventories and staged
+providers are preserved. Reinstallation in p160 preserved production/default
+development identity, and the standard three-iteration development browser
+launch/read/close/residue smoke passed. Development doctor remains nonzero only
+for the new namespace's local-hostname ingress; the direct dashboard port is
+reachable. This is not production operator-journey acceptance.
+
+material_blockers: Production still runs the baseline binary. Source repair
+`81d2936e` is pushed; the full release build is active. The optional-bootstrap
+follow-up is being validated. The remaining profile/principal and complete
+production acceptance matrix stays open.
+
+next_action_or_stop_reason: Finish the active release build and its exact-binary
+qualification, publish within existing authority with preserved browser owners,
+and verify original profile reuse. Do not restart the build merely because an
+observation window ends. Retain the original failed development smoke receipt.

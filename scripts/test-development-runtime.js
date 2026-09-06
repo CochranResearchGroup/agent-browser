@@ -261,6 +261,11 @@ try {
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  assert.deepEqual(JSON.parse(readFileSync(descriptor.presentationProvider.inventoryPath, 'utf8')), {
+    schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+    environment: 'development',
+    routes: [],
+  }, 'an unconfigured optional provider must expose zero routes without blocking headless work');
   assert.equal(installed.success, true);
   assert.equal(installed.production.unchanged, true);
   const defaultBefore = defaultDevelopmentSnapshot(namespacedEnv);

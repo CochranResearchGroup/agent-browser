@@ -331,6 +331,27 @@ export function installDevelopmentRuntime({
     });
   }
 
+  // An optional provider with no staged manifest has no admitted routes. Keep
+  // that fact explicit so its configured inventory path does not prevent even
+  // headless commands from loading flags. Never overwrite provider-owned data
+  // or reconstruct missing inventory for an already-staged provider.
+  const provider = descriptor.presentationProvider;
+  if (env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED !== '1' &&
+      !existsSync(provider.manifest) && !existsSync(provider.inventoryPath)) {
+    const serviceStatePath = join(descriptor.stateDir, 'service', 'state.json');
+    const serviceState = existsSync(serviceStatePath)
+      ? JSON.parse(readFileSync(serviceStatePath, 'utf8')) : {};
+    if (Object.keys(serviceState.remoteViewRoutes ?? {}).length === 0 &&
+        Object.keys(serviceState.routePool ?? {}).length === 0) {
+      mkdirSync(dirname(provider.inventoryPath), { recursive: true, mode: 0o700 });
+      writeJsonAtomic(provider.inventoryPath, {
+        schemaVersion: 'agent-browser.development-presentation-inventory.v1',
+        environment: 'development',
+        routes: [],
+      });
+    }
+  }
+
   const units = renderDevelopmentUnits(descriptor, generationBinary);
   for (const [name, content] of Object.entries(units)) {
     const path = join(descriptor.systemdDir, name);

@@ -457,6 +457,11 @@ leaving an occupied profile explained only as no compatible browser. Inspect
 that evidence before retrying. A helper timeout or unavailable user manager
 leaves ownership unproven.
 
+A newly installed development lane with an optional, unconfigured presentation
+provider records an empty route inventory so headless work can start. It does
+not report presentation ready. Existing provider inventories and retained routes
+are preserved; a missing inventory for a staged provider remains an error.
+
 Lease rows with an exact terminal owner generation, satisfied cleanup evidence,
 no browser projection and no active subordinate work remain visible as
 `historical` with read actions only. They do not create current lease blockers.
