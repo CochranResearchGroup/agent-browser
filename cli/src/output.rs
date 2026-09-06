@@ -6322,7 +6322,8 @@ an already-running daemon. If --port is omitted, agent-browser binds an
 available localhost port automatically and reports it back.
 
 Notes:
-  - 'stream enable' creates the WebSocket server.
+  - 'stream enable' creates the WebSocket server or returns its existing status.
+  - No port, port 0, or the current port reuses the listener; a different port requires disable first.
   - WebSocket clients trigger frame streaming automatically.
   - 'screencast_start' and 'screencast_stop' still control explicit CDP screencasts.
   - Service-owned local and attached CDP browsers can advertise cdp_screencast

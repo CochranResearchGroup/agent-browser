@@ -1639,6 +1639,8 @@ agent-browser -v chat "fill in the login form"            # Verbose (show comman
 agent-browser --model openai/gpt-4o chat "take a screenshot"  # Override model
 ```
 
+Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
+
 Transactional retry recovery may add
 `--logical-browser-id session:<original>` when a failed orphan adoption retained
 a different source-session alias. Use that flag only with the exact logical

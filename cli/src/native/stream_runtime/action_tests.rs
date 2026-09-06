@@ -160,10 +160,39 @@ async fn test_stream_enable_disable_and_status_without_browser() {
     let stream_path = socket_dir.join("stream-runtime-session.stream");
     let port_file = fs::read_to_string(&stream_path).expect("stream metadata file should exist");
     assert_eq!(port_file.trim(), port.to_string());
-    let duplicate_err = handle_stream_enable(&json!({}), &mut state)
+    let original_server = state.stream_server.clone().unwrap();
+    for command in [json!({}), json!({ "port": 0 }), json!({ "port": port })] {
+        let repeated = handle_stream_enable(&command, &mut state)
+            .await
+            .expect("ensuring the existing stream should succeed");
+        assert_eq!(repeated, enabled_status);
+        assert!(std::sync::Arc::ptr_eq(
+            &original_server,
+            state.stream_server.as_ref().unwrap()
+        ));
+        assert_eq!(fs::read_to_string(&stream_path).unwrap(), port_file);
+    }
+    let other_port = if port == 65535 { 65534 } else { port + 1 };
+    let conflict = handle_stream_enable(&json!({ "port": other_port }), &mut state)
         .await
-        .expect_err("duplicate enable should fail");
-    assert!(duplicate_err.contains("already enabled"));
+        .expect_err("a different explicit port must not silently reuse the listener");
+    assert!(conflict.contains("already enabled"));
+    assert!(handle_stream_enable(&json!({ "port": 65536 }), &mut state)
+        .await
+        .expect_err("invalid ports must still fail")
+        .contains("Invalid stream port"));
+    assert!(std::sync::Arc::ptr_eq(
+        &original_server,
+        state.stream_server.as_ref().unwrap()
+    ));
+    for invalid in [json!(-1), json!(1.5), json!("9223"), Value::Null] {
+        assert!(
+            handle_stream_enable(&json!({ "port": invalid }), &mut state)
+                .await
+                .expect_err("malformed explicit ports must not become implicit reuse")
+                .contains("Invalid stream port")
+        );
+    }
     let status = handle_stream_status(&state)
         .await
         .expect("status should work after enable");

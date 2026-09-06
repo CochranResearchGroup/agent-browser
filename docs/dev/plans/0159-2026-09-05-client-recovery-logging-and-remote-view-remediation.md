@@ -573,7 +573,38 @@ does not repeat controller takeover or input. The real-Chrome verifier and
 external-runner suites pass. This is a scoped diagnostic/readiness correction,
 not proof that the failed external transition is repaired.
 
-The selected fixture server is now PID 26061, start token 2313714, captured in
-the private post-run owned-state receipt; revalidate before cleanup. The original
+The selected fixture server identity is captured in the private post-run
+owned-state receipt; revalidate before cleanup. The original
 synthetic browser and server remain explicit cleanup obligations. W2 repair is
 underway independently; no candidate publication accompanied this external run.
+
+## Checkpoint 10: repeated stream enable no longer creates a false failure
+
+Progress: `blocker_reduction`; installed logging verification remains pending.
+
+Source tracing confirmed that automatic named-session recovery invokes
+`stream enable`, including when Profile configuration requires a lane refresh
+and the listener is already running. The handler previously rejected that
+successful existing state, producing the two generic uncertain failures noted
+in checkpoint 1.
+
+`stream enable` now returns current status for an omitted port, zero, or the
+existing bound port. The real-listener regression failed on the original
+already-enabled rejection and now passes, proving the same listener allocation,
+port and metadata bytes survive repeated calls. A different explicit port still
+fails, and malformed/out-of-range explicit ports cannot become implicit reuse.
+This eliminates the selected false failure at its cause without assigning a
+guessed actor or rewriting historical journal entries.
+
+The focused Rust test, workspace clippy with warnings denied, format check and
+docs build pass. Help, README, repository skill, streaming docs and inline
+comments describe the behavior. Private red/green, clippy and docs logs are under
+`custody-outcome/input-external/stream-repair/`. The earlier baseline-verifier
+repair logs are under `baseline-repair/`.
+
+This repair is source-verified and has not been built into or published as an
+installed candidate. The active external browser remains on the prior binary.
+Finish the selected W3 verification before controlled fixture cleanup and any
+candidate replacement; retain the exact browser/process cleanup obligations.
+W1 owner counterexamples and the consolidated W5 production proposal remain
+required work. Production replacement has not been performed.

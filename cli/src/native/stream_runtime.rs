@@ -98,18 +98,26 @@ pub(crate) mod action_commands {
             || runtime_screencasting), }
         )
     }
+    /// Ensure streaming without replacing an existing listener for an omitted, zero, or matching port.
     pub(crate) async fn handle_stream_enable(
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
-        if state.stream_server.is_some() {
-            return Err("Streaming is already enabled for this session".to_string());
-        }
-        let requested_port = match cmd.get("port").and_then(|value| value.as_u64()) {
-            Some(raw) => u16::try_from(raw)
-                .map_err(|_| format!("Invalid stream port '{}': expected 0-65535", raw))?,
+        let requested_port = match cmd.get("port") {
+            Some(value) => value
+                .as_u64()
+                .and_then(|raw| u16::try_from(raw).ok())
+                .ok_or_else(|| {
+                    "Invalid stream port: expected an integer from 0 to 65535".to_string()
+                })?,
             None => 0,
         };
+        if let Some(server) = state.stream_server.as_ref() {
+            if requested_port == 0 || requested_port == server.port() {
+                return Ok(current_stream_status(state).await);
+            }
+            return Err("Streaming is already enabled for this session".to_string());
+        }
         let (server, client_slot) =
             StreamServer::start_without_client(requested_port, state.session_id.clone(), false)
                 .await?;

@@ -769,6 +769,8 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
+Repeating `stream enable` with no port, port zero, or the current port returns the existing stream status without replacing its listener. A different explicit port fails; disable streaming before changing ports.
+
 Failed browser launches and non-success service jobs are also written to the
 append-only user-scoped forensic journal at
 `~/.agent-browser/service/failure-journal.jsonl`. The authenticated dashboard
