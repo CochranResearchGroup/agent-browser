@@ -149,9 +149,10 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 Plan 0158 is reconciled around usable authenticated Profile leases/ACLs,
 postmortem-quality logging, and ordinary durable remote-view links. Current
-proof is partial: shared self-declared clients and actionable child denials
-pass focused checks; authenticated ACL lifecycle and interruption durability
-remain unproven; ordinary links still lack external pixel/input acceptance.
+proof is partial: authenticated own-Profile acquisition and actionable denials
+pass focused checks, while full ACL lifecycle remains open. A controlled
+process-interruption probe disproves journal durability for the in-memory
+delivery interval. Ordinary links still lack external pixel/input acceptance.
 
 The retained-handoff identity rejection repair now passes one installed P158
 verification: failed response/job with actionable recourse, matching event,

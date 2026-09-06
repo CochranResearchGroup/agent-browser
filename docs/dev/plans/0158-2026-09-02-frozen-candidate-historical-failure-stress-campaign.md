@@ -32,7 +32,39 @@ P156, P157]
 
 Overlaps: [P144]
 
-## Renewed Priority Reconciliation At fa78aa99
+## Current Priority Reconciliation At a874131e
+
+The operator requested handoff reconciliation before execution. Current repo
+checkpoints supersede the handoff's historical runtime snapshot and the older
+next-action sequence below. This revision is planning alignment only: no new
+runtime measurement, repair, installation, restart, or calibration is performed.
+
+| Priority | Recorded outcome evidence | Remaining acceptance gap |
+| --- | --- | --- |
+| Usable authenticated Profile leases and ACLs | Independent registered-capability clients acquired their own restricted Profiles, including after a disposable host restart with browsers closed. Cross-profile denial now retains the exact denied decision and actionable recourse in HTTP, MCP, and journal. | Revocation, rejoin, live-browser restart, actual identity-unproven recovery, and top-level access-plan advice remain open. |
+| Durable postmortem logging | Normal-operation joins pass focused checks. A controlled journal-lock and process-interruption probe proves one lost rejection: expected 1, observed 0, missing 1, duplicates 0, conflicts 0. | Durable custody before response and idempotent restart recovery are the immediate product defect. Dashboard projection, wider failure coverage, and reboot durability remain open. |
+| Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
+
+Next execute one bounded **product logging repair**: persist pending evidence
+before response, recover it idempotently, and bound journal contention waits.
+Verify the existing lock/interruption seam and append-before-retirement seam
+with exact missing/duplicate/conflicting counts. Preserve the failed epoch.
+This is the existing one-repair/verification cycle, not a reset of attempt bounds.
+
+Then select the remaining authenticated lifecycle slice with logging attached,
+and the ordinary external synthetic same-URL slice through the protected manual
+lane. Infrastructure recovery is justified only by a selected outcome's actual
+dependency. Calibration measurement-tooling repairs are deferred. Checkpoint
+each outcome or blocker and within 60 minutes; do not expand a failure into an
+automatic readiness or anchor loop.
+
+W1–W5 remain tooling-only complete. W6, W7–W10, missing live producers, original
+acceptance criteria, and the full C01 workload remain outstanding. Calibration
+requires an explicit later sequencing decision. Production mutation, eviction,
+credential entry, and private capture remain outside scope. Current repo
+checkpoints supply this reconciliation; Graphiti returned no relevant recall.
+
+## Historical Renewed Priority Reconciliation At fa78aa99
 
 The operator again requested reconciliation before execution using
 `/tmp/plan-0158-priority-handoff-2026-09-05.md`. That handoff's clean baseline
