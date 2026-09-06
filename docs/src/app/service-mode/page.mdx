@@ -1423,6 +1423,8 @@ Run `pnpm test:service-shutdown-faulted-live` to validate the faulted shutdown p
 
 ## Service records
 
+Reconciliation removes a legacy degraded, profile-less late-close browser row only when its exact owner generation proves terminal process exit and profile-lock release, cleanup is satisfied, and no operational session, tab, process identity, or presentation remains. It preserves the close failure in a `terminal_degraded_placeholder_removed` reconciliation event and retains the lifecycle evidence. Missing or conflicting proof keeps the row for inspection.
+
 The CLI, HTTP API, MCP resources, and dashboard share the same service concepts:
 
 - `profiles` describe durable browser identity and launch policy.

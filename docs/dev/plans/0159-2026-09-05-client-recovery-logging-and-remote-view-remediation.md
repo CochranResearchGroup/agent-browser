@@ -1656,3 +1656,41 @@ run one changed provider reconciliation and verify the loaded extension digest
 before creating the fresh synthetic browser for external input/reopen proof.
 The runtime binary is already installed, the extension is staged but not yet
 verified loaded, and production remains unchanged. W3 and W5 remain open.
+
+## Checkpoint 38: provider quarantine exposed historical close residue
+
+The changed provider reconciliation completed with a quarantined failure, not
+readiness. Receipt `apply-1788682560709-21496.json` records provider startup and
+operator route grants, followed by warm route 3 failing with
+`existing_session_profile_identity_unproven`. Quarantine stopped the P158
+provider. Its HTTP port refuses connections; no loaded-extension or external
+input acceptance is claimed. Production remained unchanged. The completed
+operation was inspected, not restarted after its old tool handle disappeared.
+
+Exact private readback under `keyboard-focus-candidate/` shows route 3's owner
+generation matches a terminal lifecycle with satisfied cleanup and explicit
+process-exit/profile-lock-release evidence. Its historical degraded browser row
+has no Profile, PID, endpoint, or tab, but retains the session label. The session
+itself is absent. This stale projection prevents the existing exact terminal
+relaunch guard from admitting the viewer. No matching viewer Chrome process was
+found for any of the four warm profiles. The old route 3/4 runtime files remain
+historical evidence, not proof of live processes.
+
+The existing late-close callback guard prevents new instances of this shape,
+but reconciliation excluded degraded historical rows. A focused regression
+reproduced one retained row where zero was required. Reconciliation now retires
+only the profile-less degraded placeholder whose exact terminal owner and
+cleanup evidence agree, with no surviving operational identity, session, tab,
+or presentation reference. It preserves the close error in a
+`terminal_degraded_placeholder_removed` event and retains lifecycle authority.
+Missing exit/lock evidence, unsatisfied cleanup, generation drift, and surviving
+Profile/session records remain protected. The relaunch identity guard is unchanged.
+
+The regression and all 36 focused reconciliation tests pass. Rust format,
+workspace clippy with warnings denied, and docs build pass; all five guidance
+surfaces are updated. This is blocker reduction in source, not an installed
+repair. Next build and publish the changed isolated candidate, verify its
+supported reconciliation removes only the proven stale rows, then reassess one
+provider apply against that changed state. W3 keyboard/reopen and W5 production
+delivery remain open. The synthetic server and quarantined provider remain
+retained obligations; no external run or production replacement was performed.

@@ -3393,8 +3393,102 @@ fn remove_post_termination_browser_history(state: &mut ServiceState) -> usize {
         .collect::<Vec<_>>();
     browser_ids
         .iter()
-        .map(|id| remove_browser_operational_record(state, id, None))
+        .map(|id| {
+            if let Some(browser) = state
+                .browsers
+                .get(id)
+                .filter(|browser| browser.health == BrowserHealth::Degraded)
+            {
+                let details = serde_json::json!({
+                    "action": "terminal_degraded_placeholder_removed",
+                    "lastError": browser.last_error,
+                    "lastHealthObservation": browser.last_health_observation,
+                    "terminalEvidencePreserved": true,
+                });
+                push_service_event(
+                    state,
+                    ServiceEvent {
+                        kind: ServiceEventKind::Reconciliation,
+                        browser_id: Some(id.clone()),
+                        message:
+                            "Removed historical close failure after exact terminal cleanup proof"
+                                .to_string(),
+                        details: Some(details),
+                        ..new_service_event()
+                    },
+                );
+            }
+            remove_browser_operational_record(state, id, None)
+        })
         .sum()
+}
+
+/// Retire legacy late-close placeholders only when exact terminal ownership
+/// agrees and no operational identity, session, tab, or presentation survives.
+/// A degraded health label alone never proves process cleanup.
+fn proven_terminal_degraded_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) -> bool {
+    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+    if browser.profile_id.is_some()
+        || browser.pid.is_some()
+        || browser.cdp_endpoint.is_some()
+        || browser.display_allocation_id.is_some()
+        || !browser.view_streams.is_empty()
+        || !browser.tab_handles.is_empty()
+        || state.browser_process_identities.contains_key(browser_id)
+        || state.tabs.values().any(|tab| tab.browser_id == browser_id)
+    {
+        return false;
+    }
+    let Some(lifecycle) = state
+        .runtime_owner_registry
+        .lifecycle_records
+        .get(browser_id)
+    else {
+        return false;
+    };
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owner(&lifecycle.profile_identity_digest)
+    else {
+        return false;
+    };
+    lifecycle.logical_browser_id == browser_id
+        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "exact_process_exited")
+        && lifecycle
+            .terminal_evidence
+            .iter()
+            .any(|evidence| evidence == "profile_lock_released")
+        && owner.browser_id == browser_id
+        && owner.owner_generation == lifecycle.owner_generation
+        && owner.pending_transfer.is_none()
+        && !state
+            .runtime_owner_registry
+            .principal_bindings
+            .contains_key(&lifecycle.profile_identity_digest)
+        && !state.sessions.contains_key(&owner.daemon_session_route)
+        && !state
+            .sessions
+            .values()
+            .any(|session| session.browser_ids.iter().any(|id| id == browser_id))
+        && browser
+            .active_session_ids
+            .iter()
+            .all(|session_id| session_id == &owner.daemon_session_route)
+        && !state.browsers.iter().any(|(id, other)| {
+            id != browser_id
+                && other
+                    .active_session_ids
+                    .contains(&owner.daemon_session_route)
+        })
 }
 
 /// Downgrade legacy `ready` rows after their last lease has been released.
@@ -3443,6 +3537,9 @@ fn historical_browser_placeholder(
     browser_id: &str,
     browser: &BrowserProcess,
 ) -> bool {
+    if browser.health == BrowserHealth::Degraded {
+        return proven_terminal_degraded_placeholder(state, browser_id, browser);
+    }
     if !matches!(
         browser.health,
         BrowserHealth::NotStarted
@@ -7318,6 +7415,108 @@ mod tests {
             reconciliation.details.as_ref().unwrap()["removedTerminatedBrowsers"],
             1
         );
+    }
+
+    #[tokio::test]
+    async fn reconcile_removes_proven_terminal_degraded_placeholder() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+        };
+        let browser_id = "session:terminal-viewer";
+        let profile_digest = "a".repeat(64);
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: browser_id.to_string(),
+            health: BrowserHealth::Degraded,
+            active_session_ids: vec!["terminal-viewer".to_string()],
+            last_error: Some("Late polite close failed after process cleanup".to_string()),
+            ..BrowserProcess::default()
+        });
+        state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
+            owner_id: "terminal-owner".to_string(),
+            profile_identity_digest: profile_digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 3,
+            browser_id: browser_id.to_string(),
+            daemon_session_route: "terminal-viewer".to_string(),
+            process_instance_digest: "1".repeat(64),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "2".repeat(64),
+            target_set_digest: "3".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        });
+        state.runtime_owner_registry.lifecycle_records.insert(
+            browser_id.to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: browser_id.to_string(),
+                profile_identity_digest: profile_digest,
+                owner_generation: 3,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        for case in [
+            "missing_exit",
+            "missing_lock",
+            "cleanup_owned",
+            "generation_drift",
+            "profile_present",
+            "session_present",
+        ] {
+            let mut uncertain = state.clone();
+            let lifecycle = uncertain
+                .runtime_owner_registry
+                .lifecycle_records
+                .get_mut(browser_id)
+                .unwrap();
+            match case {
+                "missing_exit" => lifecycle
+                    .terminal_evidence
+                    .retain(|entry| entry != "exact_process_exited"),
+                "missing_lock" => lifecycle
+                    .terminal_evidence
+                    .retain(|entry| entry != "profile_lock_released"),
+                "cleanup_owned" => {
+                    lifecycle.cleanup_obligation_state = CleanupObligationState::Owned
+                }
+                "generation_drift" => lifecycle.owner_generation += 1,
+                "profile_present" => {
+                    uncertain.browsers.get_mut(browser_id).unwrap().profile_id =
+                        Some("work".to_string())
+                }
+                "session_present" => {
+                    uncertain.sessions.insert(
+                        "terminal-viewer".to_string(),
+                        BrowserSession {
+                            id: "terminal-viewer".to_string(),
+                            browser_ids: vec![browser_id.to_string()],
+                            ..BrowserSession::default()
+                        },
+                    );
+                }
+                _ => unreachable!(),
+            }
+            reconcile_service_state(&mut uncertain).await;
+            assert!(uncertain.browsers.contains_key(browser_id), "{case}");
+        }
+        let before = state.runtime_owner_registry.clone();
+        let summary = reconcile_service_state(&mut state).await;
+        assert_eq!(summary.browser_count, 0);
+        assert!(state.browsers.is_empty());
+        assert_eq!(state.runtime_owner_registry, before);
+        assert!(state
+            .events
+            .iter()
+            .any(|event| event.details.as_ref().is_some_and(|details| {
+                details["action"] == "terminal_degraded_placeholder_removed"
+                    && details["lastError"] == "Late polite close failed after process cleanup"
+            })));
     }
 
     #[tokio::test]
