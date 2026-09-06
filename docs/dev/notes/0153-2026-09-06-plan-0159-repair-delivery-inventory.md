@@ -165,3 +165,14 @@ proof, compatibility drop-in disposition and post-install outcomes still require
 review in the concrete proposal. Rollback generation custody now includes an
 independent private copy with all 32 source file hashes verified. Details and
 receipts are in Plan checkpoint 44 and private `production-candidate-v2/`.
+
+## Concrete delivery decision
+
+See the [production delivery proposal](0154-2026-09-06-plan-0159-production-delivery-proposal.md).
+It identifies the exact bundle and conditional update/rollback steps.
+Recommendation is to retain production pending review of 77 new shared-local
+profile policies. Those policy writes are outside Plan 0159's production ACL
+boundary; a successful dry run does not authorize them. Other reviewed additions
+are inert historical browser/session references, with tab-handle serialization
+changes. Current selected production remains unchanged. W1/W3 evidence hashes
+and the retained fixture PID/start identity were reverified in checkpoint 45.

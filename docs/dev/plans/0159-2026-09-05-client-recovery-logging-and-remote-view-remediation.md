@@ -1895,3 +1895,39 @@ handoff and still requires a candidate proof after staging. These facts do not
 waive fresh runtime census, exact state backup, override disposition or outcome
 checks. Next finish the class-diff review and concrete delivery proposal, with
 production deployment explicitly pending. No new external probe was run.
+
+## Checkpoint 45: concrete delivery proposal and policy disposition
+
+The [production delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+now names the frozen runtime/support identities, client dependency, conditional
+installer command, rollback custody, socket override disposition and installed
+outcome checks. Recommendation: retain production pending an explicit decision
+on the profile-policy writes. No production action was performed.
+
+Field-level review used the frozen candidate and a private current-state copy,
+with the supported isolated install deliberately stopped after migration
+validation. The original copied state stayed unchanged. Added browser rows are
+all not started without PID/CDP, and added sessions are all released. The two
+browser changes are tab-handle serialization; the nine tab changes are service
+handles. All 77 profile changes add a previously absent access policy using the
+candidate's shared-local defaults. This is an intentional P157 migration, but
+Plan 0159 excludes production ACL mutation. Effective permission equivalence to
+every production caller is unproven. Disposition: a separate exact policy-delivery
+decision, not permission to broaden this plan or silently deploy those writes.
+The reviewed copied state had no process-identity removals; do not infer current
+state from the earlier orphan snapshot.
+
+Acceptance readback reverified all 19 W1 manifest artifacts and all 22 W3 client
+artifacts. The W3 aggregate canonical body hash matches its recorded digest;
+that digest is distinct from the serialized JSON file hash. Both are recorded
+in private `delivery-evidence-readback.json`. No live campaign was repeated.
+The retained synthetic browser still has a ready Service row and the exact
+recorded PID/start ticks. `delivery-retention-readback.json` explicitly retains
+it, its synthetic server and owned warm provider for the pending review, with
+exact close and process-verification obligations before another P158 install.
+
+The concrete proposal satisfies the delivery-decision artifact requirement;
+production deployment remains pending, with an explicit material-policy caveat.
+Finish the acceptance-by-acceptance closeout audit against the selected W2
+logging evidence and remaining obligations before marking the overall plan
+complete. No new broad discovery or external retry is authorized by this step.
