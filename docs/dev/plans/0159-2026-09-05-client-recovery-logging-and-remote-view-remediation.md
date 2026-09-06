@@ -1074,3 +1074,39 @@ Private `primary-custody-live/` retains open/start receipts, the 150-second
 observation ledger, same-handoff resolve intent/response, terminal record and
 adjudication. No external dispatch or startup retry occurred. The new synthetic
 browser remains retained for exact disposition; W3 and W5 remain open.
+
+
+## Checkpoint 22: retained primary continuity across acquisition reservation
+
+The coordinator always calls `begin_route_bound_handoff_plan_acquisition` during
+durable resolution. That function atomically records the previous ready route
+and display, creates a pending acquisition lease and marks the current route
+pending. The primary's readiness-only guard treated this temporary reservation
+as binding loss. The retained live receipt confirms its prior route was ready.
+
+New-primary admission still requires ready state. Existing-primary continuity
+now separately accepts a pending route only when its readiness locator names
+a current-boot active acquisition with the exact browser/session/route/display
+and previous browser-display binding. The lease must retain the exact prior
+ready provider connection/origin and owned display, with no terminal timestamp.
+The usual live owner-generation, process, endpoint and display checks still run.
+Released routes, missing or failed leases, and changed identity remain fenced.
+Existing registry lookup uses this continuity check before new-owner admission,
+so a concurrent viewer may reuse the owner during proven revalidation.
+
+A regression invokes the actual acquisition reservation on a disposable JSON
+Service repository. It failed before the repair because the unchanged retained
+primary was invalidated, and passes afterward while new-primary admission is
+still rejected. Negative cases cover absent/failed lease proof, foreign prior
+route, foreign display, changed owner generation and released route. Registry
+coverage preserves exact existing-task reuse and rejects a noncurrent or foreign
+route. All fourteen focused primary tests, workspace clippy with warnings denied,
+format check, docs build and handoff documentation checks pass. Private
+`primary-reservation-continuity/` retains red/green and validation evidence.
+
+All five guidance surfaces describe retained continuity versus new admission.
+No guard waiver, primary restart or external attempt accompanied this source
+repair. Next build and install after exact fixture disposition, then verify the
+same primary UUID survives supported same-handoff resolution on the installed
+candidate. W3 external input/reopen evidence, selected installed W2 correlation,
+and W5 production delivery/final cleanup remain open.

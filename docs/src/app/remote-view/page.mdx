@@ -81,6 +81,9 @@ owner generation and display binding. Every viewer uses a restricted sharing
 key from that primary's exact tunnel UUID. Closing or reopening a viewer does
 not transfer primary ownership. Keys remain transient and must never be saved
 or sent as operator handoffs; use the same durable remote-view URL.
+During same-handoff revalidation, an existing primary can remain connected only
+when the active acquisition proves its previous ready route and exact browser,
+owner, process and display binding. A pending route cannot start a new primary.
 
 A rejected key is discarded and reported through the existing bounded recovery
 flow. Recovery may request a fresh key from the same healthy primary. It cannot

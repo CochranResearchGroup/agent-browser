@@ -31,25 +31,31 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     let repository = LockedServiceStateRepository::default_json()
         .map_err(|_| "guacamole_primary_state_unavailable")?;
-    let binding = PrimaryBinding::resolve(&repository, route_id, connection_id)?;
     let task = {
         let mut registry = REGISTRY
             .get_or_init(|| Mutex::new(Registry::default()))
             .lock()
             .await;
-        registry.admit(binding, |binding| {
-            let expected = binding.clone();
-            let is_current: Arc<dyn Fn() -> bool + Send + Sync> =
-                Arc::new(move || expected.is_current(&repository));
-            let evidence_binding = binding.clone();
-            PrimaryTask::connect_observed(
-                guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
-                is_current,
-                move |occurrence_id, code, elapsed_ms| {
-                    evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
-                },
-            )
-        })?
+        if let Some(task) = registry.retained(route_id, connection_id, |binding| {
+            binding.is_current(&repository)
+        })? {
+            task
+        } else {
+            let binding = PrimaryBinding::resolve(&repository, route_id, connection_id)?;
+            registry.admit(binding, |binding| {
+                let expected = binding.clone();
+                let is_current: Arc<dyn Fn() -> bool + Send + Sync> =
+                    Arc::new(move || expected.is_current(&repository));
+                let evidence_binding = binding.clone();
+                PrimaryTask::connect_observed(
+                    guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
+                    is_current,
+                    move |occurrence_id, code, elapsed_ms| {
+                        evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
+                    },
+                )
+            })?
+        }
     };
     let result = task.ready().await.and_then(|()| match task.status() {
         PrimaryStatus::Ready(id) => Ok(id),
@@ -65,6 +71,24 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
 }
 
 impl Registry {
+    fn retained(
+        &self,
+        route_id: &str,
+        connection_id: &str,
+        is_current: impl Fn(&PrimaryBinding) -> bool,
+    ) -> Result<Option<Arc<PrimaryTask>>, &'static str> {
+        let mut matches = self.owners.values().filter(|(binding, _)| {
+            binding.route_id == route_id
+                && binding.connection_id == connection_id
+                && is_current(binding)
+        });
+        let task = matches.next().map(|(_, task)| task.clone());
+        if matches.next().is_some() {
+            return Err("guacamole_primary_owner_ambiguous");
+        }
+        Ok(task)
+    }
+
     fn admit(
         &mut self,
         binding: PrimaryBinding,
@@ -124,6 +148,17 @@ mod tests {
         };
         let (first, second) = tokio::join!(acquire(), acquire());
         assert!(Arc::ptr_eq(&first, &second));
+        let locked = registry.lock().await;
+        assert!(Arc::ptr_eq(
+            &first,
+            &locked.retained("route", "1", |_| true).unwrap().unwrap()
+        ));
+        assert!(locked.retained("route", "1", |_| false).unwrap().is_none());
+        assert!(locked
+            .retained("foreign-route", "1", |_| true)
+            .unwrap()
+            .is_none());
+        drop(locked);
         assert_eq!(starts.load(Ordering::SeqCst), 1);
         drop(second);
         let mut replacement = binding.clone();

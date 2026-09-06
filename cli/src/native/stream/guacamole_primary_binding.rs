@@ -1,7 +1,7 @@
 //! Exact Service authority for a backend-owned provider connection.
 
 use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
-use crate::native::service_model::ViewStreamProvider;
+use crate::native::service_model::{RemoteViewRoute, ServiceState, ViewStreamProvider};
 use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_owner_transfer::OwnerAuthorityClaim;
 use sha2::{Digest, Sha256};
@@ -29,6 +29,15 @@ impl PrimaryBinding {
         route_id: &str,
         connection_id: &str,
     ) -> Result<Self, &'static str> {
+        Self::resolve_inner(repository, route_id, connection_id, None)
+    }
+
+    fn resolve_inner(
+        repository: &impl ServiceStateRepository,
+        route_id: &str,
+        connection_id: &str,
+        retained: Option<&Self>,
+    ) -> Result<Self, &'static str> {
         let snapshot = repository
             .load_snapshot()
             .map_err(|_| "guacamole_primary_state_unavailable")?;
@@ -40,7 +49,10 @@ impl PrimaryBinding {
                     && route.connection_id.as_deref() == Some(connection_id)
                     && route.provider == ViewStreamProvider::RdpGateway
                     && route.provider_mode == "simultaneous_view"
-                    && route.state == "ready"
+                    && (route.state == "ready"
+                        || retained.is_some_and(|binding| {
+                            binding.pending_revalidation_matches(&snapshot, route)
+                        }))
             })
             .ok_or("guacamole_primary_route_unavailable")?;
         let browser = route
@@ -159,8 +171,77 @@ impl PrimaryBinding {
         append_service_failure_best_effort(&record);
     }
 
+    /// Continuity, never admission: a current acquisition may temporarily mark
+    /// the same ready route pending. Require its exact prior route and display
+    /// custody while the usual live owner/process/endpoint guards still apply.
+    fn pending_revalidation_matches(
+        &self,
+        snapshot: &ServiceState,
+        route: &RemoteViewRoute,
+    ) -> bool {
+        if route.state != "pending"
+            || route.last_provider_event.as_deref() != Some("remote_view_open_acquisition_pending")
+        {
+            return false;
+        }
+        let Some(lease_id) = route
+            .readiness
+            .as_ref()
+            .filter(|value| value["component"] == "remote_view_open_acquisition")
+            .and_then(|value| value["leaseId"].as_str())
+        else {
+            return false;
+        };
+        let Some(lease) = snapshot.remote_view_acquisition_leases.get(lease_id) else {
+            return false;
+        };
+        if lease.id != lease_id
+            || lease.state != "pending"
+            || !matches!(
+                lease.phase.as_str(),
+                "reserved" | "display_ready" | "browser_attached" | "tab_acquired" | "proof_ready"
+            )
+            || lease.boot_epoch.is_none()
+            || lease.boot_epoch != crate::process_identity::current_boot_epoch()
+            || lease.browser_id != self.owner.logical_browser_id
+            || lease.session_id != self.session_id
+            || lease.route_id != self.route_id
+            || lease.display_allocation_id != self.display_id
+            || lease.previous_browser_display_allocation_id.as_ref() != Some(&self.display_id)
+            || lease.completed_at.is_some()
+            || lease.failed_at.is_some()
+        {
+            return false;
+        }
+        let Some(previous) = lease.previous_remote_view_route.as_ref() else {
+            return false;
+        };
+        let Some(display) = lease.previous_display_allocation.as_ref() else {
+            return false;
+        };
+        previous.state == "ready"
+            && previous.id == self.route_id
+            && previous.browser_id.as_ref() == Some(&self.owner.logical_browser_id)
+            && previous.session_id.as_ref() == Some(&self.session_id)
+            && previous.display_allocation_id.as_ref() == Some(&self.display_id)
+            && previous.connection_id.as_ref() == Some(&self.connection_id)
+            && previous.provider == ViewStreamProvider::RdpGateway
+            && previous.provider_mode == "simultaneous_view"
+            && previous
+                .route_descriptor
+                .as_ref()
+                .and_then(|value| value["localEmbedUrl"].as_str())
+                .and_then(|value| local_provider_base(value).ok())
+                .is_some_and(|base| base == self.provider_base)
+            && display.id == self.display_id
+            && display.display_name.as_ref() == Some(&self.display_name)
+            && display.owner_browser_id.as_ref() == Some(&self.owner.logical_browser_id)
+            && display.owner_session_id.as_ref() == Some(&self.session_id)
+            && display.route_ids.contains(&self.route_id)
+    }
+
     pub fn is_current(&self, repository: &impl ServiceStateRepository) -> bool {
-        Self::resolve(repository, &self.route_id, &self.connection_id)
+        Self::resolve_inner(repository, &self.route_id, &self.connection_id, Some(self))
             .is_ok_and(|current| current == *self)
     }
 }
@@ -188,7 +269,6 @@ fn local_provider_base(value: &str) -> Result<reqwest::Url, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::ServiceState;
     use serde_json::json;
 
     pub(super) struct Repository(ServiceState);
@@ -243,6 +323,106 @@ mod tests {
                 }}
             }
         })).unwrap())
+    }
+
+    #[test]
+    fn retained_primary_survives_real_revalidation_reservation_without_admitting_new_owner() {
+        use crate::native::remote_view::RemoteViewAcquisitionPlan;
+        use crate::native::remote_view_handoff::begin_route_bound_handoff_plan_acquisition;
+        use crate::native::service_store::{
+            JsonServiceStateStore, LockedServiceStateRepository, ServiceStateStore,
+        };
+        let root =
+            std::env::temp_dir().join(format!("primary-reservation-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let store = JsonServiceStateStore::new(root.join("state.json"));
+        store.save(&repository().0).unwrap();
+        let live = LockedServiceStateRepository::new(store);
+        let binding = PrimaryBinding::resolve(&live, "route", "1").unwrap();
+        let plan: RemoteViewAcquisitionPlan = serde_json::from_value(json!({
+            "mode":"reuse", "reusePolicy":"reuse_existing", "tabPolicy":"reuse_existing",
+            "requestedBrowserHost":"remote_headed", "requestedViewStreamProvider":"rdp_gateway",
+            "requestedControlInput":"manual_attached_desktop", "selectedRouteId":"route",
+            "displayAllocationId":"display", "displayName":":10",
+            "routeBinding": {
+                "routeId":"route", "displayAllocationId":"display", "displayName":":10",
+                "launchDisplayName":":10", "displayIsolation":"private_virtual_display",
+                "provider":"rdp_gateway", "providerMode":"simultaneous_view", "connectionId":"1",
+                "routeDescriptor":{"localEmbedUrl":"http://127.0.0.1:8193/guacamole/#/client/1"}
+            },
+            "decisions":[], "blockers":[], "proofRequired":[], "cleanupOnFailure":[], "suggestedCommands":[]
+        })).unwrap();
+        let lease = begin_route_bound_handoff_plan_acquisition(
+            &live,
+            None,
+            &plan,
+            "browser",
+            "scene",
+            "2026-09-06T06:00:00Z",
+        )
+        .unwrap();
+        assert!(PrimaryBinding::resolve(&live, "route", "1").is_err());
+        assert!(
+            binding.is_current(&live),
+            "same-binding reservation invalidated retained primary"
+        );
+        let pending = live.load_snapshot().unwrap();
+        for case in [
+            "missing_lease",
+            "failed_lease",
+            "foreign_previous_route",
+            "foreign_display",
+            "changed_owner",
+            "released_route",
+        ] {
+            let mut changed = Repository(pending.clone());
+            match case {
+                "missing_lease" => changed.0.remote_view_acquisition_leases.clear(),
+                "failed_lease" => {
+                    changed
+                        .0
+                        .remote_view_acquisition_leases
+                        .get_mut(&lease.id)
+                        .unwrap()
+                        .state = "failed".into()
+                }
+                "foreign_previous_route" => {
+                    changed
+                        .0
+                        .remote_view_acquisition_leases
+                        .get_mut(&lease.id)
+                        .unwrap()
+                        .previous_remote_view_route
+                        .as_mut()
+                        .unwrap()
+                        .browser_id = Some("peer".into())
+                }
+                "foreign_display" => {
+                    changed
+                        .0
+                        .display_allocations
+                        .get_mut("display")
+                        .unwrap()
+                        .owner_browser_id = Some("peer".into())
+                }
+                "changed_owner" => {
+                    changed
+                        .0
+                        .runtime_owner_registry
+                        .owners
+                        .values_mut()
+                        .next()
+                        .unwrap()
+                        .owner_generation += 1
+                }
+                "released_route" => {
+                    changed.0.remote_view_routes.get_mut("route").unwrap().state = "released".into()
+                }
+                _ => unreachable!(),
+            }
+            assert!(!binding.is_current(&changed), "{case}");
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
