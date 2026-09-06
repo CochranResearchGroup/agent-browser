@@ -3043,6 +3043,13 @@ leaving an occupied profile explained only as no compatible browser. Inspect
 that evidence before retrying. A helper timeout or unavailable user manager
 leaves ownership unproven.
 
+A capability binding from an older owner generation remains unproven for that
+capability. A new shared-local client can still reuse an exactly matched current
+browser when the current profile policy admits its stable subject. This does
+not refresh the old capability binding or grant it lifecycle authority.
+Restricted profiles, inconsistent profile identities and future-generation
+bindings still fail admission; registered clients must use guarded rejoin.
+
 A newly installed development lane with an optional, unconfigured presentation
 provider records an empty route inventory so headless work can start. It does
 not report presentation ready. Existing provider inventories and retained routes

@@ -417,3 +417,33 @@ changed-owner denial counterexamples, and repair the authority transition withou
 manually upgrading a stale principal grant. Align acquisition and failure
 recourse with actual admission. Retain the no-effect failed request as the red
 production case; repeat only after a material repair. Continue W1 then W2–W5.
+
+### W1 admission decision: separate current profile policy from stale capability authority
+
+The observed supersession and terminal-replacement transitions replace the
+runtime owner but retain its prior principal binding. That binding is correctly
+unproven for the new generation. The defect is treating it as a veto over a new
+shared-local subject, after proving the current owner, reciprocal browser/session
+membership and canonical profile digest. The existing profile policy already
+admits that subject independently. Preserve the old binding and guarded rejoin
+for registered capability users; do not promote or delete it. Allow independent
+shared-local profile selection only for an older generation, matching profile,
+stable permitted subject and non-capability request. Current policy restriction,
+future bindings and inconsistent identities continue to deny admission.
+
+The existing exact-owner selection regression was extended with this production
+shape and failed with `existing_session_profile_identity_inconsistent` before
+the repair. Its first repaired run and the three adjacent identity-conflict tests
+passed. Additional route and lint validation is in progress; this source result
+has not yet repaired the installed production request. The policy predicate is
+shared with the existing shared-local continuity path, without moving ownership
+or effect authorization into that predicate.
+
+W1 follow-up validation: all 92 route-host tests passed serially, including the
+added future-generation denial. Workspace clippy with warnings denied, format
+check, documentation build and remote-view handoff documentation checks passed.
+The optimized development candidate build is active. Its next proof uses a
+fully disposable shared-local fixture with exact retained browser processes and
+an explicitly constructed older capability binding, then exercises acquisition,
+blank-tab control and handle release through the Service API. No production
+state or capability is copied into that fixture.

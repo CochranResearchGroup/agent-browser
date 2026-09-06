@@ -836,10 +836,22 @@ pub(crate) fn apply_existing_session_profile_selection(
         .principal_bindings
         .get(&binding.claim.profile_identity_digest)
     {
+        // Superseding a browser does not promote its predecessor's capability.
+        // A fresh shared-local subject has independent policy authority, so an
+        // older binding cannot veto its exact current-owner profile selection.
+        // Registered callers still require their guarded continuity/rejoin path.
+        let independent_shared_local_use = principal_binding.owner_generation
+            < binding.claim.owner_generation
+            && command
+                .get("servicePrincipalProvenance")
+                .and_then(Value::as_str)
+                != Some("registered_capability")
+            && shared_local_profile_use_allowed(profile, profile_id, command);
         if principal_binding.profile_id != profile_id
-            || !state
+            || (!state
                 .runtime_owner_registry
                 .principal_binding_is_current(Some(principal_binding))
+                && !independent_shared_local_use)
         {
             return Err("existing_session_profile_identity_inconsistent".to_string());
         }
@@ -1578,27 +1590,43 @@ fn apply_registered_session_profile_continuity(
     Ok(true)
 }
 
-fn apply_shared_local_session_profile_continuity(
-    options: &mut LaunchOptions,
+/// Evaluate only the caller's current shared-local policy permission. This
+/// neither validates a browser identity nor grants capability continuity.
+fn shared_local_profile_use_allowed(
+    profile: &BrowserProfile,
+    profile_id: &str,
     command: &Value,
-    session_id: &str,
-    state: &ServiceState,
-) -> Result<bool, String> {
+) -> bool {
     let Some(subject_id) = command
         .get("clientSubjectId")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        return Ok(false);
+        return false;
     };
     let assurance = match command.get("identityAssurance").and_then(Value::as_str) {
         Some("self-declared") => ProfileIdentityAssurance::SelfDeclared,
         Some("authenticated-ingress") => ProfileIdentityAssurance::AuthenticatedIngress,
         Some("registered-capability") => ProfileIdentityAssurance::RegisteredCapability,
         Some("operator") => ProfileIdentityAssurance::Operator,
-        _ => return Ok(false),
+        _ => return false,
     };
+    let policy = profile
+        .access_policy
+        .clone()
+        .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(profile_id));
+    policy.mode == ProfileAccessMode::SharedLocal
+        && effective_profile_permissions(&policy, Some(subject_id), assurance)
+            .contains(&ProfilePermission::ProfileUse)
+}
+
+fn apply_shared_local_session_profile_continuity(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+) -> Result<bool, String> {
     let Some(session) = state.sessions.get(session_id) else {
         return Ok(false);
     };
@@ -1608,14 +1636,7 @@ fn apply_shared_local_session_profile_continuity(
     let Some(profile) = state.profiles.get(profile_id) else {
         return Ok(false);
     };
-    let policy = profile
-        .access_policy
-        .clone()
-        .unwrap_or_else(|| ServiceProfileAccessPolicy::shared_local_default(profile_id));
-    if policy.mode != ProfileAccessMode::SharedLocal
-        || !effective_profile_permissions(&policy, Some(subject_id), assurance)
-            .contains(&ProfilePermission::ProfileUse)
-    {
+    if !shared_local_profile_use_allowed(profile, profile_id, command) {
         return Ok(false);
     }
     if session.browser_ids.iter().any(|browser_id| {

@@ -676,6 +676,110 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
     assert_eq!(focus_selection, Some(ProfileSelectionReason::ExistingOwner));
     assert_eq!(focus_options.runtime_profile.as_deref(), Some(profile_id));
     assert_eq!(focus_options.profile.as_deref(), Some(profile_hint));
+
+    // A previous generation's capability is not authority for this owner, but
+    // must not veto a fresh client independently admitted by shared-local policy.
+    let mut state = state;
+    let digest = state
+        .runtime_owner_registry
+        .owners
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let historical = crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+        principal_id: "previous-client".to_string(),
+        profile_id: profile_id.to_string(),
+        profile_identity_digest: digest.clone(),
+        capability_id: "previous-capability".to_string(),
+        provenance:
+            crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+        owner_generation: 3,
+    };
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .insert(digest.clone(), historical.clone());
+    let shared_command = json!({
+        "action": "tab_new", "sessionName": session_id,
+        "clientSubjectId": "service:second-client", "identityAssurance": "self-declared"
+    });
+    assert_eq!(
+        apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &shared_command,
+            Some(session_id),
+            &state
+        )
+        .unwrap(),
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        state.runtime_owner_registry.principal_bindings[&digest],
+        historical
+    );
+    assert!(!state
+        .runtime_owner_registry
+        .principal_binding_is_current(Some(&historical)));
+    // Neither a stale capability nor missing subject identity may borrow this path.
+    for command in [
+        json!({ "action": "tab_new", "sessionName": session_id }),
+        json!({ "servicePrincipalProvenance": "registered_capability", "servicePrincipalId": "previous-client",
+            "action": "tab_new", "sessionName": session_id, "clientSubjectId": "service:second-client", "identityAssurance": "registered-capability" }),
+    ] {
+        assert!(apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &command,
+            Some(session_id),
+            &state
+        )
+        .is_err());
+    }
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .get_mut(&digest)
+        .unwrap()
+        .owner_generation = 5;
+    assert!(apply_existing_session_profile_selection(
+        &mut LaunchOptions::default(),
+        &shared_command,
+        Some(session_id),
+        &state
+    )
+    .is_err());
+    for generation in [4, 5] {
+        let binding = state
+            .runtime_owner_registry
+            .principal_bindings
+            .get_mut(&digest)
+            .unwrap();
+        binding.owner_generation = generation;
+        // A binding claiming another profile is always inconsistent, even when current.
+        binding.profile_id = "different-profile".to_string();
+        assert!(apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &shared_command,
+            Some(session_id),
+            &state
+        )
+        .is_err());
+    }
+    state
+        .runtime_owner_registry
+        .principal_bindings
+        .insert(digest.clone(), historical);
+    state.profiles.get_mut(profile_id).unwrap().access_policy = Some(ServiceProfileAccessPolicy {
+        mode: crate::native::service_profile_access_policy::ProfileAccessMode::Restricted,
+        ..ServiceProfileAccessPolicy::shared_local_default(profile_id)
+    });
+    assert!(apply_existing_session_profile_selection(
+        &mut LaunchOptions::default(),
+        &shared_command,
+        Some(session_id),
+        &state
+    )
+    .is_err());
 }
 
 #[test]
