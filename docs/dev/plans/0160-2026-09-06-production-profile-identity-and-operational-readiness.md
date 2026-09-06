@@ -559,3 +559,34 @@ bounded inline output. The existing Xvfb tests now isolate their log HOME; their
 final focused run passed. Workspace clippy, formatting, documentation build and
 handoff documentation checks passed. The optimized candidate build completed;
 installed development remote-headed launch/control/close/reopen is next.
+
+## Execution checkpoint 8: remote-headed development continuity passes
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete; original production reuse remains
+qualified by checkpoint 7
+
+progress_classification: blocker_reduction
+
+evidence: Repair `50540506` was committed and pushed. Installed development
+binary SHA256 `b750b542c5e5710d604b48ddc2e9b7ab4ea3e4c689697386d7ee2d5336150ce8`
+passed explicit custom-directory remote-headed launch, URL read, synthetic click
+and result read, close, reopen, second URL read and final close. Browser State
+confirmed `remote_headed`, `private_virtual_display` and display `:90` for both
+launches, with a new browser PID after the exact close. The final state had zero
+browsers and zero nonterminal tabs; a subsequent process census by fixture HOME,
+arguments and open-file ownership found no residue. Private durable receipts,
+state snapshots and probe source are in campaigns/p160/remote-headed-development-proof.
+The two Xvfb startup logs were created in the disposable HOME.
+
+material_blockers: This direct headed-control proof has no selected presentation
+route and does not establish A2 pixels, input, durable URL or multi-viewer
+acceptance. Production still runs the checkpoint 7 binary without the display
+repair. The display-fix full release build is now active. All remaining profile,
+doctor, diagnostics and timer criteria stay open.
+
+next_action_or_stop_reason: Resume the existing build recorded at
+campaigns/p160/census/x-display-release-build.log, qualify the exact release and
+publish within existing authority while preserving current browser owners.
+Repeat the required final-candidate production matrix, then complete W2–W5.
