@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_profile_denial_recourse_verified_interruption_durability_next`
+Execution state: `priority_journal_interruption_loss_reproduced`
 
 Lane: P157
 
@@ -6113,3 +6113,67 @@ decision. Full revocation/rejoin/live-browser restart, identity-unproven
 recovery, missing A-family producers, dashboard logging projection,
 interruption/reboot durability, ordinary external pixels/input, P/Q frame
 behavior, W6, and W7–W10 remain outstanding.
+
+### Priority Logging: Interruption Loss Reproduced
+
+One deterministic disposable-host experiment uses source 644c8a48 and candidate
+SHA-256 5c86c5e2f23f436bf316494f3269b89e71e981cd8f88f484c95f8e408f048a0f.
+The observer holds an exclusive advisory lock on the fixture's empty journal
+file, then sends one malformed Service request. The client receives HTTP 400,
+missing_action, no_effect, and an assigned request ID. The journal remains
+empty. The failure-journal worker is directly observed waiting in
+locks_lock_inode_wait while the observer retains the exact file lock.
+
+The observer fsyncs the response ledger, rechecks the spawned host executable
+and process start identity, then SIGKILLs only that exact disposable host.
+Exit is -9. After releasing the test lock, it starts a fresh host against the
+same fixture home with a fresh isolated socket directory. Service Status
+answers HTTP 200. The original request is never resubmitted. Journal readback
+still contains zero matching occurrences where one is expected: missing 1,
+duplicates 0, conflicts 0. Pre-dispatch jobs are correctly expected 0 and
+observed 0. Browser/session/tab counts are all zero. Exact restart-host cleanup
+exits zero and no fixture process remains.
+
+This is a measured product logging durability failure, not the earlier
+calibration harness custody failure. The original async-delivery crash window
+is no longer merely unproven. It is a process-interruption test with controlled
+journal contention, not a host power-loss or reboot test. The failing evidence
+must remain visible; no successful normal-delivery check can supersede it.
+
+The source explains the result: append_service_failure_best_effort returns
+after enqueueing an in-memory record. The worker obtains the journal file lock
+before append and sync_data. No durable pending record exists between response
+and append. Delivery/write-failure counters are process-local atomics, and the
+process log's observation line does not replace the missing causal envelope.
+Existing dispatcher tests prove delivery when the sink eventually completes,
+backpressure accounting, and explicit write-failure accounting; they do not
+prove survival of this interval.
+
+Evidence is under private P158 campaign directory
+journal-interruption-7sqtcob8: fsynced request/response/lock/process ledgers,
+pre-kill worker-wait observation, empty after-kill and after-restart journals,
+restart state, exact probe source, and hashed checkpoint. No installed P158,
+provider, production, or default-development runtime was changed, and no
+browser or external workflow was started.
+
+Classification: blocker_reduction through a verified counterexample and exact
+failing boundary. Next implement durable pending failure custody before the
+response, with idempotent restart recovery into the existing journal and
+explicit delivery-failure accounting. The failure-journal owner should own any
+pending-record storage under the same private runtime boundary; the final
+journal must remain compatible with its existing record/readback contracts.
+Do not convert this into an indefinitely blocking synchronous append: bound
+contention waits and distinguish pending durable custody from final projection.
+Replay must neither lose nor duplicate an occurrence after interruption between
+append and pending-record retirement. Preserve partial-line handling, private
+permissions, redaction, and queue-pressure evidence. Do not claim durable
+custody when the persistence operation itself fails.
+
+Use this exact lock/interruption seam as the repair regression, plus a focused
+append-before-retirement interruption check. One diagnostic is consumed; allow
+one bounded repair/verification cycle for this finding. Keep separate candidate
+identities and expected/observed counts. No automatic repetition of this failed
+request or calibration is authorized by the result. Full ACL lifecycle,
+identity-unproven recovery, top-level access-plan advice, missing A-family
+producers, dashboard logging projection, reboot durability, ordinary external
+pixels/input, P/Q frame behavior, W6, and W7–W10 remain open.

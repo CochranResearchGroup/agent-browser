@@ -169,13 +169,21 @@ and one MCP adapter verification each join exactly one journal occurrence with
 zero missing/duplicate/conflicting captured matches and no browser effects.
 The denial repair cycle is complete; installed P158 remains unchanged.
 
-Next prove the response-to-journal interruption boundary in a disposable
-process. Keep the top-level access-plan freshness advice as a separate known
-gap; it cannot override a denied decision. Live-browser restart, revocation/
-rejoin, identity-unproven recovery, dashboard logging projection, and ordinary
-external same-URL pixels/input remain open. The renewed Plan 0158 reconciliation
-governs. Calibration stays deferred; W6 and W7–W10, original workload, freeze
-gate, and full acceptance criteria remain unmet.
+The logging interruption probe now reproduces actual loss: while the disposable
+journal file is locked, a rejection reaches the client; after exact-host
+SIGKILL and restart, its journal has zero matches where one is required. The
+request was not retried. This disproves interruption durability for the
+in-memory delivery interval; it is distinct from calibration harness loss.
+
+Next repair durable pending failure custody before response, idempotent restart
+recovery, and bounded delivery behavior. Preserve the existing journal contract,
+private boundaries, and the failed epoch. Verify the exact lock/interruption
+seam and append-before-retirement recovery without lost or duplicate records.
+No synchronous unbounded journal wait or calibration loop is the default.
+Full ACL lifecycle, identity-unproven recovery, top-level access-plan advice,
+dashboard projection, reboot durability, ordinary external pixels/input, W6,
+and W7–W10 remain unmet. The renewed Plan 0158 priorities and original
+acceptance criteria remain in force.
 
 ## P156 | Full Runtime Shutdown Replacement
 
