@@ -1972,3 +1972,11 @@ This closes the reproduced profile failures. Ambient remote-headed reopen
 exposed a separate Xvfb startup failure, and global doctor/operator-journey
 acceptance remains incomplete. These findings remain explicit; the historical
 COMPLETE state applies to the bounded plan contract, not whole-runtime readiness.
+
+## Production readiness successor
+
+[Plan 0160](0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
+covers the four remaining production readiness items, prioritizing profile
+ownership/identity proof and causal error diagnosis. It is planned, not executed.
+This plan's bounded completion does not satisfy that successor's final-installed
+production acceptance contract.

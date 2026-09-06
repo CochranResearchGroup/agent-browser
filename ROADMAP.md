@@ -147,12 +147,14 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 
 ### Next Recommendation
 
-The operator now authorizes writing and executing
-[Plan 0159](docs/dev/plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
-Begin its retained-handle recovery and diagnostic repair, then ordinary
-remote-view verification and a consolidated deployment decision. This replaces
-the discussion-only successor direction below. P158's historical calibration
-sequence remains paused; its incomplete criteria and consumed attempts remain.
+[Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
+is written for the four remaining production readiness items. Execution has not
+started. Profile ownership/identity proof and causal error diagnosis are first,
+followed by the authenticated operator journey, maintenance reconciliation and
+unattended operation. Begin execution with the current census and highest-impact
+profile blocker. Plan 0159's bounded completion and installed profile repair do
+not establish whole production readiness. P158's historical calibration sequence
+remains paused and its incomplete criteria remain visible.
 
 ### Postmortem Disposition Before Successor Authorization
 
