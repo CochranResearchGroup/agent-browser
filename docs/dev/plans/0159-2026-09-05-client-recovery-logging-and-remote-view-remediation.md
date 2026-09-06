@@ -1450,3 +1450,37 @@ is still unaccepted. Next use this changed guard for one source-bound external
 verification with the same retained handle and historical oracle; keep the
 failed runs counted. W5 production delivery remains pending, production hashes
 are unchanged, and the synthetic browser/server remain retained obligations.
+
+## Checkpoint 33: resized probe exposes Chrome restore-bubble obstruction
+
+Source `80ef60ab` was dispatched once in protected readiness run
+[34019403717](https://github.com/CochranResearchGroup/agent-browser/actions/runs/34019403717)
+with the same original handle, installed binary and historical oracle. Both
+clients and the aggregate failed; retries remain zero. Each initial crop is
+400-by-100 but hashes to
+`3b2844b5faa2cdd98593e239647880843aba92a2c8960515077fe07b5fd8b79b`.
+All five artifacts from each client match their recorded bytes and hashes.
+
+Direct review of the slow client's full screenshot and marker crop shows the
+correct synthetic browser and blue marker, with Chrome's native “Restore pages?”
+bubble overlapping the crop's upper-right corner after the desktop resize.
+The white overlap explains this failed exact-pixel check. Both clients stopped
+before their input/concurrent-reopen work. The retained primary is still the
+same connectable UUID and has zero terminal owner records. This run neither
+reproduces nor clears the historical primary guard rejection.
+
+Private `primary-guard-live/external-resized-sample/` retains source/identity
+bindings, dispatch, aggregate, client artifacts, hash verification and primary
+journal readback. The initial geometry repair remains supported by the preceding
+run's two exact historical-hash passes; this new obstruction must not be hidden
+by moving the crop again or changing its expected hash.
+
+Next disposition is a bounded browser-startup/preparation correction for the
+restore bubble, not another unchanged external probe. Existing source adds
+`--hide-crash-restore-bubble` only in manual-login mode. The retained Chrome's
+command-line readback lacks that flag and includes `--start-maximized`. This
+is a concrete launch-policy lead; suppression behavior and the appropriate
+remote-headed scope still need focused verification before changing launch or
+replacing the fixture. No popup was dismissed, profile edited, browser closed,
+candidate installed or production changed during this adjudication. W3 and W5
+remain open, with the same retained synthetic browser/server obligations.
