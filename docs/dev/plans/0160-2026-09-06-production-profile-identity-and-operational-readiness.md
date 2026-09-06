@@ -373,3 +373,47 @@ next_action_or_stop_reason: Finish the active release build and its exact-binary
 qualification, publish within existing authority with preserved browser owners,
 and verify original profile reuse. Do not restart the build merely because an
 observation window ends. Retain the original failed development smoke receipt.
+
+## Execution checkpoint 5: production observation repair installed, next identity blocker reproduced
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete
+
+progress_classification: blocker_reduction
+
+evidence: Source `6d741162` was built with the full release profile. Exact binary
+SHA256 `0904e93f590bb05dd8434a137dfbabe025557821e8d83adecbd1aed958843bc0`
+passed the namespace identity probe, source-free installer fixture and disposable
+two-authenticated-client retained-handle recovery after host interruption.
+Production generation `0.28.0-0904e93f590b-df8df00a157c` was selected under existing
+installation authority. Host and both dashboard executables matched that hash;
+all four browser processes present at activation retained their exact identities.
+The previous immutable generation remains available for rollback. Private
+activation, qualification and request receipts are under campaigns/p160.
+
+After supported Service reconciliation, the original occupied profile reported
+its original browser ready and reusable. An authenticated dashboard API test
+then requested only an owned blank tab in that exact browser. It failed before
+effects with `existing_session_profile_identity_inconsistent`; no owned tab
+handle was returned. The retained browser/session profile association agrees,
+but its current owner generation is 2 while the registered principal binding
+still names generation 1. This is the next concrete admission blocker, not a
+successful end-to-end reuse result. A newer automatically selected profile is
+not accepted as proof that the original profile works.
+
+material_blockers: Access-plan reuse and execution admission still disagree.
+The failure has a job identifier and provenance but reports an unknown subject
+inside failure recourse while terminal provenance contains the declared subject;
+its advertised recovery-plan request omits the required profile and capability
+inputs. Preserve these actionable diagnostic gaps for AX. Doctor remains
+nonzero, remote-headed reopen and the operator journey remain unproved, and the
+reconciliation timer remains inactive pending A1–A3. The supported upgrade dry
+run remains unready; controlled publication does not establish A3 convergence.
+
+next_action_or_stop_reason: Trace owner-generation advancement and principal
+binding retirement/continuity, add the exact stale-binding regression with
+changed-owner denial counterexamples, and repair the authority transition without
+manually upgrading a stale principal grant. Align acquisition and failure
+recourse with actual admission. Retain the no-effect failed request as the red
+production case; repeat only after a material repair. Continue W1 then W2–W5.
