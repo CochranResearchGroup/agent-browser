@@ -342,9 +342,14 @@ synthetic pixel-marker screenshot region, and a synthetic-only visual capture
 attestation as secrets. The attestation binds a reviewed redaction receipt and
 proves forbidden private fields were excluded before capture. The expected
 pixel hash binds the exact crop of externally rendered remote pixels. Marker
-coordinates use the rendered remote-view iframe as their origin, not the
-surrounding dashboard viewport, so dashboard banners and rail layout cannot
-move the crop away from the synthetic fixture. A readiness probe paces its two
+coordinates with <code>coordinateSpace: remote-view-iframe</code> use iframe CSS
+pixels. For a scaled desktop, use <code>remote-view-display</code> and declare
+the marker rectangle in native desktop pixels, including browser chrome.
+Supply fixed CSS <code>sampleWidth</code> and <code>sampleHeight</code>; capture
+and input center that sample within the marker using observed Guacamole display
+geometry. An undersized rendered marker cannot pass by shrinking the sample.
+Preserve the independent expected PNG hash across geometry changes.
+A readiness probe paces its two
 independent clients to respect a single-viewer provider; it does not mistake
 expected viewer displacement for stream failure. Dispatch it with the frozen
 campaign run ID, exact full candidate commit SHA, and one

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { observeRemoteDisplayClip } from './p159-remote-display-geometry.js';
 
 export const SYNTHETIC_INPUT_PROTOCOL = 'trusted-marker-click-white-enter-reset-v1';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -10,22 +11,33 @@ export async function verifySyntheticRemoteInput(page, { region, expectedPixelHa
   const frames = page.locator('iframe');
   if (await frames.count() !== 1) throw new Error('Synthetic input requires exactly one remote frame');
   const box = await frames.first().boundingBox();
-  if (!box || region.coordinateSpace !== 'remote-view-iframe' ||
+  if (region.coordinateSpace !== 'remote-view-display' && (!box || region.coordinateSpace !== 'remote-view-iframe' ||
       region.x < 0 || region.y < 0 || region.width < 1 || region.height < 1 ||
-      region.x + region.width > box.width || region.y + region.height > box.height) {
+      region.x + region.width > box.width || region.y + region.height > box.height)) {
     throw new Error('Synthetic input region does not fit the remote frame');
   }
-  const clip = { x: box.x + region.x, y: box.y + region.y, width: region.width, height: region.height };
+  const observeClip = async () => {
+    if (region.coordinateSpace === 'remote-view-display') return observeRemoteDisplayClip(page, region);
+    const current = await frames.first().boundingBox();
+    if (!current || region.x + region.width > current.width || region.y + region.height > current.height) return null;
+    return { x: current.x + region.x, y: current.y + region.y, width: region.width, height: region.height };
+  };
+  let clip;
   const waitForPixels = async (label, accept) => {
     const deadline = Date.now() + timeoutMs;
     let lastBytes;
     do {
+      clip = await observeClip();
+      if (!clip) {
+        await page.waitForTimeout(100);
+        continue;
+      }
       const bytes = await page.screenshot({ clip });
       lastBytes = bytes;
       if (await accept(bytes)) {
         const file = `remote-input-${label}.png`;
         writeFileSync(join(outputDir, file), bytes);
-        return { file, sha256: digest(bytes), observedAt: new Date().toISOString() };
+        return { file, sha256: digest(bytes), clip, observedAt: new Date().toISOString() };
       }
       await page.waitForTimeout(100);
     } while (Date.now() < deadline);
@@ -39,9 +51,14 @@ export async function verifySyntheticRemoteInput(page, { region, expectedPixelHa
   // Controller takeover can reconnect the presentation. Wait for the exact
   // baseline before the first input; polling pixels does not repeat an action.
   const baseline = await waitForPixels('baseline', (bytes) => digest(bytes) === expectedPixelHash);
+  if (JSON.stringify(await observeClip()) !== JSON.stringify(baseline.clip)) {
+    throw new Error('Synthetic input geometry changed after baseline');
+  }
   await page.mouse.click(clip.x + clip.width / 2, clip.y + clip.height / 2);
   // Keep a provider-rendered cursor outside the acknowledgment crop.
-  await page.mouse.move(box.x + 10, box.y + 10);
+  const currentFrameBox = await frames.first().boundingBox();
+  if (!currentFrameBox) throw new Error('Synthetic input frame disappeared after click');
+  await page.mouse.move(currentFrameBox.x + 10, currentFrameBox.y + 10);
   const mouse = await waitForPixels('mouse', async (bytes) => page.evaluate(async (base64) => {
     const image = new Image();
     image.src = `data:image/png;base64,${base64}`;

@@ -191,6 +191,15 @@ const env = {
   RUNNER_OS: 'Linux',
   RUNNER_ARCH: 'X64',
 };
+const nativeMarkerRegion = { coordinateSpace: 'remote-view-display', x: 240, y: 206,
+  width: 960, height: 320, sampleWidth: 400, sampleHeight: 100 };
+const nativeMarkerConfig = (region) => validateExternalVantageConfiguration({
+  env: { ...env, P158_DEV_PIXEL_MARKER_REGION_JSON: JSON.stringify(region) },
+  clientId: 'external-runner-human', paceProfile: 'human_controller',
+});
+assert.deepEqual(nativeMarkerConfig(nativeMarkerRegion).pixelMarkerRegion, nativeMarkerRegion);
+assert.throws(() => nativeMarkerConfig({ ...nativeMarkerRegion, sampleWidth: undefined }), /invalid sampleWidth/);
+assert.throws(() => nativeMarkerConfig({ ...nativeMarkerRegion, sampleHeight: 1001 }), /sample must fit/);
 const boundarySanitized = sanitizeReceiptSecrets({
   nested: {
     url: env.P158_DEV_HANDOFF_URL,

@@ -8,6 +8,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { SYNTHETIC_INPUT_PROTOCOL, verifySyntheticRemoteInput } from './lib/p159-synthetic-remote-input.js';
+import { observeRemoteDisplayClip } from './lib/p159-remote-display-geometry.js';
 import {
   EXTERNAL_HANDOFF_FINDING_CODES,
   EXTERNAL_URL_ROLES,
@@ -127,10 +128,19 @@ export function validateExternalVantageConfiguration({ env, clientId, paceProfil
   if (pixelMarkerRegion.width < 1 || pixelMarkerRegion.height < 1) {
     throw new Error('Pixel marker region must have positive dimensions');
   }
-  if (!['viewport', 'remote-view-iframe'].includes(pixelMarkerRegion.coordinateSpace || 'viewport')) {
+  if (!['viewport', 'remote-view-iframe', 'remote-view-display'].includes(pixelMarkerRegion.coordinateSpace || 'viewport')) {
     throw new Error('Pixel marker region has invalid coordinateSpace');
   }
-  if (
+  if (pixelMarkerRegion.coordinateSpace === 'remote-view-display') {
+    for (const field of ['sampleWidth', 'sampleHeight']) {
+      if (!Number.isInteger(pixelMarkerRegion[field]) || pixelMarkerRegion[field] < 1) {
+        throw new Error(`Pixel marker region has invalid ${field}`);
+      }
+    }
+    if (pixelMarkerRegion.sampleWidth > 1440 || pixelMarkerRegion.sampleHeight > 1000) {
+      throw new Error('Pixel marker sample must fit the frozen viewport');
+    }
+  } else if (
     pixelMarkerRegion.x + pixelMarkerRegion.width > 1440 ||
     pixelMarkerRegion.y + pixelMarkerRegion.height > 1000
   ) {
@@ -1563,7 +1573,13 @@ async function waitForExpectedPixelMarker({
   let observedPixelHash = null;
   do {
     let screenshotClip = pixelMarkerRegion;
-    if (pixelMarkerRegion.coordinateSpace === 'remote-view-iframe') {
+    if (pixelMarkerRegion.coordinateSpace === 'remote-view-display') {
+      screenshotClip = await observeRemoteDisplayClip(page, pixelMarkerRegion);
+      if (!screenshotClip) {
+        await page.waitForTimeout(500);
+        continue;
+      }
+    } else if (pixelMarkerRegion.coordinateSpace === 'remote-view-iframe') {
       const frames = page.locator('iframe');
       const frameCount = await frames.count();
       const iframeBox = frameCount === 1 ? await frames.first().boundingBox() : null;

@@ -1108,7 +1108,13 @@ retained identity are frozen. The protected `p158-external-vantage` environment
 holds the handoff, dashboard credentials, expected identity JSON, prepared
 synthetic pixel-marker screenshot region, and synthetic-only visual capture
 attestation as secrets. The expected identity's
-pixel hash must match that exact externally rendered crop. Supply the exact
+pixel hash must match that exact externally rendered crop. Supply the
+native marker rectangle with `coordinateSpace: remote-view-display` when the
+desktop scales, plus fixed CSS `sampleWidth` and `sampleHeight`. Include browser
+chrome in native coordinates. Capture and input use observed Guacamole display
+geometry and refuse an undersized rendered marker. Keep the independent PNG
+oracle unchanged. Fixed `remote-view-iframe` regions still use iframe CSS pixels.
+Supply the exact
 full candidate commit SHA and campaign run ID at
 dispatch, plus one shared RFC3339 UTC calibration start at least 30 minutes in
 the future. Both independent GitHub-hosted client receipts and the aggregate

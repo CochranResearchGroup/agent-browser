@@ -1368,3 +1368,40 @@ Private `primary-guard-live/external/` retains the failed artifacts, aggregate,
 hash verification, terminal-record readback and provider observations. The
 synthetic browser and fixture server remain intentionally retained. W3 is not
 accepted, production is unchanged, and the goal remains open.
+
+## Checkpoint 31: map the synthetic sample through rendered display geometry
+
+Read-only inspection of the installed Guacamole 1.5.5 WAR confirms that the
+client centers its display inside the iframe. `Display.getElement()` returns a
+scaled bounding div; its first child retains native desktop dimensions with a
+CSS scale transform. The capture/input producer now reads those dimensions and
+the rendered bounds. The new `remote-view-display` region describes a native
+marker rectangle, including browser chrome, with fixed CSS `sampleWidth` and
+`sampleHeight`. Both consumers center the unchanged-size sample inside that
+rectangle. Missing geometry waits; ambiguous desktops fail; an undersized
+rendered marker cannot pass by shrinking the sample. Input rechecks geometry
+after baseline and retains crop coordinates with acknowledgment artifacts.
+
+The existing real-Chrome fixture regression now reproduces a desktop scaled to
+0.56 inside an offset, letterboxed iframe. It proves the old fixed crop misses
+the marker. Before input integration it failed at the unsupported geometry
+boundary; after repair it passes baseline, trusted mouse white acknowledgment,
+and Enter restoration with the same 400-by-100 local baseline digest. Existing
+negative input cases and the oversized-sample refusal pass. Configuration and
+external runner checks, handoff documentation checks, docs build, workspace
+clippy with warnings denied, and format pass. All five guidance surfaces are
+updated. These are focused local checks, not remote-view acceptance.
+
+A supplementary assertion comparing the direct-Chrome baseline to the historic
+RDP digest failed and was adjudicated outside that local test's scope: the source
+fixture declares RGB 18/92/142, while the independently read retained RDP PNG
+begins with RGB 16/94/140. The historical 400-by-100 RDP artifact still hashes to
+`7f642adcc83d962dcf542faedfee0a7bd9027bd45aa1bcba2fe6842c1d6ac527`.
+No external oracle, secret, installed runtime or live fixture was changed.
+
+This is W4 blocker reduction. Before one changed external diagnostic, verify
+the retained handle and native marker/chrome geometry, bind the producer source
+and installed candidate explicitly, and retain the historical RDP oracle. The
+test's 86-pixel chrome offset is a local fixture construction, not a live
+readback. W3 takeover/reopen/concurrency and the W5 production proposal remain
+open; the retained synthetic browser and server remain cleanup obligations.

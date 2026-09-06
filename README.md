@@ -145,6 +145,12 @@ and bind its redaction receipt SHA-256. The marker region is an <code>x</code>, 
 <code>width</code>, and <code>height</code> rectangle over the externally
 rendered remote pixels, and the identity's pixel hash is the prepared SHA-256
 digest for that exact crop.
+For scaled desktops, set `coordinateSpace` to `remote-view-display`: the rectangle
+uses native desktop pixels, including browser chrome, while `sampleWidth` and
+`sampleHeight` specify a fixed CSS-pixel crop centered inside it. The runner reads
+Guacamole display geometry for both capture and input, and waits if the sample
+does not fit. Preserve the independent expected PNG hash; never derive it from a
+failed capture. `remote-view-iframe` retains its fixed iframe CSS coordinates.
 The identity JSON supplies the exact
 browser, Profile, session, tab, target, visible URL, page marker, and required
 pixel hash. Dispatch the workflow with
