@@ -776,3 +776,49 @@ binary with the damaged-record/two-restart fixture and authenticated ownership
 checks, then publish while preserving all current production browsers. Run the
 original-profile synthetic request to exercise the installed recovery before
 claiming A1 progress in production. Continue AX and W2–W5.
+
+## Execution checkpoint 12: production original-profile recovery passes
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX remain incomplete. The original occupied-profile
+workflow now passes on the installed release, with its damaged launch projection
+restored through the product path.
+
+progress_classification: blocker_reduction
+
+evidence: Full release SHA256
+`d870205e3bed66e882a40b4d17a54d153e183eb8fcb2e2dd1f45c90f87e597e3`
+from source `f2786e1a` passed damaged-record recovery across two host replacements,
+two independently authenticated clients retaining their original handles,
+foreign-handle denial (`profile_child_subject_mismatch`, `no_effect`) and the
+source-free installer fixture. The authenticated fixture's 21 deliberately
+retained processes were disposed by exact fixture identity; none remained.
+The shared-headed recovery fixture left no residue.
+
+The candidate is installed as `0.28.0-d870205e3bed-796e97509b3e`, with support
+manifest SHA256 `796e97509b3efe1c4613c418d2e4c59e6c14cb987cfd35d19e23f452f80c252c`.
+All three production executables independently matched the binary hash. All
+four original browser process identities survived activation and the subsequent
+probe. The original-profile access plan selected the retained browser; ordinary
+synthetic blank-tab acquisition, evaluation and release passed. Its host,
+display name and allocation linkage were restored. No business operation,
+browser replacement or manual metadata repair was used for this result.
+Publication, rollback material, exact executable readback, probe and doctor
+receipts are private under campaigns/p160/publication-retained-recovery.
+Exact-release fixture roots are shared-headed-recovery-release-ceKnhk and
+retained-repair-eyys6m.
+
+material_blockers: Doctor remains nonzero, with the same 13 issue rows before
+and after publication: operator journey, upgrade readiness, retained terminal
+history warning, eight principal/binding warning rows, monitor readiness and
+unknown pressure ownership. Their individual dispositions and remaining A1
+matrix are unfinished. No A2 visibility or display exclusivity is claimed.
+The interlock timer remains inactive. Causal lookup, first-cause/source/build
+diagnostics and AX reconstruction remain unfinished.
+
+next_action_or_stop_reason: Complete causal diagnostics for profile failures,
+then finish current ownership dispositions and the final installed control
+matrix. Continue the operator journey, supported maintenance readiness and
+scheduled-operation acceptance without treating this reuse pass as whole-plan
+completion.
