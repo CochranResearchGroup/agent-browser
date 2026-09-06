@@ -658,3 +658,42 @@ An optimized candidate build is active in census/retained-launch-candidate-build
 the prepared isolated probe covers two clients across two host replacements.
 Already-damaged production metadata still requires verified recovery. The separate
 display allocation remains present, but its existence alone is not live proof.
+
+## Execution checkpoint 10: repeated headed reuse preserves launch identity
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete; recurrence prevention is qualified
+on an isolated optimized candidate, not yet installed in production.
+
+progress_classification: blocker_reduction
+
+evidence: Repair `29cb8739` is committed and pushed. Optimized candidate SHA256
+`77e724c3d9c7eb68f10ec43d26771ae97c0a2816833bc3ceebc6875254eb02c6`
+passed two-client remote-headed reuse across two exact host replacements.
+All four acquisitions and synthetic evaluations passed, with both original
+Chrome process identities, profile IDs, host types, display names and display
+allocation IDs preserved. Historical capability bindings remained unchanged.
+Final state had zero browser records, and exact fixture census found no residue.
+Private receipts and reproducible probe are in campaigns/p160/shared-headed-restart-4zYWjF;
+the terminal log is census/retained-launch-two-restarts.log.
+
+Read-only production X11 inspection found windows declaring the original
+browser PID on its retained allocation's display. Only window IDs and PID
+properties were retained, with no titles, screenshots or page content. The
+same display also contains windows for another retained browser, so this is
+display-location evidence and does not establish exclusive display isolation.
+Evidence is census/original-display-process-proof.json. Production state was
+not changed by these probes.
+
+material_blockers: Preventing future overwrite does not restore the already
+damaged production record. A bounded recovery must join exact current process,
+owner/profile and unique retained allocation evidence before updating that
+projection. A1 remains open until final installed production reuse passes;
+display isolation, external presentation, doctor and AX remain separate open
+criteria. The production timer remains inactive.
+
+next_action_or_stop_reason: Implement and qualify recovery of the damaged
+launch projection without granting new profile or lifecycle authority, then
+publish the combined repair and repeat final-candidate production acceptance.
+Continue causal diagnostics and W2–W5 under the existing goal authority.
