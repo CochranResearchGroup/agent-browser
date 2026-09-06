@@ -5709,6 +5709,10 @@ Before Compose can recreate Guacamole, reconciliation aligns the protected
 PostgreSQL password with any retained database container without changing the
 database and reuses its Compose project label. A retained container without a
 usable password or project label fails closed.
+The packaged defaults extension hash is bound to Guacamole's Compose service
+configuration. Changed extension code schedules web-container recreation during
+upgrade reconciliation without changing PostgreSQL or guacd configuration.
+Verify the served extension after applying the upgrade.
 The packaged container entrypoint copies the sealed Guacamole extension
 template into container-local writable storage before the upstream image
 generates authentication extensions. The immutable host generation remains

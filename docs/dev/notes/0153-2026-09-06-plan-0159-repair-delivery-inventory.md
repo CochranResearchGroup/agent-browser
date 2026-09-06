@@ -117,3 +117,21 @@ these observed notices and include the checkpoint 41 client-helper repair.
 They are not silently accepted as absent or turned into an automatic broad
 experiment queue. The synthetic browser, server and warm provider remain retained
 for this delivery review with exact private identity receipts and cleanup duties.
+
+## Production preparation checkpoint 42
+
+A preliminary release binary from `2bfd47c9` is preserved privately in
+`production-candidate/` with SHA-256
+`835c0a978c7e98f4a56e759d1d0cd9290ae26ebe850bb4cec8efcf52df097295`.
+It predates the production Compose extension-content binding correction and is
+not approval-ready. The corrected web service label binds the exact defaults
+JavaScript hash; the asset regression passes and a read-only Compose comparison
+changes only Guacamole's configuration hash. Production loaded-code proof is
+still pending an authorized deployment.
+
+The preliminary dry run is migration-blocked on an orphan process identity
+from a prior boot whose numeric PID is reused now. Do not signal that PID or
+hand-edit production state. The supported migration guard requires further
+candidate compatibility work. Exact retained generation and compatibility
+drop-in hashes are preserved under `production-rollback-custody/`; production
+replacement, override retirement and final support composition remain pending.

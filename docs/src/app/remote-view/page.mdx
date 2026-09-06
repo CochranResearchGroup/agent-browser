@@ -32,6 +32,8 @@ Reopening the durable URL preserves the original tab's client access record.
 admission before browser effects. Inspect the Service trace; a returned handle
 does not authorize reconstruction of a missing grant.
 
+Workstation upgrades bind the packaged Guacamole defaults extension hash to the web container configuration. Changed extension code therefore schedules recreation of that container during Compose reconciliation. This content change leaves the PostgreSQL and guacd service configurations unchanged; verify the served extension after applying an upgrade.
+
 The packaged Guacamole extension preserves text-input preferences but removes
 both declarative and controller-startup text-field focus in embedded viewers.
 Focus the remote text field

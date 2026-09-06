@@ -148,6 +148,8 @@ container and managed Chrome path, and it fails the live-gate readiness view
 when the managed Chrome sandbox policy is absent, inactive, or mismatched.
 Standalone doctor runs discover the versioned installed helper-script root, so
 they do not require a checkout or an ambient script-root override.
+Workstation upgrades bind the packaged Guacamole defaults extension hash to the web container configuration. Changed extension code therefore schedules recreation of that container during Compose reconciliation. This content change leaves the PostgreSQL and guacd service configurations unchanged; verify the served extension after applying an upgrade.
+
 The packaged Guacamole defaults extension migrates each browser origin once to
 the `text` input method. Text input is therefore selected for existing and new
 connections, while a later user-selected override remains persistent.

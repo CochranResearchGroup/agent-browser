@@ -97,6 +97,15 @@ const defaultsManifestPath = join(assetRoot, 'extensions/guac-manifest.json')
 const defaultsScriptPath = join(assetRoot, 'extensions/agent-browser-defaults.js')
 const defaultsManifest = JSON.parse(readFileSync(defaultsManifestPath, 'utf8'))
 const defaultsScript = readFileSync(defaultsScriptPath, 'utf8')
+// The stable installation symlink does not change Compose mount configuration.
+// Bind extension content to the web service so changed code triggers recreation.
+const guacamoleService = compose.split('\n  guacamole:\n')[1]?.split('\nvolumes:')[0]
+assert(guacamoleService, 'Guacamole service configuration must exist')
+assert(
+  guacamoleService.includes(`org.agent-browser.defaults-sha256: "${sha256(defaultsScriptPath)}"`),
+  'Guacamole service must bind the exact defaults extension content for upgrade reload',
+)
+assert.equal((compose.match(/org\.agent-browser\.defaults-sha256:/g) || []).length, 1)
 const guacamoleStart = readFileSync(join(assetRoot, 'start-guacamole.sh'), 'utf8')
 
 assert.match(guacamoleStart, /cp -R "\$template_source\/\." "\$writable_template\/"/)

@@ -1809,3 +1809,29 @@ production. Next freeze a release-profile candidate with a freshly built
 dashboard for the concrete production proposal, then verify its materialized
 support composition and supported dry-run/rollback plan. W5 and the retained
 fixture obligations remain open; production mutation remains unperformed.
+
+## Checkpoint 42: production extension delivery binding
+
+The release build from `2bfd47c992fa57a6f817a166f065f782616c0a1c`
+completed with a freshly built dashboard (80 assets). The frozen binary hash is
+`835c0a978c7e98f4a56e759d1d0cd9290ae26ebe850bb4cec8efcf52df097295`.
+Private `production-candidate/` retains the binary, dashboard asset manifest and
+build logs. It is preliminary, not an installed or approval-ready candidate.
+
+Production preparation identified a stable-symlink Compose gap: changing a
+mounted extension does not itself change the web container configuration. The
+packaged Compose service now carries the exact extension source hash as a label,
+with an asset regression requiring its equality to the packaged JavaScript.
+The regression failed before the correction and the asset suite passes after it.
+Rust format, workspace clippy with warnings denied, and docs build pass.
+A read-only Compose configuration comparison changes only Guacamole's hash;
+PostgreSQL and guacd are identical. No containers were changed. Served-extension
+readback remains required after an authorized deployment.
+
+A separate preliminary production dry run remains migration-blocked on a process
+identity without a browser row. Its recorded boot differs from the current boot,
+although the numeric PID is currently reused. Preserve the foreign current
+process and assess existing migration guards and retained references before
+changing candidate behavior. No production state was edited. W5 remains open;
+the next candidate must incorporate the delivery correction and resolve or
+explicitly disposition the migration gate before the concrete delivery decision.
