@@ -207,3 +207,41 @@ Private evidence under `production-delivery-approved/` includes
 `installed-extension-check-current.json`, `installed-doctor-current.json`,
 `browser-smoke/installed-test/ordered-smoke.json` and the immutable-mount Compose
 log. Installation is achieved; full production acceptance is not achieved.
+
+
+## Profile usability remediation in progress
+
+The operator made profile errors the highest priority. The prior bounded W1
+acceptance remains historical evidence on its tested binary; it does not accept
+profile usability on the final installed candidate. An isolated supervisor with
+an explicit custom profile path reproduces both production errors: successful
+open, `explicit_profile_conflicts_with_current_owner` on the next URL read,
+and `existing_session_profile_identity_unproven` after successful close. The
+persisted terminal lifecycle proves exact process exit and profile lock release.
+A named-profile control avoided the first failure. Current work targets these
+reproduced paths, preserves ownership and authorization guards, and requires
+installed outcome verification before declaring resolution.
+
+
+Diagnosis: the default planner attached a generated managed-ephemeral runtime
+profile to an explicitly selected custom directory. The rightful owner was then
+rejected as conflicting. Terminal recovery additionally required a named
+profile and could not resolve a path-only request despite satisfied cleanup.
+After correcting those seams, the live test exposed a third mapping error:
+internal `custom:` Service record IDs were passed as named runtime profiles,
+causing name validation failure and attempted relaunch. The repair preserves
+path-backed launch identity, suppresses conflicting defaults, and resolves an
+exact terminal custom profile by canonical path without relaxing owner gates.
+The initial live failures and focused terminal-regression failure remain
+preserved. Validation of the combined repair is in progress.
+
+
+Combined repair verification: the isolated custom-profile regression now passes
+open, URL read, click, asserted text change, close, reopen and another URL read.
+The live browser PID, profile ID and tab set remain unchanged during control.
+The original authenticated W1 probe also passes on the repaired optimized binary:
+two original handles resume after disposable host interruption, both Chrome
+processes remain original, foreign-handle control is denied, and final Service
+browsers/sessions/tabs are zero. Evidence is in private
+`retained-repair-NaKZpp/` and the custom-profile smoke receipts. Rust presubmit and
+production publication are still pending at this checkpoint.

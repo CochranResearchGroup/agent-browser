@@ -434,3 +434,11 @@ agent-browser set headers '{"X-Custom-Header": "value"}'
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete states older than N days (default: 30)</td></tr>
   </tbody>
 </table>
+
+## Custom profile continuity
+
+Repeated commands with the same `--session` and `--profile <path>` reuse that
+custom directory. A planned default must not replace an explicit profile path.
+After an exact close proves process exit and lock release, reopening the same
+path resolves its retained profile identity. Conflicting profiles and unresolved
+ownership still fail before browser effects.

@@ -7600,6 +7600,7 @@ Examples:
   agent-browser runtime list                               # Show configured and discovered runtime profiles
   agent-browser --runtime-profile work runtime status      # Inspect a named runtime profile
   agent-browser --profile ~/.myapp open example.com        # Persistent custom profile path
+  # The same session and custom path preserve profile identity across commands and clean closes.
   agent-browser profiles                               # List available Chrome profiles
   agent-browser --session-name myapp open example.com  # Auto-save/restore state
   agent-browser chat "open google.com and search for cats"  # AI chat (single-shot)

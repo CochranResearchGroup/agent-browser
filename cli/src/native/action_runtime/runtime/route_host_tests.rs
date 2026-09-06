@@ -1090,6 +1090,90 @@ fn authenticated_principal_recovers_exact_released_terminal_projection() {
 }
 
 #[test]
+fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("terminal-custom-profile-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "custom:fixture";
+    let session_id = "custom-profile-session";
+    let browser_id = format!("session:{session_id}");
+    let user_data_dir = home.join("custom-profile");
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-provider-owner".to_string(),
+        profile_identity_digest: profile_identity_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 5,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id,
+            profile_identity_digest,
+            owner_generation: 5,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "service_reconcile_process_group_absent:62232".to_string(),
+                "service_reconcile_profile_lock_stale_pid_absent:62232".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.to_string_lossy().into_owned()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                lease: LeaseState::Released,
+                profile_id: Some(profile_id.to_string()),
+                ..BrowserSession::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    // A path-backed CLI profile has no runtime-profile name. The retained
+    // record is selected by its canonical directory and exact terminal owner.
+    let command = json!({"action": "launch", "profile": user_data_dir});
+    let mut options = LaunchOptions {
+        profile: Some(user_data_dir.to_string_lossy().into_owned()),
+        ..LaunchOptions::default()
+    };
+    let result = apply_service_profile_selection(&mut options, &command, Some(session_id));
+    assert_eq!(result.unwrap(), None);
+    assert!(options.runtime_profile.is_none());
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("terminal-owner-explicit-profile-relaunch-home");
@@ -4597,4 +4681,27 @@ fn test_managed_runtime_attach_is_only_for_compatible_headless_launches() {
         ..LaunchOptions::default()
     };
     assert!(!can_attach_managed_runtime_for_launch(&remote_headed));
+}
+
+#[test]
+fn planned_runtime_profile_does_not_override_explicit_custom_directory() {
+    let planned = json!({"runtimeProfile": "managed-ephemeral-planned", "profile": "/tmp/planned"});
+    for command in [
+        json!({"action": "launch", "profile": "/tmp/requested"}),
+        json!({"action": "navigate", "profile": "/tmp/requested"}),
+    ] {
+        let options = LaunchOptions {
+            profile: Some("/tmp/requested".to_string()),
+            ..LaunchOptions::default()
+        };
+        let effective =
+            crate::native::action_runtime::runtime::daemon::apply_planned_launch_defaults(
+                &command,
+                &json!({}),
+                &planned,
+                &options,
+            );
+        assert_eq!(effective["profile"], "/tmp/requested");
+        assert!(effective.get("runtimeProfile").is_none());
+    }
 }

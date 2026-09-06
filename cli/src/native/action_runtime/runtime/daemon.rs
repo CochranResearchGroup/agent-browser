@@ -481,6 +481,8 @@ pub(crate) fn apply_planned_launch_defaults(
     let mut object = command.as_object().cloned().unwrap_or_default();
     insert_planned_string_if_missing(&mut object, command, planned_request, "browserBuild");
     if options.runtime_profile.is_none()
+        && options.profile.is_none()
+        && command.get("profile").is_none()
         && command.get("runtimeProfile").is_none()
         && command.get("profileId").is_none()
     {
@@ -695,6 +697,19 @@ pub(crate) fn apply_service_profile_selection(
     Ok(Some(selection.reason))
 }
 
+/// Service custom-profile IDs identify a directory record; they are not named
+/// runtime profiles. Preserve that distinction when resolving an existing owner
+/// so repeated commands keep the original launch identity and profile path.
+fn retained_profile_launch_identity(
+    profile_id: &str,
+    profile: &BrowserProfile,
+) -> (Option<String>, Option<String>) {
+    (
+        (!profile_id.starts_with("custom:")).then(|| profile_id.to_string()),
+        profile.user_data_dir.clone(),
+    )
+}
+
 pub(crate) fn apply_existing_session_profile_selection(
     options: &mut LaunchOptions,
     command: &Value,
@@ -863,8 +878,8 @@ pub(crate) fn apply_existing_session_profile_selection(
             return Err("explicit_profile_conflicts_with_current_owner".to_string());
         }
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
@@ -1092,6 +1107,37 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     let command_profile_id = optional_command_or_params_string(command, "runtimeProfile")
         .or_else(|| optional_command_or_params_string(command, "profileId"));
     let command_profile = optional_command_or_params_string(command, "profile");
+    // Path-backed CLI profiles have no runtime-profile name. Resolve the
+    // retained record by canonical directory, then keep the same exact owner
+    // and terminal cleanup gates used for named profiles. Ambiguous records
+    // must not choose an arbitrary profile policy.
+    let requested_path = command_profile
+        .as_deref()
+        .or(options.profile.as_deref())
+        .filter(|profile| crate::runtime_profile::looks_like_path(profile));
+    let path_profile_id = if command_profile_id.is_none() {
+        if let Some(path) = requested_path {
+            let digest = crate::runtime_profile::canonical_profile_identity_digest(
+                &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
+            )?;
+            let mut matches = state.profiles.iter().filter_map(|(id, profile)| {
+                let path =
+                    resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), id)
+                        .ok()?;
+                (crate::runtime_profile::canonical_profile_identity_digest(&path).ok()? == digest)
+                    .then_some(id.as_str())
+            });
+            let matched = matches.next();
+            if matches.next().is_some() {
+                return Ok(false);
+            }
+            matched
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let Some(profile_id) = command_profile_id
         .as_deref()
         .or_else(|| {
@@ -1099,6 +1145,7 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
                 .as_deref()
                 .filter(|profile| !crate::runtime_profile::looks_like_path(profile))
         })
+        .or(path_profile_id)
         .or(options.runtime_profile.as_deref())
         .or_else(|| {
             options
@@ -1259,8 +1306,8 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
     if !(exact_terminal_owner && owner_projection_inert && principal_projection_absent) {
         return Ok(false);
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
@@ -1521,8 +1568,8 @@ fn apply_registered_session_profile_continuity(
             return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
         }
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {
@@ -1603,8 +1650,8 @@ fn apply_shared_local_session_profile_continuity(
             return Err("explicit_profile_conflicts_with_shared_local_session".to_string());
         }
     }
-    options.runtime_profile = Some(profile_id.to_string());
-    options.profile = profile.user_data_dir.clone();
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(profile_id, profile);
     if profile.browser_build == Some(BrowserBuild::StockChrome)
         && command.get("executablePath").is_none()
     {

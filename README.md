@@ -1984,6 +1984,12 @@ agent-browser --profile ~/.myapp-profile open myapp.com/dashboard
 AGENT_BROWSER_PROFILE=~/.myapp-profile agent-browser open myapp.com
 ```
 
+Repeated commands with the same `--session` and `--profile <path>` reuse that
+custom directory. A planned default must not replace an explicit profile path.
+After an exact close proves process exit and lock release, reopening the same
+path resolves its retained profile identity. Conflicting profiles and unresolved
+ownership still fail before browser effects.
+
 The profile directory stores:
 
 - Cookies and localStorage
