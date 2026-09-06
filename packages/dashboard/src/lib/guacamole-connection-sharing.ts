@@ -24,9 +24,8 @@ type GuacamoleSharingCredentials = {
 
 type GuacamolePrimaryClaim = {
   granted?: boolean;
-  retryAfterMs?: number;
-  claimId?: string | null;
-  revision?: string | null;
+  primaryOwned?: boolean;
+  activeConnectionId?: string;
 };
 
 export type GuacamolePrimaryReservation = { claimId: string; revision: string; routeId: string; connectionId: string };
@@ -129,7 +128,15 @@ function guacamoleSharingRoot(root: URL): URL {
 }
 
 async function readJson<T>(response: Response, operation: string): Promise<T> {
-  if (!response.ok) throw new Error(`${operation} returned HTTP ${response.status}`);
+  if (!response.ok) {
+    if (operation === "Guacamole backend primary ownership") {
+      const failure = await response.json().catch(() => null) as { code?: unknown } | null;
+      if (typeof failure?.code === "string" && /^guacamole_(primary_|viewer_primary_)[a-z_]+$/.test(failure.code)) {
+        throw new Error(`${operation}: ${failure.code}`);
+      }
+    }
+    throw new Error(`${operation} returned HTTP ${response.status}`);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -269,8 +276,15 @@ export async function resolveGuacamoleViewerFrame({
   const root = guacamoleRoot(frameUrl, dashboardHref);
   const connectionId = stream.connectionId?.trim();
   const routeId = stream.routeId?.trim();
-  if (stream.providerMode !== "simultaneous_view" || !root || !connectionId || !routeId) {
-    return { mode: "direct", url: frameUrl };
+  if (stream.providerMode !== "simultaneous_view") return { mode: "direct", url: frameUrl };
+  if (!root || !connectionId || !routeId) throw new Error("Guacamole primary binding is incomplete");
+  const ownership = await readJson<GuacamolePrimaryClaim>(await fetchImpl(
+    new URL("/api/guacamole-primary-claim", dashboardHref), {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: "ensure", routeId, connectionId }), cache: "no-store", signal,
+    }), "Guacamole backend primary ownership");
+  if (ownership.primaryOwned !== true || ownership.granted !== false || !ownership.activeConnectionId) {
+    throw new Error("Guacamole backend primary identity is unavailable");
   }
 
   const tokenResponse = await fetchImpl(new URL("api/tokens", root), {
@@ -292,68 +306,15 @@ export async function resolveGuacamoleViewerFrame({
     }),
     operation,
   );
-  let observedRevision: string | null = null;
-  const claimPrimary = async (): Promise<GuacamolePrimaryClaim> => readJson<GuacamolePrimaryClaim>(
-    await fetchImpl(new URL("/api/guacamole-primary-claim", dashboardHref), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ routeId, connectionId, observedRevision }),
-      cache: "no-store",
-      signal,
-    }),
-    "Guacamole primary election",
-  );
-
   const electionDeadline = nowImpl() + 15_000;
-  let consecutiveEmptySnapshots = 0;
   while (nowImpl() < electionDeadline) {
     const activeConnections = await authenticatedFetch<Record<string, GuacamoleActiveConnection>>(
       "api/session/data/postgresql/activeConnections",
       "Guacamole active-connection discovery",
     );
-    // Guacamole 1.5.5 does not identify which REST rows are primary versus
-    // shared children. Prefer the oldest connectable row, then prove it remains
-    // stable after key creation so a closing viewer cannot donate a dead key.
-    const matchingRows = matchingActiveConnections(activeConnections, connectionId);
-    // Guacamole includes shared child sessions in activeConnections. A key
-    // minted from one of those rows dies with that viewer and strands the next
-    // viewer on Guacamole's login screen. Only a direct primary may donate a
-    // sharing credential. Some Guacamole APIs expose
-    // sharingProfileIdentifier for shared children, while the installed 1.5.5
-    // projection may omit it. The connectable, role, age, and post-mint
-    // identity checks therefore act together rather than trusting one field.
-    const activeCandidates = connectableCandidates(activeConnections, connectionId, nowImpl());
-    if (matchingRows.length === 0) {
-      consecutiveEmptySnapshots += 1;
-      if (consecutiveEmptySnapshots < 2) {
-        if (!await waitWithinDeadline({
-          deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
-        })) break;
-        continue;
-      }
-      const claim = await claimPrimary();
-      if (claim.granted) return {
-        mode: "direct", url: frameUrl,
-        ...(claim.claimId && claim.revision ? { primaryReservation: {
-          claimId: claim.claimId, revision: claim.revision, routeId, connectionId,
-        } } : {}),
-      };
-      observedRevision = claim.revision ?? null;
-      // A revision is admission metadata, not provider-absence proof. Collect
-      // both empty snapshots again after every denied or stale claim.
-      consecutiveEmptySnapshots = 0;
-      const retryAfterMs = Number.isFinite(claim.retryAfterMs) ? claim.retryAfterMs! : 250;
-      if (!await waitWithinDeadline({
-        deadline: electionDeadline,
-        delayMs: Math.max(50, Math.min(250, retryAfterMs)),
-        nowImpl,
-        signal,
-        waitImpl,
-      })) break;
-      continue;
-    }
-    consecutiveEmptySnapshots = 0;
+    // Only the UUID returned by the backend-owned tunnel may donate a key.
+    const activeCandidates = connectableCandidates(activeConnections, connectionId, nowImpl())
+      .filter(([id]) => id === ownership.activeConnectionId);
 
     // A just-created direct primary is visible before it is old enough to
     // donate a reliable sharing key. Wait for maturity rather than electing a
@@ -436,5 +397,5 @@ export async function resolveGuacamoleViewerFrame({
       deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
     })) break;
   }
-  throw new Error("Guacamole primary election timed out");
+  throw new Error("Guacamole backend primary sharing timed out");
 }

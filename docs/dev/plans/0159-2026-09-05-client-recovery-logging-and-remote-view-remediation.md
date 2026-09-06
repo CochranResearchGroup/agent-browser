@@ -659,3 +659,118 @@ W2's compatible stream-enable repair still needs installed custody. The
 synthetic browser/server remain retained obligations. The provider ownership
 repair and W5 consolidated delivery decision remain required; production is
 unchanged and the old terminal-target proposal remains unexecuted.
+
+### W3 implementation contract: backend-owned provider primary
+
+Guacamole 1.5.5's [sharing contract](https://guacamole.apache.org/doc/1.5.5/gug/using-guacamole.html#sharing-the-connection)
+explicitly ties shared access to the original connection. The repair will own
+that connection in the dashboard backend, using the existing authenticated
+primary-claim endpoint and trusted local provider configuration. This is product
+connection ownership, not a calibration client or additional browser process.
+
+Before provider effects, resolve the exact route/connection/browser from current
+Service authority and validate the original process/owner binding. Never accept
+an arbitrary caller URL or provider credential. Serialize startup per exact
+binding and let every viewer use a restricted sharing connection. A viewer page
+must no longer receive a direct-primary election grant. Connection tokens stay
+in memory and are excluded from response, logs and persisted evidence.
+
+The owner consumes only provider display/protocol traffic; it sends no desktop
+input and creates no browser or target. Its task belongs to the backend process,
+has bounded startup and shutdown, and is cancelled when the exact route/browser
+binding becomes invalid or terminal. A failed owner is an explicit failed state,
+not an automatic reconnect loop. Stale or foreign bindings fail before effects.
+Tests must prove that dropping viewer requests does not drop the primary,
+concurrent requests do not start duplicate primaries, and binding invalidation
+does close it. Installed proof must then cover peer departure and actual input
+through the same durable URL before W3 acceptance.
+
+Implementation in progress: the receive-only protocol and backend task modules
+are currently compiled only for tests. Eight focused tests pass, including the
+two existing primary-election tests. The new tests exercise real WebSocket
+framing over an in-memory transport, cancellation of a pending viewer wait,
+binding invalidation, stale readiness after task abortion, and bounded protocol
+parsing without desktop input. Workspace clippy with warnings denied and the
+format check pass; clippy's ordinary workspace selection does not lint these
+test-only modules. Logs are `/tmp/p159-primary-protocol-tests.log` and
+`/tmp/p159-primary-clippy.log`.
+
+The authenticated endpoint, exact Service-binding admission, duplicate-start
+serialization, local provider connection and shared-only frontend remain to be
+wired. These tests do not establish installed provider ownership, peer continuity,
+or external input acceptance. No provider dispatch or runtime publication was
+performed for this implementation step.
+
+The exact-binding module now reuses `RuntimeLifecycleAuthority` and validates
+the route, connection, original process digest, endpoint digest and display
+ownership. Its regression uses current process evidence and the real lifecycle
+gate against an in-memory Service repository. Viewer/controller lease changes
+preserve the binding; missing process evidence, changed endpoint, display
+reassignment, missing lifecycle/owner evidence and foreign route/connection
+selectors fail. Provider origins require a literal loopback address and the
+expected Guacamole path, with no URL credentials or query. Ten focused tests,
+workspace clippy with warnings denied and format check pass. Current logs are
+`/tmp/p159-primary-binding-tests-final.log` and
+`/tmp/p159-primary-binding-clippy.log`. All three new modules remain test-only.
+The logs and a source-hash receipt are preserved in the private P159 campaign
+directory `primary-owner-source-validation/` for durable evidence custody.
+
+Integration must also replace the frontend's oldest-eligible-connection
+selection with the backend owner's exact active-connection identity. A lingering
+viewer-owned primary is not an acceptable sharing-key donor just because its
+connection ID matches. Resolve the provider's tunnel-to-active-row identity
+contract before wiring key issuance. Startup must belong to the backend task
+even while authentication/connection is pending; request cancellation must not
+cancel that startup or permit duplicate admission. These are remaining
+implementation requirements, not reasons to dispatch another external run.
+
+## Checkpoint 12: backend primary ownership integrated in source
+
+The primary modules now compile in the ordinary runtime. The authenticated
+primary endpoint accepts `ensure`, resolves exact Service authority, and retains
+one backend task per provider origin/connection. Authentication and WebSocket
+startup belong to that task, so cancelling a pending viewer request cannot
+cancel startup. The task has one total startup deadline, bounded sends/shutdown,
+and periodic exact-binding checks. Failed entries are retained without automatic
+retry; a changed binding must wait for the prior owner to stop before replacement.
+Legacy viewer-election and connected-confirmation requests fail before effects.
+
+Guacamole 1.5.5's WebSocket endpoint emits the tunnel UUID in its initial internal
+instruction. JDBC `ActiveConnectionRecord` preserves that UUID on the tunnel and
+`TrackedActiveConnection` exposes it as the active-row identifier. The source
+readback is retained privately; upstream references are
+[WebSocket endpoint](https://github.com/apache/guacamole-client/blob/1.5.5/guacamole-common/src/main/java/org/apache/guacamole/websocket/GuacamoleWebSocketTunnelEndpoint.java)
+and [tracked active connection](https://github.com/apache/guacamole-client/blob/1.5.5/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-base/src/main/java/org/apache/guacamole/auth/jdbc/activeconnection/TrackedActiveConnection.java).
+The protocol validates and freezes that UUID. Readiness requires it plus a
+consumed sync frame. The frontend obtains keys only from that exact UUID and
+never falls back to an older or viewer-owned primary. Backend failure codes
+survive into the existing dashboard error-reporting path without raw provider
+responses or credentials.
+
+Ten focused Rust tests pass, including cancelled pending startup, exact identity
+and lifecycle guards, immutable tunnel identity, terminal task status and legacy
+endpoint rejection. Workspace clippy now covers the enabled modules and passes
+with warnings denied. Format check, dashboard type check, dashboard build, docs
+build, resolver custody tests and the mounted observer-frame regression pass.
+The latter proves that observer acknowledgement preserves the same iframe and
+explicit reload replaces it. Legacy election cases were replaced with exact
+backend-donor, concurrent/reopen, maturity, missing/vanishing donor, rejected key,
+authorization failure and cancellation coverage. The first mounted-fixture
+attempt still supplied a direct-election grant; its next revision changed the
+primary start timestamp on each read and correctly failed stability checks.
+The final fixture freezes the timestamp and supplies backend ownership. Those
+failed attempts remain diagnostic evidence. Two clippy findings in the newly
+enabled transport were fixed before the passing check.
+Moving the authority gate before connection startup also changed the invalid-
+binding fixture from a WebSocket close frame to transport closure; its assertion
+now accepts closure while still rejecting every provider acknowledgement.
+Logs, upstream source readbacks and the source-hash receipt are preserved under
+the private P159 campaign directory `primary-owner-integration/`.
+
+This is source integration, not W3 acceptance. Remaining immediate gates are
+the provider adapter's authentication/handshake and registry duplicate-start
+boundary tests, exact retained-fixture disposition, isolated installation and
+real provider peer-departure/input proof. No new external dispatch, provider
+mutation or candidate publication accompanied this checkpoint. Production and
+the retained browser/server remain unchanged by this slice. W2 installed
+verification and W5 delivery/cleanup obligations remain open.

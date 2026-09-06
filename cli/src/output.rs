@@ -6090,6 +6090,10 @@ selected build, executable path when known, and mismatch state.
 When a likely one-time operator handoff passes a new arbitrary runtime profile,
 oneTimeProfileWarning recommends a managed one-time profile id.
 Dry runs return operatorVisible.state=not_checked.
+Simultaneous Guacamole viewers share a backend-owned primary connection bound
+to the exact browser and display. Closing a viewer preserves that primary.
+A failed primary remains an explicit failure requiring provider reconciliation;
+reopening the durable URL does not elect another viewer as primary.
 
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook

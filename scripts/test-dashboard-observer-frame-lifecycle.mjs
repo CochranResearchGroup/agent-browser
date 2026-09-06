@@ -42,13 +42,16 @@ const browser={id:'session:fixture',profileId:'fixture',health:'ready',host:'rem
 const selected={browser,stream,streamChoices:[stream],streamChoiceKeys:['rdp-1'],canView:true,canControl:false,authority:{lifecycle:{live:true}},tabSelection:{tab:null,tabIndex:null,recoveredFromStaleSelection:false,staleSelectionId:null},readiness:{status:'ready',recoveryAction:null}};
 const projection={selected,candidates:[selected],tiles:[]};
 window.leaseRequested=false;window.leaseCompleted=false;window.failures=[];
+const primaryStartedAt=Date.now()-10000;
 window.fetch=async (url,options={})=>{
  const u=new URL(String(url),location.href),body=options.body?JSON.parse(options.body.startsWith('{')?options.body:'{}'):{};
  let value={};
  if(body.action==='service_viewer_lease_request'){window.leaseRequested=true;await new Promise(r=>window.finishLease=r);window.leaseCompleted=true;value={success:true,data:{}};}
  else if(u.pathname.endsWith('/api/tokens'))value={authToken:'synthetic'};
- else if(u.pathname.endsWith('/activeConnections'))value={};
- else if(u.pathname==='/api/guacamole-primary-claim')value={granted:true,claimId:'claim',revision:'revision'};
+ else if(u.pathname.endsWith('/activeConnections'))value={'backend-owner':{connectionIdentifier:'connection-1',connectable:true,startDate:primaryStartedAt}};
+ else if(u.pathname.endsWith('/sharingProfiles'))value={profile:{identifier:'profile',name:'Agent Browser Shared Session route-1',primaryConnectionIdentifier:'connection-1'}};
+ else if(u.pathname.includes('/sharingCredentials/'))value={expected:[{name:'key',type:'QUERY_PARAMETER'}],values:{key:'synthetic-key'}};
+ else if(u.pathname==='/api/guacamole-primary-claim')value={granted:false,primaryOwned:true,activeConnectionId:'backend-owner'};
  else if(u.pathname.includes('failure'))window.failures.push(body);
  return new Response(JSON.stringify(value),{status:200,headers:{'content-type':'application/json'}});
 };
@@ -61,7 +64,7 @@ try {
     const pageErrors = [];
     page.on('pageerror', e => pageErrors.push(e.message));
     await page.route('**/*', route => route.abort());
-    await page.route('http://p159.test/**', async (route) => { const u = new URL(route.request().url()); await route.fulfill({ contentType: 'text/html', body: u.pathname === '/guacamole/' ? '<html><body>synthetic remote frame</body></html>' : '<html><body><div id="root"></div></body></html>' }); });
+    await page.route('http://p159*.test/**', async (route) => { const u = new URL(route.request().url()); await route.fulfill({ contentType: 'text/html', body: u.pathname === '/guacamole/' ? '<html><body>synthetic remote frame</body></html>' : '<html><body><div id="root"></div></body></html>' }); });
     await page.goto('http://p159.test/?view=workspace:view&browser=session:fixture&session=fixture');
     await page.addScriptTag({ content: bundle });
     await page.waitForFunction(() => window.leaseRequested, {}, { timeout: 5000 });

@@ -3118,19 +3118,20 @@ diagnose missing stream metadata before opening a remote desktop. Its **Open
 remote control** action uses the same path as browser rows, so it queues
 `view_focus` with target ID plus tab-index fallback before opening the embedded
 stream when the service reports a controllable input provider.
-For a Guacamole route that declares `providerMode="simultaneous_view"`, the
-dashboard joins the route's existing Guacamole tunnel through its managed
-sharing profile. It does not open another RDP login that would disconnect an
-existing viewer. The transient sharing key stays inside the iframe URL and is
-never used as an operator handoff. If the sibling-origin Guacamole frame
-rejects that key before becoming usable, the installed extension reports only
-an opaque attempt ID and bounded outcome to the exact dashboard origin. The
-dashboard removes the failed frame, records the failure, and performs a fresh
-bounded election. It never reloads the rejected key.
-The exact connected direct frame retires its startup reservation. Reconnect
-must observe the resulting reservation revision and two fresh empty provider
-snapshots before admitting another primary. Unconfirmed reservations retain
-their 30-second expiry; the 15-second election deadline is unchanged.
+For a managed Guacamole route with `providerMode="simultaneous_view"`, the
+dashboard backend owns the primary connection for the exact browser, process,
+owner generation and display binding. Every viewer uses a restricted sharing
+key from that primary's exact tunnel UUID. Closing or reopening a viewer does
+not transfer primary ownership. Keys remain transient and must never be saved
+or sent as operator handoffs; use the same durable remote-view URL.
+
+A rejected key is discarded and reported through the existing bounded recovery
+flow. Recovery may request a fresh key from the same healthy primary. It cannot
+elect a viewer as primary or restart a failed backend owner. Provider failures
+remain explicit until reconciled; binding invalidation closes the owned tunnel.
+Backend startup requires the installed provider's trusted header principal and
+literal loopback Guacamole origin. Connection readiness does not establish
+visible pixels or successful input; those require separate outcome evidence.
 Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
 selected-browser inspector or embedded remote-control dialog; it drives the
 real dashboard UI with `agent-browser`, selects the remote-headed browser row,

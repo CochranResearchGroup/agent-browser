@@ -7,6 +7,11 @@ mod dashboard;
 mod dashboard_auth;
 mod discovery;
 mod foreign_cdp_control;
+mod guacamole_primary_binding;
+mod guacamole_primary_protocol;
+mod guacamole_primary_provider;
+mod guacamole_primary_registry;
+mod guacamole_primary_transport;
 mod http;
 mod websocket;
 

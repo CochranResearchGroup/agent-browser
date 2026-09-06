@@ -2957,21 +2957,20 @@ The Chat tab is always visible in the dashboard. Set `AI_GATEWAY_API_KEY` to ena
 
 ### Simultaneous Guacamole viewers
 
-When a managed Guacamole route declares `providerMode="simultaneous_view"`,
-the dashboard joins the existing Guacamole tunnel through a transient
-connection-sharing URL instead of opening another RDP login. Never expose
-that transient share key as an operator handoff or persist it in evidence. A
-rejected sibling-origin key is reported to the parent only as an opaque attempt
-ID plus `ready` or `share_key_rejected`. The dashboard must discard the iframe,
-record the failure, and run a fresh bounded election. It must never reload the
-rejected key.
+For a managed Guacamole route with `providerMode="simultaneous_view"`, the
+dashboard backend owns the primary connection for the exact browser, process,
+owner generation and display binding. Every viewer uses a restricted sharing
+key from that primary's exact tunnel UUID. Closing or reopening a viewer does
+not transfer primary ownership. Keys remain transient and must never be saved
+or sent as operator handoffs; use the same durable remote-view URL.
 
-A direct frame retires only its own startup reservation after Guacamole reports
-`CONNECTED`. Reconnect admission requires the current reservation revision and
-two fresh empty provider snapshots. A stale confirmation cannot retire a new
-primary. Unconfirmed reservations keep their 30-second expiry; the election
-deadline remains 15 seconds. Do not treat frame load or authentication as
-connection proof, extend campaign deadlines, or publish reservation credentials.
+A rejected key is discarded and reported through the existing bounded recovery
+flow. Recovery may request a fresh key from the same healthy primary. It cannot
+elect a viewer as primary or restart a failed backend owner. Provider failures
+remain explicit until reconciled; binding invalidation closes the owned tunnel.
+Backend startup requires the installed provider's trusted header principal and
+literal loopback Guacamole origin. Connection readiness does not establish
+visible pixels or successful input; those require separate outcome evidence.
 
 ## Ready-to-Use Templates
 
