@@ -194,8 +194,13 @@ conflicting records. Next reconcile the retained remote-view target and supporte
 recovery path, then pursue ordinary external same-URL pixels/input. Preserve P/Q
 failures and the original target. Do not repeat the completed journal, drain, or
 provenance cycles or resume calibration by default.
-Full ACL lifecycle, identity-unproven recovery, top-level access-plan advice,
-dashboard projection, reboot durability, ordinary external pixels/input, W6,
+Access-plan denial advice is now fixed and authenticated-client verified in
+31a5a348. The failed production host is restored with its existing binary and a
+scoped startup-directory compatibility override; this is not remote-view proof.
+The operator prioritizes remaining client blockers next: retained live-browser
+restart, identity-unproven recovery, stale handles, and timeout uncertainty.
+Full ACL lifecycle, dashboard projection, reboot durability, ordinary external
+pixels/input, W6,
 and W7–W10 remain unmet. The renewed Plan 0158 priorities and original
 acceptance criteria remain in force.
 

@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_authenticated_actor_provenance_verified`
+Execution state: `priority_profile_blocker_repairs_active`
 
 Lane: P157
 
@@ -34,6 +34,16 @@ Overlaps: [P144]
 
 ## Current Priority Reconciliation
 
+The operator's latest direction makes the remaining client Profile blockers high
+priority. Execute the known access-plan advice correction first, then bounded
+identity-unproven/inconsistent recovery and retained-live-browser restart/crash
+coverage. Keep the existing completed ACL and logging cycles closed. The
+production startup failure has a reproduced cause and existing source repair;
+prepare its scoped operational restoration separately from a formal release or
+promotion of all development changes. The same-URL replacement-target proposal
+remains separately pending explicit reopening confirmation. Calibration stays
+deferred and original full-plan criteria remain in force.
+
 The operator requested handoff reconciliation before execution. Current repo
 checkpoints supersede the handoff's historical runtime snapshot and the older
 next-action sequence below. The reconciliation preceded execution; subsequent
@@ -41,7 +51,7 @@ bounded repairs and their evidence are recorded in the checkpoints below.
 
 | Priority | Recorded outcome evidence | Remaining acceptance gap |
 | --- | --- | --- |
-| Usable authenticated Profile leases and ACLs | Own-Profile acquisition and exact denials have focused proof. After repair 54d1a8f6, two registered-capability clients also pass shared-Profile drain, own release, committed revocation, restored grant, fresh-connection rejoin, and retained-peer control. | Live-browser restart, actual identity-unproven recovery, full matrix coverage, and top-level access-plan advice remain open. |
+| Usable authenticated Profile leases and ACLs | Own-Profile acquisition and exact denials have focused proof. After repair 54d1a8f6, two registered-capability clients also pass shared-Profile drain, own release, committed revocation, restored grant, fresh-connection rejoin, and retained-peer control. | Access-plan denial advice is repaired and authenticated-client verified in 31a5a348. Live-browser restart, actual identity-unproven recovery, and full matrix coverage remain open. |
 | Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Repair 062727fb resolves the policy actor conflict in three focused authenticated operations with 18 matching provenance projections. Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
 | Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
 
@@ -6501,3 +6511,62 @@ browser reopen, external workflow, or calibration has run. Source/hash and
 prepare receipts remain private in execution-preparation.json. This is execution
 preparation, not a remote-view acceptance pass; explicit confirmation is still
 required for the proposed replacement-target effect.
+
+
+### Priority Client Blockers: Advice Fixed And Production Host Restored
+
+The operator explicitly prioritized fixing the remaining client blockers.
+Source 31a5a348 corrects access-plan guidance: a denied Profile decision now
+selects its policy or occupancy inspection action before freshness/seeding
+advice, with blocking attention. Site-policy denial retains precedence, and
+permission enforcement is unchanged. The extended existing regression fails
+before repair with freshness advice versus expected policy inspection. All 55
+focused service-access tests, workspace clippy, format, docs build, and the
+optimized candidate build pass.
+
+One disposable authenticated-client verification uses candidate SHA-256
+1f93af7a797aaf3115a50ae349b384bfcebb914c1a0eb3adb30f6a0c1724595e.
+A valid registered capability lacking a grant receives denied access, unavailable
+acquisition, matching top-level and nested policy-inspection recourse, and
+blocking attention. The separately authorized capability retains allowed access
+and available acquisition. No browsers are opened. The exact host exits 0;
+final state has zero browsers, sessions, and tabs. Private directory
+access-advice-nBgVPq retains source, fsynced evidence, and a hashed checkpoint;
+capability scans find zero leaks. This verifies permission advice through the
+real HTTP client; it does not claim the full remaining ACL matrix.
+
+Independent production read-only diagnosis found the installed runtime host
+failed after the September 5 reboot, while dashboards remained active. The
+startup error is failure to write its daemon auth token because a directory is
+missing. The installed binary reproduces that exact failure in a disposable
+no-browser supervisor smoke. The current candidate passes the same supervisor
+smoke, including socket-directory removal between starts; existing source repair
+8164eac9 supplies the fix. Production metadata also contains 63 historical ready
+handoffs, 62 without their referenced browser row, including 45 terminal
+lifecycles. These historical counts are not an external link-failure rate.
+
+Under the operator's subsequent fix instruction, scoped operational restoration
+recreates only the selected production socket directory with mode 0700 and
+starts the previously failed host using unchanged binary SHA-256
+4a92c42517e1441f5e30b6fcf52857123efa7eb8273a8b126fc504de966333f7.
+Service Status succeeds; the exact host remains active with zero restarts.
+A generation-scoped systemd override ensures that same private directory before
+future starts. Unit verification and effective configuration readback pass;
+no second production restart or machine reboot is performed. Review/remove the
+override on future runtime replacement; promoting the startup source fix is
+preferable to keeping a pinned-path compatibility override indefinitely.
+
+An initial preparation guard incorrectly included root-owned /run/user in the
+per-user ownership check and stopped before effects. The corrected boundary
+checks /run/user/1000 and descendants, preserving that pre-effect disposition.
+Private production-readonly-1cf6invy and production-host-restoration-1xndokxt
+retain diagnosis, unchanged-binary proof, start/status readbacks, validated
+service override, and rollback instructions. This restores host availability;
+it does not establish working remote links or deploy the development ACL fixes.
+No production browser request, credential entry, client eviction, Profile/ACL
+mutation, runtime replacement, release, or calibration is performed.
+
+Next bounded verification targets authenticated original-tab use across an
+unexpected isolated host stop while retaining the exact Chrome processes. Keep
+actual identity-unproven/inconsistent recovery, stale handles, and timeout
+uncertainty open until their corresponding client outcomes are verified.
