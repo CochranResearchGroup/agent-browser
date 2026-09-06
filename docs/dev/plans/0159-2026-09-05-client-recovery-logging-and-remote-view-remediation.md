@@ -795,3 +795,36 @@ candidate build, followed by exact fixture disposition and isolated installation
 Status custody is under private `primary-owner-candidate/`; boundary proof logs
 are preserved under `primary-owner-boundary/`. No installation or live provider
 effect has occurred at this checkpoint.
+
+## Checkpoint 14: isolated candidate installed; selected W2 repair verified
+
+The optimized candidate built from `76997cda` is installed only in P158 as
+`0.28.0-1698c2f6c4a9`, SHA-256
+`1698c2f6c4a9a08486a7c208e9349bc83636550dd395c5ee003a56ae16033fd5`.
+The installer verifies production and default-development custody unchanged.
+The exact development doctor and three disposable browser-launch smokes pass.
+
+Before installation, the retained synthetic browser answered through its
+original authorized handle. A fresh target inventory contained the synthetic
+fixture, blank/new-tab pages and Chrome internal UI. The exact browser was then
+closed through `service_browser_close` with its original handle/session and
+labels. Its Service row is absent afterward; all fourteen captured process
+start identities are gone. This is a deliberate fixture closure, not a
+same-browser upgrade or same-URL reopen pass. The synthetic fixture server
+remains retained for subsequent provider verification. Captured-tree cleanup
+does not assert that every namespace-wide ancillary process is reclaimed.
+
+On the installed candidate, two successive `stream enable` requests against
+the existing `development-default-p158` lane succeed, both reporting enabled
+port 5151. The supervisor manifest hash remains identical. Together with the
+earlier real-listener identity regression, this closes the selected W2
+compatible-stream-enable installation gap. It does not establish universal
+failure-log coverage or erase the historical uncertain failures.
+
+Private `primary-owner-candidate/` contains build/candidate identity, before
+status, original-handle readback, target/process inventory, durable close intent
+and response, cleanup readback, installation receipt, doctor, launch smokes and
+stream-enable readbacks. W3 still requires a new explicitly scoped synthetic
+fixture, actual provider primary/peer-departure/input evidence and the protected
+external outcome. No new external dispatch was made. W5 repair inventory,
+production-update decision and final cleanup remain open.
