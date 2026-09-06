@@ -2,9 +2,9 @@
 
 Date: 2026-09-05
 
-State: OPEN
+State: COMPLETE
 
-Execution state: `selected_outcomes_verified_delivery_preparation_active`
+Execution state: `accepted_production_delivery_decision_pending`
 
 Lane: P157
 
@@ -1931,3 +1931,23 @@ production deployment remains pending, with an explicit material-policy caveat.
 Finish the acceptance-by-acceptance closeout audit against the selected W2
 logging evidence and remaining obligations before marking the overall plan
 complete. No new broad discovery or external retry is authorized by this step.
+
+## Checkpoint 46: acceptance audit complete
+
+Progress: `outcome_progress`. State transitions to COMPLETE for the frozen five
+criteria, with production delivery decision pending. The
+[acceptance audit](../notes/0155-2026-09-06-plan-0159-acceptance-audit.md)
+records the criterion-by-criterion evidence and limits. W1/W3 artifact readback,
+selected W2 journal/actor/stream receipts, rollback/support custody, exact
+migration review and explicit retained-resource dispositions were inspected.
+The final frozen release binary passes the source-free installer fixture;
+handoff documentation checks pass. Required Rust, migration, asset, client and
+docs validation is retained with its corresponding source/build boundaries.
+
+The [delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+recommends retaining current production until a separate decision explicitly
+covers the 77 policy materializations. Criterion 4 permits that decision to
+remain pending. No production replacement, ACL mutation, override retirement,
+formal release, whole-branch promotion or new external campaign occurred.
+Retained synthetic review obligations remain explicit under criterion 5.
+P158 historical failures and unexecuted endurance criteria remain unchanged.

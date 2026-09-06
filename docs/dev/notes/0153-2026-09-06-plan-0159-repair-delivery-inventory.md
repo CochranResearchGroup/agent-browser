@@ -1,7 +1,7 @@
 # Plan 0159 repair and delivery inventory
 
-Date: 2026-09-06. Status: isolated candidate installed; production proposal
-preparation incomplete. This inventory does not authorize whole-branch promotion.
+Date: 2026-09-06. Status: bounded Plan 0159 accepted; concrete production
+delivery decision pending. This inventory does not authorize whole-branch promotion.
 
 Authority: [Plan 0159](../plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
 The historical [D01–D15 register](0152-2026-09-05-plan-0158-defect-register.json)
@@ -176,3 +176,5 @@ boundary; a successful dry run does not authorize them. Other reviewed additions
 are inert historical browser/session references, with tab-handle serialization
 changes. Current selected production remains unchanged. W1/W3 evidence hashes
 and the retained fixture PID/start identity were reverified in checkpoint 45.
+
+Final criterion-by-criterion result: [acceptance audit](0155-2026-09-06-plan-0159-acceptance-audit.md).
