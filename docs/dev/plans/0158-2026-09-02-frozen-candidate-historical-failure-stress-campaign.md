@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_retained_handoff_source_repaired_verification_pending`
+Execution state: `priority_retained_handoff_failure_verified_acl_and_durability_next`
 
 Lane: P157
 
@@ -5948,3 +5948,48 @@ Classification: blocker_reduction. The next step remains one installed
 response/job/event/trace/journal verification, preserving the original handoff.
 Authenticated ACL lifecycle, interruption durability, ordinary external pixels
 and input, P/Q frame behavior, W6, and W7–W10 remain unmet.
+
+### Priority Retained Handoff: One Installed Verification Passed
+
+Source 5803203b builds and installs in P158 as generation
+0.28.0-75f7d4a2caab. All three service processes read back from that exact
+binary. Required provider doctor and the three disposable open/read/close/
+residue checks pass. Production and default-development isolation comparisons
+pass both during installation and after verification. No provider apply or
+external dispatch occurs.
+
+Exactly one supported resolution request reuses the prior retained handoff
+without allowReopenClosed or identity replacement. It returns HTTP 200 with
+success false, the exact runtime_handoff_orphan_browser_hint_mismatch cause,
+lifecycle_owner / launch_admission / no_effect, and inspect_before_retry with
+inspect_profile_recovery_plan recourse. Transport HTTP 200 is not operation
+success. The job is failed, replacing the prior misleading succeeded result.
+
+Response, one durable job, one terminal event, one matching trace job/event,
+and one journal occurrence agree on the structured failure. Expected counts
+are one for each captured projection; missing, duplicate, and conflict counts
+are all zero. Browser, session, tab, and durable-handoff collections compare
+identically before and after the request. Dashboard projection and interruption
+durability were not verified. The exact target remains unavailable; there is
+no ready/pixel/input or recovery claim.
+
+Private evidence is retained under campaign directory
+retained-handoff-repair-20260906T000247Z: pre-install and verification state,
+source/candidate disposition, install/doctor/smoke receipts, fsynced one-request
+ledger, job/event/trace/journal readbacks, final isolation comparison, and a
+SHA-256 artifact checkpoint. Raw runtime state and links stay outside the repo.
+The source regression was red before repair and green afterward; 28 focused
+coordinator tests, 13 failure-recourse tests, format, clippy with warnings denied,
+client generation/parity, docs build, and handoff guidance checks pass. This is
+focused plus one installed verification, not comprehensive campaign acceptance.
+
+Classification: outcome_progress for truthful ordinary-handoff failure and
+normal-operation postmortem evidence. The one repair/verification cycle for
+this finding is consumed and passed; do not rerun it as a calibration pretext.
+Next follow the renewed reconciliation's second step: select the actual
+identity-unproven/inconsistent authenticated Profile path, inventory its live
+producer gap, and prove authorized access plus exact unauthorized denial with
+logging attached. Keep the independent interruption-durability slice explicit.
+Ordinary external same-URL pixels/input, P/Q frame failures, authenticated ACL
+lifecycle, full logging durability, W6, and W7–W10 remain unmet. Calibration
+stays deferred and production mutation remains outside scope.

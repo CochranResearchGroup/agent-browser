@@ -153,18 +153,20 @@ proof is partial: shared self-declared clients and actionable child denials
 pass focused checks; authenticated ACL lifecycle and interruption durability
 remain unproven; ordinary links still lack external pixel/input acceptance.
 
-The retained-handoff identity rejection now has a focused source repair with
-a red/green coordinator regression. Next is its one installed verification:
-preserve authority and the same URL, report truthful failure and recovery
-recourse, and join the failure evidence. An absent record
-does not prove permanent loss. This slice cannot establish working links.
-Then address authenticated ACL lifecycle and logging interruption independently,
-and run the ordinary external same-URL proof with current synthetic bindings.
-The latest reconciliation in Plan 0158 governs; source checks do not prove
-installed behavior. Calibration remains deferred. Do not
-implicitly restart, reinstall, or resume the harness queue. W6 and W7–W10,
-the original workload, freeze gate, and full acceptance criteria remain open.
-Anchored readiness does not prove ordinary links or production reliability.
+The retained-handoff identity rejection repair now passes one installed P158
+verification: failed response/job with actionable recourse, matching event,
+trace and journal, zero missing/duplicate/conflicting captured matches, and
+unchanged browser/session/tab/handoff records. Source is 5803203b; installed
+generation is 0.28.0-75f7d4a2caab. This proves truthful failure, not recovery or
+working links. The bounded verification is complete; do not repeat it.
+
+Next address authenticated Profile access and identity-denial lifecycle with
+logging attached, and separately prove logging interruption durability. Then
+run ordinary external same-URL pixel/input acceptance with current synthetic
+bindings. The renewed Plan 0158 reconciliation governs. Calibration remains
+deferred; W6 and W7–W10, original workload, freeze gate, and full acceptance
+criteria remain open. Anchored readiness does not prove ordinary links or
+production reliability.
 
 ## P156 | Full Runtime Shutdown Replacement
 
