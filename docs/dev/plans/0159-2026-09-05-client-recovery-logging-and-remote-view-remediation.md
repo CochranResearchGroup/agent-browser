@@ -1610,3 +1610,15 @@ provider restart. Verify the loaded asset and trusted focus behavior before the
 changed external verification. Preserve the current white acknowledgment state
 until that disposition; no remote DOM reset or unchanged retry is authorized.
 W3 keyboard/reopen and W5 production delivery remain open.
+
+The matching optimized candidate built in 2m04s from
+`593cc6ee8105aed25996cfaa5e83f89cbcebf258`, binary SHA-256
+`d2626e2428c3fdb08a19d2931066573ab3cb7af9cd47375772e95e6e015db727`.
+Its extension source SHA-256 is
+`afe1387803908700c2fa90420c67ed592a6f4560ce145d6d43bc4a48619ab009`.
+Private `keyboard-focus-candidate/` retains the frozen executable, build/source
+receipt and successful read-only provider plan. No provider mutation or fixture
+closure has occurred. The provider effect adapter supports force-recreation of
+the P158 Guacamole/guacd containers when reconciliation requires startup; verify
+that publication actually loads the new extension rather than accepting only
+healthy containers with stale code.
