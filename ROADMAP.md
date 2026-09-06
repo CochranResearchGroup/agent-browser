@@ -182,9 +182,14 @@ pass: pending-before-append and an observer-synced append-before-retirement
 state each yield expected 1, observed 1, missing 0, duplicates 0, conflicts 0.
 This closes the bounded process-interruption repair cycle; the original failed
 epoch remains evidence, and host power-loss durability is not established.
-Next select authenticated policy revocation and rejoin with two independent
-synthetic clients and logging attached. Do not repeat the completed journal
-cycle or resume calibration by default.
+Authenticated policy revocation and rejoin now pass after 54d1a8f6: closed tab
+history no longer blocks drain completion. Revision 1 drains, revision 2 denies
+the revoked client, and revision 3 permits restored-grant rejoin over a fresh
+connection while the retained peer remains usable. Two denial journal joins
+pass with zero missing/duplicate/code-conflicting records. Three policy mutation
+receipts still disagree with terminal provenance about the authenticated actor.
+Next repair that bounded provenance defect from the retained evidence. Do not
+repeat the completed journal or drain cycles or resume calibration by default.
 Full ACL lifecycle, identity-unproven recovery, top-level access-plan advice,
 dashboard projection, reboot durability, ordinary external pixels/input, W6,
 and W7–W10 remain unmet. The renewed Plan 0158 priorities and original

@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 State: OPEN
 
-Execution state: `priority_journal_interruption_recovery_verified`
+Execution state: `priority_authenticated_revocation_rejoin_verified`
 
 Lane: P157
 
@@ -41,15 +41,17 @@ bounded repairs and their evidence are recorded in the checkpoints below.
 
 | Priority | Recorded outcome evidence | Remaining acceptance gap |
 | --- | --- | --- |
-| Usable authenticated Profile leases and ACLs | Independent registered-capability clients acquired their own restricted Profiles, including after a disposable host restart with browsers closed. Cross-profile denial now retains the exact denied decision and actionable recourse in HTTP, MCP, and journal. | Revocation, rejoin, live-browser restart, actual identity-unproven recovery, and top-level access-plan advice remain open. |
-| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
+| Usable authenticated Profile leases and ACLs | Own-Profile acquisition and exact denials have focused proof. After repair 54d1a8f6, two registered-capability clients also pass shared-Profile drain, own release, committed revocation, restored grant, fresh-connection rejoin, and retained-peer control. | Live-browser restart, actual identity-unproven recovery, full matrix coverage, and top-level access-plan advice remain open. |
+| Durable postmortem logging | The original interruption probe proves one lost rejection and remains preserved. Repair 2fae5f5a passes both pending-before-append and append-before-retirement restart seams, each with expected 1, observed 1, missing 0, duplicates 0, conflicts 0. | Three policy-mutation receipt/provenance identity conflicts remain in the latest lifecycle verification. Dashboard projection, wider failure coverage, and reboot durability remain open. These focused process checks do not establish power-loss or full campaign acceptance. |
 | Ordinary working remote-view links | Retained-handoff identity rejection now reports a truthful failed response/job and matching failure evidence. | Ordinary external authenticated same-URL pixels, input, reopening, concurrent ownership, and recovery remain unaccepted. Truthful rejection is not a working-link pass; production reliability has not been independently established. |
 
 The bounded product logging repair and its two distinct interruption checks
 are complete; preserve the original failed epoch and do not repeat this cycle.
-Next select the authenticated policy-revocation and rejoin diagnostic with two
-independent synthetic clients and durable logging attached. Establish exact
-expected permission and effect outcomes before changing the fixture policy.
+Authenticated policy revocation and rejoin now pass after the closed-tab drain
+repair. Next address the concrete policy-mutation provenance conflict: preserve
+the authenticated actor used by authorization in job and terminal evidence.
+Use the retained three conflicting receipts as the regression target; do not
+repeat the completed lifecycle campaign or restart calibration.
 
 Retain live-browser restart and actual identity-unproven recovery as explicit
 remaining lifecycle criteria, and the ordinary external synthetic same-URL
@@ -6271,3 +6273,101 @@ logging attached. Full ACL lifecycle, live-browser restart, identity-unproven
 recovery, top-level access-plan advice, missing A-family producers, dashboard
 projection, reboot durability, ordinary external pixels/input, P/Q behavior,
 W6 and W7–W10 remain open. Calibration remains deferred.
+
+
+### Priority ACL Lifecycle: Closed History Blocks Policy Drain
+
+Two bounded diagnostics use source 2fae5f5a and candidate SHA-256
+5063b91aac03f5f7a8c63dd72d19a54e2bed2ffb1243204fc71114095f1c5ce2.
+Both independent registered-capability clients acquire distinct tabs in one
+restricted synthetic Profile. The first diagnostic then fails before policy
+mutation: the probe passes profileCapability to a helper whose declared options
+do not support it. The server rejects that body field. Existing A05 transport
+composition supplies capability authentication separately; the corrected probe
+uses authenticated transport. Preserve auth-revocation-Nux9gB as a measurement
+construction failure, not an ACL product failure or a successful lifecycle run.
+
+The second diagnostic, auth-revocation-5MZLk0, begins revocation of B while A
+remains authorized. Policy revision 1 enters draining with B's exact target as
+blocking occupancy. B's attempted control is denied with
+profile_child_permission_not_inherited and no_effect, and its own-tab release
+succeeds. State retains B's historical tab as closed while A remains ready.
+The next revision-fenced policy operation still reports that same closed B tab
+as blocking, returns drain_updated, and remains revision 1 rather than committing
+revision 2. Restoration and rejoin are not reached. The product defect is in
+mutate_profile_policy_in_repository: it counts retained closed tab ACL rows as
+occupancy without checking lifecycle.
+
+The existing repository regression previously removed the tab outright before
+completing the drain. Retaining it as closed reproduces the failure: revision 7
+remains 7 where 8 is expected. Source 54d1a8f6 excludes only closed rows from
+occupancy and preserves them as history. Disconnected and other nonterminal
+rows still fence narrowing. All 22 focused service-configuration tests pass,
+including the repaired regression; workspace clippy, format, and docs build pass.
+One bounded live repair verification follows on a separately hashed candidate.
+
+Both diagnostic fixtures clean up to zero browsers/sessions/tabs, host exit 0,
+and zero remaining fixture processes. Exact source, fsynced ledgers, state
+readbacks, journal copies, and hashed checkpoints are retained privately.
+The control denial has one expected and one matching journal occurrence and a
+failed durable job. Policy mutation logging has a separate concrete conflict:
+both mutation receipts report registered-capability assurance for principal A,
+but terminal provenance reports self-declared assurance and the label-derived
+subject. Preserve those two conflicts for a focused provenance repair; no
+comprehensive logging pass is claimed. Shared acquisition also records a
+stream-already-enabled failure, which remains an additional unadjudicated
+occurrence rather than being silently omitted from the evidence.
+
+No installed runtime, provider, production, or default-development environment
+is changed. No forced eviction, private page access, external workflow, or
+calibration occurs. The two diagnostic attempts are consumed; one bounded
+repair verification is available for the closed-history finding. Full Plan 0158
+acceptance remains open.
+
+
+### Priority ACL Lifecycle: Revocation And Rejoin Verified
+
+One bounded repair verification uses source 54d1a8f6 and candidate SHA-256
+61f5b31b3208c2329debcd2e39f07753cbd684a038f3335197f66ccc55866ba4.
+Independent registered-capability clients A and B open distinct tabs in one
+restricted synthetic Profile. Removing B's grant begins drain at revision 1.
+B's control attempt is denied without effects, and B releases its own tab while
+A's original tab remains ready. The next revision-fenced policy mutation now
+commits revision 2 with active state. B's access plan denies tab_create at that
+revision; a direct authenticated request independently confirms
+profile_access_denied and no_effect. The direct request is intentional negative
+coverage because the client correctly refuses to execute an unavailable plan.
+
+Restoring B's grant commits revision 3. B uses the same capability over a fresh
+transport, obtains an allowed revision-3 access plan, and acquires a valid new
+tab handle. A evaluates the synthetic expression 1+1 through its original
+retained handle and receives 2. No forced eviction is used. This proves the
+selected authenticated revocation/rejoin lifecycle, not live-browser restart,
+capability revocation, or every A-family cell.
+
+Private directory auth-revocation-verification-ibXc66 retains the exact probe,
+fsynced ledger, initial/pre-cleanup/final state, trace, journal, and hashed
+checkpoint. Both expected denial journal joins have observed 1, missing 0,
+duplicates 0, and code conflicts 0. The child-control denial has one failed
+job; the pre-dispatch revoked-admission denial correctly has zero jobs. The
+journal also retains one stream-already-enabled failure. Three policy mutations
+still have receipt/provenance identity conflicts: the receipt names the
+registered-capability principal, while terminal provenance names a self-declared
+label subject. These three conflicts prevent a complete logging acceptance
+claim despite the selected denial joins passing. No capability bytes appear in
+the retained evidence artifacts checked against the two fixture capabilities.
+
+Cleanup closes only the fixture's browser sessions, finishes with zero browsers,
+sessions, and tabs, then exits the exact host with code 0. A separate process
+readback finds zero fixture processes. Production, installed P158, default
+development, and provider services remain untouched. No external workflow or
+calibration is dispatched. The candidate build, 22 focused configuration tests,
+workspace clippy, format check, and docs build pass; no full-suite claim is made.
+
+Classification: outcome_progress for authenticated shared-Profile revocation,
+restored-grant rejoin, and peer preservation. The closed-history repair cycle
+is complete; preserve both failed diagnostics and do not repeat it. Next fix
+the narrowly identified policy-mutation provenance conflict using these retained
+receipts and a request-to-job regression. Ordinary external handoff pixels/input,
+P/Q behavior, live-browser restart, actual identity-unproven recovery, remaining
+logging coverage, missing producers, W6, and W7–W10 remain open.
