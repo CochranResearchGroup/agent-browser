@@ -741,3 +741,38 @@ failure will trigger local reframe rather than another unchanged retry.
 All 92 route/host tests passed before this small entry-gate correction. The
 corrected optimized candidate build is active in
 census/retained-recovery-route-gate-build.log.
+
+## Execution checkpoint 11: damaged headed records recover and remain reusable
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX incomplete. Damaged-record recovery and repeat
+reuse are qualified on a disposable optimized candidate; production remains on
+the checkpoint 9 generation.
+
+progress_classification: blocker_reduction
+
+evidence: Corrected source `f2786e1a` is committed and pushed. Candidate SHA256
+`56399d594144fb6e7e6ab055b8a517dec78bf13d2c7bc97ae1c3d3667d6dcb55`
+passed the third bounded verification attempt. Two deliberately damaged headed
+records recovered their original host, display name and allocation IDs through
+ordinary planned tab requests, with original process identities and historical
+capability bindings unchanged. Four acquisitions/evaluations passed across two
+host replacements. Independent snapshot comparison confirmed the restored
+fields; final state had zero browsers and exact fixture census found no residue.
+Evidence and probe source are private in campaigns/p160/shared-headed-recovery-lZDjAE;
+terminal and cleanup receipts are census/retained-recovery-route-gate-proof.log
+and census/retained-recovery-qualified-cleanup.json. Prior failed attempts remain
+available. Corrected entry-gate clippy and formatting passed.
+
+material_blockers: Production recovery and exact-release acceptance remain
+unproved. The full release build is active in census/retained-recovery-release-build.log.
+Runtime ownership warnings, causal diagnostics, external presentation, doctor,
+monitor and timer criteria remain open. Synthetic recovery proves neither
+exclusive display isolation nor operator-visible presentation.
+
+next_action_or_stop_reason: Resume the existing release build, qualify its exact
+binary with the damaged-record/two-restart fixture and authenticated ownership
+checks, then publish while preserving all current production browsers. Run the
+original-profile synthetic request to exercise the installed recovery before
+claiming A1 progress in production. Continue AX and W2–W5.
