@@ -298,14 +298,18 @@ pub(crate) fn route_bound_open_reused_target_result(
         optional_command_string(cmd, "taskName"), }, "valid" : true, "staleReason" :
         Value::Null, }
     );
-    persist_service_owned_tab_new(
-        cmd,
-        session_id,
-        Some(target_id),
-        Some(&url),
-        Some(&title),
-        &service_tab_handle,
-    )?;
+    // Resolving presentation carries no new client acquisition authority.
+    // Persisting this synthetic handle would erase the original child's grant.
+    if cmd.get("durableResolutionMode").and_then(Value::as_str) != Some("reacquire_only") {
+        persist_service_owned_tab_new(
+            cmd,
+            session_id,
+            Some(target_id),
+            Some(&url),
+            Some(&title),
+            &service_tab_handle,
+        )?;
+    }
     Ok(json!(
         { "targetId" : target_id, "url" : url, "title" : title, "browserId" :
         browser_id, "sessionId" : session_id, "profileId" : profile_id,

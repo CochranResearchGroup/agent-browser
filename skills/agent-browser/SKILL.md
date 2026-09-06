@@ -498,6 +498,9 @@ diagnostic or legacy infrastructure workflow.
 Pass the access plan's `browserId` and `sessionName` at the top level of the
 remote-view open helper. It preserves daemon routing and matching handoff
 metadata; nested action parameters alone do not select the daemon session.
+Durable presentation resolution preserves existing tab grants. A handle with
+`profile_child_access_record_missing` fails at child admission with no browser
+effect. Inspect the Service trace; never reconstruct authority from the handle.
 After resolving a durable handoff, call
 `deriveServiceRemoteViewHandoffResumeIntent()` on the response to recover the
 exact caller labels, retained browser and session route, profile, target, URL,

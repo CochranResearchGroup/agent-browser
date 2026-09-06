@@ -319,3 +319,56 @@ Next: reconcile the malformed handoff through supported exact-owner semantics
 or explicitly dispose of that failed fixture before a changed-source ordinary
 verification. A new fixture cannot count as recovery of the failed URL. W2's
 logging gap, external W3 acceptance and W5 delivery decision remain open.
+
+## Checkpoint 5: presentation reacquisition erased client access
+
+Date: 2026-09-06 UTC. Progress: `blocker_reduction`.
+
+Exact fixture reconciliation used supported route release with display release,
+then browser reattachment to its original route/display. Before effects, the
+route had no active viewer or controller, and the browser process start identity
+and physical display matched the captured fixture. Both Service actions passed;
+Chrome's process identity and original target remained present. No new browser,
+replacement target or handoff was acquired. Private receipts are
+`ordinary-route-release.json`, `ordinary-route-reattach.json`, their ledgers,
+`ordinary-before-route-repair-identity.json`, and
+`ordinary-after-route-repair-state.json` under `campaigns/p159/`.
+
+The changed-state same-URL local verification reached the embedded frame, but
+showed Guacamole's login screen and timed out before connected pixels. The
+browser context closed. This advances route reconciliation only; it does not
+accept ordinary external presentation, and no external run was dispatched.
+The previous local failure and this new result remain separate receipts.
+
+An original-handle check then failed because its stored Profile child access
+record was missing. The pre-reconciliation snapshot already lacked that record,
+so the loss preceded route release/reattachment. Source tracing and a real
+persistence regression identify a second seam: durable target reacquisition
+called the new-tab persistence function with a synthetic handle containing no
+client grant. It overwrote the existing child record while merely resolving
+presentation. The original implementation reproduced that overwrite.
+
+Presentation-only reacquisition now skips new-tab persistence. The regression
+passes with the entire original tab record and event count unchanged. Missing
+child-record failures also retain the typed code
+`profile_child_access_record_missing`, `profile_access`, `child_admission`,
+`no_effect`, and trace-inspection recourse. The original generic classification
+failed its regression; the repaired classifier passes. Direct admission tests
+cover both missing-tab and missing-grant records, proving no state mutation and
+no reconstruction from the caller's handle. Wrapped or unknown errors retain
+uncertain effect classification.
+
+Focused custody tests (2), the remote-view open module (see retained test log),
+failure-recourse module and direct child-admission tests pass. Workspace clippy
+with warnings denied, formatting, handoff docs, failure-journal/dashboard
+observation contracts and docs build pass. Red/green and validation logs are
+retained in `campaigns/p159/child-custody-repair/`.
+
+The erased live grant has not been recreated. The original fixture remains a
+failed acceptance attempt and a cleanup obligation; its process is still live.
+This source repair prevents the demonstrated overwrite but has not been
+installed or verified live. Next: account for that failed fixture, publish the
+changed-source isolated candidate, and verify that ordinary URL resolution
+preserves a newly authorized original handle. Investigate the Guacamole login
+boundary from source/evidence before another presentation attempt. W2's earlier
+stream-enable logging gap and W5 delivery decision remain open.

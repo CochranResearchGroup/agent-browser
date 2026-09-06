@@ -4150,6 +4150,10 @@ provider-diagnostic workflow against a legacy or infrastructure-only runtime.
 Pass the access plan's `browserId` and `sessionName` at the top level when
 opening a remote view. The helper preserves these daemon-routing fields and
 matching handoff metadata so resolution returns to the selected browser session.
+Reopening a retained durable URL preserves the original tab's client access
+record. If that record is missing, handle operations fail before browser effects
+with `profile_child_access_record_missing`; inspect the Service trace rather
+than retrying or reconstructing a grant from a returned handle.
 Dry runs return `operatorVisible.state=not_checked`. A typical HTTP
 request is:
 

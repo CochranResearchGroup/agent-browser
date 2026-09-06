@@ -27,6 +27,10 @@ When opening through `requestServiceRemoteViewOpen()`, pass the access plan's
 `browserId` and `sessionName` at the top level. The helper preserves daemon
 routing alongside matching handoff metadata. Nested action parameters alone
 do not select the daemon session.
+Reopening the durable URL preserves the original tab's client access record.
+`profile_child_access_record_missing` means a handle operation stopped at child
+admission before browser effects. Inspect the Service trace; a returned handle
+does not authorize reconstruction of a missing grant.
 
 The packaged Guacamole extension preserves text-input preferences but removes
 both declarative and controller-startup text-field focus in embedded viewers.

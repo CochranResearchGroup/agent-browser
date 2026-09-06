@@ -841,5 +841,31 @@ mod tests {
             crate::native::service_failure::ServiceEffectState::NoEffect
         );
         assert_eq!(failure.recommended_action, "use_own_service_tab_handle");
+        // A returned handle is not authority to reconstruct a missing grant.
+        for missing_tab in [false, true] {
+            if missing_tab {
+                state.tabs.remove(tab_id);
+            } else {
+                state.tabs.get_mut(tab_id).unwrap().profile_access = None;
+            }
+            let before_missing = serde_json::to_value(&state).unwrap();
+            let error = authorize_profile_child_access_in_state(
+                &mut state,
+                handle,
+                tab_id,
+                Some("client:fieldwork"),
+                ProfileIdentityAssurance::SelfDeclared,
+                "connection:other",
+                ProfilePermission::TabControlOwn,
+            )
+            .expect_err("missing authority must stop before reconnect");
+            assert_eq!(serde_json::to_value(&state).unwrap(), before_missing);
+            let failure = crate::native::service_failure::classify_service_failure(&error);
+            assert_eq!(failure.code, "profile_child_access_record_missing");
+            assert_eq!(
+                failure.effect_state,
+                crate::native::service_failure::ServiceEffectState::NoEffect
+            );
+        }
     }
 }

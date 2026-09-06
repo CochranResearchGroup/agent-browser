@@ -128,6 +128,10 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     // guard before child reconnect or the guarded browser operation. Never
     // infer no-effect from a substring or an unrecognized policy reason.
     let child_denial = match error {
+        "profile child access record is missing" => Some((
+            "profile_child_access_record_missing",
+            "inspect_service_trace",
+        )),
         "profile child access denied: subject_mismatch" => Some((
             "profile_child_subject_mismatch",
             "use_own_service_tab_handle",
@@ -156,7 +160,11 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             retry_disposition: ServiceRetryDisposition::DoNotRetry,
             recommended_action: action.to_string(),
             reuse_allowed: false,
-            safe_next_actions: vec![action.to_string(), "inspect_service_trace".to_string()],
+            safe_next_actions: if action == "inspect_service_trace" {
+                vec![action.to_string()]
+            } else {
+                vec![action.to_string(), "inspect_service_trace".to_string()]
+            },
             hard_stops: vec![
                 "blind_retry".to_string(),
                 "impersonate_child_owner".to_string(),
@@ -583,6 +591,12 @@ mod tests {
 
     #[test]
     fn child_authority_denials_preserve_cause_without_claiming_unknown_errors_are_effect_free() {
+        let missing = classify_service_failure("profile child access record is missing");
+        assert_eq!(missing.code, "profile_child_access_record_missing");
+        assert_eq!(missing.axis, ServiceFailureAxis::ProfileAccess);
+        assert_eq!(missing.phase, ServiceFailurePhase::ChildAdmission);
+        assert_eq!(missing.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(missing.recommended_action, "inspect_service_trace");
         for (reason, code, action) in [
             (
                 "subject_mismatch",
@@ -618,6 +632,7 @@ mod tests {
             assert_eq!(failure.recommended_action, action);
         }
         for error in [
+            "operation failed after profile child access record is missing",
             "profile child access denied: future_reason",
             "operation failed after profile child access denied: subject_mismatch",
         ] {

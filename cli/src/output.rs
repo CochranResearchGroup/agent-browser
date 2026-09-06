@@ -5856,6 +5856,10 @@ browser, or mutates the profile.
 Service clients opening remote views pass the access plan's browserId and
 sessionName at the top level. The helper preserves daemon routing alongside
 matching handoff metadata; nested action parameters alone do not select a session.
+Reopening a durable URL preserves the original tab's client access record.
+profile_child_access_record_missing stops handle operations at child admission
+before browser effects. Inspect the Service trace; a returned handle cannot
+reconstruct a missing grant.
 Detected non-owned browsers with reachable page CDP targets provide Screenshot
 and a responsive Watch live image feed. A dashboard superuser can explicitly
 Borrow pointer, keyboard, and wheel input for up to five minutes, then Release

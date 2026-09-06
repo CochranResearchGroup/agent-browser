@@ -1034,6 +1034,71 @@ fn durable_handoff_observation_accepts_reacquired_intent_target() {
 }
 
 #[tokio::test]
+async fn durable_target_reacquisition_preserves_original_client_access() {
+    use crate::native::service_profile_access_policy::ProfileChildAccess;
+
+    let repository = LockedServiceStateRepository::default_json().unwrap();
+    let target_id = "retained-client-custody";
+    let tab_id = format!("target:{target_id}");
+    repository
+        .mutate(|state| {
+            state.tabs.insert(
+                tab_id.clone(),
+                BrowserTab {
+                    id: tab_id.clone(),
+                    browser_id: "session:test".to_string(),
+                    target_id: Some(target_id.to_string()),
+                    owner_session_id: Some("test".to_string()),
+                    lifecycle: TabLifecycle::Ready,
+                    url: Some("https://example.test/fixture".to_string()),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("client:original".to_string()),
+                        connection_instance_id: Some("original-connection".to_string()),
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    let before = repository.load_snapshot().unwrap();
+    let mut runtime = ScriptedRuntime::new();
+    runtime.observation.browser_present = true;
+    runtime.observation.active_target_id = Some(target_id.to_string());
+    runtime.observation.pages = vec![PageInfo {
+        target_id: target_id.to_string(),
+        session_id: "page-session".to_string(),
+        url: "https://example.test/fixture".to_string(),
+        title: "Fixture".to_string(),
+        target_type: "page".to_string(),
+    }];
+    route_bound_open_acquire_target(
+        &json!({
+            "durableResolutionMode": "reacquire_only",
+            "preferredTargetId": target_id,
+            "url": "https://example.test/fixture"
+        }),
+        &mut runtime,
+        &RouteBoundOpenSupervisor::system(Some(1_000), None),
+        &before,
+        "session:test",
+        "test",
+        true,
+    )
+    .await
+    .unwrap();
+    let after = repository.load_snapshot().unwrap();
+    assert_eq!(
+        serde_json::to_value(&after.tabs[&tab_id]).unwrap(),
+        serde_json::to_value(&before.tabs[&tab_id]).unwrap(),
+        "presentation reacquisition must not replace client access or tab custody"
+    );
+    assert_eq!(after.events.len(), before.events.len());
+    assert_eq!(*runtime.events.lock().unwrap(), vec!["refresh_targets"]);
+}
+
+#[tokio::test]
 async fn durable_target_reacquisition_uses_live_title_for_the_exact_active_target() {
     for live_title in [Some("Synthetic fixture"), Some(""), None] {
         let mut runtime = ScriptedRuntime::new();
