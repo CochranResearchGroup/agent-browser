@@ -495,6 +495,9 @@ raw provider connection URLs out of the ordinary client result. The lower-level
 `requestServiceRemoteViewOpen()` helper requires a durable handoff URL for real
 opens by default; use `allowRawProviderUrl: true` only for an explicit provider
 diagnostic or legacy infrastructure workflow.
+Pass the access plan's `browserId` and `sessionName` at the top level of the
+remote-view open helper. It preserves daemon routing and matching handoff
+metadata; nested action parameters alone do not select the daemon session.
 After resolving a durable handoff, call
 `deriveServiceRemoteViewHandoffResumeIntent()` on the response to recover the
 exact caller labels, retained browser and session route, profile, target, URL,

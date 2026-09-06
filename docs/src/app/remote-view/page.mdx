@@ -23,6 +23,11 @@ Browser does not rewrite a provider or Guacamole origin into the dashboard-only
 
 ## Before you begin
 
+When opening through `requestServiceRemoteViewOpen()`, pass the access plan's
+`browserId` and `sessionName` at the top level. The helper preserves daemon
+routing alongside matching handoff metadata. Nested action parameters alone
+do not select the daemon session.
+
 The packaged Guacamole extension preserves text-input preferences but removes
 both declarative and controller-startup text-field focus in embedded viewers.
 Focus the remote text field

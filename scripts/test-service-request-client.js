@@ -2928,6 +2928,17 @@ async function main() {
   });
   assert.equal(routeOpenRequest.action, 'remote_view_open');
   assert.equal(routeOpenRequest.serviceName, 'agent-browser-dashboard');
+  // Routing must agree with the action metadata used to persist the handoff.
+  assert.equal(routeOpenRequest.browserId, 'session:rdp-a');
+  assert.equal(routeOpenRequest.sessionName, 'rdp-a');
+  const plannedSessionOpen = createServiceRemoteViewOpenRequest({
+    sessionName: 'planned-profile-session',
+    runtimeProfile: 'planned-profile',
+    params: { sessionName: 'stale-action-session' },
+  });
+  assert.equal(plannedSessionOpen.sessionName, 'planned-profile-session');
+  assert.equal(plannedSessionOpen.params.sessionName, 'planned-profile-session');
+  assert.equal(Object.hasOwn(plannedSessionOpen, 'browserId'), false);
   assert.deepEqual(routeOpenRequest.params, {
     displayAllocationId: 'display-a',
     routeId: 'route-a',
@@ -3175,6 +3186,8 @@ async function main() {
   const remoteViewOpenResponse = await requestServiceRemoteViewOpen({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: remoteViewOpenWorkflow.fetch,
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
     displayAllocationId: 'display-a',
     routeId: 'route-a',
     routePoolEntry: {
@@ -3217,8 +3230,12 @@ async function main() {
   assert.match(remoteViewOpenSummary.summary, /profile=last30days-facebook/);
   assert.equal(requireServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.status, 'opened');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.action, 'remote_view_open');
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.browserId, 'session:rdp-a');
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.sessionName, 'rdp-a');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.allowInfrastructureOnlyReadiness, undefined);
   assert.deepEqual(remoteViewOpenWorkflow.calls[0].body.params, {
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
     displayAllocationId: 'display-a',
     routeId: 'route-a',
     routePoolEntry: {

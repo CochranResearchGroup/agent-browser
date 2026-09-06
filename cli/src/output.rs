@@ -5853,6 +5853,9 @@ acknowledgement preserves the embedded frame while connecting or displaying the
 desktop; Reload view explicitly reloads it. Automatic
 recovery never takes controller ownership, releases a viewer, launches another
 browser, or mutates the profile.
+Service clients opening remote views pass the access plan's browserId and
+sessionName at the top level. The helper preserves daemon routing alongside
+matching handoff metadata; nested action parameters alone do not select a session.
 Detected non-owned browsers with reachable page CDP targets provide Screenshot
 and a responsive Watch live image feed. A dashboard superuser can explicitly
 Borrow pointer, keyboard, and wheel input for up to five minutes, then Release

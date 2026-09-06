@@ -4147,6 +4147,9 @@ cannot accidentally publish the current Guacamole connection URL.
 `requestServiceRemoteViewOpen()` also requires a durable handoff URL for real
 opens by default. Set `allowRawProviderUrl: true` only for an explicit
 provider-diagnostic workflow against a legacy or infrastructure-only runtime.
+Pass the access plan's `browserId` and `sessionName` at the top level when
+opening a remote view. The helper preserves these daemon-routing fields and
+matching handoff metadata so resolution returns to the selected browser session.
 Dry runs return `operatorVisible.state=not_checked`. A typical HTTP
 request is:
 

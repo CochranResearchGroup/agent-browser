@@ -1373,6 +1373,9 @@ export function createServiceRemoteViewRoutePreflightRequest(input) {
 export function createServiceRemoteViewOpenRequest(input) {
   assertPlainObject(input, 'remote-view open request');
   const { params, allowInfrastructureOnlyReadiness: _allowInfrastructureOnlyReadiness, ...request } = input;
+  // Preserve explicit daemon routing as well as the action's handoff metadata.
+  // mergeParams consumes these keys; params alone do not select the host session.
+  const { browserId, sessionName } = request;
   const openParams = mergeParams(params, request, [
     'displayAllocationId',
     'routeId',
@@ -1400,6 +1403,8 @@ export function createServiceRemoteViewOpenRequest(input) {
   return createServiceRequest({
     ...request,
     action: 'remote_view_open',
+    ...(browserId !== undefined ? { browserId } : {}),
+    ...(sessionName !== undefined ? { sessionName } : {}),
     params: openParams,
   });
 }

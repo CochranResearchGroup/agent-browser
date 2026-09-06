@@ -275,3 +275,47 @@ calibration was executed. Next: obtain the supported access plan for the
 synthetic ordinary-link fixture, preserve the terminal proposal boundary,
 and bind one protected external verification to the exact installed candidate.
 W2 logging and W5 production decision remain open.
+
+## Checkpoint 4: ordinary open lost the access-plan session
+
+Date: 2026-09-06 UTC. Progress: `blocker_reduction`.
+
+The first local ordinary durable-URL preparation failed before an iframe was
+rendered. The supported open reported operator-visible readiness on route 1,
+but durable resolution selected route 2 and could not find the same browser's
+window there. Service returned a failed job and rolled back to the original
+display allocation. No external workflow was dispatched and no unchanged retry
+was made. This is a distinct failure before the repaired frame-lifecycle seam.
+
+The retained request and authoritative state identify the cause: the access
+plan selected a named session, but `createServiceRemoteViewOpenRequest` moved
+`sessionName` into action parameters and deleted the top-level daemon selector.
+HTTP correctly left this request on its default daemon. Open then persisted the
+requested session in handoff/route/display metadata while the actual browser
+belonged to the default session. Durable resolution used the current owner
+session, making the original route fail its exact-owner checks.
+
+The helper now preserves explicit top-level browser/session routing alongside
+matching action metadata. The unchanged helper failed a routing regression;
+the repair passes that test, including a session-only access-plan shape,
+conflicting nested metadata overridden by explicit routing, and serialized HTTP
+request custody. The full service-client gate, Rust format and workspace clippy
+with warnings denied, and docs build pass. All five documentation surfaces are
+updated. This is source/client-contract evidence, not a repaired stored handoff
+or successful external presentation claim.
+
+Private evidence remains under `campaigns/p159/`: `ordinary-access-plan.json`,
+`ordinary-open-ledger.jsonl`, `ordinary-open.json`, `ordinary-local-preparation.json`,
+`ordinary-jobs-after-local.json`, `ordinary-state-after-local.json`, and the
+synthetic scene captures. The failed handoff and original synthetic browser are
+retained for exact reconciliation, with the fixture server still running.
+They are explicit live cleanup obligations, not zero-resource cleanup. The
+terminal-target replacement proposal remains unexecuted.
+
+The earlier full Rust suite's tool handle is now absent and its final result
+was not recovered; do not claim that suite passed. No active Cargo test process
+was found at this checkpoint. Focused prior results retain their stated scope.
+Next: reconcile the malformed handoff through supported exact-owner semantics
+or explicitly dispose of that failed fixture before a changed-source ordinary
+verification. A new fixture cannot count as recovery of the failed URL. W2's
+logging gap, external W3 acceptance and W5 delivery decision remain open.
