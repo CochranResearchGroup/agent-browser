@@ -3189,3 +3189,41 @@ timer restoration occurred in this slice. Next: establish positive retained
 browser descendant evidence, resolve current observed-pressure dispositions and
 monitor freshness, then qualify the consolidated repair. Consumer original-handle
 attestation and the remaining A4/AX acceptance contract still govern completion.
+
+### Retained browser descendant resource proof
+
+state_transition: Exact retained-browser descendant protection implemented and source validated.
+acceptance_state: Current-process candidate readback and installed qualification remain pending; A1, A3, A4 and AX remain open.
+progress_classification: progress
+
+Fresh process and sidecar inspection confirms the retained Default root and its
+Chrome children are still alive. The root's recorded process identity, Ready
+owner generation and current-boot lifecycle agree, while the inventory's original
+PID-only browser correlation leaves children unowned. This is resource accounting
+evidence, not consumer lease authority.
+
+A focused service_resources/retained_tree module now derives read-only child and
+grandchild correlation from an exact current-boot retained root. Root admission
+requires Ready browser and owner, matching physical profile, process identity,
+owner generation, lifecycle, process group and package-launch digest. The sampled
+ancestry must have matching observed executables, consistent boot/start tokens,
+no missing parents or cycles, and no conflicting child profile. Only previously
+observed browser rows become protected. Existing candidates and protected rows
+are unchanged; the proof grants neither browser control nor GC authority.
+The Linux collector also leaves failed executable observations absent rather
+than substituting command-line text as executable identity proof.
+
+The same regression failed on e09051ad with two descendants incorrectly observed,
+then passed with the repair. It covers direct children, grandchildren, protected
+RSS accounting, absent cleanup authority and twelve negative identity, lifecycle,
+profile and ancestry cases. All 25 resource tests passed. Formatting, workspace
+Clippy with warnings denied and the docs production build passed. Help, README,
+skill, docs site and inline comments describe the boundary. Private red/green
+logs and continuation evidence are under campaigns/p160/retained-tree-proof.
+The pre-repair parent used for the red test has been restored to the integrated
+source. Production remains on 35611c64, and no browser or lease was changed.
+
+Next: build the consolidated candidate and compare its no-launch resource
+projection with the installed command against current production evidence.
+Unproven foreign processes, stale monitoring, the consumer's original connection
+and remaining A4/AX gates still require their own disposition and acceptance.

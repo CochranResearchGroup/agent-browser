@@ -2298,6 +2298,11 @@ pressure merely because they are absent from production Service State.
 Process kinds use the executable name, not its parent directory: managed Chrome
 is a browser even when installed below `.agent-browser`. Classification does
 not establish ownership or authorize cleanup of an otherwise unproven process.
+On Linux, observed browser descendants become protected only when current-boot
+owner, lifecycle and exact root-process evidence agree, and the sampled ancestry
+uses the same executable with consistent start times and no conflicting profile.
+Missing executable observations cannot be replaced with command-line claims.
+This correlation does not authorize browser control or garbage collection.
 
 The dashboard includes an app-owned login screen. On first start it creates
 `~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a

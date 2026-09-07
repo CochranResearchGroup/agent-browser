@@ -882,6 +882,11 @@ process tree can still be reclaimed.
 Resource kinds use executable names rather than installation directory names.
 Managed Chrome below <code>.agent-browser</code> is classified as a browser.
 Classification alone does not establish ownership or authorize cleanup.
+On Linux, <code>verified_retained_browser_descendant</code> identifies protected
+browser descendants with exact current-boot root-process, owner and lifecycle
+evidence plus a consistent same-executable ancestry chain. Missing executable
+evidence, changed generations and conflicting profiles cannot establish the
+proof. This resource correlation grants neither browser control nor cleanup.
 
 Service Status also includes additive <code>runtimeLifecycle</code> readback for
 CLI JSON, HTTP <code>GET /api/service/status</code>, typed MCP
