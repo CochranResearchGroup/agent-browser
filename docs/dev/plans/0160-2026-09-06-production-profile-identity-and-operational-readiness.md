@@ -1892,3 +1892,72 @@ inventory labels differ from runtime route IDs. Independently repair the
 operator focus authorization flow and iframe readiness/error reporting without
 borrowing tab-owner identity. Original consumer acceptance and A3/A4/AX remain
 required; no unchanged fourth viewer attempt is admitted by this checkpoint.
+
+## Checkpoint 33: sharing HTTPS repaired; cross-environment display proof fails
+
+state_transition: Production sharing ingress is reachable with valid TLS;
+physical window evidence exposes an incorrect production display binding.
+
+acceptance_state: A1–A4 and AX remain incomplete. Display ownership and false
+complete attestation are immediate A1/AX blockers. Original consumer connection
+acceptance remains open.
+
+progress_classification: blocker_reduction
+
+Cooper inventory now includes the production sharing origin on pinned port8092.
+Its external route strips Remote-User and related identity headers; it does not
+forward dashboard identity onto a sharing-key connection. Inventory validation
+and rendering passed. Existing Traefik file watchers loaded the local and bastion
+routes without restarting either shared proxy. Public certificate-verifying HTTPS
+returns 200 for the Guacamole shell and 403 for anonymous token requests, forged
+identity headers, and an invalid sharing key. Cooper commit c50abc8 is pushed;
+bastion commit 2842790 records the generated route. The pre-existing dirty
+CODEX_LOG.md remains dirty with an appended operational note. Other pre-existing
+Cooper edits were preserved.
+
+The changed-condition viewer attempt local-viewers-mJIcQG reached the Guacamole
+iframe but still failed synthetic pixels before remote input or a second viewer.
+The frame now shows the Guacamole surface rather than a TLS load error.
+
+An extension check initially inspected the unused legacy runtime directory. Its
+old JAR is not the running mount. A mount guard rejected replacement before any
+file write, but a following shell command still restarted the exact Guacamole
+container. That sequencing error is retained in the private receipt. Actual mount
+inspection then proved that the older generation path contains the exact same
+JAR and script bytes as the selected candidate; no extension replacement was
+needed or performed. The Guacamole asset test passed. All five known browser
+processes remained present after that restart. Do not attribute the pixel failure
+to the unused legacy JAR or treat the restart as an asset repair.
+
+Fresh own-handle diagnostics still reported controlPlaneAttestation.complete=true
+and display :12. Physical process readback showed that :12 belongs to the retained
+P158 development route user, while production route3's user owns Xorg :14.
+Read-only X window properties on :12 independently bound window0x600003 to our
+synthetic Chrome PID45678. This confirms an actual misrouted production browser,
+not merely stale display text. Own-handle evaluation still read the expected
+synthetic page, demonstrating that correct tab content and complete current
+attestation did not establish correct environment/display ownership.
+
+The misrouted synthetic browser was contained through its exact PID descriptor,
+after rechecking recorded start time, executable and dedicated profile path.
+SIGTERM removed that browser and its window. Readback preserved the development
+X server identity, all other X windows, and all four original production browser
+identities. No remaining process carried the exact synthetic profile evidence.
+No remote input was sent. No development server, retained development browser,
+original production browser, route allocation or lease was cleaned up. The
+synthetic handoff is retained as failed evidence; its browser is now absent and
+must not be reported usable or silently replaced to claim continuity.
+
+Private evidence: campaigns/p160/a2-operator-journey/production-share-ingress
+contains public-readback.json, actual-mounted-extension-and-restart.json,
+display-process-ownership.txt, synthetic-browser-physical-display.json,
+misrouted-browser-containment.json and misrouted-browser-residue.json.
+
+next_action_or_stop_reason: Reproduce the mismatched route-user/display binding
+in isolation and repair launch admission plus control-plane attestation so a
+production route cannot borrow a development X server. Then reconcile the exact
+production route to its live display through supported ownership checks. Resume
+operator qualification only on positively proved production resources, retaining
+this failed fixture and the failed continuity evidence. Focus authorization,
+iframe readiness reporting, provider provisioning, original consumer acceptance,
+A3/A4 and the remaining AX matrix still require completion.
