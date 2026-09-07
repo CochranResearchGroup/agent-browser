@@ -999,3 +999,50 @@ The raw alias-routing defect remains a W1/A1 blocker and is not counted as
 resolved or hidden by the passing fixture. All failed fixture roots and cleanup
 receipts remain private. Production publication, consumer readback, complete
 A1/AX and A2–A4 acceptance remain outstanding.
+
+## Checkpoint 17: production publication and Default-owner readback
+
+Published source 495649c6 as production generation
+0.28.0-787159fbcae7-a58bd361158f. Binary SHA256:
+787159fbcae76a2cde1bccf51bc131300cea9abae28d4fd829b7a3b282ab0bec.
+Support-manifest SHA256:
+a58bd361158fe251b78df97b7ec497c49841511f76ecb8556db9390d1592b2be.
+The full release build passed. Its disposable named-profile fixture w5m1qI
+passed the same attestation, restart, exact cleanup and surviving-handle checks
+as the CI candidate. Release-fixture ledger SHA256:
+358ec376b04c63c630bf07c6f320948c2ea7724d71a72beba5512247b8177c46.
+All fixture residue checks passed.
+
+The controlled host replacement used the standing publication authority and
+retained the previous immutable generation for rollback. Fresh admission found
+no active jobs. All four preexisting browser process identities survived; the
+new host PID is 57482. The publication receipt and before/after configuration,
+validation logs, doctor results and rollback scripts are private under
+campaigns/p160/publication-attestation. Shared installed skill guidance now
+reflects the deployed attestation and verified-cleanup contracts.
+
+A separate authenticated P160 client was correctly refused when it attempted
+diagnostics through the consumer's still-active child connection:
+owner_connection_still_active. That is not consumer-side readback and was not
+bypassed. A new P160-owned synthetic blank tab in the same existing Default
+browser then returned complete=true, managed_launch custody, owner generation24
+and bounded evaluation result42. Its release physically closed that exact tab.
+Post-probe readback preserved the consumer target, its complete child-access
+record, all three original active target records and all four browser processes.
+No payment input or business submission occurred. The consumer must recheck
+through its original connection; its own capability's fresh guarded rejoin
+projection is available for evaluation but no consumer lease was applied here.
+
+Install doctor remains nonzero with 12 issues: operator journey and upgrade
+readiness, retained terminal-history warning, seven principal/lease warning rows,
+runtime-monitor readiness and unknown pressure ownership. This publication
+therefore does not establish full operational readiness or complete Plan0160.
+The maintenance timer remains inactive.
+
+Next W1 unit: fix the already-reproduced catalog/runtime-name routing conflict.
+apply_existing_session_profile_selection in runtime/daemon.rs compares an
+explicit runtimeProfile with the catalog ID, while active_browser_profile_mismatch
+in runtime/profile_lease.rs compares it with the active runtime name. Join both
+through the exact configured physical identity; retain foreign-profile denial.
+Use the preserved alias counterexamples, not another broad failure review.
+Then continue remaining A1/AX and A2–A4 evidence and final installed qualification.
