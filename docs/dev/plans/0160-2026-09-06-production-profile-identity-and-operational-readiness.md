@@ -1832,3 +1832,63 @@ next_action_or_stop_reason: Complete remaining profile dispositions and original
 consumer continuity, run the dedicated synthetic authenticated operator journey,
 then reconcile supported generation/monitor/resource readiness and perform the
 scheduled A4 cycles. The full AX fixture matrix remains required.
+
+## Checkpoint 32: production viewer configuration repaired; sharing ingress absent
+
+state_transition: Missing sharing configuration repaired for the owned synthetic route;
+the next viewer failure is isolated to the sharing origin.
+
+acceptance_state: A1–A4 and AX remain incomplete. Original consumer connection
+acceptance remains the highest-priority outstanding ownership proof.
+
+progress_classification: blocker_reduction
+
+The dedicated p160-operator-journey browser and its original durable handoff
+remain retained. Authenticated handoff resolution returns the intended browser
+and target. Anonymous access presents login without a remote frame. These checks
+use the public origin from this host and are not external-vantage acceptance.
+
+An instrumented viewer diagnosis established two distinct failures. The dashboard
+automatically submits view_focus under its own caller identity; child custody
+rejects subject_mismatch against the synthetic tab owner. Separately, the route3
+sharingProfiles API returned an empty collection. Direct database readback
+confirmed that connection3 had no sharing profile. The latter prevents the
+dashboard from obtaining its shared iframe URL; the focus denial alone does not
+explain the missing iframe.
+
+A bounded production configuration transaction created the missing sharing
+profile for connection3, after verifying its exact connection name and RDP user.
+It used the runtime's expected name, Agent Browser Shared Session guacamole:3,
+and inherited READ membership only from that connection's existing READ grants.
+It changed no connection parameters, browser, route allocation, or other route.
+The previous sharing tables were exported before the transaction. The SQL and
+apply receipt are retained privately. Authenticated API readback then returned
+the exact sharing profile, and the same handoff produced one Guacamole iframe.
+This is a provider configuration repair, not an acceptance-receipt edit.
+
+The rendered synthetic-pixel check still failed. A separate owner-authorized
+view_focus succeeded but did not repair the pixel failure. The next iframe
+capture showed a browser load-error surface. Certificate-verifying curl to the
+derived production sharing origin failed with exit60: the certificate does not
+cover that hostname. Current Cooper generated routes contain development sharing
+origins but no production sharing-origin route. No TLS bypass was used. The
+dashboard nevertheless displayed Ready while this iframe was unusable.
+
+Three bounded viewer attempts are retained: initial missing iframe, iframe with
+missing pixels after the sharing repair, and the owner-focused diagnostic with
+the same pixel failure. Neither remote input nor the second authenticated viewer
+was reached. Disposable viewer process readback found zero matching residue.
+The owned remote browser stays available for the next changed-condition test.
+
+Private evidence: campaigns/p160/a2-operator-journey/checkpoint32-evidence.json
+binds the diagnostic events, owner-focus receipt, transaction and TLS readback.
+route3-sharing-repair contains the pre-change export and reviewable repair SQL.
+The consumer's incident note was preserved without modification by this slice.
+
+next_action_or_stop_reason: Repair the production sharing-origin ingress through
+the governed Cooper path, including valid TLS and the correct sharing backend;
+then resume the same handoff. Reconcile provider provisioning because its route
+inventory labels differ from runtime route IDs. Independently repair the
+operator focus authorization flow and iframe readiness/error reporting without
+borrowing tab-owner identity. Original consumer acceptance and A3/A4/AX remain
+required; no unchanged fourth viewer attempt is admitted by this checkpoint.
