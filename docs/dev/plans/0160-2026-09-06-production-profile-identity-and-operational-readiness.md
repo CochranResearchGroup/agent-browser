@@ -2065,3 +2065,64 @@ and Xvfb unit. Candidate metadata and hashed live ledgers are bound in
 campaigns/p160/display-owner-repair/private-allocation/live-validation.json.
 Production remains unchanged. The next step is the production release build and
 controlled installation, with exact route-display reconciliation before launch.
+
+
+## Checkpoint 36: display-owner candidate installed with original custody preserved
+
+state_transition: Release candidate 789cb780 qualified and installed; production
+route3 canonical configuration and Service projection corrected to its own X server.
+
+acceptance_state: Installed own-tab attestation and causal denial proof pass.
+Original-consumer acceptance, operator journey, A3/A4 and full AX remain open.
+
+progress_classification: blocker_reduction
+
+The release build completed successfully. Binary SHA256
+`e7d3e8ea4384f0d435ea3d1baa6d26b180cf99002d45829b98bdb55ae5f15253`
+passed isolated real remote-headed original-handle continuity and terminal
+close/reopen at a1-terminal-reopen-9BXeCb. The same binary passed correct-owner
+preflight and wrong-owner preflight/open rejection at display-owner-boundary-xyPalX.
+Both fixtures exited successfully; exact continuity-fixture inspection found no
+owned process residue. Release provenance binds source 789cb780.
+
+Installed generation is 0.28.0-e7d3e8ea4384-5afafcf688e5. Support manifest SHA256 is
+`5afafcf688e533d344fc3509e1772a9e4ef6588403521b80b9459245ba72c29a`.
+Controller/provider payloads and units were verified unchanged from the preceding
+installation. Controlled host replacement preserved all four original browser
+process identities and all 47 original tab-custody records. Rollback retains the
+previous generation and configuration backup. The monitor timer remains inactive.
+
+Kernel SO_PEERCRED independently proved production route3's user owns display :14.
+The stored :12 binding was corrected in the canonical environment with an unused
+route guard. Restart alone did not refresh the retained Service entry, so the
+supported authoritative-route-pool reconciliation applied the single route3 entry.
+It reported one update and no active conflicts. Readback shows :14 and available;
+original browser and tab custody remained intact after reconciliation. The other
+two production route accounts have no live X server, so their stale display hints
+are not ownership evidence. Their recovery remains an operational requirement.
+
+Installed authenticated HTTP smoke acquired two own blank tabs on the existing
+Default browser, obtained complete attestation, and evaluated both successfully.
+Cross-client use was denied with profile_child_subject_mismatch and no_effect.
+Exactly one journal occurrence joined the returned request ID to matching binary,
+source revision, support generation/hash and child-access evidence. Both own test
+tabs were released. Shared installed skill guidance now includes display-owner
+proof; its previous contents are backed up.
+
+Install doctor exited1. The 12 findings concern authenticated operator-journey
+readiness, selected-generation readiness, retained transaction history, seven
+legacy lease observations, stale monitor state and unknown resource ownership.
+These findings remain retained and do not constitute full operational acceptance.
+The misrouted synthetic handoff has not been reopened or replaced; no payment,
+remote input, original consumer capability use or development cleanup occurred.
+
+Private publication receipts, hashes, activation rollback, canonical environment
+backup, route projection, installed smoke and doctor output are retained at
+campaigns/p160/publication-789cb780. installed-validation.json records the bounded
+result and explicitly leaves operationalAcceptanceComplete false.
+
+next_action_or_stop_reason: Prove the installed route3 preflight and complete the
+synthetic operator journey on positively owned production resources, preserving
+the failed prior fixture and its continuity evidence. Complete original-consumer
+acceptance on its own connection, repair focus/iframe readiness and remaining
+provider readiness, then finish A3/A4 and the full causal-error matrix.
