@@ -1502,6 +1502,14 @@ shared-host executable drift, port conflicts, restart exhaustion, and whether
 the lane stream is reachable.
 Supervisor startup recreates a missing socket directory after reboot with
 private permissions before writing its authentication token.
+The Linux runtime host mounts private, mode-0700 state directories at `/tmp` and
+`/var/tmp`. Their backing storage survives host retirement so retained browsers
+can still create temporary files. It is scoped by the systemd unit name under
+the user state directory. Never remove that storage while a retained browser
+references it. Replacing the unit does not repair a browser already holding a
+deleted temporary directory; that requires a separate ownership-preserving
+recovery.
+
 After an accepted workstation convergence, repeating `supervisor install` for
 the same lane and port may rebind its stale manifest to the exact selected
 generation. A clean candidate rollback may do the same only when that selected

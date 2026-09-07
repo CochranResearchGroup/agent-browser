@@ -75,6 +75,17 @@ and one qualification/publication decision. Reassess at 30 minutes without A1
 outcome progress. All prior effort remains cumulative; this is a tactic change,
 not a reset of the full goal or its acceptance requirements.
 
+The retained-runtime boundary also includes temporary filesystem custody. A
+2026-09-07 disposable systemd reproduction showed that retiring a PrivateTmp
+service unlinks its backing directory while a retained child remains alive.
+A1/A3 acceptance must include usable temporary storage after host retirement,
+not only unchanged browser PID and tab targets. Preserve private isolation with
+storage whose lifetime covers retained browsers. Do not retire another legacy
+PrivateTmp host over retained browsers until that dependency is preserved.
+Existing deleted namespaces require a separate ownership-preserving recovery;
+a new unit template cannot repair their mounted inode. Browser-native download
+and artifact retrieval must pass before calling the consumer download resolved.
+
 After the identity batch, repair supported rollback retention before maintenance
 can resume. Complete A1/A3 dispositions and doctor acceptance before A4's actual
 scheduled cycles. A2 and AX retain their existing scope; the full A1–A4/AX

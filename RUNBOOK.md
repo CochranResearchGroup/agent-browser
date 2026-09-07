@@ -85,6 +85,37 @@ fixture with one lease row, both original handles usable and no remaining
 fixture processes. These source fixes have not replaced the
 installed dc570e5b binary or its shared skill. Do not report them as live.
 
+### Temporary-storage failure: reproduced, preventive source fix
+
+Current classification found guarded rejoin available for the affected registered
+consumer leases. No consumer capability was used. The incident 0156 cleanup
+repair already has source and isolated qualification in Plan0160 checkpoint14;
+its older report is not a reason to repeat unchanged tests.
+
+New note0159 reports a retained browser holding an unlinked private `/tmp`.
+A disposable systemd service reproduced the causal mechanism: with PrivateTmp,
+stopping the parent service preserved its child PID and namespace but changed
+`/tmp` link count from 2 to 0; mkdir then failed with ENOENT. This proves the
+mechanism, not the historical deletion event for a consumer browser.
+
+The supervisor renderer now binds private mode-0700, unit-scoped state directories
+at `/tmp` and `/var/tmp`. The rendered configuration preserved the backing inode
+and successful mkdir after service retirement. State storage avoids moving browser
+temporary files onto the user runtime tmpfs. It remains private and must not be
+removed while browsers reference it. All 13 supervisor tests, formatting and
+workspace Clippy pass. Disposable process and backing-directory cleanup passed.
+One transient-unit setup rejected an unexpanded `%t` before starting; its failed
+receipt remains preserved. No production service was restarted or reconfigured.
+
+A real disposable Chrome also completed a synthetic Blob CSV download after its
+parent service stopped. Begin/progress events matched the exact frame and GUID;
+retrieved bytes matched the expected CSV. The browser and its fixture storage
+were cleaned up. This prevention is NOT INSTALLED. It does not repair already-
+deleted consumer namespaces or establish shared-profile CSV acceptance. Before any
+further production retirement, preserve existing temporary-storage dependencies.
+The next repair must cover existing-browser recovery, the shared-profile
+download-policy boundary and typed diagnosis of missing storage.
+
 ### Retention and next work
 
 Generation-GC preview lists 22 candidates, including the immediately previous
@@ -115,6 +146,11 @@ three real scheduled cycles, controlled restart and next scheduled cycle.
 
 Evidence stays under `~/.local/state/agent-browser/campaigns/p160/`:
 
+- `retained-download-6xfjyhb6`: real Chrome post-retirement CSV, exact
+  frame/GUID and byte readback, cleanup complete.
+- `private-tmp-lifecycle-oswt5o1o`: disposable deletion reproducer.
+- `rendered-tmp-lifecycle-qn2_650f`: preventive unit configuration proof and cleanup.
+- `state-tmp-lifecycle-u1gpfuc3`: disk-backed private storage lifetime proof.
 - `reconcile-rejoin/`: installed collection read, validation record, optimized
   candidate qualification, and fractional-wire endpoint driver.
 - `missing-binding-sim-fy12OQ`: installed-predecessor planner failure and cleanup.

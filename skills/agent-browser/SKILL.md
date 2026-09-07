@@ -3200,3 +3200,12 @@ target after profile, process, endpoint and owner checks. This preserves the
 existing ownership generation and does not create a replacement browser or tab.
 An ownership refusal remains a failed resolution with its original cause and
 inspection recourse; it must not be treated as an automatic convergence retry.
+
+
+The Linux runtime host mounts private, mode-0700 state directories at `/tmp` and
+`/var/tmp`. Their backing storage survives host retirement so retained browsers
+can still create temporary files. It is scoped by the systemd unit name under
+the user state directory. Never remove that storage while a retained browser
+references it. Replacing the unit does not repair a browser already holding a
+deleted temporary directory; that requires a separate ownership-preserving
+recovery.
