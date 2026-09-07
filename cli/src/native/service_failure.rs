@@ -83,6 +83,40 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    for code in [
+        "retained_browser_close_identity_unproven",
+        "browser_terminal_close_unproven",
+    ] {
+        if error.starts_with(code) {
+            let pre_effect = code == "retained_browser_close_identity_unproven";
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::LifecycleOwner,
+                phase: if pre_effect {
+                    ServiceFailurePhase::ChildAdmission
+                } else {
+                    ServiceFailurePhase::Finalize
+                },
+                effect_state: if pre_effect {
+                    ServiceEffectState::NoEffect
+                } else {
+                    ServiceEffectState::EffectUncertain
+                },
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "inspect_lifecycle_owner".to_string(),
+                safe_next_actions: vec![
+                    "inspect_service_trace".to_string(),
+                    "inspect_exact_process_and_profile_lock".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "launch_duplicate_profile_lane".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
     if error.contains("service_browser_close_authority_denied") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),

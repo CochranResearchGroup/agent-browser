@@ -1315,3 +1315,49 @@ CDP close, verify exit and lock release afterward, commit terminal cleanup only
 on that evidence, and refuse a success claim when terminal proof is incomplete.
 Do not weaken the replacement gate or manufacture cleanup evidence. The 16
 lifecycle tests, final Clippy and formatting checks pass; live reopen remains red.
+
+## Checkpoint 22: retained terminal shutdown and reopen verified
+
+state_transition: missing retained shutdown proof repaired with live close/reopen
+
+acceptance_state: isolated terminal close/reopen passes; installed A1–A4 and AX remain open
+
+progress_classification: outcome_progress
+
+The common close path now pins the recovered browser's exact process before CDP
+close, comparing process and physical profile digests with its lifecycle owner.
+It observes that pinned process and physical SingletonLock afterward. Only exact
+exit plus absent lock permits terminal cleanup completion; an incomplete barrier
+returns browser_terminal_close_unproven instead of closed:true. No lock deletion
+or foreign process termination is introduced. Pre-effect identity refusal and
+post-effect incomplete cleanup have distinct effect certainty and source-linked
+recourse. Existing owned-child shutdown continues to supply its own evidence.
+
+Headless fixture a1-terminal-reopen-6i1zZp passes, ledger SHA256:
+6ce209f13b675dc56fc77c0016fbc9b179addacc80c2f2dcfcbfb77287b4d7d6.
+Remote-headed fixture a1-terminal-reopen-bs8we0 passes, ledger SHA256:
+73e9411a95655b231f351aff9e6faa1d6a9081fac3990d5025462d0d52efd875.
+Both use archived optimized candidate SHA256:
+302a59f7a68772b7892796b4225fcf134e199f598b358d91a28b393299e1ff12.
+Each verifies original registered-client handles and synthetic input before and
+after host restart, participant shutdown denial without lost access, authorized
+terminal close, exact process absence, terminal/satisfied lifecycle state, old
+handle rejection, reopen with the same capability and incremented owner
+generation, complete diagnostics and working input, and peer preservation.
+Both cleanup censuses found zero owned residue without sending any signals.
+Fixture manifests include the separate owner and lifecycle registries.
+
+The 14 close/launch tests, 14 recourse tests, formatting, docs build and workspace
+Clippy pass. Initial Clippy rejected an unnecessary unwrap; the equivalent
+pattern match passes. That style correction occurred during the optimized build,
+so the digest is working-source evidence, not a frozen-commit build claim.
+Private validation is under campaigns/p160/retained-shutdown-validation. The
+next full release build must use frozen source. No production state changed.
+
+material_blockers: Final installed A1 qualification, A2 authenticated external
+operator journey, A3 supported upgrade and doctor readiness, A4 scheduled cycles
+and AX causal reconstruction remain required.
+
+next_action_or_stop_reason: Freeze and build the full production candidate,
+qualify the exact binary, and publish through the already-authorized controlled
+replacement path while preserving original production browsers.

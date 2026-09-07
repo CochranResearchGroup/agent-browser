@@ -2195,7 +2195,7 @@ Use `POST /api/service/request` on the stream port when a software client wants 
 
 Browser lifecycle remedies can also go through `service_request`. Use `action: "service_browser_close"` with `params.browserId` to politely close the active service browser and record shutdown health. Use `action: "service_browser_repair"` with `params.browserId` after operator review to make one degraded or faulted retained browser record retryable again. Check `GET /api/service/contracts` or MCP `agent-browser://contracts` before assuming these actions are available.
 
-An explicit `service_browser_close` requests terminal shutdown even after retained-browser recovery. Service callers require the profile full_shutdown permission, and the service verifies current lifecycle ownership before closing. Ordinary retained-connection teardown continues to preserve the browser.
+An explicit `service_browser_close` requests terminal shutdown even after retained-browser recovery. Service callers require the profile full_shutdown permission, and the service verifies current lifecycle ownership before closing. Ordinary retained-connection teardown continues to preserve the browser. Terminal close succeeds only after exact process exit and physical profile lock release are proven; incomplete proof retains the cleanup obligation and refuses success.
 
 For software integrations, use one intent object and let agent-browser handle profile selection and queueing:
 
