@@ -1257,7 +1257,10 @@ selectors must agree with that owner. Background reconciliation preserves newer
 tab ownership and grants while refreshing browser observations. Navigation
 preserves existing child custody. Supply the owned handle for native navigation
 and input too: the service validates current child permission and selects that
-exact target. Conflicting target selectors are rejected before input.
+exact target. Conflicting target selectors are rejected before input. Service
+requests without handles use current child custody too. A session-only request
+uses your active owned tab or sole owned tab; ambiguous or unattributed targets
+require an exact owned handle. Another client's active tab is never a fallback.
 After detached manual seeding closes, verify the profile through the service
 control plane rather than editing profile JSON. Use
 `agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`
@@ -2191,6 +2194,8 @@ Use HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<
 Use `POST /api/service/request` on the stream port when a software client wants to submit one explicit request object with caller context, site or login hints, target-service hints, optional top-level `browserHost`, `viewStreamProvider`, `controlInputProvider`, and `displayIsolation` routing hints, optional top-level `browserId` or `sessionName` reuse route hints, `action`, `params`, and `jobTimeoutMs`. The route queues the requested browser action through the same service-owned control path as MCP `service_request`. A request can set `allowDuplicateProfileLane: true` to bypass the duplicate-lane guard only when separate isolation or throwaway browser behavior is intentional.
 
 Browser lifecycle remedies can also go through `service_request`. Use `action: "service_browser_close"` with `params.browserId` to politely close the active service browser and record shutdown health. Use `action: "service_browser_repair"` with `params.browserId` after operator review to make one degraded or faulted retained browser record retryable again. Check `GET /api/service/contracts` or MCP `agent-browser://contracts` before assuming these actions are available.
+
+An explicit `service_browser_close` requests terminal shutdown even after retained-browser recovery. Service callers require the profile full_shutdown permission, and the service verifies current lifecycle ownership before closing. Ordinary retained-connection teardown continues to preserve the browser.
 
 For software integrations, use one intent object and let agent-browser handle profile selection and queueing:
 

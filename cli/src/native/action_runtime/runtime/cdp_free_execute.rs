@@ -378,6 +378,106 @@ pub(crate) fn service_tab_handle_browser_id(state: &DaemonState) -> String {
         .map(str::to_string)
         .unwrap_or_else(|| service_browser_id(&state.session_id))
 }
+/// Bind legacy Service browser commands to current child custody before effects.
+/// Browser observations choose a target, but never grant permission to it.
+pub(crate) fn bind_native_service_tab_command(
+    command: &Value,
+    state: &DaemonState,
+) -> Result<Value, String> {
+    let action = command.get("action").and_then(Value::as_str).unwrap_or("");
+    if command.get("serviceTabHandle").is_some()
+        || command.get("connectionInstanceId").is_none()
+        || matches!(action, "tab_new" | "window_new")
+        || (action == "navigate"
+            && state.browser.is_none()
+            && command
+                .get("profileChildAccess")
+                .is_some_and(|grant| !grant.is_null()))
+    {
+        return Ok(command.clone());
+    }
+    let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+    let browser_id = service_tab_handle_browser_id(state);
+    let mut targets = Vec::new();
+    for (field, prefix) in [("targetId", ""), ("tabId", "target:")] {
+        if let Some(value) = command.get(field).filter(|value| !value.is_null()) {
+            let target = value
+                .as_str()
+                .and_then(|value| value.strip_prefix(prefix))
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("service_tab_target_selector_conflict: invalid {field}"))?;
+            targets.push(target.to_string());
+        }
+    }
+    if action == "tab_switch" {
+        let index = command
+            .get("index")
+            .and_then(Value::as_u64)
+            .and_then(|index| usize::try_from(index).ok());
+        let target = state.browser.as_ref().zip(index)
+            .and_then(|(browser, index)| browser.pages_list().get(index).map(|page| page.target_id.clone()))
+            .ok_or("service_tab_target_unproven: no current index inventory; request the exact owned tab handle")?;
+        targets.push(target);
+    }
+    if targets.is_empty() {
+        let subject = command
+            .get("servicePrincipalId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                command
+                    .get("clientSubjectId")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+            });
+        let owned_targets: Vec<String> = snapshot
+            .tabs
+            .values()
+            .filter(|tab| {
+                tab.browser_id == browser_id
+                    && tab.lifecycle == crate::native::service_model::TabLifecycle::Ready
+                    && subject.is_some()
+                    && tab
+                        .profile_access
+                        .as_ref()
+                        .and_then(|access| access.subject_id.as_deref())
+                        == subject
+            })
+            .filter_map(|tab| tab.target_id.clone())
+            .collect();
+        let active_owned = state
+            .browser
+            .as_ref()
+            .and_then(|browser| browser.active_target_id().ok())
+            .filter(|active| owned_targets.iter().any(|target| target == active));
+        if let Some(target) = active_owned {
+            targets.push(target.to_string());
+        } else {
+            targets.extend(owned_targets);
+        }
+    }
+    targets.sort();
+    targets.dedup();
+    if targets.len() != 1 {
+        return Err("service_tab_target_unproven: target is missing or ambiguous; request the exact owned tab handle".into());
+    }
+    let tab_id = format!("target:{}", targets[0]);
+    let tab = snapshot
+        .tabs
+        .get(&tab_id)
+        .filter(|tab| tab.browser_id == browser_id)
+        .ok_or("service_tab_target_unproven: no current target in the routed browser")?;
+    if tab.profile_access.is_none() {
+        return Err("service_tab_target_unproven: current child access record is missing; acquire an owned service tab".into());
+    }
+    let handle = snapshot
+        .service_tab_handle(&tab_id)
+        .ok_or("service_tab_target_unproven: current service handle is unavailable")?;
+    let mut bound = command.clone();
+    bound["serviceTabHandle"] = serde_json::to_value(handle).map_err(|error| error.to_string())?;
+    Ok(bound)
+}
+
 pub(crate) fn validate_service_tab_handle_for_daemon(
     handle: &Map<String, Value>,
     cmd: &Value,

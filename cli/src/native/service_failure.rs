@@ -83,6 +83,20 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if error.contains("service_browser_close_authority_denied") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "service_browser_close_authority_denied".to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::ChildAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_profile_access_policy".to_string(),
+            missing_permission: Some("full_shutdown".to_string()),
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if error.split(':').next() == Some("explicit_profile_conflicts_with_current_owner") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -109,6 +123,7 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             "tab_close_invalid_selector"
                 | "service_tab_profile_selector_conflict"
                 | "service_tab_target_selector_conflict"
+                | "service_tab_target_unproven"
                 | "tab_close_selector_conflict"
                 | "tab_close_target_unproven"
                 | "tab_close_target_missing"
@@ -139,7 +154,10 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                     "inspect_service_trace".to_string(),
                     if code == "service_tab_profile_selector_conflict" {
                         "compare_requested_profile_to_current_owner"
-                    } else if code == "service_tab_target_selector_conflict" {
+                    } else if matches!(
+                        code,
+                        "service_tab_target_selector_conflict" | "service_tab_target_unproven"
+                    ) {
                         "compare_requested_target_to_current_handle"
                     } else {
                         "inspect_exact_target_cleanup"

@@ -4221,6 +4221,72 @@ fn retained_profile_route_state() -> ServiceState {
 }
 
 #[test]
+fn implicit_native_target_requires_current_unambiguous_child_custody() {
+    use crate::native::service_profile_access_policy::ProfileChildAccess;
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("implicit-native-child");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let mut snapshot = retained_profile_route_state();
+    snapshot.tabs.insert(
+        "target:owned".into(),
+        BrowserTab {
+            id: "target:owned".into(),
+            browser_id: "session:carrier-evidence".into(),
+            target_id: Some("owned".into()),
+            owner_session_id: Some("carrier-evidence".into()),
+            lifecycle: TabLifecycle::Ready,
+            profile_access: Some(ProfileChildAccess {
+                subject_id: Some("client:owner".into()),
+                ..ProfileChildAccess::default()
+            }),
+            ..BrowserTab::default()
+        },
+    );
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&snapshot).unwrap();
+    let mut daemon = DaemonState::new();
+    daemon.session_id = "carrier-evidence".into();
+    let command = json!({"action":"fill", "connectionInstanceId":"connection:owner", "clientSubjectId":"client:owner"});
+    let bound = bind_native_service_tab_command(&command, &daemon).unwrap();
+    assert_eq!(bound["serviceTabHandle"]["targetId"], "owned");
+    assert_eq!(
+        bound["serviceTabHandle"]["profileAccess"]["subjectId"],
+        "client:owner"
+    );
+    let mut peer = snapshot.tabs["target:owned"].clone();
+    peer.id = "target:peer".into();
+    peer.target_id = Some("peer".into());
+    snapshot.tabs.insert(peer.id.clone(), peer);
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&command, &daemon)
+        .unwrap_err()
+        .contains("ambiguous"));
+    let mut explicit = command.clone();
+    explicit["targetId"] = json!("owned");
+    assert_eq!(
+        bind_native_service_tab_command(&explicit, &daemon).unwrap()["serviceTabHandle"]
+            ["targetId"],
+        "owned"
+    );
+    explicit["tabId"] = json!("target:peer");
+    assert!(bind_native_service_tab_command(&explicit, &daemon).is_err());
+    explicit.as_object_mut().unwrap().remove("tabId");
+    snapshot
+        .tabs
+        .get_mut("target:owned")
+        .unwrap()
+        .profile_access = None;
+    store.save(&snapshot).unwrap();
+    let error = bind_native_service_tab_command(&explicit, &daemon).unwrap_err();
+    assert!(error.contains("child access record is missing"));
+    assert_eq!(
+        crate::native::service_failure::classify_service_failure(&error).effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+}
+
+#[test]
 fn configured_runtime_alias_preserves_exact_owner_selection() {
     use sha2::Digest;
     let endpoint = "ws://127.0.0.1:39111/devtools/browser/current";

@@ -639,6 +639,15 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         }
         return response;
     }
+    let bound_command = if !action_skips_browser_launch(action) {
+        match super::action_runtime::runtime::bind_native_service_tab_command(cmd, state) {
+            Ok(command) => command,
+            Err(error) => return error_response(&id, &format!("{error}; source=native/action_runtime/runtime/cdp_free_execute.rs::bind_native_service_tab_command")),
+        }
+    } else {
+        cmd.clone()
+    };
+    let cmd = &bound_command;
     let native_handle_command =
         !action_skips_browser_launch(action) && cmd.get("serviceTabHandle").is_some();
     if native_handle_command {

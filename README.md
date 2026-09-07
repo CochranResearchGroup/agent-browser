@@ -3532,6 +3532,8 @@ A registered profile that needs interactive sign-in can use queued service reque
 
 Use `service_browser_contamination_report` for a no-effect inventory of inert and review-required retained browser rows. An eligible inert row can be removed only through `service_browser_retirement_plan` followed by `service_browser_retirement_apply` with the unchanged, unexpired plan. Planning returns the affected browser identity, record revision, evidence digest, reasons, and expiry. Apply compare-and-swaps those fields and returns a durable terminal receipt. Retirement never substitutes for `service_browser_close` and never terminates a process. The dashboard keeps incident handling separate from selected-browser retirement, previews the redacted plan, and requires an `AlertDialog` confirmation before apply.
 
+An explicit `service_browser_close` requests terminal shutdown even after retained-browser recovery. Service callers require the profile full_shutdown permission, and the service verifies current lifecycle ownership before closing. Ordinary retained-connection teardown continues to preserve the browser.
+
 `service status` also returns `crashRegenerationTransactions`, a redacted view of replayable recovery progress. It includes stable principal, profile, browser, route, connection, route-user, and durable-handoff identities plus the current phase, readiness, and safe recourse. Host PIDs, socket identities, display numbers, viewer-session IDs, and provider generations remain private Service State evidence.
 
 The Service dashboard projects this collection into each profile allocation. It shows principal provenance, lease revision, owner generation, identity blockers, doctor findings, recourse, and current authorized actions. Rejoin, renew, release, and reconciliation controls require the private capability in an ephemeral password field. The dashboard never stores that capability in browser storage or Service State. Reconciliation planning is read-only, and apply stays disabled unless the sealed plan is explicitly effect-capable.
@@ -3986,7 +3988,10 @@ fields, must still agree with the current owner. Background reconciliation
 preserves tab ownership and grants changed after its probe began. Navigation
 updates page metadata without replacing child custody. Native commands supplied
 with a tab handle validate its current child permission and select its exact
-target before navigation or input; conflicting target selectors are rejected. Released, foreign or
+target before navigation or input; conflicting target selectors are rejected.
+Service requests without a handle resolve explicit target/index selectors to
+current child custody. Without a selector, they use the caller's active owned
+tab or sole owned tab; an ambiguous or unattributed target is refused. Released, foreign or
 conflicting identities remain denied. `service_tab_profile_selector_conflict`
 identifies an explicit selector that disagrees with the current handle, including
 one supplied in `params`; compare that field with the current profile before retrying. Use

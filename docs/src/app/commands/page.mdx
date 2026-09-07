@@ -190,6 +190,10 @@ Navigation updates page metadata without replacing child custody. Native
 commands supplied with a tab handle validate current child permission and select
 its exact target before navigation or input.
 `service_tab_target_selector_conflict` rejects contradictory target selectors.
+Requests without handles resolve explicit targets or indexes to current child
+custody. A session-only request uses the caller's active owned tab or sole owned
+tab. `service_tab_target_unproven` refuses ambiguous or unattributed targets;
+request an exact owned handle instead of retrying against the active peer tab.
 `explicit_profile_conflicts_with_current_owner` reports a refusal before effects
 with the conflicting field and source location; compare the requested profile
 with the current owner before retrying. Fail closed when `complete` is false or `missingProofs`
@@ -1102,6 +1106,8 @@ Use MCP <code>service_request</code> when a service wants to queue one intent-ba
 <code>POST /api/service/request</code> request objects follow <code>docs/dev/contracts/service-request.v1.schema.json</code>. MCP <code>service_request</code> tool-call wrappers follow <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. HTTP <code>GET /api/service/contracts</code> and MCP <code>agent-browser://contracts</code> expose matching compatibility metadata for schema IDs, contract versions, routes, MCP tool names, and supported actions. The HTTP contracts metadata also names the <code>@agent-browser/client/service-observability</code> helpers and MCP resource templates for browser capability registry, profile readiness, profile lookup, and access-plan responses, including the profile lookup selection order.
 
 Browser row remedies use the same service request queue. <code>service_browser_close</code> politely closes the active service browser named by <code>params.browserId</code> and records shutdown health. <code>service_browser_repair</code> makes one degraded or faulted retained browser record retryable again after operator review. Dashboard controls enable these actions only when the contracts metadata advertises the action and the selected browser record is eligible.
+
+An explicit <code>service_browser_close</code> requests terminal shutdown even after retained-browser recovery. Service callers require the profile full_shutdown permission, and the service verifies current lifecycle ownership before closing. Ordinary retained-connection teardown continues to preserve the browser.
 
 Profile access defaults to <code>shared-local</code>, where a stable self-declared <code>clientSubjectId</code> is sufficient. If no durable profile is selected and site policy does not require one, the broker returns an executable request with a deterministic disposable <code>managed-ephemeral-*</code> profile. Later requests with the same labels or subject can continue a consistent shared-local session without strict runtime-owner proof. Ambiguous legacy identity migrates to that nonblocking default. Use <code>service_profile_policy_mutate</code> with <code>profileId</code>, <code>expectedRevision</code>, and either <code>mode</code> plus an <code>administrator</code>, <code>participant</code>, or <code>observer</code> preset, or an exact <code>targetPolicy</code>. Narrowing occupied access establishes a drain and fences new admission until incompatible users leave. Use <code>service_profile_tab_evict</code> only with an exact <code>authorizationId</code> and <code>tabId</code> from the persisted eviction plan.
 

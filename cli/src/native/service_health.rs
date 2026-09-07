@@ -8205,6 +8205,59 @@ pub(crate) mod service_commands {
                 browser_id
             ));
         }
+        if cmd.get("connectionInstanceId").is_some() {
+            use crate::native::service_profile_access_policy::{
+                evaluate_profile_access, ProfileAccessEvaluation, ProfileIdentityAssurance,
+                ProfilePermission,
+            };
+            let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+            let profile_id = snapshot
+                .browsers
+                .get(browser_id)
+                .and_then(|browser| browser.profile_id.as_deref())
+                .ok_or(
+                    "service_browser_close_authority_denied: current browser profile is missing",
+                )?;
+            let principal = cmd
+                .get("servicePrincipalId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty());
+            let subject = principal.or_else(|| {
+                cmd.get("clientSubjectId")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+            });
+            let (_, decision) = evaluate_profile_access(ProfileAccessEvaluation {
+                profile_id,
+                explicit_policy: snapshot
+                    .profiles
+                    .get(profile_id)
+                    .and_then(|profile| profile.access_policy.as_ref()),
+                subject_id: subject.map(str::to_string),
+                assurance: if principal.is_some() {
+                    ProfileIdentityAssurance::RegisteredCapability
+                } else if subject.is_some() {
+                    ProfileIdentityAssurance::SelfDeclared
+                } else {
+                    ProfileIdentityAssurance::Unknown
+                },
+                connection_instance_id: cmd
+                    .get("connectionInstanceId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                permission: ProfilePermission::FullShutdown,
+                operation: "service_browser_close",
+                incompatible_occupancy: Vec::new(),
+            });
+            if !decision.allowed {
+                return Err(format!("service_browser_close_authority_denied: expected=full_shutdown; observed=denied; profile={profile_id}; policyRevision={}; source=service_health.rs::handle_service_browser_close", decision.policy_revision));
+            }
+        }
+        // Retained tab recovery defaults to detach so ordinary daemon teardown
+        // preserves Chrome. An explicit Service browser close requests terminal
+        // shutdown instead; handle_close still fences the current lifecycle owner
+        // before approving process effects and records exact shutdown evidence.
+        state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::CloseBrowser;
         let mut result = handle_close(state).await?;
         result["browserId"] = json!(browser_id);
         result["requestedBrowserId"] = json!(browser_id);

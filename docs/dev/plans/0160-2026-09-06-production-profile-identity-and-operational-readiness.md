@@ -1182,3 +1182,136 @@ next_action_or_stop_reason: Finish the running full Rust suite, freeze the
 validated source and qualify the release binary. Continue the named remaining
 A1 cases before final installed acceptance; do not treat successful synthetic
 input as full operational readiness or retry business payment work here.
+
+## Checkpoint 20: implicit native commands respect child custody
+
+state_transition: A1 no-handle ownership bypass reproduced and repaired
+
+acceptance_state: A1–A4 and AX remain incomplete
+
+progress_classification: blocker_reduction
+
+Two self-declared clients sharing one profile reproduced a raw fill without a
+serviceTabHandle changing the other client's synthetic input. The failed fixture
+a1-shared-native-Ov2Mvo is retained; its ledger SHA256 is
+1bc449fe10f4a90097d3d27db665b673af4dc8ca67194228ab2b77e2c1266056.
+Native Service commands now resolve their target against current child custody,
+then use the existing handle authorization before effects. An implicit command
+uses the caller's owned active target or sole owned target. Missing, ambiguous,
+conflicting or foreign targets fail without selecting a peer. New-child creation
+retains its broker admission path.
+
+The optimized working candidate SHA256 is
+9f11ce76c135fc101c0c9a141fb558052d6a0d8494b0f86aae1169340eb59c0d.
+Its binary is archived under the private campaign retained-candidates directory.
+Headless fixture a1-shared-native-o7e7vq passes, ledger SHA256
+da97818af8a32fca4f251ca791db1d54028c7d4f404bd0d359aa941b46909bd7.
+Remote-headed fixture a1-shared-native-6Vkia0 passes, ledger SHA256
+e51c8f6f568dec049808188b33c289f6a686d0e1ff51043501f6725ef1e1f044.
+Each verifies foreign input denial, successful implicit own input while a peer
+was active, independent field readback and conflicting-selector no_effect.
+Manifests bind candidate, probe, ledger and saved state. All three exact fixture
+cleanup receipts report zero remaining owned processes.
+
+The 95 routing tests pass. The corrected checkpoint19 full Rust run subsequently
+failed two retained-browser dispatch tests because their fixture omitted the
+profile record required by recovery's physical-identity check. The fixture now
+includes that record; all 13 focused dispatch tests pass. The original failures
+remain preserved. Full Rust validation and workspace Clippy are running for the
+new dispatcher source. The earlier full release build finished, but source
+advanced during that build; it is not qualified for publication as this repair.
+
+material_blockers: This repair is not installed. Terminal browser close/reopen,
+final installed A1 qualification, AX reconstruction, A2 external operator journey,
+A3 supported upgrade and doctor readiness, and A4 scheduled cycles remain open.
+
+next_action_or_stop_reason: Finish the current validation handles, test the
+supported terminal close/reopen lifecycle, then freeze and build the production
+candidate. Preserve the consumer's original capability and browser throughout.
+
+Terminal lifecycle follow-up: fixture a1-terminal-reopen-qiS1yo reaches successful
+original-handle navigation and input after host restart, but service_browser_close
+fails with "Can only leave open a launched managed runtime profile". Its subsequent
+own-handle release fails runtime_owner_generation_stale; peer release succeeds.
+The terminal-close failure is currently classified unknown/effect_uncertain.
+Source inspection shows retained recovery sets CloseBehavior::Detach, while the
+explicit service close handler delegates to handle_close without changing that
+intent. The common close path first preserves the owner, then attempts managed
+detach on a borrowed manager. This is a concrete A1/AX repair lead, not green
+terminal-close evidence. Ledger SHA256:
+3732c1af56729daa48b4b0825ed2f270a47acabb278fd7dcf5fd6333f4829a0c.
+The saved probe and state are bound by its evidence manifest. Exact disposable
+cleanup signaled 13 positively identified processes through pidfd; none remain.
+No production process was involved. Reopen was not reached.
+
+## Checkpoint 21: terminal close and replacement admission
+
+state_transition: supported terminal close repaired; replacement admission in validation
+
+acceptance_state: A1–A4 and AX remain incomplete
+
+progress_classification: blocker_reduction
+
+Explicit service_browser_close now selects terminal shutdown rather than the
+detach default installed by retained-tab recovery. Service callers must pass the
+current profile full_shutdown permission before any close transition, followed
+by the existing lifecycle-owner fence. A denial names the missing permission,
+profile, policy revision and source, with no_effect recourse. Ordinary retained
+connection teardown continues to preserve the browser.
+
+Fixture a1-terminal-reopen-Ommtbg verifies participant denial with continuing
+original-handle usability, authorized terminal close, exact original process
+absence, stale-handle denial and preservation of the other browser and handle.
+Reopen then fails runtime_owner_generation_stale. Ledger SHA256:
+98396fc5abe3353a382f8ba1bbcb993fd0b4ef23c5b7026f9495e9c42aeb1d4c.
+Its archived candidate SHA256 is
+3f121e588cf483290b5a54687dcc23918195468487095210d39247cd135159ae.
+The fixture manifest binds source, ledger and saved state; exact cleanup found
+zero remaining owned processes. This is partial close proof, not a reopen pass.
+
+The lifecycle admission code reloads retained owner history for a new request.
+It previously released a proven terminal binding only for remote_view_open.
+Tab and window creation now use that same exact-session, current-owner,
+no-pending-transfer, terminal-state and satisfied-cleanup gate before launch.
+Registration must still atomically establish the replacement owner. Navigation
+and mismatched sessions remain denied. The existing focused regression was
+extended: it fails before repair and passes with the lifecycle suite afterward.
+The replacement candidate build is still running.
+
+The full Rust script completed successfully. Source advanced during its serial
+partitions, so this is not represented as one frozen-source run. Subsequent
+focused service-health tests (7), recourse tests (14), lifecycle tests and
+workspace Clippy pass for the affected repairs. Docs build and remote-view
+handoff documentation checks also pass. Private validation is under
+campaigns/p160/terminal-close-validation. No production publication occurred.
+
+material_blockers: Reopen live verification and final installed A1 qualification
+remain open, along with A2, A3, A4 and AX. Stale-owner errors still need the AX
+classification and causal reconstruction checks already required by the plan.
+
+next_action_or_stop_reason: Test the completed replacement candidate in the
+isolated terminal close/reopen workflow, freeze the validated source, and proceed
+to production candidate qualification under the existing authority.
+
+Replacement follow-up: a1-terminal-reopen-KzstjR still fails reopen. Its separate
+runtime-lifecycle-registry.json proves the closed browser remains closing with
+cleanup owned; the replacement gate correctly refuses that state. The ordinary
+state.json projection omits these lifecycle records and cannot establish this
+proof by itself. Ledger SHA256:
+9e8561268e8adf40a21200ae05d3b1f42f28a3f3eadb961cb0a4f0da7c6905f5.
+Archived candidate SHA256:
+e012ddfc25139e6616f702231a396bfae7abefca26c332f0731daced14c81592.
+Both owner and lifecycle registries are now included in the fixture manifest.
+Exact disposable cleanup reports zero remaining processes.
+
+Source diagnosis: terminate_runtime_browser returns default shutdown evidence
+when the process is already absent, and its other exit branches never populate
+exact_process_exited or profile_lock_released. The borrowed manager cannot supply
+owned-child shutdown evidence either. Consequently the common close path skips
+CompleteClose but still returns closed:true. The third materially distinct
+terminal fixture ends this work unit. Reframe the next unit around the missing
+retained-process shutdown barrier: capture exact process/profile evidence before
+CDP close, verify exit and lock release afterward, commit terminal cleanup only
+on that evidence, and refuse a success claim when terminal proof is incomplete.
+Do not weaken the replacement gate or manufacture cleanup evidence. The 16
+lifecycle tests, final Clippy and formatting checks pass; live reopen remains red.

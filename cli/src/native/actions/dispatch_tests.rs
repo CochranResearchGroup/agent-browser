@@ -446,6 +446,14 @@ async fn run_retained_handle_recovery_fixture(target_present: bool) {
         .unwrap();
     repository
         .mutate(|service| {
+            service.profiles.insert(
+                "retained-profile".to_string(),
+                crate::native::service_model::BrowserProfile {
+                    id: "retained-profile".to_string(),
+                    user_data_dir: Some(home.join("profile").display().to_string()),
+                    ..crate::native::service_model::BrowserProfile::default()
+                },
+            );
             service.browsers.insert(
                 "session:retained-owner".to_string(),
                 BrowserProcess {
