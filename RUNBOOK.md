@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 220 | 2026-09-07
+## Turn 221 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
@@ -18,8 +18,12 @@ abrupt host death in a disposable runtime. Source `3dfd4d09` is qualified for
 that case; production remains on `d6d99e43`. All effort remains cumulative.
 Focused lifetime and existing custody tests, format, workspace Clippy and the
 optimized build pass. Prior MCP correlation validation remains applicable.
-The legacy operator maintenance candidate is building; focused custody/parser
-checks, Clippy and API parity passed. Isolated application proof is pending.
+Exact release `dfbcd2aa` passed `retained-unit-sim-YtpFEw`: live-owner denial,
+changed-evidence refusal, transactional repair and audit event, unchanged browser
+and permissions, original-handle control and complete attestation; cleanup zero.
+Focused custody/parser, format, Clippy and parity passed. Progress: blocker reduction.
+Production preview passed for one legacy connection. The 22:27Z window expired
+without production application or installation; consumer acceptance remains.
 Full A1–A4/AX readiness remains OPEN.
 No consumer capability was borrowed, profile lease reassigned or consumer browser
 restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
@@ -81,8 +85,8 @@ The consumer legacy access record exactly matches the pre-publication custody
 snapshot and remains active. Fresh census finds three production processes, all
 started after that snapshot, and six development processes with separate homes.
 The reviewed legacy transition affects one tab; no jobs were active. Native
-transactional application remains unimplemented and no state repair was applied. UUID-only legacy reconciliation, consumer acceptance
-and actual consumer artifact transport remain incomplete.
+transactional repair is exact-release qualified; production preview passes.
+Production application, consumer acceptance and artifact transport remain open.
 
 ### Storage recovery and prevention
 
