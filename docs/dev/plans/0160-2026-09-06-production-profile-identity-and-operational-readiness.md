@@ -3119,3 +3119,44 @@ doctor findings, or complete the full plan. Evidence and the optimized binary
 are archived under current-selection-proof. The optimized build began on base
 795d7c18 with the source changes later committed as 8c3ee439; final publication
 must use a fresh release build from committed source.
+
+## Installed 35611c64 current-selection checkpoint
+
+state_transition: Current-selection proof is installed and local operator acceptance passed.
+acceptance_state: A1, A3, A4 and AX remain open; full-plan acceptance is not established.
+progress_classification: progress
+
+The committed-source release build passed in 9m 48s. Its binary SHA256 is
+9429d20fd5a55e6b7b71d4d7bdbc87e066363af801c061d040fc73ab03a98ce2.
+All five exact-release qualification cases passed with successful disposable
+cleanup: cold owner, two-client headless and remote-headed, and session-only
+headless and headed. Controlled activation selected generation
+0.28.0-9429d20fd5a5-457dd13afe4f. Five existing browser process identities and
+all 68 tab-custody rows were preserved. Activation has executed and must not be
+replayed.
+
+The first traced cold viewer attempt, local-viewers-Otd4LZ, passed two
+authenticated viewers, anonymous denial, synthetic pixels, trusted mouse and
+keyboard, same durable URL reconnect and peer continuity. Its client closed.
+The original synthetic handle subsequently reported complete control-plane
+attestation, mouse/keyboard counters 8/8 and matching installed asset hashes.
+This does not prove the consumer's distinct lease or explain the earlier
+c249c531 cold startup failure.
+
+Installed doctor still reports success=false, but the current-selection
+readiness blocker is gone. Historical terminal upgrade evidence remains as a
+warning. Remaining findings include consumer and legacy principal bindings,
+owner-generation/session-authority mismatches, stale runtime monitoring and
+observed process pressure with unknown ownership. No scheduled timer was restored
+and no consumer capability was used. Private evidence is retained under
+campaigns/p160/publication-35611c64, including qualification-status.json,
+activation-receipt.json, the viewer event ledger, original-handle readback and
+doctor-after.json.
+
+Current pressure investigation found a concrete diagnostic classification defect:
+Chrome executables below the agent-browser browser installation directory match
+the agent-browser substring before browser classification. Browser children
+therefore receive misleading agent-browser process reasons. Correcting executable
+classification must preserve unknown ownership and must not grant cleanup
+authority. Descendant ownership correlation and the stale monitor require their
+own evidence; changing a resource label alone cannot satisfy A3.
