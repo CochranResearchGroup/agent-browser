@@ -4,24 +4,24 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 216 | 2026-09-07
+## Turn 217 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
-The previous hour closed within 15:58:19Z–16:58:19Z. Goal continuation authorized
-this bounded recovery follow-up, 16:58:51Z–17:18:51Z, primary-controlled.
-This follow-up is checkpointed with no running repair, fixture or build process.
-All prior effort remains cumulative. Progress: recovered existing production
-storage after isolated proof. Full readiness remains OPEN. No consumer capability
-was borrowed, profile lease reassigned, browser restarted or browser input sent.
-Unrelated note0156 and untracked note0159 remain preserved.
+The candidate batch runs 17:17:48Z–17:47:48Z with one publication decision.
+All prior effort remains cumulative, including the prior hour and live storage
+recovery. Previous goal turn: verified wait on build session30120. Current
+progress: exact candidate installed with retained browser, handle and storage
+proof. Full readiness remains OPEN. No consumer capability was borrowed, profile
+lease reassigned or consumer browser restarted. Unrelated note0156 and untracked
+note0159 remain preserved. Build, qualification and activation have completed.
 
 ### Installed repair and current acceptance
 
-- Installed source: `dc570e5b4f70722e56cb3ec14b62420ef4baefc2`.
-  Selected generation: `0.28.0-73428f5db89f-de1a24242899`.
-  Binary SHA256: `73428f5db89f5331d5cf340a38f97a0281cbfb9bdec2650b43f2cd7fcd0aae28`.
-  Support SHA256: `de1a24242899b4dff891f7277019ef600d749c4bbd1aa9b2bf04c2c6ff0542e3`.
+- Installed source: `dd94dfe7e00cb3a098aa8d58b84cabf552e31856`.
+  Selected generation: `0.28.0-13d426fb15c9-bb2f5ae53042`.
+  Binary SHA256: `13d426fb15c92a5e21b7744f45cd45b6dfe7942f8c2d6e3f58348ad7ff6938a6`.
+  Support SHA256: `bb2f5ae530427178dac9237495902fd02e84581ec633f9ee2ed8ac5dc99a6e7d`.
 - A1 advanced and remains OPEN. The installed predecessor reproduced
   `no_safe_reconciliation_transition` despite the lease authorizing rejoin.
   The planner now seals one `rejoin_owned_browser` transition and apply reuses
@@ -32,14 +32,17 @@ Unrelated note0156 and untracked note0159 remain preserved.
   attestation without replacing browser or targets. Its returned receipt joined
   to the persisted plan ID and lease ID. Foreign changed custody was denied
   without mutation in the focused regression; replay was idempotent.
-- Six exact-release cases passed, including the new reconciliation case,
-  cold owner, headed/headless retained reopen and headed/headless session-only
-  cases. Every fixture cleanup passed. Activation admitted with no active jobs
+- The predecessor passed six exact-release cases. The new exact release passed
+  a combined retained-handle reconciliation and persistent-storage simulation.
+  Two fixture defects preceded that pass: default group shutdown stopped Chrome;
+  recreating a still-loaded transient unit failed. The corrected fixture uses
+  main-process-only retirement and restarts the existing unit. Both failures and
+  all cleanup receipts remain preserved; no candidate source retry occurred. Activation admitted with no active jobs
   and preserved five exact live browser process identities and 70 tab-custody
   records. Authenticated manifest and retained synthetic-handle readback passed
   after activation; mouse/keyboard counters remained 9/9.
-- A2 is OPEN on this candidate. Its new generation invalidated the prior bound
-  presentation receipt, so one bounded local synthetic journey was run.
+- A2 is OPEN. The previous dc570e5b candidate had one bounded local synthetic
+  journey. The new generation has no matching presentation acceptance receipt.
   Both authenticated viewers connected, anonymous access was denied, synthetic
   pixels matched and operator focus succeeded. Mouse acknowledgement then failed.
   Direct page readback confirmed counters still 9/9; the click did not reach the
@@ -47,19 +50,19 @@ Unrelated note0156 and untracked note0159 remain preserved.
   closed. No unchanged retry followed. Cause is unproven; do not attribute this
   failure to the lease repair or claim the earlier pass covers this binary.
   Prior A2 success on c36ce2b0 remains historical evidence.
-- A3 remains OPEN. Supported doctor still exits 1. After viewer connection its
-  presentation and upgrade-readiness findings cleared, despite the later input
-  failure. That narrower receipt does not prove full A2 acceptance. Remaining
-  findings concern terminal history, legacy principals, missing owner bindings,
-  generation/session proof, stale monitoring and unknown process ownership under
-  pressure. Exact current report is retained privately.
+- A3 remains OPEN. Current installed doctor exits 1 for presentation and upgrade
+  readiness, retained terminal history, two legacy-principal rows, three missing
+  owner bindings, one owner-generation/session-authority pair, stale monitoring
+  and unknown pressure ownership. Current report is retained privately. The
+  original synthetic handle has complete attestation despite its maintenance
+  warning; ordinary operation and maintenance evidence remain separate.
 - A4 remains OPEN. The maintenance timer is linked and inactive, with automatic
   startup disabled. No scheduled-cycle or additional restart acceptance is claimed.
 - AX advanced but remains OPEN. The new reconciliation receipt correlates to its
   plan and lease. Investigation also confirmed a dashboard logging wire mismatch,
   repaired in source below. Missing mouse-input delivery remains untraced.
 
-### Follow-up source batch, not installed
+### Diagnostic batch, now installed
 
 Two concrete diagnostic defects are repaired in source commit `d523aaeb`:
 
@@ -82,34 +85,31 @@ All 26 focused lease tests pass. Failure-journal/client-observation checks and
 Dashboard build/TypeScript, formatting and workspace Clippy with warnings denied
 pass. The optimized candidate also passed the retained-consumer reconciliation
 fixture with one lease row, both original handles usable and no remaining
-fixture processes. These source fixes have not replaced the
-installed dc570e5b binary or its shared skill. Do not report them as live.
+fixture processes. These fixes are now installed in the
+selected dd94dfe7 candidate, and its main shared skill matches repository source.
+The separate Service skill and its lock-diagnostic guidance were preserved.
 
-### Existing production storage recovered; prevention not installed
+### Existing storage recovered; prevention now installed
 
 Source `bee768ed` prevents future host retirement from deleting retained-browser
 temporary storage. It mounts private, unit-scoped disk-backed state directories
 at `/tmp` and `/var/tmp`. All 13 supervisor tests, formatting and workspace Clippy
 passed. The rendered unit and real Chrome synthetic CSV download passed after
-parent retirement. This preventive template is NOT INSTALLED.
+parent retirement. This preventive template is now installed. The exact release
+simulation preserved both original handles and positive temporary-storage link
+counts across host interruption. Live activation preserved all five browser
+processes, 70 tab-custody records and all six recovered namespace mounts. The
+new host mounts private state directories; authenticated binary readback and
+the original synthetic handle passed, with mouse/keyboard counters still 9/9.
 
 Read-only production observation at 16:57:35Z found all five retained browsers
 holding unlinked `/tmp` and `/var/tmp`, across three mount namespaces. Existing
 PID/tab preservation had not established usable storage. The mechanism reproduced
 in a disposable systemd service; the historical deleting stop remains unproven.
 
-A direct bind over a deleted mount failed ENOENT. A bounded disposable recovery
-then used Linux MOVE_MOUNT_BENEATH to stage private storage under the deleted
-mount before revealing it. The same browser PID/start and mount namespace survived,
-and Chrome completed an exact frame/GUID-correlated synthetic CSV download with
-matching bytes. Fixture processes, units and storage were cleaned up.
-
-A frozen production plan bound five Ready owners, process start/executable/UID,
-three exact namespaces, deleted mount inode/device, permitted namespace members,
-mount propagation, boot and expiry. Three negative checks rejected changed start,
-unproven executable and changed mount identity. The first pilot stopped before
-any filesystem or mount effect because the ambient Python lacked pidfd_open;
-the tested /usr/bin/python3 supplied it. That failure is preserved.
+The ownership-bound recovery plan, disposable proof, rejected negative checks
+and guarded beneath/reveal operations remain in the linked private evidence.
+Git checkpoint dd94dfe7 preserves the detailed recovery account.
 
 Recovery applied first to the owned synthetic operator namespace. Its original
 service handle retained complete attestation and unchanged 9/9 input counters.
@@ -118,8 +118,8 @@ now have positive link counts, private mode 0700 and verified write/readback;
 original nosuid/nodev/noexec restrictions were retained where present. Five browser
 PIDs, start identities and mount namespaces remained unchanged. Global `/tmp`
 remained unchanged. No browser restart, page action, download-policy change or
-consumer capability use occurred. This is a LIVE storage repair, not installation
-of the new template or full browser/download acceptance.
+consumer capability use occurred. This LIVE storage repair preceded the template installation. Full consumer
+browser/download acceptance remains open.
 
 Post-repair install doctor still exits 1 for lease identity, monitoring, unknown
 pressure ownership and retained upgrade history. Storage repair does not clear
@@ -147,16 +147,17 @@ and supervisor references. Repair a supported publication/retention path before
 maintenance resumes. Never fabricate accepted transactions or green monitor
 receipts to protect a rollback target.
 
-Next consolidate the already-tested diagnostic and preventive-template fixes
-into one installed candidate, preserving the recovered storage. Complete remaining
-identity dispositions and scoped consumer artifact transport before claiming A1.
+The diagnostic and preventive-template candidate is installed. Next resolve the
+highest-impact remaining identity refusal, distinguishing an actual request
+blocker from a maintenance warning. Complete identity dispositions and scoped
+consumer artifact transport before claiming A1.
 The recovery helper still needs a reusable product diagnostic/recovery surface;
 its private receipt must not be represented as a supported upgrade transaction.
 Before another operator attempt, isolate mouse delivery with an observable input
 path; pixel readiness and operator-focus success alone proved insufficient.
 Preserve the failed attempt and its unchanged page counters. Do not spend an
-unchanged viewer retry. Then consolidate the remaining identity, logging and
-retention repairs before another production candidate. Reconcile every A1/A3
+unchanged viewer retry. Consolidate remaining repairs before
+another production candidate. Reconcile every A1/A3
 finding with operation-specific evidence; only after A1–A3 pass restore A4's
 three real scheduled cycles, controlled restart and next scheduled cycle.
 
@@ -164,20 +165,17 @@ three real scheduled cycles, controlled restart and next scheduled cycle.
 
 Evidence stays under `~/.local/state/agent-browser/campaigns/p160/`:
 
+- `publication-dd94dfe7/`: exact release, corrected combined simulation, one
+  activation, original handle readback, storage preservation, current doctor,
+  verified 32-file dc570e5b rollback backup and shared skill synchronization.
 - `temporary-storage-recovery/`: frozen plan/helper, negative checks, three
   production apply ledgers, pilot handle proof, final readback and recovery receipt.
 - `deleted-tmp-recovery-81654n_8`: failed direct bind, successful beneath/reveal
   recovery, same-Chrome CSV and cleanup.
 - `retained-download-6xfjyhb6`: real Chrome post-retirement CSV, exact
   frame/GUID and byte readback, cleanup complete.
-- `private-tmp-lifecycle-oswt5o1o`: disposable deletion reproducer.
-- `rendered-tmp-lifecycle-qn2_650f`: preventive unit configuration proof and cleanup.
-- `state-tmp-lifecycle-u1gpfuc3`: disk-backed private storage lifetime proof.
 - `reconcile-rejoin/`: installed collection read, validation record, optimized
   candidate qualification, and fractional-wire endpoint driver.
-- `missing-binding-sim-fy12OQ`: installed-predecessor planner failure and cleanup.
-- `missing-binding-sim-jhmudE`: optimized repaired planner, original handles and
-  targets preserved, cleanup complete.
 - `publication-dc570e5b/`: exact-release six-case qualification, sealed generation,
   activation/custody receipts, pre/post manifest and synthetic-handle readback,
   current doctor, GC preview, verified rollback backup and installed skill sync.

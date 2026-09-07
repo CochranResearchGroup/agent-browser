@@ -69,11 +69,21 @@ rejection. Diagnostics must identify missing proof and supported recourse, with
 correlation sufficient to trace the failure. Existing green viewer acceptance
 does not need replay unless this batch changes that path.
 
-Allocate at most one hour to this batch: ten minutes for classification,
-approximately 35 for a causal repair, and the remainder for focused validation
-and one qualification/publication decision. Reassess at 30 minutes without A1
-outcome progress. All prior effort remains cumulative; this is a tactic change,
-not a reset of the full goal or its acceptance requirements.
+Allocate the next hour first to completing the prepared candidate, then to the
+highest-impact remaining identity refusal: approximately 20 minutes for exact
+candidate qualification and one installation decision, 30 minutes for one causal
+identity investigation and repair, and ten minutes for focused verification and
+checkpointing. Qualification must simulate host interruption and prove original
+handles, complete identity attestation and writable private temporary storage
+survive together before production replacement. Candidate publication retains
+its existing execution deadline; this allocation does not silently extend it.
+Distinguish an action refusal from an incorrect maintenance diagnostic before
+choosing a repair. Reassess at 30 minutes without A1 outcome progress and change
+the unsuccessful approach instead of repeating unchanged verification. All prior
+effort remains cumulative; this is a tactic change, not a reset of the full goal
+or its acceptance requirements. Keep mouse delivery, supported rollback retention
+and scheduled maintenance as subsequent work unless evidence makes one a direct
+dependency of the identity repair.
 
 The retained-runtime boundary also includes temporary filesystem custody. A
 2026-09-07 disposable systemd reproduction showed that retiring a PrivateTmp
