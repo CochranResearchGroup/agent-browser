@@ -3257,3 +3257,9 @@ Set the existing `AGENT_BROWSER_PRESENTATION_WARM_MINIMUM`,
 `AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH` for the admitted provider inventory.
 A changed boot or binding requires requalification; never relabel a development
 inventory as production.
+If production inventory validation fails, Service State remains readable and
+retains existing custody. `presentationCapacity.admissionError` and the capacity
+projection’s `bindingWarnings` report the cause; admitted capacity becomes zero
+and new presentation effects are refused with `inventory_admission`. Restore
+the configured inventory and its ownership evidence to requalify capacity.
+Ordinary browser diagnostics remain available during the outage.

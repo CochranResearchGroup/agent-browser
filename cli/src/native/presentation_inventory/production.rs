@@ -33,8 +33,14 @@ impl ProductionInventory {
         if !path.is_absolute() {
             return Err("production_presentation_inventory_absolute_path_required".into());
         }
-        let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let inventory: Self = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        let raw = fs::read_to_string(path).map_err(|e| {
+            format!(
+                "production_presentation_inventory_read_failed:{}:{e}",
+                path.display()
+            )
+        })?;
+        let inventory: Self = serde_json::from_str(&raw)
+            .map_err(|e| format!("production_presentation_inventory_json_invalid:{e}"))?;
         let environment = match std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT") {
             Ok(value) => value,
             Err(std::env::VarError::NotPresent) => "production".into(),
@@ -327,11 +333,15 @@ mod tests {
                 "display"
             )
             .is_granted());
-        state.presentation_capacity = Some(capacity.clone());
+        let mut unavailable = capacity.clone();
+        unavailable.admission_error =
+            Some("production_presentation_inventory_owner_unproven:route".into());
+        state.presentation_capacity = Some(unavailable);
         let refreshed = inventory
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
         assert_eq!(refreshed.slots, capacity.slots);
+        assert!(refreshed.admission_error.is_none());
         assert_eq!(state.remote_view_routes["route"].state, "orphaned");
         assert_eq!(state.display_allocations["display"].state, "orphaned");
     }

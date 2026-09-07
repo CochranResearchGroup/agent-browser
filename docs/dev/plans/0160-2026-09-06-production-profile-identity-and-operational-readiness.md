@@ -71,6 +71,12 @@ Use existing production provider routes; this work does not authorize expansion
 or borrowing development resources. Include namespace-aware display UID evidence
 and original browser/process continuity in the acceptance receipt.
 
+Production inventory failures must fence presentation effects without disabling
+Service State reads or ordinary browser diagnostics. Preserve incumbent custody
+and reservations, expose the validation cause, and require successful inventory
+requalification before admitting new presentation work. Include provider-outage
+and restored-inventory cases before enabling this adapter in production.
+
 For stranded legacy connections, use preserved host-replacement custody and a
 fresh census of connection-producing processes, scoped to the same Service State
 root. Require an exact unchanged child-access record and affected-tab set under

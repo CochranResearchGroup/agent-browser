@@ -360,7 +360,19 @@ impl ServiceStateStore for JsonServiceStateStore {
             state.runtime_owner_registry.lifecycle_records = lifecycle_registry.records;
         }
         state.mark_persisted_entity_sources();
-        super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)?;
+        if let Err(error) =
+            super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)
+        {
+            if std::env::var_os("AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH").is_none() {
+                return Err(error);
+            }
+            // Provider outages must remain diagnosable through Service State.
+            // Retain custody, but fence presentation admission until revalidation.
+            state
+                .presentation_capacity
+                .get_or_insert_with(Default::default)
+                .admission_error = Some(error);
+        }
         state.refresh_derived_views();
         Ok(state)
     }
@@ -1653,6 +1665,81 @@ mod tests {
                     .as_nanos()
             ))
             .join("state.json")
+    }
+
+    #[test]
+    fn unavailable_production_inventory_preserves_readable_state_and_fences_capacity() {
+        use crate::native::presentation_capacity::{
+            CapacityLimitingResource, PresentationCapacityAuthority, PresentationRequest,
+            PresentationSlot, PresentationSlotState, PressureAdmission,
+        };
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH",
+            "AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH",
+        ]);
+        let path = unique_state_path("inventory-outage");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        guard.set(
+            "AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH",
+            path.with_file_name("missing-inventory.json")
+                .to_str()
+                .unwrap(),
+        );
+        guard.remove("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH");
+        let mut slot = PresentationSlot::warm_idle("slot").with_binding("route", "display");
+        slot.state = PresentationSlotState::Active;
+        slot.browser_id = Some("incumbent".into());
+        let mut initial = ServiceState::default();
+        initial.presentation_capacity = Some(PresentationCapacityAuthority {
+            slots: vec![slot.clone()],
+            ..Default::default()
+        });
+        let bytes = serde_json::to_vec(&initial).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        let store = JsonServiceStateStore::new(&path);
+        let state = store
+            .load()
+            .expect("inventory outage must not disable state reads");
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            bytes,
+            "read must not write custody"
+        );
+        let mut capacity = state.presentation_capacity.clone().unwrap();
+        assert!(capacity.admission_error.is_some());
+        assert_eq!(capacity.slots, vec![slot]);
+        assert_eq!(capacity.reconcile_authoritative_bindings(&state), 0);
+        assert_eq!(
+            capacity
+                .projection(PressureAdmission::admit(2))
+                .pressure_admitted_maximum,
+            0
+        );
+        assert!(!capacity.binding_warnings(&state).is_empty());
+        let before = capacity.clone();
+        for bound in [false, true] {
+            let request = PresentationRequest::recovery("recover").for_browser("incumbent");
+            let decision = if bound {
+                capacity.request_bound_recovery(
+                    request,
+                    PressureAdmission::admit(2),
+                    &state,
+                    "route",
+                    "display",
+                )
+            } else {
+                capacity.request(request, PressureAdmission::admit(2))
+            };
+            assert_eq!(
+                decision.limiting_resource(),
+                Some(CapacityLimitingResource::InventoryAdmission)
+            );
+            assert_eq!(
+                capacity, before,
+                "refusal must not enqueue or alter custody"
+            );
+        }
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]
