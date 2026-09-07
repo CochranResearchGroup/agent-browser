@@ -1815,6 +1815,11 @@ can then return `reuse_existing_browser` with `browserId` and `sessionName`
 route hints. `external_observed` profiles are still process evidence only and
 are not reusable identity lanes.
 
+MCP `service_request` routes a handle-only browser operation using the returned
+`serviceTabHandle.sessionName` or its session-prefixed `browserId`. Keep the
+original handle; there is no need to duplicate its route fields. Explicit route
+selectors remain subject to conflict and ownership checks.
+
 After a runtime-host interruption, reuse the original `serviceTabHandle` for
 bounded `evaluate`, `probe`, or permitted `cdp_attach`. The service reconnects
 the exact retained target after validating child access, runtime ownership,

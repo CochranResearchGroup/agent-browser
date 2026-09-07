@@ -91,39 +91,14 @@ The separate Service skill and its lock-diagnostic guidance were preserved.
 
 ### Existing storage recovered; prevention now installed
 
-Source `bee768ed` prevents future host retirement from deleting retained-browser
-temporary storage. It mounts private, unit-scoped disk-backed state directories
-at `/tmp` and `/var/tmp`. All 13 supervisor tests, formatting and workspace Clippy
-passed. The rendered unit and real Chrome synthetic CSV download passed after
-parent retirement. This preventive template is now installed. The exact release
-simulation preserved both original handles and positive temporary-storage link
-counts across host interruption. Live activation preserved all five browser
-processes, 70 tab-custody records and all six recovered namespace mounts. The
-new host mounts private state directories; authenticated binary readback and
-the original synthetic handle passed, with mouse/keyboard counters still 9/9.
-
-Read-only production observation at 16:57:35Z found all five retained browsers
-holding unlinked `/tmp` and `/var/tmp`, across three mount namespaces. Existing
-PID/tab preservation had not established usable storage. The mechanism reproduced
-in a disposable systemd service; the historical deleting stop remains unproven.
-
-The ownership-bound recovery plan, disposable proof, rejected negative checks
-and guarded beneath/reveal operations remain in the linked private evidence.
-Git checkpoint dd94dfe7 preserves the detailed recovery account.
-
-Recovery applied first to the owned synthetic operator namespace. Its original
-service handle retained complete attestation and unchanged 9/9 input counters.
-The two remaining namespaces then passed the same guarded repair. All six mounts
-now have positive link counts, private mode 0700 and verified write/readback;
-original nosuid/nodev/noexec restrictions were retained where present. Five browser
-PIDs, start identities and mount namespaces remained unchanged. Global `/tmp`
-remained unchanged. No browser restart, page action, download-policy change or
-consumer capability use occurred. This LIVE storage repair preceded the template installation. Full consumer
-browser/download acceptance remains open.
-
-Post-repair install doctor still exits 1 for lease identity, monitoring, unknown
-pressure ownership and retained upgrade history. Storage repair does not clear
-those findings.
+Source `bee768ed` now supplies the installed preventive unit. Thirteen supervisor
+tests and a real Chrome synthetic CSV passed after parent retirement. Production
+recovery repaired six deleted temporary mounts across three exact namespaces,
+preserving all five original browser processes. Candidate activation preserved
+those mounts and 70 tab-custody records. New host storage is private, unit-scoped
+state-backed storage. Original synthetic handle readback retains complete
+attestation and unchanged mouse/keyboard counters 9/9. Recovery details remain
+in Git checkpoint dd94dfe7 and the private operation receipts.
 
 The report's old Playwright Node PID no longer exists. Its artifact directory
 was not recreated or bridged. Consumer CSV, current client artifact transport,
@@ -132,6 +107,22 @@ Do not revive stale artifact paths or change shared download settings by guesswo
 Recovery backing directories under user state runtime-tmp/recovered must remain
 while retained namespaces reference them. The private recovery receipt binds
 all three operation ledgers and the final five-browser readback.
+
+### Current identity repair, not installed
+
+The exact installed binary passed self-identified HTTP control across disposable
+host interruption with both original handles and no registered capabilities.
+An MCP stdio simulation then reproduced a distinct routing refusal: after
+opening a tab successfully, a handle-only diagnostics request was sent to the
+MCP default session instead of the handle's session. This is not proof that the
+historical consumer's connection-active denial has the same cause.
+Source now derives a missing MCP route from the canonical handle fields while
+preserving explicit routes and daemon custody checks. Focused route and desktop
+regressions, formatting, Clippy and API/MCP parity pass. The optimized candidate
+build is running. Exact MCP
+reconnection and foreign-owner denial remain pending. The identity follow-up
+ends by 18:17:48Z, including this batch's 17:17:48Z start in the hour allowance;
+no second production publication is part of this follow-up.
 
 ### Retention and next work
 

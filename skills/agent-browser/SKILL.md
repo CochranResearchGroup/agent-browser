@@ -471,6 +471,11 @@ allocation identity follows the route rather than its reusable X11 display
 number, preventing released historical display rows from capturing a new
 route checkout.
 
+MCP `service_request` routes a handle-only browser operation using the returned
+`serviceTabHandle.sessionName` or its session-prefixed `browserId`. Keep the
+original handle; there is no need to duplicate its route fields. Explicit route
+selectors remain subject to conflict and ownership checks.
+
 After runtime-host interruption, bounded `evaluate`, `probe`, and permitted
 `cdp_attach` reconnect the exact original handle's retained target after child,
 owner, process and endpoint checks. Do not reacquire a tab to mask recovery

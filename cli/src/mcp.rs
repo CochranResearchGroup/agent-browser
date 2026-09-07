@@ -11116,7 +11116,15 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
         return service_request_session_candidate(command.get("sessionName"))
             .unwrap_or_else(|| default_session.to_string());
     }
-    for value in [command.get("sessionName"), command.get("browserId")] {
+    // A returned handle carries the same canonical route hints as HTTP ingress.
+    // Selecting its lane does not authorize the operation: the daemon still
+    // validates the handle's selectors, current custody and caller permissions.
+    for value in [
+        command.get("sessionName"),
+        command.get("browserId"),
+        command.pointer("/serviceTabHandle/sessionName"),
+        command.pointer("/serviceTabHandle/browserId"),
+    ] {
         if let Some(session_name) = service_request_session_candidate(value) {
             return session_name;
         }
@@ -14069,7 +14077,7 @@ mod tests {
     }
 
     #[test]
-    fn service_request_tool_session_uses_browser_id_route_hint() {
+    fn service_request_tool_session_uses_explicit_and_handle_route_hints() {
         let command = json!({
             "action": "tab_new",
             "browserId": "session:operator-social",
@@ -14083,6 +14091,34 @@ mod tests {
             queued_tool_command_session("browser_navigate", "AgentBrowserDashboard", &command),
             "AgentBrowserDashboard"
         );
+        for action in ["diagnostics", "evaluate", "tab_handle_release"] {
+            let mut retained = json!({
+                "action": action,
+                "serviceTabHandle": {
+                    "sessionName": "operator-social",
+                    "browserId": "session:operator-social",
+                },
+            });
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "operator-social"
+            );
+            retained["serviceTabHandle"]
+                .as_object_mut()
+                .unwrap()
+                .remove("sessionName");
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "operator-social"
+            );
+            // Keep explicit routing intact so conflicting handle custody is
+            // rejected by the destination daemon rather than silently ignored.
+            retained["sessionName"] = json!("explicit-other");
+            assert_eq!(
+                queued_tool_command_session("service_request", "AgentBrowserDashboard", &retained),
+                "explicit-other"
+            );
+        }
     }
 
     #[test]

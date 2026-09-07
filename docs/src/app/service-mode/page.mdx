@@ -18,6 +18,11 @@ The primary connection batches image acknowledgements and checks fresh ownership
 
 ## Forensic failure journal
 
+MCP `service_request` routes a handle-only browser operation using the returned
+`serviceTabHandle.sessionName` or its session-prefixed `browserId`. Keep the
+original handle; there is no need to duplicate its route fields. Explicit route
+selectors remain subject to conflict and ownership checks.
+
 After a runtime-host interruption, bounded <code>evaluate</code>,
 <code>probe</code>, and permitted <code>cdp_attach</code> requests can reuse the
 original <code>serviceTabHandle</code>. The service validates child access,
