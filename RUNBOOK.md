@@ -4,22 +4,25 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 227 | 2026-09-07
+## Turn 228 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Lane P157; branch `plan/profile-permissions-and-request-provenance`.
-Progress: implemented explicit production presentation inventory admission.
-It verifies existing route/display/process identity and creates capacity without
-rewriting presentation custody or ready states. Active reservations and human
-controller protection remain intact; development inventory remains separate.
-All ten inventory tests, format, Clippy and optimized build pass at `d682ae6c`.
-All five documentation surfaces are updated. Private-state-copy readback returned
-capacity with an idle, unbound slot despite the route retaining its browser.
-Live qualification FAILED capacity ownership preservation. Do not enable this candidate inventory in production.
-Private `production-inventory/candidate-inventory.json` is prepared for the exact
-synthetic route but is not enabled. This unit is bounded through 23:05:24Z with
-one optimized candidate build and two isolated attempts; effort is cumulative.
-Production remains on dfbcd2aa. No host or provider mutation occurred this turn.
+Progress: reproduced capacity ownership loss in the existing production inventory
+recovery test by invoking the actual reconciliation transition before recovery.
+The test failed before repair. Source `c0201044` preserves an admitted orphaned
+slot only when browser, session, route and display custody still agree, without
+promoting presentation readiness. Foreign-browser recovery remains denied and
+released routes still free capacity. All 57 selected presentation tests passed;
+the extended regression, format and workspace Clippy also passed.
+The previous private-copy Service Status attempt failed at `d682ae6c`: its route
+retained the browser while its capacity slot became idle and unbound. Preserve
+that failure. Optimized `c0201044` passed the same isolated Service Status replay:
+`production-inventory/isolated-readback-g51y46lj` retains the original browser
+binding in an active slot while route and display remain orphaned. Reattach
+and the original durable URL remain untested with this candidate.
+The bounded successor completed one build and one isolated replay. Cumulative
+effort: two optimized builds, three readbacks. Production remains on dfbcd2aa.
 Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
