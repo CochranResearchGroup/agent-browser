@@ -4,34 +4,34 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 229 | 2026-09-07
+## Turn 230 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Progress: `c0201044` preserved the original capacity browser binding through
-reconciliation in `production-inventory/isolated-readback-g51y46lj`, without
-promoting orphaned route/display readiness. A subsequent missing-inventory replay
-returned successful Service Status with an empty browser inventory after the
-store load failed: `production-inventory/isolated-readback-4ua58d3l`.
-Source `d22ed31d` contains inventory failures: Service State retains custody and
-exposes `presentationCapacity.admissionError`; admitted capacity becomes zero.
-New presentation requests/transitions are fenced until successful requalification.
-All five user-facing docs and the plan are updated. Validation passed: 30 store
-and 57 presentation tests, service-client checks, format and workspace Clippy.
-Exact release `d46cf77f8f36` passed valid/missing/restored inventory readbacks in
-`production-inventory/isolated-readback-nc0brlld`, preserving six browser records.
-The first sequence failed a fixture assertion about unpersisted capacity; one
-corrected replay passed. Evidence and binary are in `publication-d22ed31d/`.
-Production remains on dfbcd2aa; guarded installation preparation is next.
-Reattach and the original durable URL remain unaccepted. Full A1–A4/AX is OPEN.
+Progress: installed exact release `d22ed31d` after isolated inventory qualification.
+Activation preserved all five Chrome processes, storage identities and tab custody.
+Original synthetic-handle diagnostics and evaluation pass with complete attestation.
+Direct same-route reattach passed and released its recovery reservation. Its first
+request was misrouted by params-only session hints; documented top-level hints
+corrected that invocation, with the refused request and no-custody-change proof kept.
+The original durable URL still fails checkout: production inventory rejects the
+pending acquisition route/display/pool state. The correlated job identifies the
+cause and confirms compensation. The original handle and all five process identities
+still pass after that failure. No new mouse/keyboard or two-viewer proof was obtained.
+Evidence: `publication-d22ed31d/handoff-checkout-failure.json`; viewer attempt
+`a2-operator-journey-r2/access-grant-attempt/local-viewers-siZk1T`.
+Next: test actual `begin_route_bound_handoff_acquisition`, inventory reload and
+checkout together; admit only exact current acquisition custody, with foreign and
+expired negatives, before another live handoff attempt. No further build is running.
+Doctor exits 1. Full A1–A4/AX remains OPEN; consumer workflows are unaccepted.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
 
-- Source: `dfbcd2aac277365532c70f9d7722fe8796e367af`.
-- Generation: `0.28.0-d0eb66dc19fd-d7d81d2f5bc4`.
-- Binary SHA256: `d0eb66dc19fdc0b6812cc10ddcb1f22a5f349fa6a9c4aeb5bc02fe92cf49002b`.
-- Support SHA256: `d7d81d2f5bc4f72bcef58a8e8815c248320423bfd5e4f749b0502c9e984a284f`.
-- Host PID83902; activation preserved five exact browser identities, retained
+- Source: `d22ed31d649001a7dfd6046b760043ff8ac0b011`.
+- Generation: `0.28.0-d46cf77f8f36-3351d8c23c95`.
+- Binary SHA256: `d46cf77f8f366faabfd6c21a8b1b970172b5b66400ef3874a3752dca2f8fc9cb`.
+- Support SHA256: `3351d8c23c95c7bffcdee0778ca4a92de81064e40ad4b791bdf66f574a0372c3`.
+- Host PID80040; activation preserved five exact browser identities, retained
   private storage and all tab custody. Admission found no active jobs.
 - Installed manifest and original synthetic handle pass; attestation complete,
   page marker intact, input counters 9/9. This was readback, not new input proof.
