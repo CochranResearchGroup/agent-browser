@@ -4,20 +4,20 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 226 | 2026-09-07
+## Turn 227 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Lane P157; branch `plan/profile-permissions-and-request-provenance`.
-Progress: production inventory admission exposed a product contract gap.
-The installed loader accepts development inventory only and explicitly rejects
-production. No inventory was applied and no environment guard was weakened.
-Provider database route3 uses agent-browser-rdp-c (UID1010); its Xorg PID60951
-runs on :14, agreeing with the retained browser allocation. Runtime host maps
-only UID1000, so display proof must retain its namespace-aware observation path.
-Evidence: `publication-dfbcd2aa/production-inventory-admission.json`.
-Plan0160 now requires explicit production inventory support, preservation of
-orphaned incumbent custody, and separation of recovery capacity from visible
-presentation readiness. Next implement and qualify that bounded contract.
+Progress: implemented explicit production presentation inventory admission.
+It verifies existing route/display/process identity and creates capacity without
+rewriting presentation custody or ready states. Active reservations and human
+controller protection remain intact; development inventory remains separate.
+All ten inventory tests and final workspace Clippy pass. All five user-facing
+documentation surfaces are updated. Built-candidate and isolated live proof remain.
+Private `production-inventory/candidate-inventory.json` is prepared for the exact
+synthetic route but is not enabled. This unit is bounded through 23:05:24Z with
+one optimized candidate build and two isolated attempts; effort is cumulative.
+Production remains on dfbcd2aa. No host or provider mutation occurred this turn.
 Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
@@ -143,7 +143,7 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next implement the explicit production presentation-inventory contract;
+Next qualify the built production-inventory adapter with real display/process proof;
 actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.

@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+mod production;
+
 use super::presentation_capacity::{PresentationCapacityAuthority, PresentationCapacityConfig};
 use super::service_model::{
     ControlInputProvider, DisplayAllocation, RemoteViewRoute, RoutePoolEntry, ServiceState,
@@ -535,7 +537,22 @@ fn validate_provider_identities<'a>(
 pub(crate) fn overlay_provider_inventory_from_environment(
     state: &mut ServiceState,
 ) -> Result<(), String> {
-    let path = match std::env::var("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH") {
+    let production_path =
+        match std::env::var("AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH") {
+            Ok(path) if !path.trim().is_empty() => Some(path),
+            Err(std::env::VarError::NotPresent) => None,
+            _ => return Err("production_presentation_inventory_path_invalid".into()),
+        };
+    if production_path.is_some()
+        && std::env::var_os("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH").is_some()
+    {
+        return Err("presentation_provider_inventory_environment_conflict".into());
+    }
+    let path = match production_path
+        .clone()
+        .map(Ok)
+        .unwrap_or_else(|| std::env::var("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH"))
+    {
         Ok(path) if !path.trim().is_empty() => path,
         Ok(_) | Err(std::env::VarError::NotPresent) => return Ok(()),
         Err(std::env::VarError::NotUnicode(_)) => {
@@ -558,7 +575,12 @@ pub(crate) fn overlay_provider_inventory_from_environment(
         recovery_reserve: usize_env("AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE", 1)?,
         max_queue_depth: usize_env("AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH", 64)?,
     };
-    PresentationProviderInventory::from_path(Path::new(&path))?.overlay_service_state(state, config)
+    if production_path.is_some() {
+        production::ProductionInventory::apply(Path::new(&path), state, config)
+    } else {
+        PresentationProviderInventory::from_path(Path::new(&path))?
+            .overlay_service_state(state, config)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

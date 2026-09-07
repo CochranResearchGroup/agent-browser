@@ -5379,3 +5379,21 @@ target after profile, process, endpoint and owner checks. This preserves the
 existing ownership generation and does not create a replacement browser or tab.
 An ownership refusal remains a failed resolution with its original cause and
 inspection recourse; it must not be treated as an automatic convergence retry.
+
+### Production presentation recovery inventory
+
+Production recovery inventory uses `AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH`
+(an absolute path) and schema `agent-browser.production-presentation-inventory.v1`.
+Set `environment` to `production`, `bootEpoch` to the current boot identity, and
+provide `routes` containing `routePoolEntryId`, `routeId`, `displayAllocationId`,
+`displayName`, `routeUser`, and `connectionId`. Every entry must match existing
+Service custody and current process/display ownership. This configures capacity
+without rewriting route records or claiming operator visibility. Existing human
+controllers and capacity reservations remain protected. Do not also configure
+`AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH`, which remains development-only.
+Set the existing `AGENT_BROWSER_PRESENTATION_WARM_MINIMUM`,
+`AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM`, `AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE`,
+`AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE`, and
+`AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH` for the admitted provider inventory.
+A changed boot or binding requires requalification; never relabel a development
+inventory as production.
