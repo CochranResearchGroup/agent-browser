@@ -4,14 +4,20 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 223 | 2026-09-07
+## Turn 224 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Lane P157; branch `plan/profile-permissions-and-request-provenance`.
-Progress: exact installed binary also passes missing-binding rejoin acceptance.
-The previous window ended without apply. Fresh continuation used the qualified
-release and successful preview for one transaction, then consolidated installation.
-All effort remains cumulative; no new build or repeated qualification was needed.
+Progress: combined identity rejoin passes on the installed binary in disposable
+`retained-unit-sim-b3k3L1`; original handles, attestation and cleanup pass. Only
+fixture state was seeded; consumer application remains unverified.
+Fresh durable-link attempt `local-viewers-azhO8s` failed before Guacamole loaded:
+`route_display_owner_unproven` on :12, expected UID absent, observed UID65534.
+The retained synthetic browser allocation is :14. No input test ran. All five
+browser identities remain intact; returned request ID joins the persisted cause.
+Evidence: `publication-dfbcd2aa/handoff-display-owner-failure.json`.
+Next inspect and reproduce this route/display mismatch before retrying the link.
+All effort remains cumulative. No source change or rebuild was made.
 Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
@@ -53,7 +59,7 @@ control despite its legacy warning. Exact installed binary `retained-unit-sim-Nd
 passes ordinary control before rejoin, sealed rejoin with its original credential,
 active lease, complete attestation, two original handles and retained storage.
 Cleanup left zero owned processes. Private `ownership-dispositions.json` assigns
-all six records; the stealthcdp combined identity gap remains unqualified. Consumer capabilities were not borrowed to
+all six records; combined identity recovery now has isolated exact-binary proof. Consumer capabilities were not borrowed to
 apply ownership changes or claim their workflows accepted.
 
 The stored consumer `owner_connection_still_active` refusal has matching
@@ -137,7 +143,7 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next qualify the combined owner-generation/session-authority gap in isolation;
+Next investigate the durable handoff route/display ownership mismatch;
 actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
@@ -161,14 +167,9 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 - `retained-unit-sim-8rJXkf/`: 3dfd4d09 abrupt-host recovery and live/foreign
   ownership protection, zero-residue cleanup, plus legacy reconciliation evidence,
   writer census and exact one-tab transition review.
-- `retained-unit-sim-Xpwqqx/`: first attempt's conflicting physical-profile hints;
-  custody recovery passed, control refused, three owned processes cleaned.
 - `retained-unit-sim-gSifp9/`: optimized a9830cfa real MCP error correlation,
   exact persisted outcomes, ordinary reconnect/control, and zero-residue cleanup;
   private `consumer-stale-connection-readback.json` anchors historical comparison.
-- `retained-unit-sim-Q2Hc69/`: abrupt host death with active socket reproduces
-  stale active ownership and original-handle refusal; original Chrome preserved;
-  cleanup terminated three fixture-owned processes, zero remaining.
 - `publication-d6d99e43/`: frozen source, exact release, qualification, sealed
   generation, activation/custody/storage receipts, installed original-handle
   readback, doctor, rollback backup, skill sync and the next AX finding.
