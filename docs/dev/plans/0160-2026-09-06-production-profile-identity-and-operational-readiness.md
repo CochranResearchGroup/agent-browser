@@ -2891,3 +2891,54 @@ final fixture explicitly tests that refusal, original owner continuity and
 complete original-client attestation. Old-source CFdNvs still fails earlier at
 runtime_handoff_orphan_owner_present. Production A2 must independently pass the
 real authorized display, synthetic input, concurrent viewers and durable reconnect.
+
+
+## Checkpoint 20476d9a: installed cold owner recovery and operator journey
+
+The release build completed in 9m 27s. Production generation
+0.28.0-0031818eb0a0-9982d6cba7ee now runs source 20476d9a with binary SHA256
+0031818eb0a0e463f2186eeb88dacf3ad90483af0ddffd846e21bb457459286c.
+Support SHA256 is 9982d6cba7eedea75eaa20b602a7b217ee08af4ee9705e615efe0417cb64008d.
+All five live browser process identities and 68 tab-custody projections survived
+controlled activation. Installed embedded dashboard assets and shared guidance
+match. Publication helpers have run and must not be replayed.
+
+Exact-release isolated qualifications passed: cold owner recovery/refusal 41QdYN,
+headless two-client continuity 4tara8, remote-headed continuity Mmm3Mq, session-only
+headless poaDKW and remote-headed JtWyhf. The session-only cases include exact tab
+closure, five foreign/ambiguous no-effect denials, retained release, peer control
+and complete attestation after interruption. All fixture residue is clear. One
+cleanup invocation failed because the default Python lacks PID-descriptor APIs;
+the system Python supports them and the subsequent exact-fixture census was clear.
+The original cleanup failure is retained separately from test success.
+
+Installed attempt local-viewers-4cwtMJ, before any diagnostic warmup, resolved the
+original browser and target for both authenticated viewers. Thus the cold Ready
+owner path is verified on production. Operator focus retained authenticated
+account provenance. Both trusted counters advanced from four to five and original
+handle attestation stayed complete, but the keyboard pixel oracle failed. The
+failed sample was white while the full synthetic frame showed a blue marker.
+The vertical-only crop selector allowed a sample near the marker's right edge;
+the precise failed clip movement was not recorded and is not claimed proven.
+
+The corrected sampler requires 35 pixels of solid-blue clearance on both axes
+and records changed sample coordinates/hashes. It leaves the fixed-region input
+protocol unchanged and does not alter the remote DOM. Attempt local-viewers-z1j8Ma
+passed two simultaneous authenticated viewers, anonymous denial, synthetic pixels,
+trusted mouse and keyboard, same-URL reconnect and continued peer usability.
+All three acknowledgment samples used the identical 20x20 clip at 388,716; the
+baseline and keyboard hashes matched, and mouse was verified white. Original
+handle attestation remains complete; both counters are now six. Both viewer
+clients closed. This is a pass after a retained failed pixel attempt, not a
+first-attempt clean result or P158 external-vantage proof.
+
+Evidence is retained in publication-20476d9a, including qualification-status,
+activation-receipt, tab-custody readback, local-operator-acceptance and both viewer
+attempts. Doctor still exits 1: the verified selected dashboard lacks its ingress
+operator-journey acceptance projection, selected-generation readiness still
+compares against older failed-preserved history, consumer principal binding and
+other lease findings remain, monitor is stale, and observed-pressure ownership
+needs disposition. The original consumer's own rejoin and attestation result is
+still pending. A1, A3, A4 and AX remain open; local A2 journey evidence now passes
+on this installed candidate. No timer restoration or full-plan acceptance is
+claimed.
