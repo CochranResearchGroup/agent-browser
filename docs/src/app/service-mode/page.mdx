@@ -888,6 +888,11 @@ evidence plus a consistent same-executable ancestry chain. Missing executable
 evidence, changed generations and conflicting profiles cannot establish the
 proof. This resource correlation grants neither browser control nor cleanup.
 
+CLI and HTTP Service reads do not implicitly persist profile-seeding handoff
+refreshes. Service reconciliation, including its background cycle, records
+seeding-browser exits and preserves concurrent re-seeding updates or deletion.
+Operators can request <code>service reconcile</code> for an immediate refresh.
+
 Service Status also includes additive <code>runtimeLifecycle</code> readback for
 CLI JSON, HTTP <code>GET /api/service/status</code>, typed MCP
 <code>service_status</code>, the generated client helpers, Service State, and the dashboard. It

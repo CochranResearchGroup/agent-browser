@@ -88,6 +88,50 @@ fn installed_validator_accepts_exact_bytes_without_runtime_writes() {
 }
 
 #[test]
+fn read_commands_do_not_refresh_or_rewrite_service_state() {
+    let root = TempRoot::new();
+    let home = root.path.join("home");
+    let service = home.join(".agent-browser/service");
+    fs::create_dir_all(&service).unwrap();
+    let state_path = service.join("state.json");
+    let original = br#"{"schemaVersion":"agent-browser.service-state.v2","stateRevision":7}"#;
+    fs::write(&state_path, original).unwrap();
+    for args in [
+        vec!["service", "resources", "--json"],
+        vec!["service", "--help"],
+        vec!["runtime", "list", "--json"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_agent-browser"))
+            .args(&args)
+            .env("HOME", &home)
+            .env("AGENT_BROWSER_SOCKET_DIR", home.join("sockets"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fs::read(&state_path).unwrap(),
+            original,
+            "{args:?} rewrote Service State"
+        );
+        let names = fs::read_dir(&service)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert!(
+            names
+                .iter()
+                .all(|name| name == "state.json" || name == "state.json.lock"),
+            "{args:?} created authority files: {names:?}"
+        );
+        assert!(!home.join("sockets").exists(), "{args:?} started a daemon");
+    }
+}
+
+#[test]
 fn installed_validator_returns_exact_hashed_invariant_error() {
     let root = TempRoot::new();
     let home = root.path.join("home");

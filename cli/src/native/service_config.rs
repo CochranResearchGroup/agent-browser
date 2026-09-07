@@ -819,12 +819,6 @@ pub fn update_persisted_profile_seeding_handoff(
     update_profile_seeding_handoff_in_repository(&repository, id, update)
 }
 
-/// Refresh default persisted handoff lifecycles from retained PID state.
-pub fn refresh_persisted_profile_seeding_handoffs() -> Result<usize, String> {
-    let repository = LockedServiceStateRepository::default_json()?;
-    repository.mutate(|state| Ok(refresh_profile_seeding_handoff_lifecycles(state)))
-}
-
 /// Record a default persisted CDP-free runtime-login launch, if it maps to a known profile target.
 pub fn record_persisted_profile_seeding_handoff_launch(
     profile_id: &str,

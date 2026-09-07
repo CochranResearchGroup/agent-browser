@@ -2304,6 +2304,11 @@ uses the same executable with consistent start times and no conflicting profile.
 Missing executable observations cannot be replaced with command-line claims.
 This correlation does not authorize browser control or garbage collection.
 
+CLI and HTTP Service reads do not implicitly persist profile-seeding handoff
+refreshes. Service reconciliation, including its background cycle, records
+seeding-browser exits. Its merge preserves records changed by concurrent
+re-seeding. An operator can run `service reconcile` for an immediate refresh.
+
 The dashboard includes an app-owned login screen. On first start it creates
 `~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
 mode-0600 bootstrap credential file at

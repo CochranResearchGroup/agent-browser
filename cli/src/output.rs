@@ -7207,6 +7207,7 @@ Service:
   service resources          Inspect boot-scoped processes, runtime lanes, and cleanup obligations
                              Kinds follow executable names; classification does not authorize cleanup
                              Verified retained-browser descendants are protected by exact owner and ancestry evidence
+                             Read commands do not persist seeding refreshes; Service reconciliation does
   service gc                 Review or reclaim exact lifecycle-owned closing process trees
   service prune-retained     Dry-run or apply retained closed-tab, inert-browser, orphaned-profile, and display-allocation cleanup
   service repair-retained    Dry-run or apply retained session evidence repair

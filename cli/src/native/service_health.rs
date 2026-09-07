@@ -376,6 +376,8 @@ async fn reconcile_service_state_with_controller_fence(
 ) -> ServiceReconcileSummary {
     let before = state.clone();
     let reconciled_at = current_timestamp();
+    let closed_seeding_handoffs =
+        super::service_config::refresh_profile_seeding_handoff_lifecycles(state);
     let reconciled_stale_running_jobs =
         reconcile_stale_running_service_jobs(state, reconciled_at.as_str());
     let reconciled_stale_running_job_count = reconciled_stale_running_jobs.len();
@@ -423,6 +425,7 @@ async fn reconcile_service_state_with_controller_fence(
                 "expiredSessionLeases": summary.expired_session_leases.clone(),
                 "expiredSessionLeaseCount": summary.expired_session_leases.len(),
                 "completedRuntimeLifecycles": completed_runtime_lifecycles,
+                "closedSeedingHandoffCount": closed_seeding_handoffs,
                 "reconciledStaleRunningJobs": reconciled_stale_running_jobs,
                 "reconciledStaleRunningJobCount": reconciled_stale_running_job_count,
                 "tabCount": state.tabs.len(),
@@ -1970,6 +1973,18 @@ pub fn merge_reconciled_service_state(
         && target.presentation_capacity == before.presentation_capacity
     {
         target.presentation_capacity = reconciled.presentation_capacity.clone();
+    }
+
+    // A seeding browser can be relaunched or its record updated while health
+    // probes run. Only publish closure of the exact record that was observed.
+    for (id, handoff) in &reconciled.profile_seeding_handoffs {
+        if before.profile_seeding_handoffs.get(id) != Some(handoff)
+            && target.profile_seeding_handoffs.get(id) == before.profile_seeding_handoffs.get(id)
+        {
+            target
+                .profile_seeding_handoffs
+                .insert(id.clone(), handoff.clone());
+        }
     }
 
     for (id, reconciled_browser) in &reconciled.browsers {
@@ -7344,7 +7359,29 @@ mod tests {
             ..BrowserProcess::default()
         });
 
+        use crate::native::service_model::{
+            ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+        };
+        state.profile_seeding_handoffs.insert(
+            "fixture:example".to_string(),
+            ProfileSeedingHandoffRecord {
+                id: "fixture:example".to_string(),
+                profile_id: "fixture".to_string(),
+                target_service_id: "example".to_string(),
+                pid: Some(u32::MAX),
+                state: ProfileSeedingHandoffState::SeedingWaitingForClose,
+                ..ProfileSeedingHandoffRecord::default()
+            },
+        );
         let summary = reconcile_service_state(&mut state).await;
+        assert_eq!(
+            state.profile_seeding_handoffs["fixture:example"].state,
+            ProfileSeedingHandoffState::SeedingClosedUnverified
+        );
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["closedSeedingHandoffCount"],
+            1
+        );
 
         assert_eq!(summary.browser_count, 0);
         assert_eq!(summary.changed_browsers, 1);

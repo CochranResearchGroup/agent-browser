@@ -20,7 +20,6 @@ use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state_with_principal,
 };
-use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_LEASES_HTTP_ROUTE,
@@ -1477,7 +1476,6 @@ async fn service_status_command(query: Option<&str>) -> Value {
 }
 
 fn service_status_command_blocking(query: Option<&str>) -> Value {
-    let _ = refresh_persisted_profile_seeding_handoffs();
     let query = query_params(query);
     let full_tab_history = query.iter().any(|(key, value)| {
         matches!(key.as_str(), "full-tab-history" | "fullTabHistory")
@@ -4186,13 +4184,11 @@ fn query_params(query: Option<&str>) -> Vec<(String, String)> {
 }
 
 fn load_service_state_snapshot() -> Value {
-    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
 pub(super) fn load_service_state() -> ServiceState {
-    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     let mut service_state = parse_flags(&args).service_state;
     service_state.refresh_profile_readiness();

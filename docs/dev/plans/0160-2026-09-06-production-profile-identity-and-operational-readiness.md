@@ -3259,3 +3259,38 @@ candidate-resource-file-access.trace and file-access-readback.json are preserved
 The candidate has not been installed. Next: diagnose and remove the unintended
 write path for the read command, verify that caller and owner state are preserved,
 then resume consolidated qualification and the remaining A1/A3/A4/AX work.
+
+### Read-path seeding persistence repair
+
+state_transition: Unintended read-path persistence traced to the shared seeding refresh hook and repaired in source.
+acceptance_state: Fresh candidate syscall verification and installed qualification remain pending; full plan remains open.
+progress_classification: progress
+
+The CLI unconditionally called refresh_persisted_profile_seeding_handoffs before
+parsing every service/runtime command, including help. Three HTTP read helpers
+called the same function. It always opened a repository mutation, so even zero
+changed handoffs incremented the state revision and rewrote the full authority
+sidecars. This path predates the descendant repair. The isolated CLI regression
+reproduced a revision change from 7 to 8 on service resources without any seeding
+handoff present; it failed before the repair.
+
+The CLI and HTTP read hooks and their unconditional persistence helper are now
+removed. Service reconciliation owns seeding-browser exit observation, including
+the existing background reconciliation cycle. Its event records
+closedSeedingHandoffCount. Reconciliation merges a changed handoff only when the
+current record still equals the record it observed, preserving concurrent
+re-seeding, updates and deletion. No new lifecycle or cleanup authority is granted.
+
+All three Service State integration tests passed, including exact-byte preservation
+and no authority-sidecar or daemon creation for resource reads, Service help and
+runtime listing. The extended reconciliation summary test proves missing seeding
+browser closure; the extended repository merge test proves persisted closure and
+preservation of newer or deleted records. Both passed. Formatting, workspace
+Clippy with warnings denied and the docs production build passed. All five help
+and documentation surfaces describe the explicit persistence boundary. Direct
+HTTP read-path runtime verification has not yet run. Private continuation evidence
+is under campaigns/p160/read-command-proof; production remains on 35611c64.
+
+Next: build committed source and repeat the candidate resource syscall audit,
+then resume consolidated qualification. Consumer original-connection attestation,
+remaining pressure and monitoring findings, and A4/AX acceptance remain required.

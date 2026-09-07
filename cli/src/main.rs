@@ -53,9 +53,7 @@ use connection::{
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
 use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
-use native::service_config::{
-    record_persisted_profile_seeding_handoff_launch, refresh_persisted_profile_seeding_handoffs,
-};
+use native::service_config::record_persisted_profile_seeding_handoff_launch;
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
@@ -1889,13 +1887,8 @@ fn main() {
 
     let args: Vec<String> = env::args().skip(1).collect();
     let clean = clean_args(&args);
-    if matches!(
-        clean.first().map(String::as_str),
-        Some("service") | Some("runtime")
-    ) && !flags::is_explicit_service_state_validation(&args)
-    {
-        let _ = refresh_persisted_profile_seeding_handoffs();
-    }
+    // Parsing and read-only commands must not persist lifecycle observations.
+    // Explicit Service reconciliation owns detached seeding-handoff refresh.
     let mut flags = parse_flags(&args);
 
     let has_help = args.iter().any(|a| a == "--help" || a == "-h");
