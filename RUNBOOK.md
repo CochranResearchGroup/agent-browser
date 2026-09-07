@@ -4,11 +4,11 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 222 | 2026-09-07
+## Turn 223 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Lane P157; branch `plan/profile-permissions-and-request-provenance`.
-Progress: outcome progress for legacy repair and installed retained-handle control.
+Progress: exact installed binary also passes missing-binding rejoin acceptance.
 The previous window ended without apply. Fresh continuation used the qualified
 release and successful preview for one transaction, then consolidated installation.
 All effort remains cumulative; no new build or repeated qualification was needed.
@@ -49,7 +49,11 @@ three missing owner bindings on Default, and an owner-generation/session-authori
 pair on stealthcdp-default. All four affected profiles have active shared-local
 policies. These maintenance warnings alone do not establish an ordinary request
 refusal. The original synthetic profile has complete attestation and successful
-control despite its legacy warning. Consumer capabilities were not borrowed to
+control despite its legacy warning. Exact installed binary `retained-unit-sim-NdcCp4`
+passes ordinary control before rejoin, sealed rejoin with its original credential,
+active lease, complete attestation, two original handles and retained storage.
+Cleanup left zero owned processes. Private `ownership-dispositions.json` assigns
+all six records; the stealthcdp combined identity gap remains unqualified. Consumer capabilities were not borrowed to
 apply ownership changes or claim their workflows accepted.
 
 The stored consumer `owner_connection_still_active` refusal has matching
@@ -133,7 +137,8 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next verify actual consumer reconnect after the single legacy repair. Complete
+Next qualify the combined owner-generation/session-authority gap in isolation;
+actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
 For Guacamole input, check refresh/reconnect, effective settings, and scoped
