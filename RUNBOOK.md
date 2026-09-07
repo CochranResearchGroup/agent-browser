@@ -1,145 +1,157 @@
 # Runbook
 
 This is the sole current execution status. Plans own acceptance and strategy;
-linked archives preserve historical evidence. Keep this file at or below 200
-lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
+linked archives and Git checkpoints preserve history. Keep this file at or below
+200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
 ## Turn 214 | 2026-09-07
 
-Current task: finish the AX logging batch and diagnose the A2 cold-view failure.
-The operator explicitly authorized review of the approach and up to 60 additional
-minutes. This round starts 2026-09-07T14:49:48+00:00 and ends
-2026-09-07T15:49:48+00:00. Prior approximately 12-hour effort and the
-completed 30-minute round (14:04:08–14:34:08 UTC) remain cumulative history.
-Controller: primary agent. First finish pending integration checks; then isolate
-which cold-view layer stalls using a local reproducer. Batch a causal repair and
-its logging before publication. Do not turn a warm pass or logging-only fix into
-operator acceptance, or interrupt the original consumer for diagnosis.
-Reassess after two checkpoints or 30 active minutes without acceptance progress;
-no tactic or successor resets the overall deadline. No automatic live retry.
-Approach review: consumer-only diagnosis was an unnecessary dependency; the
-initial fresh-launch simulation was incomplete; passing intermediate checks did
-not justify stopping the broader task. The closer retained-handle simulation
-now covers that historical condition, while A2's cause remains unproven.
+The operator authorized an approach review and up to 60 additional minutes,
+from 2026-09-07T14:49:48Z through 15:49:48Z. Prior approximately 12-hour effort
+and the completed 30-minute round (14:04:08–14:34:08 UTC) remain cumulative.
+Controller: primary agent. This allowance does not reset the overall history.
 
-### Plan 0160: OPEN, production operational acceptance incomplete
+Approach correction: requiring the original consumer to interrupt its work was
+unnecessary. Simulate its retained credential, handle and host interruption;
+then test the failing operational path. Passing an intermediate check is not
+completion. This round reproduced and repaired a cold-stream delay, installed
+the qualified candidate and passed the first cold operator journey. Production
+operational acceptance remains incomplete for the specific reasons below.
 
-- Authority and acceptance: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
+### Installed candidate and acceptance
+
+- Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
   lane P157. Profile ownership and identity proof remain the highest priority.
-- Last recorded installed candidate source: `0cf07a43`, generation
-  `0.28.0-86d7b29c81fe-5f4b8dee3613`. This is recorded evidence, not a fresh
-  runtime census during this documentation task.
-- Original consumer identity/rejoin acceptance remains unproven. The first
-  installed cold operator-view attempt failed with session-tabs HTTP 504 and
-  no iframe. A later warm, no-input diagnostic displayed the iframe; it does
-  not erase the cold failure or establish full operator acceptance.
-- Evidence remains in the operator-owned campaign directory
-  `~/.local/state/agent-browser/campaigns/p160/publication-0cf07a43/`:
-  `activation-receipt.json`, `viewer-first-attempt.log`,
-  `local-viewers-qGlp5N/events.json`, and `diagnostic-viewer.log`.
-  These are private local evidence, not published durable acceptance receipts.
-- Cumulative effort: the operator reports approximately 12 hours in the current
-  repair/verification run. Exact aggregate accounting was not established.
-  This adoption does not reset effort or manufacture a new remaining budget.
-- Current state: isolated missing-binding recovery passed on the exact installed
-  binary. The original test credential rejoined through the public CLI; the
-  lease became active with no blocking identity axes. Both original handles
-  remained usable, PID/start token and target set were preserved, and final
-  attestation was complete. No product repair or rebuild was required.
-- Follow-up historical-case simulation also passed after a host interruption:
-  the same retained browser accepted the original handle with stale `shared`
-  lease metadata while the current session was `exclusive`, and proved managed
-  launch custody with no handoff receipt. The original test credential then
-  rejoined successfully; both handles and all process/target identities survived.
-- The recorded consumer failure predates these attestation repairs. Current
-  read-only owner evidence shows no pending transfer or transfer history, so an
-  older generation number alone does not imply missing transfer custody.
-  This simulation covers the reported stale-handle and absent-handoff conditions;
-  it does not claim a fresh attestation from the production consumer.
-- Evidence: private P160 campaigns `missing-binding-sim-ThA0Um/` (initial case)
-  and `missing-binding-sim-aAMdDU/` (retained historical case), each containing
-  `probe-source.mjs`, `ledger.jsonl`, `acceptance.json`, and `cleanup.json`.
-  Both completed with zero remaining owned fixture processes.
-- Earlier harness setup failures are retained in `missing-binding-sim-IDfJUT`
-  and `missing-binding-sim-IvUQPa`. The latter fixture's three remaining owned
-  processes were terminated with PID/start/executable checks after correcting
-  the cleanup interpreter; final residue was zero. No failed rejoin was retried.
-- The simulation removes the assumed need to interrupt the original consumer
-  for mechanism testing. The pending consumer request is no longer a dependency
-  for investigation. Production remains untouched by these experiments.
-- Next active issue: A2 cold operator view. Recorded tab read took approximately
-  28 seconds and returned HTTP 504; primary-claim response was still absent at
-  the viewer cutoff. A later warm diagnostic passed. Source inspection shows
-  session-tabs forwards backend responses or emits 502 on fallback failure,
-  so the observed 504 alone does not locate the failing layer.
-- AX gap: the retained client failure has an observation ID but no backend port,
-  elapsed time, or joined primary-owner terminal event. No server causal failure
-  for that cold request appears in the retained failure journal. Do not claim
-  session-tabs caused the missing iframe or rerun an unchanged viewer test.
-  The next bounded repair must join request timing and gateway/primary evidence
-  or reproduce the cold condition locally before changing runtime behavior.
-- AX repair batch started: dashboard fetch instrumentation now fills the existing
-  `elapsedMs` field when fetch settles, including failures delivered after later
-  recovery. The regression failed before the fix and passed afterward; it proves
-  queued delivery delay is excluded and existing privacy/no-retry checks pass.
-  `pnpm test:service-failure-journal`, dashboard build/TypeScript, Rust format
-  and workspace Clippy passed for that batch. It is not installed.
-- Cold-frame diagnosis reproduced 11,818 ms startup from an immediately ready
-  in-memory provider: 128 blob acknowledgements caused 154 full authority reads
-  against a private copy of current Service State. Each optimized check took
-  66–84 ms. This identifies a startup delay mechanism, not the historical 504
-  source or the exact production provider message pattern.
-- The repair batches acknowledgements with fresh authority before each write,
-  moves synchronous admission and guard reads off async workers, and prevents
-  overdue periodic checks from accumulating. The same optimized simulation
-  passed in 295 ms with five checks and all 128 acknowledgements retained.
-  The scheduler regression failed before the repair and passed afterward.
-  Seventeen focused Rust tests and the dashboard sharing contract passed,
-  including exact owner-change rejection and retained-owner/cancellation tests.
-  Batch-wide format/Clippy and optimized candidate build passed.
-  The isolated authenticated dashboard endpoint passed with two concurrent
-  requests sharing one provider connection, all 128 acknowledgements delivered,
-  and one returned terminal occurrence joined to exactly one owner failure
-  record. The failed owner remained sticky; no second provider connection
-  started. Backend and mock provider cleanup completed. The fixture uses the
-  existing backend-only mode and its own generated dashboard credential.
-  Evidence: P160 `primary-endpoint-sim-ZwpewN/`. Earlier fixture setup failures
-  occurred before viewer requests; `primary-endpoint-sim-nHoqlD/` retains the
-  missing-host bootstrap failure and completed cleanup.
-- At the 30-minute reassessment, the reproducible startup bottleneck is removed
-  and the real endpoint contract passes in isolation. Production A2 is still
-  open. The remaining allowance prepares an exact production candidate and
-  checks admission for publication while preserving active work. No original
-  consumer credential or live profile was used by the endpoint fixture.
-  Temporary measurement tests and private copied state are kept outside Git;
-  evidence is in P160 `primary-guard-measurement/`. Production is unchanged.
-- The preceding 30-minute round ended with the AX batch incomplete. The new
-  operator-authorized round above resumes its required checks and A2 diagnosis.
-- Progress classification: `outcome_progress` for isolated retained-handle and
-  custody acceptance within A1; full A1, A2, A3, A4 and AX remain open.
+- Installed source: `c36ce2b04ed23ba3c4db51612b1b86686db52eac`.
+  Selected generation: `0.28.0-b5c77d59b0de-5413901f4e26`.
+  The authenticated runtime manifest matched the release binary after activation.
+- Activation admitted with no active jobs and preserved five exact browser
+  process identities and all 70 tab-custody records. Evidence includes before
+  and after process, ingress and tab records plus the activation receipt.
+- A1 remains OPEN. Exact-candidate isolated qualification passed retained-owner,
+  headed, headless and session-only cases. The closer consumer simulation used
+  its original capability and stale shared handle after host interruption;
+  managed-launch custody proved identity without a handoff receipt. Ordinary
+  tab control returned 42 BEFORE explicit rejoin. Public rejoin then made the
+  lease active and preserved both original handles, process and targets.
+  Cleanup ended with no fixture residue. This proves those mechanisms without
+  interrupting the production consumer; it does not invent its fresh result or
+  resolve every outstanding profile-owner/maintenance binding.
+- A2 PASSED on this installed candidate, in the first cold attempt. Two separate
+  authenticated viewers displayed the synthetic page; unauthenticated access
+  was denied. Trusted mouse and keyboard input passed, as did reconnection via
+  the same durable handoff while the second viewer remained present.
+  Retained-handle readback proved complete attestation and exactly one additional
+  trusted event per input class, with counters moving from 8/8 to 9/9.
+  Primary readiness requests took 2,770 ms cold, 86 ms for the second viewer,
+  and 157 ms after reconnect. This is local operator acceptance, not resumed
+  Plan 0158 external-vantage work.
+- A3 remains OPEN. Post-viewer supported doctor exited 1. The operator-journey
+  and upgrade-readiness findings cleared; remaining findings include terminal
+  transaction history, legacy principals, missing owner/principal bindings,
+  generation/session proof, stale runtime monitoring and unknown process
+  ownership under RSS pressure. Distinguish profile-owner maintenance authority
+  from ordinary authorized tab control; the latter passed before rejoin.
+- A4 remains OPEN. The timer was inactive but still enabled for startup. It is
+  now linked and inactive, with automatic startup disabled, preventing GC of
+  the unprotected rollback generation on the next login or boot. Restore its
+  schedule only after A1–A3 acceptance.
+  No scheduled-cycle or additional production-restart acceptance is claimed.
+- AX advanced but remains OPEN as a complete matrix. Fetch-failure elapsed time
+  now measures fetch settlement, excluding deferred journal delivery. A forced
+  provider failure through the isolated real dashboard endpoint returned a
+  terminal occurrence that joined to exactly one owner journal record. The
+  failed owner remained sticky, with no replacement provider connection.
 
-### Retained execution boundaries
+### Causal repair and validation
 
-- Production is not declared fully operational; all five acceptance rows remain
-  subject to Plan 0160. Do not infer acceptance from this policy closeout.
-- Do not replay completed staging or activation to collect another receipt.
-- Preserve browser ownership and original consumer identity. Do not borrow
-  foreign capabilities or treat synthetic diagnostics as consumer acceptance.
-- Maintenance timer restoration and unattended-cycle acceptance remain pending.
-- Plan 0158 external-vantage work retains its explicit dispatch and no-retry
-  restrictions. Policy adoption does not authorize an external attempt.
-- Historical stops remain effective for their scoped lanes unless a later
-  approved plan supersedes them. Consult the relevant entry before resuming an
-  older lane; no archived turn is an instruction to restart work.
+The primary transport performed full Service State authority reads on async
+workers and before every individual image acknowledgement. On a private copy
+of current state, each optimized guard took 66–84 ms. An immediately available
+in-memory provider delivering 128 blobs took 11,818 ms to become ready and
+caused 154 guards. Bounded acknowledgement batches and blocking-pool authority
+reads reduced the same case to 295 ms and five guards. Every actual write
+still checks fresh exact ownership; no successful authority result is cached.
+Periodic checks no longer accumulate overdue ticks.
+
+The scheduler regression failed before the repair and passed after it.
+Seventeen focused Rust tests passed, including changed-owner rejection,
+retained ownership, cancellation, provider identity and failure correlation.
+Dashboard sharing contracts, failure-journal tests, dashboard build/TypeScript,
+Rust formatting and workspace Clippy passed for their changed surfaces.
+The optimized development candidate passed the authenticated endpoint fixture:
+two concurrent requests shared one provider and all 128 acknowledgements arrived.
+The final release binary then passed all five established isolated qualification
+cases, each with successful cleanup, before production publication.
+
+Production Agent Browser skill guidance now matches installed source c36ce2b0.
+The existing additional Service skill lock-diagnostics guidance was preserved.
+Source is committed and pushed on `plan/profile-permissions-and-request-provenance`.
+No formal release was created.
+
+### Maintenance blocker and next work
+
+- Service process-GC preview found zero candidates. Generation-GC preview found
+  21 candidates, INCLUDING the immediately previous production generation
+  `0.28.0-86d7b29c81fe-5f4b8dee3613`. No GC or workstation reconcile was applied.
+- The controlled activation receipt is outside the product transaction ledger.
+  `workstation_install.rs::generation_retention_plan` builds retention from
+  supported upgrade transactions, selected generation, live processes and
+  supervisor references. It does not consume this campaign's activation receipt;
+  the preview reports no previous healthy generation. Thus the current rollback
+  target is not protected from unattended generation GC.
+- A private backup of that entire sealed generation was created and all 32 file
+  hashes were verified. The original generation remains in place. The backup
+  protects recovery material; it does not manufacture supported retention or
+  an accepted upgrade transaction.
+- The supported installer dry-run returned a non-mutating planned result with
+  `ready=false`; it did not establish a retention reference or acceptance.
+- Next: repair the supported controlled-publication/retention path so an actual
+  prior rollback generation remains protected until operational acceptance.
+  Do not create a fake accepted transaction, green monitor receipt, supervisor
+  reference or live-process placeholder to influence GC.
+- Reconcile remaining profile-owner findings with operation-specific impact and
+  current evidence. Preserve valid own-tab control while maintaining exact
+  authority requirements for owner recovery, transfer and cleanup.
+- Then run one reviewed supported maintenance pass, require doctor zero and
+  complete A1/A3 dispositions, and only then resume A4's real scheduled cycles.
+  Do not replace scheduled cycles with manual invocations or another warm viewer
+  pass. No additional production activation or viewer retry is queued.
+
+### Evidence and custody
+
+Private operator-owned evidence is under
+`~/.local/state/agent-browser/campaigns/p160/`:
+
+- `publication-c36ce2b0/`: qualification, staging and activation receipts;
+  `local-viewers-3RC8R1/events.json`; before/after synthetic input readback;
+  doctor results; GC previews; installer dry-run; rollback backup manifest;
+  production skill-sync receipt. Original browser and provider data stay private.
+- `primary-guard-measurement/`: exact before/after measurement sources and
+  receipts. Temporary measurement tests and copied state are outside Git.
+- `primary-endpoint-sim-ZwpewN/`: real-binary endpoint proof and zero-residue
+  readback. Earlier setup failure `primary-endpoint-sim-nHoqlD/` records missing
+  host bootstrap and completed cleanup; the corrected fixture used the existing
+  backend-only boundary and its own generated dashboard credential.
+- `missing-binding-sim-G1aDln/`: exact installed candidate, ordinary control
+  before rejoin, original credential/handle continuity and completed cleanup.
+- Earlier retained-handle simulations: `missing-binding-sim-ThA0Um/` and
+  `missing-binding-sim-aAMdDU/`. Earlier setup failures and cleanup remain retained.
+- The original cold failure remains in `publication-0cf07a43/`, including
+  `local-viewers-qGlp5N/events.json`. Its later warm diagnostic did not erase it.
+  This round's first cold pass follows a measured causal repair.
+
+The unrelated consumer contribution in note 0156 and untracked note 0159 were
+preserved. Tenant data, capabilities and raw runtime evidence were not committed.
+Plan 0158's manual external-vantage dispatch and no-retry boundaries remain in force.
 
 ## History index
 
 - [Complete previous runbook, through Turn 213](RUNBOOK-history-through-2026-09-02.md)
-  is preserved byte-for-byte beside this file, retaining relative-link behavior.
-- [Plan 0160 historical checkpoints](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#planning-checkpoint)
-  remain in place; future current status belongs here.
+  remains byte-for-byte beside this file with relative links preserved.
+- [Plan 0160 historical checkpoints](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#planning-checkpoint).
 - [Policy adoption and validation](docs/dev/notes/2026-09-07-outcome-first-policy-adoption.md).
+- Earlier Turn 214 status is retained in Git checkpoints `05434b3c` and `c36ce2b0`.
 
-Read only the historical entries relevant to the task, not the whole archive
-at startup. Historical plan and runbook claims do not override this current
-acceptance status.
+Read only history relevant to the task. Archived status does not override this
+current acceptance record or authorize restarting a previously stopped lane.
