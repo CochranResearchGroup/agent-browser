@@ -115,6 +115,7 @@ export interface ServiceRequest {
   action: ServiceRequestAction;
   params?: Record<string, unknown>;
   profileLeasePolicy?: string;
+  tabId?: string;
   targetId?: string;
   script?: string;
   expression?: string;

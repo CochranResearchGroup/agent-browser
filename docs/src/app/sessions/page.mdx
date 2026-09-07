@@ -498,3 +498,24 @@ Lease rows with an exact terminal owner generation, satisfied cleanup evidence,
 no browser projection and no active subordinate work remain visible as
 `historical` with read actions only. They do not create current lease blockers.
 Mismatched generations, pending transfers and current work remain blocking.
+
+
+## Exact tab cleanup
+
+`tab_close` accepts an explicit `targetId`, `tabId`, or `serviceTabHandle`.
+Conflicting or invalid selectors fail before close; explicit targets never fall
+back to the active tab. Service calls enforce the current child's close
+permission even when only a target selector is supplied.
+
+`tab_handle_release` recovers an identity-verified retained connection when
+needed. Physical close requires browser acknowledgement, target disappearance
+and survival of the observed peer targets. A manager attached to only one owned
+target can close it when the physical browser has other tabs. The actual last
+physical tab remains protected.
+
+Unverified requested cleanup fails and retains the handle for diagnosis. Inspect
+the request's service trace before retrying; never close a peer as a fallback.
+The `closed` number identifies the former attached-tab index;
+`targetRemovalVerified` confirms physical closure. Explicit release-only or
+`closePhysicalTab: false` requests release logical custody without claiming a
+physical close. Failure journal records include request correlation and source location.

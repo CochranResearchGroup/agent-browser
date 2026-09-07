@@ -100,7 +100,15 @@ impl ServiceRequestProvenance {
             browser_id: optional_string(command, "browserId"),
             session_id: optional_string(command, "sessionId")
                 .or_else(|| optional_string(command, "sessionName")),
-            tab_id: optional_string(command, "tabId"),
+            tab_id: optional_string(command, "tabId")
+                .or_else(|| {
+                    command
+                        .get("serviceTabHandle")
+                        .and_then(|handle| optional_string(handle, "tabId"))
+                })
+                .or_else(|| {
+                    optional_string(command, "targetId").map(|target| format!("target:{target}"))
+                }),
             service_name: optional_string(command, "serviceName"),
             agent_name: optional_string(command, "agentName"),
             task_name: optional_string(command, "taskName"),
@@ -166,6 +174,7 @@ mod tests {
                 "profileId": "research-gov",
                 "sessionName": "selector-that-will-be-consumed",
                 "serviceName": "research-fieldwork",
+                "serviceTabHandle": {"tabId":"target:owned", "credential":"do-not-retain"},
                 "url": "https://private.example/path",
                 "profilePath": "/private/profile",
                 "credential": "do-not-retain"
@@ -180,6 +189,7 @@ mod tests {
             provenance.runtime_environment_id.as_deref(),
             Some("development" | "production")
         ));
+        assert_eq!(provenance.tab_id.as_deref(), Some("target:owned"));
         assert_eq!(provenance.request_id, "request-7");
         assert_eq!(provenance.job_id, "job-7");
         assert_eq!(

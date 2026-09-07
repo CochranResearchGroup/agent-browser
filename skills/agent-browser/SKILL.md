@@ -1239,9 +1239,14 @@ under Advanced connection controls; automatic recovery never launches another
 browser, changes the profile, takes control, or releases a viewer.
 When a client is finished with a leased shared-profile tab, use
 `releaseServiceTabHandle()` or service request `action: "tab_handle_release"`.
-Release best-effort closes that exact physical target when the routed live
-browser owns it, marks only that retained tab closed in service state, and
-preserves the browser process plus session route for other clients.
+Release recovers an identity-verified retained connection if needed, closes the
+exact authorized target and verifies its removal while preserving observed peer
+targets and the browser process. Unverified requested cleanup fails and preserves
+the handle: inspect the request's service trace before retrying. Never substitute
+an active-tab close. `tab_close` honors explicit target/handle selectors, rejects
+conflicts and checks current child close permission. `closed` is an index;
+`targetRemovalVerified` confirms physical removal. Explicit release-only or
+`closePhysicalTab: false` requests release logical custody without physical close.
 After detached manual seeding closes, verify the profile through the service
 control plane rather than editing profile JSON. Use
 `agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`

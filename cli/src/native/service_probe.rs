@@ -49,8 +49,24 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         .and_then(Value::as_object)
         .ok_or_else(|| "serviceTabHandle is required".to_string())?;
     validate_service_tab_handle_for_daemon(handle, cmd, state)?;
-    if state.browser.is_some() {
-        return Ok(());
+    if let Some(manager) = state.browser.as_ref() {
+        let target_is_attached =
+            handle
+                .get("targetId")
+                .and_then(Value::as_str)
+                .is_some_and(|target| {
+                    manager
+                        .pages_list()
+                        .iter()
+                        .any(|page| page.target_id == target)
+                });
+        if target_is_attached || manager.owns_launched_browser_process() {
+            return Ok(());
+        }
+        // Retained recovery attaches only the authorized target. A subsequent
+        // original handle may name another surviving target, including after
+        // release empties that manager. Re-run the full identity fence and
+        // replace only the borrowed connection; never drop an owned process.
     }
     let repository = LockedServiceStateRepository::default_json()?;
     let mut binding =

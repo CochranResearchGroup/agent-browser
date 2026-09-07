@@ -202,6 +202,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ),
     ServiceRequestFieldSpec::field("serviceTabHandle", FieldKind::Object, true, true, true),
     ServiceRequestFieldSpec::field("targetId", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field("tabId", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("script", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("expression", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("returnByValue", FieldKind::Boolean, true, true, false),
@@ -2467,7 +2468,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 83);
+        assert_eq!(canonical_names.len(), 84);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),

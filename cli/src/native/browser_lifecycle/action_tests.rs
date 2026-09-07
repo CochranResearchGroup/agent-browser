@@ -449,7 +449,8 @@ fn test_tab_handle_release_closes_only_selected_tab_record() {
     let handle = handle_value
         .as_object()
         .expect("handle should be an object");
-    let result = release_service_tab_handle_record(
+    let before = serde_json::to_value(&service_state).unwrap();
+    let pending = release_service_tab_handle_record(
         &mut service_state,
         handle,
         "shared-session",
@@ -459,15 +460,28 @@ fn test_tab_handle_release_closes_only_selected_tab_record() {
             "no_live_browser", "error" : Value::Null, "result" : Value::Null, }
         ),
     )
+    .expect_err("unverified cleanup must preserve the handle");
+    assert!(pending.starts_with("tab_cleanup_pending:"));
+    assert_eq!(serde_json::to_value(&service_state).unwrap(), before);
+    let result = release_service_tab_handle_record(
+        &mut service_state,
+        handle,
+        "shared-session",
+        "2026-06-19T22:45:00Z",
+        &json!(
+            { "attempted" : true, "closed" : true, "skippedReason" :
+            Value::Null, "error" : Value::Null, "result" : Value::Null, }
+        ),
+    )
     .expect("release should succeed");
     assert_eq!(result["action"], "tab_handle_release");
     assert_eq!(result["tabReleased"], true);
     assert_eq!(result["browserProcessPreserved"], true);
     assert_eq!(result["sessionRoutePreserved"], true);
     assert_eq!(result["closeBrowserOnRelease"], false);
-    assert_eq!(result["physicalTabCloseAttempted"], false);
-    assert_eq!(result["physicalTabClosed"], false);
-    assert_eq!(result["physicalTabCloseSkippedReason"], "no_live_browser");
+    assert_eq!(result["physicalTabCloseAttempted"], true);
+    assert_eq!(result["physicalTabClosed"], true);
+    assert_eq!(result["physicalTabCloseSkippedReason"], Value::Null);
     assert_eq!(
         service_state.tabs["target:tab-a"].lifecycle,
         TabLifecycle::Closed
@@ -794,4 +808,31 @@ fn test_remote_view_open_retained_tab_candidate_requires_ready_same_origin_tab()
         Some("https://other.example"),
     )
     .is_none());
+}
+
+#[test]
+fn explicit_close_selectors_never_fall_back_to_active_tab() {
+    assert_eq!(
+        tab_close_target(&json!({"targetId":"owned"}), None).unwrap(),
+        "owned"
+    );
+    assert_eq!(
+        tab_close_target(
+            &json!({"tabId":"target:owned","serviceTabHandle":{"targetId":"owned"}}),
+            None
+        )
+        .unwrap(),
+        "owned"
+    );
+    for command in [
+        json!({"targetId":""}),
+        json!({"targetId":false}),
+        json!({"tabId":"wrong-format"}),
+        json!({"targetId":"owned","tabId":"target:peer"}),
+        json!({"targetId":"owned","serviceTabHandle":{"targetId":"peer"}}),
+        json!({"targetId":"owned","index":-1}),
+        json!({"targetId":"owned","index":0}),
+    ] {
+        assert!(tab_close_target(&command, None).is_err(), "{command}");
+    }
 }

@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.dev/contracts/service-request-field-roles.v1.json",
   "description": "Machine-readable role ledger for canonical service-request fields and transport-only compatibility fields.",
-  "canonicalPropertyCount": 83,
+  "canonicalPropertyCount": 84,
   "roles": {
     "structural": ["action", "params"],
     "command": [
       "action", "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
-      "requiresCdpFree", "cdpAttachmentAllowed", "serviceTabHandle", "targetId",
+      "requiresCdpFree", "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "tabId",
       "script", "expression", "returnByValue", "timeoutMs", "maxReturnBytes",
       "maxTextBytes", "maxBodyBytes", "includeScreenshot", "screenshotDir",
       "maxConsoleEntries", "maxErrorEntries", "maxRequestEntries",
@@ -22,7 +22,7 @@
     ],
     "trace": [
       "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
-      "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "script", "expression",
+      "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "tabId", "script", "expression",
       "returnByValue", "timeoutMs", "maxReturnBytes", "maxTextBytes", "maxBodyBytes",
       "includeScreenshot", "screenshotDir", "maxConsoleEntries", "maxErrorEntries",
       "maxRequestEntries", "captureEvidenceOnFailure", "probe", "uiAction", "networkCapture",
@@ -36,7 +36,7 @@
       "allowDuplicateProfileLane", "handoffId", "remoteViewHandoffId", "pid", "expiresAt", "plan"
     ],
     "routing": [
-      "serviceTabHandle", "targetId", "browserBuild", "browserHost", "viewStreamProvider", "controlInputProvider",
+      "serviceTabHandle", "targetId", "tabId", "browserBuild", "browserHost", "viewStreamProvider", "controlInputProvider",
       "displayIsolation", "serviceName", "agentName", "taskName", "clientSubjectId",
       "identityAssurance", "targetServiceId",
       "targetService", "targetServiceIds", "targetServices", "siteId", "siteIds", "loginId",

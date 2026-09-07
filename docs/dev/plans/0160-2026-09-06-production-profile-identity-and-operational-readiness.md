@@ -868,3 +868,68 @@ retained release recovery, physical target-set verification and truthful cleanup
 outcomes. Reuse the disposable reproducer for green verification, including
 negative selectors and unrelated-target preservation. Continue remaining A1/AX,
 then A2–A4; no broad incident-profile cleanup or new approval is needed.
+
+## Execution checkpoint 14: exact cleanup and surviving-handle control repaired
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX remain incomplete. The tab-cleanup repair passes
+isolated candidate verification; it has not passed the production publication
+gate or resolved the consumer's separate lease/handoff attestation blocker.
+
+progress_classification: blocker_reduction
+
+evidence: Optimized candidate SHA256
+`7bcaad1737cba146cdfa85a1a147ae00220042c6fd9f95326d7bd26b228638e1`
+passed the disposable HTTP/CDP fixture in campaigns/p160/tab-cleanup-green-CORyLt.
+Four negative requests (conflicting selectors, empty target, another declared
+subject, and an unattributed bootstrap target) preserved every physical target.
+Authorized close removed only its explicit target. Release after an exact host
+interruption recovered and closed only its target. Another original handle then
+evaluated 42 on its surviving target. No fixture residue remained after teardown.
+The private ledger SHA256 is
+`6c6fed2a5f5d75d6298edb1934869ef33a2aa26bb4cab6fc4aab13849c53a4e0`;
+the saved fixture source SHA256 is
+`121630d38610be2c2cc0b9f68604af952508521b40f1ed26cf3eebbe65072082`.
+
+Close now resolves target, tab and handle selectors without active-tab fallback,
+requires current attributed child close authority for service requests, checks
+the physical browser target census, sends one close command and waits at most
+two seconds for verified removal and peer survival. Local page state is retained
+when verification fails. Release preserves the handle when requested physical
+cleanup is unverified. Retained recovery can switch a borrowed connection to
+another original authorized target after rerunning its identity fence; it never
+drops an owned browser process to achieve that switch. The request schema, field
+role ledger and generated client now recognize top-level tabId. Failure records
+correlate typed close decisions to the request and source location, and terminal
+provenance includes the requested tab. Full AX build and cross-surface proof
+remains outstanding.
+
+Validation: the new real-CDP-transport regression failed on the old last-tab
+check and passes with acknowledged removal, delayed destruction, refusal,
+target-still-present and peer-loss cases. Twenty lifecycle tests, 27 request
+contract tests, three provenance tests, 14 recourse tests and three owner-guard
+tests passed. The client suite, generated contracts, API/MCP parity, handoff
+documentation, docs build, Rust formatting and workspace clippy passed. These
+are focused and isolated-live checks, not whole-production acceptance.
+
+Preserved failed verification: the first candidate needed bounded observation
+after Chrome's asynchronous close acknowledgement. A later continuity extension
+showed that the borrowed manager retained only the released target; that defect
+was locally reframed as surviving-handle recovery and repaired before the final
+pass. No failed result was erased or treated as an unchanged retry. Private
+roots kDDpyT, CktyTy and g0SGcY retain these distinct candidate results and exact
+cleanup receipts.
+
+material_blockers: The newly appended SoyLei r2 report remains a priority W1
+dependency. Its diagnostics show an exclusive session but a shared handle lease;
+the current attestation requires both to be exclusive. It also has no handoff
+receipt. Registration's raw relative userDataDir versus named-profile resolution
+is a separately reported identity-digest mismatch requiring source verification
+and reproduction. No consumer reconciliation or payment input is authorized by
+the incomplete attestation, and no such action was performed here.
+
+next_action_or_stop_reason: Repair the lease/handle attestation contract and
+registration's canonical profile identity, then qualify and publish the combined
+candidate under existing authority. Continue full A1/AX and A2–A4 acceptance;
+do not bypass the consumer's identity gate or claim Plan 0160 complete.

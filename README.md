@@ -3950,10 +3950,17 @@ attachment, use `attachServiceTabCdp()` with that valid handle to receive a
 service-owned attach descriptor, then call `requestServiceCdpDetach()` when the
 client is finished. Detach preserves the browser process by default, so browser
 lifecycle remains owned by agent-browser rather than the caller. When a client
-is finished with its leased tab, call `releaseServiceTabHandle()` to best-effort
-close that exact physical target when the routed live browser owns it, mark only
-that retained tab closed in service state, and preserve the shared browser plus
-session route for other clients. Use
+is finished with its leased tab, call `releaseServiceTabHandle()`. It recovers an
+identity-verified retained connection when needed, closes the exact authorized
+target and verifies removal plus survival of observed peer targets before
+marking the tab closed. Unverified requested cleanup fails and preserves the
+handle for diagnosis; inspect the request's service trace before retrying.
+`tab_close` honors `targetId`, `tabId`, or `serviceTabHandle`, rejects conflicting
+selectors, and enforces current child close permission for service requests.
+It never falls back from an explicit target to the active tab. The returned
+`closed` number is the former attached-tab index; `targetRemovalVerified` proves
+physical closure. Explicit release-only or `closePhysicalTab: false` requests
+release logical custody without claiming physical closure. Use
 `evaluateServiceTab()` for bounded JavaScript reads against the same valid
 handle; it requires `timeoutMs` and `maxReturnBytes`, returns URL/title and
 truncation metadata, and refuses missing or stale handles before posting the

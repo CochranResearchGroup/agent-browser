@@ -83,6 +83,48 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if let Some((code, _)) = error.split_once(':') {
+        if matches!(
+            code,
+            "tab_close_invalid_selector"
+                | "tab_close_selector_conflict"
+                | "tab_close_target_unproven"
+                | "tab_close_target_missing"
+                | "tab_close_preflight_failed"
+                | "tab_close_effect_uncertain"
+                | "tab_cleanup_pending"
+        ) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::LifecycleOwner,
+                phase: if matches!(code, "tab_close_effect_uncertain" | "tab_cleanup_pending") {
+                    ServiceFailurePhase::Finalize
+                } else {
+                    ServiceFailurePhase::ChildAdmission
+                },
+                effect_state: if matches!(
+                    code,
+                    "tab_close_effect_uncertain" | "tab_cleanup_pending"
+                ) {
+                    ServiceEffectState::EffectUncertain
+                } else {
+                    ServiceEffectState::NoEffect
+                },
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "inspect_service_trace".to_string(),
+                safe_next_actions: vec![
+                    "inspect_service_trace".to_string(),
+                    "inspect_exact_target_cleanup".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "close_active_or_peer_tab_as_fallback".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
     // These recovery guards run after child authorization and before target
     // attachment. Transport/bootstrap failures may already have attached CDP;
     // keep them uncertain rather than declaring the whole recovery effect-free.

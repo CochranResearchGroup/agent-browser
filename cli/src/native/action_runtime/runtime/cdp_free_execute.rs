@@ -447,7 +447,7 @@ fn authorize_profile_child_access(
         .unwrap_or("unknown");
     let permission = match action {
         "diagnostics" | "probe" | "network_capture" => ProfilePermission::TabObserve,
-        "tab_handle_release" => ProfilePermission::TabCloseOwn,
+        "tab_handle_release" | "tab_close" => ProfilePermission::TabCloseOwn,
         _ => ProfilePermission::TabControlOwn,
     };
     let repository = LockedServiceStateRepository::default_json()?;

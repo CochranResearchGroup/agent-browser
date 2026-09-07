@@ -340,6 +340,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incidents"
             | "service_events"
             | "tab_handle_refresh"
+            | "tab_close"
             | "tab_handle_release"
             | "file_transfer"
     )

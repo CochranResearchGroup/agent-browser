@@ -119,6 +119,7 @@ export const SERVICE_REQUEST_REQUIRED_FIELDS = [
 export const SERVICE_REQUEST_STRING_FIELDS = [
   "action",
   "profileLeasePolicy",
+  "tabId",
   "targetId",
   "script",
   "expression",
