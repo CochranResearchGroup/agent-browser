@@ -4,44 +4,31 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 221 | 2026-09-07
+## Turn 222 | 2026-09-07
 
-Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
-lane P157, branch `plan/profile-permissions-and-request-provenance`.
-Previous publication history is preserved at `f269ce64`. This successor began
-21:27Z; the evidence-backed successor is bounded through 22:27Z, within this
-hour. All previous effort remains cumulative. Legacy transactional repair and
-one exact release build are the current work units.
-The preceding turn advanced AX and reproduced an A1 refusal. This turn repaired
-new-connection host lifetime tracking and proved original-handle control after
-abrupt host death in a disposable runtime. Source `3dfd4d09` is qualified for
-that case; production remains on `d6d99e43`. All effort remains cumulative.
-Focused lifetime and existing custody tests, format, workspace Clippy and the
-optimized build pass. Prior MCP correlation validation remains applicable.
-Exact release `dfbcd2aa` passed `retained-unit-sim-YtpFEw`: live-owner denial,
-changed-evidence refusal, transactional repair and audit event, unchanged browser
-and permissions, original-handle control and complete attestation; cleanup zero.
-Focused custody/parser, format, Clippy and parity passed. Progress: blocker reduction.
-Production preview passed for one legacy connection. The 22:27Z window expired
-without production application or installation; consumer acceptance remains.
-Full A1–A4/AX readiness remains OPEN.
-No consumer capability was borrowed, profile lease reassigned or consumer browser
-restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
+Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
+Lane P157; branch `plan/profile-permissions-and-request-provenance`.
+Progress: outcome progress for legacy repair and installed retained-handle control.
+The previous window ended without apply. Fresh continuation used the qualified
+release and successful preview for one transaction, then consolidated installation.
+All effort remains cumulative; no new build or repeated qualification was needed.
+Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
+Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
 
-- Source: `d6d99e4387412ce731b145b6ef950c6779dbfe55`.
-- Generation: `0.28.0-7991b404eafe-8362848f8b0b`.
-- Binary SHA256: `7991b404eafe0e7a81ac14f6eff6065b6162791195dda1252a15f2f9dc7cf6fb`.
-- Support SHA256: `8362848f8b0bbd0e4d9eb17cbe35cbc0ac41ba2fd814756adafdd608c4488e11`.
-- Activation observed new host PID14552 at 18:06Z, preserving five exact live
-  browser process identities, all six recovered namespace mounts and 70
-  tab-custody records. No jobs were active at either admission check.
-- Authenticated installed-manifest and original synthetic-handle readback pass.
-  Attestation is complete; synthetic mouse/keyboard counters remain 9/9.
-- The main shared skill matches repository source. The separate Service skill
-  and its lock-diagnostic guidance were preserved. No formal release or external
-  notification occurred.
+- Source: `dfbcd2aac277365532c70f9d7722fe8796e367af`.
+- Generation: `0.28.0-d0eb66dc19fd-d7d81d2f5bc4`.
+- Binary SHA256: `d0eb66dc19fdc0b6812cc10ddcb1f22a5f349fa6a9c4aeb5bc02fe92cf49002b`.
+- Support SHA256: `d7d81d2f5bc4f72bcef58a8e8815c248320423bfd5e4f749b0502c9e984a284f`.
+- Host PID83902; activation preserved five exact browser identities, retained
+  private storage and all tab custody. Admission found no active jobs.
+- Installed manifest and original synthetic handle pass; attestation complete,
+  page marker intact, input counters 9/9. This was readback, not new input proof.
+- Doctor exits 1; full operational readiness remains unaccepted.
+- Main shared skill synced with backup; separate Service skill unchanged.
+- Immediate rollback generation and 32 verified backup files remain available.
+  No formal release, GC or external notification occurred.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -86,7 +73,9 @@ snapshot and remains active. Fresh census finds three production processes, all
 started after that snapshot, and six development processes with separate homes.
 The reviewed legacy transition affects one tab; no jobs were active. Native
 transactional repair is exact-release qualified; production preview passes.
-Production application, consumer acceptance and artifact transport remain open.
+Production application succeeded for that one tab: the dead connection is now
+disconnected, with permissions, target and owner/lease authority unchanged. All
+five browsers survived. Consumer reconnect and artifact transport remain open.
 
 ### Storage recovery and prevention
 
@@ -129,7 +118,7 @@ still needs a reusable product diagnosis/recovery surface.
   In `retained-unit-sim-gSifp9`, both actual MCP denials returned request/job
   correlation and the exact persisted terminal outcome. Original-handle
   reconnect, foreign denial without effects and exact release also passed.
-  This repair is not installed in production yet. Full AX remains open.
+  This repair is now installed; full installed AX acceptance remains open.
 
 ### Retention and next work
 
@@ -137,16 +126,15 @@ The earlier GC preview listed 22 candidates and `previousHealthyGenerationId=nul
 That preview is historical after two additional publications. No GC or workstation
 reconcile was applied. Original generations and verified private rollback copies
 remain. Each publication backed up its immediate predecessor with 32 matching
-file hashes. The final predecessor is `0.28.0-13d426fb15c9-bb2f5ae53042`.
+file hashes. The immediate predecessor is `0.28.0-7991b404eafe-8362848f8b0b`.
 
 Controlled publication receipts remain outside the supported upgrade ledger.
 Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next reconcile already-stranded legacy connections using preserved host-replacement
-custody evidence; do not invent host lifetime for UUID-only identities. Install
-the consolidated repairs after qualification. Complete consumer artifact transport
+Next verify actual consumer reconnect after the single legacy repair. Complete
+consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
 For Guacamole input, check refresh/reconnect, effective settings, and scoped
 browser/provider recovery in a disposable session before code diagnosis.
@@ -159,6 +147,12 @@ boundaries remain unchanged.
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 
+- `legacy-connection-repair/`: exact release qualification, production native
+  transaction, backup and readback preserving permissions and five browsers.
+- `publication-dfbcd2aa/`: sealed generation, rollback backup, activation,
+  original synthetic-handle acceptance, nonzero doctor and skill-sync evidence.
+- `retained-unit-sim-YtpFEw/`: exact release legacy repair with live-owner and
+  changed-evidence denial, restored original handle and zero remaining processes.
 - `retained-unit-sim-8rJXkf/`: 3dfd4d09 abrupt-host recovery and live/foreign
   ownership protection, zero-residue cleanup, plus legacy reconciliation evidence,
   writer census and exact one-tab transition review.
