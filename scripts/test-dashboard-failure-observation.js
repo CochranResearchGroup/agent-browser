@@ -106,7 +106,7 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
   globalThis.performance = { now: () => clock };
   try {
   await withInstrumentedFetch(async (input, init = {}) => {
-    clock += 17;
+    clock += 17.25;
     const parsed = new URL(String(input), globalThis.location.href);
     calls.push({ path: parsed.pathname, search: parsed.search, init: structuredClone(init) });
     if (parsed.pathname === '/api/service/failure-observation') {
@@ -159,7 +159,7 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
       ['session_tabs_read', 'fetch_rejected'],
     ]);
     assert.deepEqual(reports.map(report => report.elapsedMs), [17, 17, 17, 17],
-      'failure duration must exclude deferred reporting and recovery delay');
+      'failure duration must use integer wire milliseconds and exclude deferred delivery');
     const serializedReports = JSON.stringify(reports);
     for (const forbidden of ['secret-body', 'secret-message', 'token=secret', 'secret=query', '9222']) {
       assert(!serializedReports.includes(forbidden), `failure report leaked ${forbidden}`);

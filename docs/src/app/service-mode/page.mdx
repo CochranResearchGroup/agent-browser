@@ -13,7 +13,7 @@ An oversized decision is explicitly marked
 `profileAccessDecisionOmitted: record_size_limit` in journal details.
 
 
-Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it.
+Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it. The client rounds the wire value to nonnegative whole milliseconds so the integer-only receiver accepts high-resolution browser timings.
 The primary connection batches image acknowledgements and checks fresh ownership before each write. Slow ownership reads run off the dashboard asynchronous workers so they do not block unrelated requests.
 
 ## Forensic failure journal
@@ -1662,7 +1662,7 @@ replacing the signer behind the existing trust root. File permissions alone are
 not the final production custody boundary. Plan 0144 still requires an
 independently supervised signer identity before installation.
 
-Reconciliation also seals a single <code>rejoin_owned_browser</code> transition when the current lease explicitly authorizes <code>rejoin</code>. It reuses the direct rejoin checks for one exact uncontested ready owner and binds only that session and its same-browser active tabs, through the plan expiry. Apply rechecks current capability, lease revision, owner, process, routes, boot epoch and custody before mutation. A missing owner binding therefore has a supported plan/apply repair when rejoin is already permitted; ambiguous or foreign work remains blocked. Lease doctor findings concern profile-owner authority, while ordinary tab permission is evaluated separately.
+Reconciliation also seals a single <code>rejoin_owned_browser</code> transition when the current lease explicitly authorizes <code>rejoin</code>. It reuses the direct rejoin checks for one exact uncontested ready owner and binds only that session and its same-browser active tabs, through the plan expiry. Apply rechecks current capability, lease revision, owner, process, routes, boot epoch and custody before mutation. A missing owner binding therefore has a supported plan/apply repair when rejoin is already permitted; ambiguous or foreign work remains blocked. Lease doctor findings concern profile-owner authority, while ordinary tab permission is evaluated separately. Profiles already represented by a canonical claim or registered-capability lease do not also produce a legacy owner row; a genuine missing-binding finding remains on the capability lease.
 
 Observation-only legacy and unbound identity rows advertise
 <code>profile_acquire</code> when the capability-bound acquisition coordinator

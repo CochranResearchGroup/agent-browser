@@ -238,7 +238,11 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
             .get(&owner.browser_id)
             .and_then(|browser| browser.profile_id.clone())
         {
-            legacy_profiles.insert(profile_id);
+            // Owner context must not create a second legacy authority row for
+            // a profile already represented by a claim or capability lease.
+            if !bound_profiles.contains(&profile_id) {
+                legacy_profiles.insert(profile_id);
+            }
         }
     }
     for profile_id in legacy_profiles {
@@ -3089,6 +3093,19 @@ mod tests {
                 ..BrowserTab::default()
             },
         );
+        state.browsers.insert(
+            "browser-odollo".to_string(),
+            super::super::service_model::BrowserProcess {
+                id: "browser-odollo".to_string(),
+                profile_id: Some(authority.profile_id.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            profile_leases_for_state(&state, NOW).len(),
+            1,
+            "an unbound capability must not also project a legacy owner row"
+        );
         let lease = profile_leases_for_state(&state, NOW)
             .into_iter()
             .find(|lease| lease.principal_id.as_deref() == Some(authority.principal_id.as_str()))
@@ -3505,6 +3522,17 @@ mod tests {
             )]),
             ..ServiceState::default()
         };
+        let (retained, _, _) = state_with_lease();
+        state.runtime_owner_registry = retained.runtime_owner_registry;
+        state.runtime_owner_registry.principal_bindings.clear();
+        state.browsers.insert(
+            "browser-odollo".to_string(),
+            super::super::service_model::BrowserProcess {
+                id: "browser-odollo".to_string(),
+                profile_id: Some("last30days-social".to_string()),
+                ..Default::default()
+            },
+        );
         let claim = state
             .acquire_lease_claim(AcquireLeaseClaimRequest {
                 resource: LeaseResourceKey::profile("last30days-social"),

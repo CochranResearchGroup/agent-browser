@@ -316,6 +316,10 @@ async function sendDashboardFailure(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...observation,
+        // performance.now() has fractional precision; the receiver accepts u64 milliseconds.
+        elapsedMs: observation.elapsedMs == null
+          ? observation.elapsedMs
+          : Math.max(0, Math.round(observation.elapsedMs)),
         observationId: observation.observationId || newObservationId(),
       }),
     });
