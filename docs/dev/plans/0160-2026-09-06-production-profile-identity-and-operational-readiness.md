@@ -66,8 +66,9 @@ to clear a doctor finding.
 The next bounded repair batch must identify the affected action, reproduce its
 failure, repair its cause, and verify the original action plus foreign-owner
 rejection. Diagnostics must identify missing proof and supported recourse, with
-correlation sufficient to trace the failure. Existing green viewer acceptance
-does not need replay unless this batch changes that path.
+correlation sufficient to trace the failure. Keep earlier viewer acceptance as
+historical evidence. Do not replay a failed current viewer journey without a
+causal change or instrumentation that can explain its input path.
 
 Allocate the next hour first to completing the prepared candidate, then to the
 highest-impact remaining identity refusal: approximately 20 minutes for exact
