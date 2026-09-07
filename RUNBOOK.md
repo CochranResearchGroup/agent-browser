@@ -4,18 +4,18 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 218 | 2026-09-07
+## Turn 219 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
 Previous publication history is preserved at `f269ce64`. This successor began
 21:27Z with a 30-minute ceiling through 21:57Z; all previous effort is cumulative.
-Recent status replies were no progress. This turn advanced AX with real MCP
-failure-to-job correlation and reproduced an A1 stale-connection refusal after
-abrupt host interruption. No production publication in this batch.
-Source `a9830cfa` is qualified in isolation; production remains on `d6d99e43`.
-The expanded existing regression failed before repair, then all 129 MCP tests,
-format, workspace Clippy and API parity passed. Optimized build passed.
+The preceding turn advanced AX and reproduced an A1 refusal. This turn repaired
+new-connection host lifetime tracking and proved original-handle control after
+abrupt host death in a disposable runtime. Source `3dfd4d09` is qualified for
+that case; production remains on `d6d99e43`. All effort remains cumulative.
+Focused lifetime and existing custody tests, format, workspace Clippy and the
+optimized build pass. Prior MCP correlation validation remains applicable.
 No build or fixture remains running. Full A1–A4/AX readiness remains OPEN.
 No consumer capability was borrowed, profile lease reassigned or consumer browser
 restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
@@ -44,30 +44,10 @@ session and tab guards. Earlier exact-release proof retained both original
 handles across host interruption, restored active lease and complete attestation,
 and correlated the returned receipt with the persisted plan and lease.
 
-The first candidate this hour, `dd94dfe7`, combined that repair with diagnostic
-and private-storage changes. Its exact release passed original-capability,
-two-handle reconciliation across a disposable systemd host interruption, with
-unchanged browser/targets and persistent temporary storage. Self-identified HTTP
-control also passed without a registered capability. Two initial systemd fixture
-errors were corrected: default group shutdown terminated Chrome, and recreating
-a still-loaded transient unit failed. Their evidence and cleanup are retained.
-
-MCP then reproduced a different real refusal on that installed binary: opening a
-tab succeeded, but a subsequent request supplying its valid handle alone was
-routed to the MCP default session. The daemon rejected the browser/session
-mismatch. Source `d6d99e43` now derives missing MCP route hints from the original
-handle, retaining explicit selectors and all daemon custody/permission checks.
-
-The final exact release passed MCP self-identified handle-only diagnostics,
-original-handle control after client closure/reconnection, foreign-subject denial
-with no page change, explicit conflicting-route denial, and exact owned-target
-release with peer tabs and browser process preserved. The earlier optimized
-candidate passed the same identity/control checks. The expanded existing routing
-regression, existing desktop-routing regression, format, workspace Clippy and
-API/MCP parity all pass. One test invocation selected zero tests and was not
-counted; the corrected invocation executed the regression. Fixture request-shape
-errors are retained separately from the red product routing failure and green
-candidate result. All fixture process cleanup checks passed.
+Earlier storage/rejoin and handle-only MCP routing qualification is preserved at
+`c40e583a`. The installed `d6d99e43` routes original handles correctly and its
+isolated reconnect, foreign denial, exact release and peer-preservation checks
+passed. This does not establish current consumer acceptance.
 
 Seven current lease findings span six rows: two legacy-principal warnings,
 three missing owner bindings on Default, and an owner-generation/session-authority
@@ -84,10 +64,18 @@ The isolated `retained-unit-sim-Q2Hc69` reproduction held an authenticated socke
 open, killed only its disposable host, preserved Chrome, then restarted the host.
 The original handle was refused with that same typed error because the dead
 connection remained active. Normal connection teardown passes; abrupt host death
-bypasses its disconnect guard. This reproduces the failure mode, while the exact
-historical interruption remains unproven. Repair needs positive host-lifetime
-proof so dead connections can be retired without taking over live owners.
-Consumer acceptance and actual consumer artifact transport remain incomplete.
+bypasses its disconnect guard. Source `3dfd4d09` now mints opaque connection IDs
+with boot, PID namespace, PID and process start evidence. Reconnect uses only
+persisted custody and positive host-death evidence; subject and permissions
+remain enforced. Legacy IDs and unreadable evidence never authorize takeover.
+`retained-unit-sim-8rJXkf` proves live-owner protection, host-kill recovery,
+complete attestation, original-handle evaluation, same Chrome and foreign denial
+without page effects. An initial attempt `retained-unit-sim-Xpwqqx` recovered
+custody but correctly refused control with conflicting fixture profile hints;
+correcting those hints before launch passed. The failure remains preserved.
+The consumer legacy access record exactly matches the pre-publication custody
+snapshot and remains active. UUID-only legacy reconciliation, consumer acceptance
+and actual consumer artifact transport remain incomplete.
 
 ### Storage recovery and prevention
 
@@ -145,9 +133,10 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next repair dead-host connection lifecycle using the reproduced A1 failure,
-preserving denial for live foreign connections. Keep self-identification as the
-ordinary default. Complete consumer artifact transport and A1 dispositions.
+Next reconcile already-stranded legacy connections using preserved host-replacement
+custody evidence; do not invent host lifetime for UUID-only identities. Install
+the consolidated repairs after qualification. Complete consumer artifact transport
+and remaining A1 dispositions, preserving ordinary self-identification.
 For Guacamole input, check refresh/reconnect, effective settings, and scoped
 browser/provider recovery in a disposable session before code diagnosis.
 Consolidate repairs before another production candidate. After A1–A3 pass,
@@ -159,6 +148,10 @@ boundaries remain unchanged.
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 
+- `retained-unit-sim-8rJXkf/`: 3dfd4d09 abrupt-host recovery and live/foreign
+  ownership protection, zero-residue cleanup, plus legacy reconciliation evidence.
+- `retained-unit-sim-Xpwqqx/`: first attempt's conflicting physical-profile hints;
+  custody recovery passed, control refused, three owned processes cleaned.
 - `retained-unit-sim-gSifp9/`: optimized a9830cfa real MCP error correlation,
   exact persisted outcomes, ordinary reconnect/control, and zero-residue cleanup;
   private `consumer-stale-connection-readback.json` anchors historical comparison.
