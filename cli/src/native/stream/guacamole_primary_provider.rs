@@ -1,7 +1,7 @@
 //! Local Guacamole authentication and receive-only tunnel startup.
 //! Provider tokens never leave this module's transient connection setup.
 
-use super::guacamole_primary_binding::{PrimaryBinding, PrimaryGuard};
+use super::guacamole_primary_binding::{check_primary_authority, PrimaryBinding, PrimaryGuard};
 #[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,7 +12,7 @@ pub(super) async fn connect(
     binding: PrimaryBinding,
     is_current: PrimaryGuard,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
-    is_current()?;
+    check_primary_authority(&is_current).await?;
     let principal = std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -25,7 +25,7 @@ async fn connect_with_principal(
     is_current: PrimaryGuard,
     principal: String,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
-    is_current()?;
+    check_primary_authority(&is_current).await?;
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -81,7 +81,7 @@ async fn connect_with_principal(
         .as_str()
         .filter(|value| !value.is_empty() && value.len() <= 8192)
         .ok_or("guacamole_primary_provider_auth_invalid")?;
-    is_current()?;
+    check_primary_authority(&is_current).await?;
     let mut url = binding
         .provider_base
         .join("websocket-tunnel")
@@ -119,7 +119,7 @@ async fn connect_with_principal(
     .await
     .map_err(|_| "guacamole_primary_provider_connect_timeout")?
     .map_err(|_| "guacamole_primary_provider_connect_failed")?;
-    is_current()?;
+    check_primary_authority(&is_current).await?;
     Ok(socket)
 }
 

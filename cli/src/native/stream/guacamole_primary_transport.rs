@@ -1,6 +1,6 @@
 //! Backend task ownership for a receive-only Guacamole primary connection.
 
-use super::guacamole_primary_binding::PrimaryGuard;
+use super::guacamole_primary_binding::{check_primary_authority, PrimaryGuard};
 use super::guacamole_primary_protocol::Protocol;
 use futures_util::{SinkExt, StreamExt};
 use std::future::Future;
@@ -163,17 +163,18 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
     F: Future<Output = Result<WebSocketStream<S>, &'static str>>,
 {
-    if let Err(code) = is_current() {
+    if let Err(code) = check_primary_authority(&is_current).await {
         return code;
     }
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut fence = tokio::time::interval(Duration::from_millis(250));
+    fence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(connection);
     let socket = loop {
         tokio::select! {
             _ = shutdown.changed() => return "guacamole_primary_stopped",
             _ = fence.tick() => {
-                if let Err(code) = is_current() { return code; }
+                if let Err(code) = check_primary_authority(&is_current).await { return code; }
                 if Instant::now() >= deadline { return "guacamole_primary_start_timeout"; }
             }
             result = &mut connection => match result {
@@ -198,22 +199,23 @@ where
     let mut protocol = Protocol::default();
     let mut ready = false;
     let mut fence = tokio::time::interval(Duration::from_millis(250));
+    fence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut keepalive = tokio::time::interval(Duration::from_secs(5));
     let outcome = loop {
         tokio::select! {
             _ = shutdown.changed() => break "guacamole_primary_stopped",
             _ = fence.tick() => {
-                if let Err(code) = is_current() { break code; }
+                if let Err(code) = check_primary_authority(&is_current).await { break code; }
                 if !ready && Instant::now() >= start_deadline { break "guacamole_primary_start_timeout"; }
             }
             _ = keepalive.tick() => {
-                if let Err(code) = is_current() { break code; }
+                if let Err(code) = check_primary_authority(&is_current).await { break code; }
                 if send(&mut socket, Message::Text("3.nop;".into())).await.is_err() {
                     break "guacamole_primary_transport_closed";
                 }
             }
             message = socket.next() => {
-                if let Err(code) = is_current() { break code; }
+                if let Err(code) = check_primary_authority(&is_current).await { break code; }
                 let observation = match message {
                     Some(Ok(Message::Text(text))) => match protocol.receive(&text) {
                         Ok(value) => value,
@@ -228,9 +230,13 @@ where
                     Some(Ok(Message::Pong(_))) => continue,
                     _ => break "guacamole_primary_transport_closed",
                 };
-                for reply in observation.replies {
-                    if let Err(code) = is_current() { return code; }
-                    if send(&mut socket, Message::Text(reply)).await.is_err() {
+                // Guacamole instructions share a websocket message. Bound each
+                // batch and authorize its write once, so a cold frame containing
+                // many image blobs does not reread all Service State per blob.
+                // Every actual write still requires fresh exact owner authority.
+                for replies in observation.replies.chunks(128) {
+                    if let Err(code) = check_primary_authority(&is_current).await { return code; }
+                    if send(&mut socket, Message::Text(replies.concat())).await.is_err() {
                         return "guacamole_primary_transport_closed";
                     }
                 }
@@ -262,6 +268,49 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
     use tokio_tungstenite::tungstenite::protocol::Role;
+
+    #[tokio::test]
+    async fn slow_authority_read_does_not_block_other_dashboard_work() {
+        let (client, server) = tokio::io::duplex(4096);
+        let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
+        let mut server = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let first_check = std::sync::Mutex::new(Some((entered_tx, release_rx)));
+        let mut owner = PrimaryTask::spawn(
+            client,
+            Arc::new(move || {
+                if let Some((entered, release)) = first_check.lock().unwrap().take() {
+                    let _ = entered.send(());
+                    // A slow repository read must leave the asynchronous server free
+                    // to serve other work, including the work that releases this read.
+                    release
+                        .recv_timeout(Duration::from_secs(2))
+                        .map_err(|_| "fixture_server_worker_starved")?;
+                }
+                Ok(())
+            }),
+        );
+        let other_request = tokio::spawn(async move {
+            entered_rx.await.unwrap();
+            let _ = release_tx.send(());
+        });
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000001;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        let result = owner.ready().await;
+        let other_result = other_request.await;
+        owner.close().await;
+        assert_eq!(
+            result,
+            Ok(()),
+            "authority read starved unrelated server work"
+        );
+        other_result.unwrap();
+    }
 
     #[tokio::test]
     async fn viewer_waiter_departure_preserves_owner_until_binding_invalidation() {
@@ -379,6 +428,65 @@ mod tests {
             terminal_rx.await.unwrap(),
             "guacamole_primary_task_cancelled"
         );
+    }
+
+    #[tokio::test]
+    async fn cold_frame_replies_preserve_order_and_reject_a_changed_owner() {
+        let (client, server) = tokio::io::duplex(4096);
+        let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
+        let mut server = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
+        let current = Arc::new(AtomicBool::new(true));
+        let guard = current.clone();
+        let mut owner = PrimaryTask::spawn(
+            client,
+            Arc::new(move || {
+                if guard.load(Ordering::SeqCst) {
+                    Ok(())
+                } else {
+                    Err("guacamole_primary_owner_changed")
+                }
+            }),
+        );
+        server
+            .send(Message::Text(
+                concat!(
+                    "0.,36.00000000-0000-4000-8000-000000000001;",
+                    "4.blob,1.0,1.A;4.blob,1.1,1.B;4.sync,1.1;"
+                )
+                .into(),
+            ))
+            .await
+            .unwrap();
+        owner.ready().await.unwrap();
+        let mut replies = String::new();
+        while !replies.contains("4.sync,1.1;") {
+            if let Message::Text(text) = server.next().await.unwrap().unwrap() {
+                replies.push_str(&text.replace("3.nop;", ""));
+            }
+        }
+        assert_eq!(
+            replies,
+            "3.ack,1.0,8.consumed,1.0;3.ack,1.1,8.consumed,1.0;4.sync,1.1;"
+        );
+        current.store(false, Ordering::SeqCst);
+        server
+            .send(Message::Text("4.blob,1.2,1.C;4.sync,1.2;".into()))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while let Some(Ok(message)) = server.next().await {
+                if let Message::Text(text) = message {
+                    assert_eq!(text, "3.nop;", "changed owner acknowledged another frame");
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            owner.status(),
+            PrimaryStatus::Closed("guacamole_primary_owner_changed")
+        );
+        owner.close().await;
     }
 
     #[tokio::test]

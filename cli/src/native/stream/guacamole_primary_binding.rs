@@ -10,6 +10,17 @@ use sha2::{Digest, Sha256};
 /// repository paths or raw provider/identity evidence.
 pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static str> + Send + Sync>;
 
+/// Read fresh authority on the blocking pool. Repository locks, JSON projection,
+/// and process inspection must not occupy an asynchronous dashboard worker.
+/// Cancellation can leave only a read running; the caller must await admission
+/// before issuing any provider effect. No successful result is cached.
+pub(super) async fn check_primary_authority(guard: &PrimaryGuard) -> Result<(), &'static str> {
+    let guard = guard.clone();
+    tokio::task::spawn_blocking(move || guard())
+        .await
+        .map_err(|_| "guacamole_primary_authority_task_failed")?
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct PrimaryBinding {
     pub route_id: String,

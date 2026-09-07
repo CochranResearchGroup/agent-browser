@@ -29,19 +29,22 @@ impl From<&'static str> for PrimaryFailure {
 
 pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String, PrimaryFailure> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
-    let repository = LockedServiceStateRepository::default_json()
-        .map_err(|_| "guacamole_primary_state_unavailable")?;
-    let task = {
+    let route_id = route_id.to_owned();
+    let connection_id = connection_id.to_owned();
+    // Admission includes synchronous repository and process reads. Keep the
+    // registry decision atomic without blocking unrelated dashboard requests.
+    let task = tokio::task::spawn_blocking(move || -> Result<Arc<PrimaryTask>, &'static str> {
+        let repository = LockedServiceStateRepository::default_json()
+            .map_err(|_| "guacamole_primary_state_unavailable")?;
         let mut registry = REGISTRY
             .get_or_init(|| Mutex::new(Registry::default()))
-            .lock()
-            .await;
-        if let Some(task) = registry.retained(route_id, connection_id, |binding| {
+            .blocking_lock();
+        if let Some(task) = registry.retained(&route_id, &connection_id, |binding| {
             binding.is_current(&repository)
         })? {
-            task
+            Ok(task)
         } else {
-            let binding = PrimaryBinding::resolve(&repository, route_id, connection_id)?;
+            let binding = PrimaryBinding::resolve(&repository, &route_id, &connection_id)?;
             registry.admit(binding, |binding| {
                 let expected = binding.clone();
                 let is_current: PrimaryGuard =
@@ -54,9 +57,11 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
                         evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
                     },
                 )
-            })?
+            })
         }
-    };
+    })
+    .await
+    .map_err(|_| "guacamole_primary_admission_task_failed")??;
     let result = task.ready().await.and_then(|()| match task.status() {
         PrimaryStatus::Ready(id) => Ok(id),
         PrimaryStatus::Closed(code) => Err(code),

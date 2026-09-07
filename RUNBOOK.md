@@ -6,16 +6,21 @@ lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
 ## Turn 214 | 2026-09-07
 
-Current task: execute the Plan 0160 consumer-first strategy amendment.
-The operator authorized amendment and execution after the reassessment.
-Additional round starts 2026-09-07T14:04:08+00:00 and ends
-2026-09-07T14:34:08+00:00 (30 minutes total, including governance).
-Controller: primary agent. The operator subsequently directed isolated
-simulation instead of interrupting the consumer. Existing approximately
-12-hour effort and the current round deadline are retained.
-Prior turn classification: progress, because evidence established that the
-named-profile mismatch was no longer the recorded blocker and selected the
-consumer's supported rejoin path as the next investigation.
+Current task: finish the AX logging batch and diagnose the A2 cold-view failure.
+The operator explicitly authorized review of the approach and up to 60 additional
+minutes. This round starts 2026-09-07T14:49:48+00:00 and ends
+2026-09-07T15:49:48+00:00. Prior approximately 12-hour effort and the
+completed 30-minute round (14:04:08–14:34:08 UTC) remain cumulative history.
+Controller: primary agent. First finish pending integration checks; then isolate
+which cold-view layer stalls using a local reproducer. Batch a causal repair and
+its logging before publication. Do not turn a warm pass or logging-only fix into
+operator acceptance, or interrupt the original consumer for diagnosis.
+Reassess after two checkpoints or 30 active minutes without acceptance progress;
+no tactic or successor resets the overall deadline. No automatic live retry.
+Approach review: consumer-only diagnosis was an unnecessary dependency; the
+initial fresh-launch simulation was incomplete; passing intermediate checks did
+not justify stopping the broader task. The closer retained-handle simulation
+now covers that historical condition, while A2's cause remains unproven.
 
 ### Plan 0160: OPEN, production operational acceptance incomplete
 
@@ -77,12 +82,39 @@ consumer's supported rejoin path as the next investigation.
   `elapsedMs` field when fetch settles, including failures delivered after later
   recovery. The regression failed before the fix and passed afterward; it proves
   queued delivery delay is excluded and existing privacy/no-retry checks pass.
-  `pnpm test:service-failure-journal` passes. Full dashboard integration and Rust
-  format/clippy for the CLI help edit remain pending before merge readiness or
-  publication. This source checkpoint is not installed and does not resolve A2.
-- The 30-minute round ends at the deadline above. No new expensive build or
-  unchanged live attempt is started at this checkpoint. Retain the unfinished
-  AX batch and A2 causal investigation for the next evidence-backed execution.
+  `pnpm test:service-failure-journal`, dashboard build/TypeScript, Rust format
+  and workspace Clippy passed for that batch. It is not installed.
+- Cold-frame diagnosis reproduced 11,818 ms startup from an immediately ready
+  in-memory provider: 128 blob acknowledgements caused 154 full authority reads
+  against a private copy of current Service State. Each optimized check took
+  66–84 ms. This identifies a startup delay mechanism, not the historical 504
+  source or the exact production provider message pattern.
+- The repair batches acknowledgements with fresh authority before each write,
+  moves synchronous admission and guard reads off async workers, and prevents
+  overdue periodic checks from accumulating. The same optimized simulation
+  passed in 295 ms with five checks and all 128 acknowledgements retained.
+  The scheduler regression failed before the repair and passed afterward.
+  Seventeen focused Rust tests and the dashboard sharing contract passed,
+  including exact owner-change rejection and retained-owner/cancellation tests.
+  Batch-wide format/Clippy and optimized candidate build passed.
+  The isolated authenticated dashboard endpoint passed with two concurrent
+  requests sharing one provider connection, all 128 acknowledgements delivered,
+  and one returned terminal occurrence joined to exactly one owner failure
+  record. The failed owner remained sticky; no second provider connection
+  started. Backend and mock provider cleanup completed. The fixture uses the
+  existing backend-only mode and its own generated dashboard credential.
+  Evidence: P160 `primary-endpoint-sim-ZwpewN/`. Earlier fixture setup failures
+  occurred before viewer requests; `primary-endpoint-sim-nHoqlD/` retains the
+  missing-host bootstrap failure and completed cleanup.
+- At the 30-minute reassessment, the reproducible startup bottleneck is removed
+  and the real endpoint contract passes in isolation. Production A2 is still
+  open. The remaining allowance prepares an exact production candidate and
+  checks admission for publication while preserving active work. No original
+  consumer credential or live profile was used by the endpoint fixture.
+  Temporary measurement tests and private copied state are kept outside Git;
+  evidence is in P160 `primary-guard-measurement/`. Production is unchanged.
+- The preceding 30-minute round ended with the AX batch incomplete. The new
+  operator-authorized round above resumes its required checks and A2 diagnosis.
 - Progress classification: `outcome_progress` for isolated retained-handle and
   custody acceptance within A1; full A1, A2, A3, A4 and AX remain open.
 

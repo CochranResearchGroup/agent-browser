@@ -6125,6 +6125,7 @@ Primary guards distinguish state/authority read failures from identity changes.
 Primary termination records retain the typed cause, elapsed lifetime and
 route/session/display references in the private failure journal.
 Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it.
+The primary connection batches image acknowledgements and checks fresh ownership before each write. Slow ownership reads run off the dashboard asynchronous workers so they do not block unrelated requests.
 Failed primary responses include occurrenceId and, when known, terminalOccurrenceId
 for journal correlation; retrySafe remains false.
 
