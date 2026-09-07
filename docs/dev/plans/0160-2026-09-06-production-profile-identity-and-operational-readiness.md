@@ -3011,3 +3011,54 @@ must join exact binary/manifest evidence instead of assuming those labels match.
 Production and the consumer's capability remain untouched. Next: qualify this
 combined acceptance repair on the installed runtime, then continue current-state
 readiness reconciliation without discarding historical failure evidence.
+
+## Installed c249c531 acceptance checkpoint
+
+state_transition: Installed authenticated journey acceptance is now projected into doctor.
+acceptance_state: A1, A3, A4 and AX remain open; first cold viewer startup failure remains unclassified.
+progress_classification: progress
+
+The full release build passed in 10m 03s. Exact binary SHA256 is
+e7c871b3f26b26f28fb8b8574fbd1edfbc9155ce01342b3c6c7b241a788b6849.
+Sequential exact-release cases passed: cold owner i7n71F, headless two-client
+Vzedsf, remote-headed two-client mupgRW, headless session-only UB6vna and headed
+session-only xMdLLM. Every case's exact disposable cleanup passed.
+
+Controlled activation selected generation 0.28.0-e7c871b3f26b-d87931582350 with
+support SHA256 d879315823506b99aa8601516f93b9ca6fb78f43572b641ded942052e0fe6bd4.
+Five browser process identities and all 68 tab-custody rows survived. The new
+host PID was 41744 at activation. Shared guidance was synchronized only after
+verifying that its prior bytes matched the previously installed source.
+Activation helpers have executed and must not be replayed.
+
+The first authenticated cold attempt, local-viewers-PmQcm0, resolved the original
+browser and target and wrote the new ready ingress receipt. It then failed its
+30-second iframe check: the viewport stayed at Checking stream with zero
+iframes. It did not reach input. Its client closed, and the failed attempt is
+retained. A subsequent one-viewer diagnostic with request tracing reached the
+iframe without input or repair; this does not establish the first failure's
+cause. That diagnostic also retained an HTTP502 session-tabs read followed by
+successful reads. Startup and causal-diagnostic disposition remain required.
+
+The complete traced attempt local-viewers-UMFmI4 passed two authorized viewers,
+anonymous denial, original target identity, synthetic pixels, trusted mouse and
+keyboard, same-URL reconnect and peer continuity. Both viewers verified the
+selected ingress acceptance receipt. Original-handle diagnostics afterward
+remained complete, input counters were 7/7, and installed dashboard asset hashes
+matched. This is a pass after the retained initial startup failure, not a clean
+first-attempt result. All viewer clients closed.
+
+Doctor before and after still exits1, but operatorJourneyReady changed from
+false to true and dashboard_operator_journey_not_ready disappeared. The
+remaining selectedGenerationReady=false still references old
+failed_preserved_old_generation history. Principal/lease findings, stale monitor
+and observed-pressure ownership remain. No history or green acceptance record
+was manually synthesized, no consumer capability was borrowed, and no scheduled
+timer was restored. Evidence is under publication-c249c531, including both doctor
+snapshots, exact qualification, activation, custody comparison, viewer attempts,
+original attestation and local-operator-acceptance.json.
+
+Next: repair the separate current-generation readiness comparison with exact
+selected payload, live host and dashboard manifest evidence while retaining
+historical failures. Continue consumer original-connection acceptance, cold
+viewer startup diagnosis, remaining ownership dispositions and A4/AX gates.
