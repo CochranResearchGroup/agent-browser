@@ -10,8 +10,9 @@ Current task: execute the Plan 0160 consumer-first strategy amendment.
 The operator authorized amendment and execution after the reassessment.
 Additional round starts 2026-09-07T14:04:08+00:00 and ends
 2026-09-07T14:34:08+00:00 (30 minutes total, including governance).
-Controller: primary agent. Milestone: original consumer recovery or one
-reproduced causal defect. Existing approximately 12-hour effort is retained.
+Controller: primary agent. The operator subsequently directed isolated
+simulation instead of interrupting the consumer. Existing approximately
+12-hour effort and the current round deadline are retained.
 Prior turn classification: progress, because evidence established that the
 named-profile mismatch was no longer the recorded blocker and selected the
 consumer's supported rejoin path as the next investigation.
@@ -35,25 +36,32 @@ consumer's supported rejoin path as the next investigation.
 - Cumulative effort: the operator reports approximately 12 hours in the current
   repair/verification run. Exact aggregate accounting was not established.
   This adoption does not reset effort or manufacture a new remaining budget.
-- Current state: read-only installed diagnosis completed; original-consumer
-  execution and attestation are pending. Fresh lease explanation still offers
-  `rejoin_owned_browser` for missing owner/principal binding. The existing
-  consumer capability is active; rotation is forbidden by active work.
-- Evidence: `consumer-first-20260907/lease-explain.json` and
-  `capability-status.json` under the same private P160 campaign root.
-  Installed generation matches the recorded candidate above.
-- Backend source uses the same exact-owner eligibility check when advertising
-  and executing rejoin. No new backend defect has been reproduced in this round.
-- Next action: original consumer executes its supported rejoin with its existing
-  private capability, then obtains attestation through its original handle.
-  A prepared `consumer-first-20260907/consumer-rejoin-once.py` refreshes the
-  revision, checks recorded identity, submits once, and checks custody readback.
-  Syntax checked; not executed here. It does not supply consumer attestation.
-- This repository session has requested that consumer-side result from the
-  operator. It has not borrowed the capability, changed its binding, submitted
-  page input, or started a replacement browser. No runtime retry is scheduled.
-- Production progress classification: `no_progress`; the verified diagnosis
-  narrows the next action but does not advance A1 acceptance or reset the clock.
+- Current state: isolated missing-binding recovery passed on the exact installed
+  binary. The original test credential rejoined through the public CLI; the
+  lease became active with no blocking identity axes. Both original handles
+  remained usable, PID/start token and target set were preserved, and final
+  attestation was complete. No product repair or rebuild was required.
+- Scope limit: this fixture naturally produced missing principal binding on a
+  fresh managed launch. Attestation was already complete before rejoin through
+  managed-launch custody. It does not reproduce the old consumer's historical
+  missing `profile_lease` and `handoff_receipt` proof combination or establish
+  consumer acceptance. A lease warning alone is not proof of unusable control.
+- Evidence: private P160 campaign `missing-binding-sim-ThA0Um/`, containing
+  `probe-source.mjs`, `ledger.jsonl`, `acceptance.json`, and `cleanup.json`.
+  Cleanup found zero remaining owned fixture processes.
+- Earlier harness setup failures are retained in `missing-binding-sim-IDfJUT`
+  and `missing-binding-sim-IvUQPa`. The latter fixture's three remaining owned
+  processes were terminated with PID/start/executable checks after correcting
+  the cleanup interpreter; final residue was zero. No failed rejoin was retried.
+- The simulation removes the assumed need to interrupt the original consumer
+  for mechanism testing. The pending consumer request is no longer a dependency
+  for investigation. Production remains untouched by these experiments.
+- Next diagnosis: reproduce the older retained-owner custody condition, including
+  its handoff/launch evidence, before attributing its historical attestation
+  failure to principal binding. Do not repeat this passing clean-launch case
+  or resume costly operator-view retries as a substitute.
+- Progress classification: `blocker_reduction`; isolated rejoin is proven,
+  original-consumer and complete A1 acceptance remain unproven.
 
 ### Retained execution boundaries
 

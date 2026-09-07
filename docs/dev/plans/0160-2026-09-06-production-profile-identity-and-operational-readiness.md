@@ -112,14 +112,18 @@ Read-only evidence collection for later units may proceed without delaying W1.
 ## Strategy amendment, 2026-09-07
 
 Preserve A1, A2, A3, A4 and AX in full. Execute consumer recovery before further
-presentation, maintenance, or unattended work. The next milestone is the
-original blocked consumer safely rejoining with its existing identity and
-obtaining complete attestation, preserving its browser, targets, and handles.
-A synthetic client cannot substitute for this consumer result.
+presentation, maintenance, or unattended work. The next diagnosis milestone is an isolated simulation of the blocked recovery
+transition with a test-owned credential, profile, browser, and original handles.
+Do not interrupt an active consumer merely to diagnose a reproducible mechanism.
+Original-consumer recovery remains final acceptance evidence; it is not a
+prerequisite for isolated investigation. Simulation must state which identity
+and custody conditions it reproduces and which remain unproven.
 
-1. Read current installed recovery and ownership evidence for that consumer.
-   Use the supported own-lease rejoin path if offered; do not rotate identity,
-   borrow a capability, replace its browser, or replay historical selectors.
+1. Read current installed recovery and ownership evidence, then reproduce the
+   relevant state in a disposable isolated runtime using the exact candidate.
+   Exercise the supported rejoin path with the original test-owned capability.
+   Preserve process, target, and handle identity; verify cleanup. Never borrow
+   production capabilities or mutate a consumer browser for simulation.
 2. If blocked, reproduce the exact failed transition and join requested profile,
    physical profile, lease, live owner, and principal evidence into one causal
    explanation before changing code. Ordinary shared-local self-identification
@@ -131,7 +135,8 @@ A synthetic client cannot substitute for this consumer result.
    unattended acceptance in the existing dependency order.
 
 The operator authorized the proposed additional 30-minute round to establish
-consumer recovery or a reproduced causal defect. Count diagnosis, validation,
+consumer recovery or a reproduced causal defect, then explicitly directed using
+simulation to avoid interrupting ongoing consumer work. Count diagnosis, validation,
 waiting, and documentation within it. RUNBOOK.md records its exact start and
 end. Retain the approximately 12 hours already reported; no successor resets
 that effort. An inconclusive round does not automatically trigger a rebuild,
