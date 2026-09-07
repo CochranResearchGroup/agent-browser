@@ -3124,3 +3124,9 @@ If user isolation hides the route UID, the service uses a bounded read-only
 namespace-neutral socket observation tied to the same peer PID and process start.
 An overflow UID is never accepted as owner proof. Helper failure remains unproved;
 inspect `namespaceObservationError` without disabling runtime isolation.
+
+Display access grants use the existing restricted privileged helper through a
+separate bounded supervised unit; do not disable the browser runtime sandbox.
+For `display_access_grant_failed` or `display_access_grant_timeout`, follow
+`inspect_privileged_display_grant` and the returned bounded stderr. Reservation
+rollback does not prove a timed-out X access grant had no effect.

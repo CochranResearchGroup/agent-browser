@@ -117,6 +117,33 @@ pub(crate) fn child_access_failure_evidence(failure: &ServiceFailureRecourse) ->
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     for code in [
+        "display_access_grant_failed",
+        "display_access_grant_timeout",
+    ] {
+        if error.split(':').next() == Some(code) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::Presentation,
+                phase: ServiceFailurePhase::LaunchAdmission,
+                // A helper timeout may follow a completed X access grant even
+                // when browser launch and reservation rollback never progressed.
+                effect_state: ServiceEffectState::EffectUncertain,
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "inspect_privileged_display_grant".to_string(),
+                safe_next_actions: vec![
+                    "inspect_service_trace".to_string(),
+                    "inspect_privileged_display_grant".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "disable_runtime_isolation".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
+    for code in [
         "route_display_owner_unproven",
         "route_display_owner_mismatch",
         "route_display_server_unavailable",
@@ -746,6 +773,23 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn display_grant_cause_survives_browser_reservation_rollback_metadata() {
+        for code in [
+            "display_access_grant_failed",
+            "display_access_grant_timeout",
+        ] {
+            let result = classify_service_failure(&format!("{code}: helper stderr; route_bound_blocker_code=display_access_failed; route_bound_compensation_state=rolled_back"));
+            assert_eq!(result.code, code);
+            assert_eq!(result.phase, ServiceFailurePhase::LaunchAdmission);
+            assert_eq!(result.effect_state, ServiceEffectState::EffectUncertain);
+            assert_eq!(
+                result.recommended_action,
+                "inspect_privileged_display_grant"
+            );
+        }
+    }
 
     #[test]
     fn retained_recovery_failures_keep_guard_and_attachment_certainty_distinct() {

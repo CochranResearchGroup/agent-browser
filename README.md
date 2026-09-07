@@ -3989,7 +3989,11 @@ Inspect the returned failure correlation ID and repair the route/display binding
 before retrying. When user isolation hides the route account UID, a bounded
 read-only helper observes socket ownership outside that namespace. Its peer PID
 and process start time must match the local observation; UID65534 is not ownership
-proof. Runtime isolation remains enabled.
+proof. Runtime isolation remains enabled. If X access must be granted, the existing
+sudoers-restricted helper runs in a separate bounded user-manager unit. Grant
+failures retain up to 1024 characters of stderr and direct callers to
+`inspect_privileged_display_grant`. A timeout leaves grant effects uncertain even
+when the browser reservation rolls back.
 Lease metadata from an older valid handle is checked against the current tab and
 session records. A runtime name is accepted as an alias only when it matches the
 current profile's configured directory hint. Retained-browser requests also accept

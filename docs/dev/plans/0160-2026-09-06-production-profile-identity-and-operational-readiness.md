@@ -2311,3 +2311,56 @@ operation, while keeping runtime isolation enabled. Retain bounded causal stderr
 and namespace/elevation evidence. Qualify the real grant path and its failure
 recourse, then resume operator acceptance and all remaining A1–A4/AX requirements.
 Automatic inactive-allocation recovery remains separately unresolved.
+
+
+## Checkpoint 41: supervised display grant repair and bounded causal errors
+
+state_transition: Implemented supervised restricted-helper grant transport and
+proved its real display access effect while the caller retains isolation.
+
+acceptance_state: Source checks and scoped operational grant proof pass; candidate
+build/publication and complete operator journey remain pending. A1–A4/AX remain open.
+
+progress_classification: blocker_reduction
+
+Linux display grants now run the existing sudoers-restricted privileged helper in
+a generated user-manager unit outside the caller's user/temp namespace and
+NoNewPrivileges restriction. The browser runtime stays isolated. The grant keeps
+its two-second timeout, the supervised unit has a four-second lifetime plus
+one-second stop limit, and an outer six-second timeout bounds the transport.
+The unit uses control-group termination. No sudoers policy or root helper
+capability changed; existing exact user/display validation remains in force.
+
+Grant stderr is retained in the returned error, stripped of unsafe control
+characters and limited to 1024 characters. Classification preserves
+ display_access_grant_failed or display_access_grant_timeout at launch admission
+with inspect_privileged_display_grant recourse, ahead of generic reservation
+rollback classification. Grant effects remain uncertain on failure because an X
+access grant may finish before a timeout even when no browser was launched.
+
+All 118 selected remote-view and failure-classification tests passed. The added
+checks cover bounded diagnostics and retention of the original grant cause and
+uncertainty despite browser rollback metadata. Workspace Clippy and format check
+passed; all five user-facing/source documentation surfaces were updated.
+
+A nested read-only status probe first demonstrated that the restricted helper can
+run through this supervised boundary while its caller has PrivateUsers, PrivateTmp
+and NoNewPrivileges enabled. A subsequent guarded operational probe invoked the
+same command recipe for production route3 only, after fresh kernel UID/PID/start
+proof for its X server and an available-route check. The exact grant to operator
+ecochran76 on :14 succeeded. A fresh equally isolated xdpyinfo probe then succeeded
+on :14. The X-server process instance was preserved. These probes did not launch
+a browser, change a development display, or disable runtime isolation. This is a
+scoped environment repair plus transport proof, not yet a native-candidate cold
+grant-path acceptance claim. Installed production binary is unchanged in this slice.
+
+Private command intent, stdout/stderr, readback and hashes are retained at
+campaigns/p160/display-grant-repair/validation.json. No prior failed attempt or
+acceptance receipt was overwritten.
+
+next_action_or_stop_reason: Build and qualify the native candidate, retain the
+supervised grant proof, and publish with original custody preservation. The now
+repaired production display permits a separately recorded operator attempt using
+the existing empty r2 profile. Complete that journey, automatic inactive-allocation
+recovery, original-consumer acceptance, doctor/monitor readiness and the full AX
+matrix on the final accepted installed candidate.

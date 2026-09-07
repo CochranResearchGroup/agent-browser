@@ -144,6 +144,13 @@ fn test_remote_view_display_access_grant_timeout_is_typed() {
     );
     assert!(failed_error.contains("helper exited with 1"));
     assert!(failed_error.contains("sudo failed"));
+    let bounded =
+        remote_view_display_access_grant_error("guacamole:1", ":11", 1, &"x".repeat(8192));
+    assert!(bounded.len() < 1200);
+    assert!(
+        !remote_view_display_access_grant_error("guacamole:1", ":11", 1, "bad\u{001b}output")
+            .contains('\u{001b}')
+    );
 }
 #[test]
 fn test_remote_view_helper_status_contract_accepts_current_capabilities() {
