@@ -3227,3 +3227,35 @@ Next: build the consolidated candidate and compare its no-launch resource
 projection with the installed command against current production evidence.
 Unproven foreign processes, stale monitoring, the consumer's original connection
 and remaining A4/AX gates still require their own disposition and acceptance.
+
+### Live descendant projection and unexpected read-command persistence
+
+state_transition: Live candidate projection passed; file-access audit found a separate read-command write defect.
+acceptance_state: Publication held for diagnosis of unintended Service persistence; full plan remains open.
+progress_classification: progress
+
+The committed ed4552c3 optimized candidate built in 2m 23s, SHA256
+4b834895733bcb36cf1157b7cb9cc38188871396819df0be36488678e2d34797.
+The four browser-session-authority tests also passed. Comparing the installed
+and candidate resource commands proved that the same retained Default children
+change from observed agent-browser processes to protected browser descendants
+with the exact retained browser correlation and no GC action. Observed process
+identities remained unchanged. Both commands reported zero cleanup candidates;
+candidate observed RSS remained approximately 6.82 GB, so pressure was not cleared.
+
+The comparison's Service evidence hashes changed. A subsequent syscall trace
+of the candidate command confirmed writes by that command itself: temporary
+Service State, handoff, presentation, owner and lifecycle files plus transaction
+publication and renames. Thirteen potential Service write operations excluding
+the lock file were captured. The classifier result is valid, but the command
+cannot be accepted as read-only. This observation does not establish whether
+the unintended persistence predates the descendant repair, nor which state
+fields changed during the first comparison.
+
+Private evidence under retained-tree-proof now separates descendantProjectionPassed
+from the failed readOnlyComparisonPassed assertion. The original comparison
+receipt is retained as readback-before-file-access-audit.json; the correction,
+candidate-resource-file-access.trace and file-access-readback.json are preserved.
+The candidate has not been installed. Next: diagnose and remove the unintended
+write path for the read command, verify that caller and owner state are preserved,
+then resume consolidated qualification and the remaining A1/A3/A4/AX work.
