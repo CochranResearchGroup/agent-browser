@@ -119,7 +119,7 @@ fn producer_census(snapshot_ms: u128) -> Result<Value, String> {
         let cgroup = fs::read_to_string(proc.join("cgroup"))
             .map_err(|_| "legacy_connection_producer_unit_unknown")?;
         let unit = cgroup
-            .split('/')
+            .rsplit('/')
             .find(|part| part.trim().ends_with(".service"))
             .ok_or("legacy_connection_producer_unit_unknown")?
             .trim();
@@ -148,7 +148,7 @@ fn producer_census(snapshot_ms: u128) -> Result<Value, String> {
             != Some(pid)
             || properties.get("ActiveState") != Some(&"active")
         {
-            return Err("legacy_connection_producer_unit_mismatch".into());
+            return Err(format!("legacy_connection_producer_unit_mismatch: pid={pid} unit={unit} mainPid={:?} activeState={:?}",properties.get("MainPID"),properties.get("ActiveState")));
         }
         let timestamp = properties
             .get("ExecMainStartTimestamp")
