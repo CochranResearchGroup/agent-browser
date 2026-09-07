@@ -39,13 +39,28 @@ pub(crate) fn browser_display_owner(
             .find_map(|key| super::route_pool_target_string(entry, key));
         return route_display_owner(browser.display_name.as_deref(), user.as_deref());
     }
-    // A standalone private display has no provider route. Its socket must still
-    // belong to this runtime's OS account. Route-bound allocations cannot use
-    // this fallback when their provider identity is missing or ambiguous.
+    // A standalone private display can have a service allocation without a
+    // provider route. Require that allocation to name this browser and display,
+    // then verify the socket belongs to this runtime's OS account. An unresolved
+    // provider route must never fall back to the runtime account.
     #[cfg(target_os = "linux")]
     if entries.is_empty()
-        && browser.display_allocation_id.is_none()
         && browser.display_isolation.as_deref() == Some("private_virtual_display")
+        && !state.remote_view_routes.values().any(|route| {
+            route.browser_id.as_deref() == Some(browser.id.as_str())
+                || (browser.display_allocation_id.is_some()
+                    && route.display_allocation_id == browser.display_allocation_id)
+        })
+        && browser.display_allocation_id.as_ref().is_none_or(|id| {
+            state.display_allocations.get(id).is_some_and(|allocation| {
+                allocation.id == *id
+                    && allocation.owner_browser_id.as_deref() == Some(browser.id.as_str())
+                    && allocation.display_name == browser.display_name
+                    && allocation.display_isolation == "private_virtual_display"
+                    && allocation.route_ids.is_empty()
+                    && allocation.state == "ready"
+            })
+        })
     {
         // SAFETY: geteuid has no pointer arguments or preconditions.
         return linux::observe(
@@ -195,6 +210,57 @@ mod linux {
                 observe(Some("remote.example:10"), Some(uid))["verified"],
                 false
             );
+        }
+
+        #[test]
+        fn private_allocation_requires_exact_browser_binding_and_no_provider_route() {
+            use crate::native::service_model::{
+                BrowserProcess, DisplayAllocation, RemoteViewRoute, ServiceState,
+            };
+            let number = uuid::Uuid::new_v4().as_u128() as u32;
+            let display = format!(":{number}");
+            let address =
+                SocketAddr::from_abstract_name(format!("/tmp/.X11-unix/X{number}")).unwrap();
+            let _listener = UnixListener::bind_addr(&address).unwrap();
+            let browser = BrowserProcess {
+                id: "browser-private".into(),
+                host: crate::native::service_model::BrowserHost::RemoteHeaded,
+                display_name: Some(display.clone()),
+                display_isolation: Some("private_virtual_display".into()),
+                display_allocation_id: Some("private-allocation".into()),
+                ..Default::default()
+            };
+            let mut state = ServiceState::default();
+            let allocation = DisplayAllocation {
+                id: "private-allocation".into(),
+                display_name: Some(display),
+                owner_browser_id: Some(browser.id.clone()),
+                state: "ready".into(),
+                ..Default::default()
+            };
+            state
+                .display_allocations
+                .insert(allocation.id.clone(), allocation.clone());
+            assert_eq!(browser_display_owner(&state, &browser)["verified"], true);
+            state
+                .display_allocations
+                .get_mut(&allocation.id)
+                .unwrap()
+                .owner_browser_id = Some("foreign".into());
+            assert_eq!(browser_display_owner(&state, &browser)["verified"], false);
+            state
+                .display_allocations
+                .insert(allocation.id.clone(), allocation);
+            state.remote_view_routes.insert(
+                "unresolved-provider".into(),
+                RemoteViewRoute {
+                    id: "unresolved-provider".into(),
+                    browser_id: Some(browser.id.clone()),
+                    display_allocation_id: browser.display_allocation_id.clone(),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(browser_display_owner(&state, &browser)["verified"], false);
         }
     }
 }

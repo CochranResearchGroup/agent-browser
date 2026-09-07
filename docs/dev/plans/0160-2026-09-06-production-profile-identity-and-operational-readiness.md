@@ -2014,3 +2014,41 @@ real preflight/launch boundary in isolation. Reconcile production route3 with it
 own live X server through the supported provider workflow before another browser
 launch. Qualify and install the resulting production candidate under standing
 authority, then resume the original consumer and all remaining A1–A4/AX gates.
+
+
+## Checkpoint 35: live display boundary and private-allocation regression
+
+state_transition: Candidate 621b8db8 passed isolated route-owner admission, but
+real remote-headed continuity exposed a private-allocation attestation regression.
+
+acceptance_state: Repair passes focused source checks; rebuilt browser validation
+and production publication remain pending. A1–A4 and AX remain open.
+
+progress_classification: blocker_reduction
+
+The optimized candidate's full Rust suite passed. The isolated boundary fixture
+at campaigns/p160/display-owner-boundary-49RTCg proved matching-owner display
+preflight ready, wrong-owner preflight blocked, and actual wrong-owner open denied
+before any browser or tab existed. Earlier setup failures remain retained.
+
+The remote-headed fixture a1-terminal-reopen-zgVHUg then failed before continuity:
+its own live private X server matched the runtime UID, but complete attestation
+was false because the browser carried a valid private display allocation ID.
+The initial proof incorrectly required that ID to be absent. The fixture released
+its own tab and stopped its host. Exact fixture process inspection found no
+remaining owned process to signal.
+
+The correction accepts an allocation only when it names the same browser and
+display, is ready and private, and has no provider routes. Any associated remote
+route, including one missing from the route pool, prevents fallback to the runtime
+account. Kernel socket ownership remains required. A provider-free regression
+failed on 621b8db8 with observed false versus expected true, then passed after
+repair, also rejecting foreign browser ownership and an unresolved provider route.
+All nine focused display-owner and diagnostics tests and workspace Clippy passed.
+Logs and hashes are retained at campaigns/p160/display-owner-repair/private-allocation.
+
+next_action_or_stop_reason: Qualify the rebuilt candidate against real private
+remote-headed continuity and wrong-owner admission, then reconcile the production
+route display and publish under standing authority. The original consumer's own
+connection acceptance, physical tab safety, operator journey, installed doctor,
+monitor continuity and complete causal error matrix remain required.
