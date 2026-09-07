@@ -181,7 +181,18 @@ managed-launch lifecycle record matching the current boot, owner generation and
 process. `ownerCustody` reports the basis and individual launch checks without
 inventing a handoff. The current profile's configured runtime name is an accepted
 alias for its catalog ID. Retained-browser routing also accepts this alias only
-when current-owner selection, physical directory and endpoint evidence agree. Fail closed when `complete` is false or `missingProofs`
+when current-owner selection, physical directory and endpoint evidence agree.
+Requests targeting an existing session without a profile selector inherit the
+verified owner's profile ahead of host startup defaults. Every explicit profile
+selector, including one in `params`, must agree with that owner. Background
+reconciliation preserves tab ownership and grants changed after its probe began.
+Navigation updates page metadata without replacing child custody. Native
+commands supplied with a tab handle validate current child permission and select
+its exact target before navigation or input.
+`service_tab_target_selector_conflict` rejects contradictory target selectors.
+`explicit_profile_conflicts_with_current_owner` reports a refusal before effects
+with the conflicting field and source location; compare the requested profile
+with the current owner before retrying. Fail closed when `complete` is false or `missingProofs`
 is nonempty.
 
 Use service request `action: "network_capture"` when a client needs capped

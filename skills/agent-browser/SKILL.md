@@ -1250,7 +1250,14 @@ conflicts and checks current child close permission. `closed` is an index;
 For retained-browser requests, `runtimeProfile` may identify the configured
 catalog ID or its exact runtime name. The service requires current-owner,
 physical-directory and endpoint agreement before accepting that alias. An
-unrelated selector or mismatched browser remains denied.
+unrelated selector or mismatched browser remains denied. A session-only request
+inherits the verified current owner's profile ahead of host startup defaults;
+you do not need to repeat its profile selector. Explicit top-level and nested
+selectors must agree with that owner. Background reconciliation preserves newer
+tab ownership and grants while refreshing browser observations. Navigation
+preserves existing child custody. Supply the owned handle for native navigation
+and input too: the service validates current child permission and selects that
+exact target. Conflicting target selectors are rejected before input.
 After detached manual seeding closes, verify the profile through the service
 control plane rather than editing profile JSON. Use
 `agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`

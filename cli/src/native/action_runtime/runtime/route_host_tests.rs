@@ -660,6 +660,32 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
         Some(profile_id)
     );
 
+    let mut session_only_options = LaunchOptions {
+        runtime_profile: Some("obsolete-lane-default".to_string()),
+        profile: Some(home.join("unrelated-startup-profile").display().to_string()),
+        ..LaunchOptions::default()
+    };
+    let session_only_selection = apply_service_profile_selection(
+        &mut session_only_options,
+        &json!({
+            "action": "tab_switch",
+            "sessionName": session_id,
+            "serviceName": "OdolloFulfillment",
+            "params": { "index": 1 }
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(
+        session_only_selection,
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+    assert_eq!(
+        session_only_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+    assert_eq!(session_only_options.profile.as_deref(), Some(profile_hint));
+
     let mut focus_options = LaunchOptions {
         runtime_profile: Some("obsolete-lane-default".to_string()),
         ..LaunchOptions::default()
@@ -850,12 +876,43 @@ fn test_existing_session_rejects_explicit_profile_conflict() {
 
     let error = apply_service_profile_selection(
         &mut options,
-        &json!({ "action": "launch", "serviceName": "BooksReceipts" }),
+        &json!({ "action": "launch", "serviceName": "BooksReceipts", "runtimeProfile": "default" }),
         Some("books-receipts"),
     )
     .unwrap_err();
 
-    assert_eq!(error, "explicit_profile_conflicts_with_current_owner");
+    assert!(error.starts_with("explicit_profile_conflicts_with_current_owner:"));
+    assert!(error.contains("field=runtimeProfile"));
+    assert!(error.contains(
+        "source=native/action_runtime/runtime/daemon.rs::apply_existing_session_profile_selection"
+    ));
+    let recourse = crate::native::service_failure::classify_service_failure(&error);
+    assert_eq!(
+        recourse.effect_state,
+        crate::native::service_failure::ServiceEffectState::NoEffect
+    );
+    assert_eq!(
+        recourse.phase,
+        crate::native::service_failure::ServiceFailurePhase::LaunchAdmission
+    );
+    for selectors in [
+        json!({"runtimeProfile": "books-bank", "params": {"profileId": "foreign"}}),
+        json!({"profileId": "books-bank", "params": {"runtimeProfile": "foreign"}}),
+        json!({"params": {"profile": "/unrelated-profile"}}),
+        json!({"profileId": ""}),
+        json!({"runtimeProfile": false}),
+    ] {
+        let mut command = selectors;
+        command["action"] = json!("tab_switch");
+        command["sessionName"] = json!("books-receipts");
+        let mut options = LaunchOptions::default();
+        let error = apply_service_profile_selection(&mut options, &command, Some("books-receipts"))
+            .unwrap_err();
+        assert!(
+            error.starts_with("explicit_profile_conflicts_with_current_owner:"),
+            "{error}"
+        );
+    }
 }
 
 #[test]

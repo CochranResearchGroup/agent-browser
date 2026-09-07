@@ -133,6 +133,60 @@ fn route_pool_error_diagnostic(result: &Value) -> Value {
 }
 
 #[test]
+fn navigation_observation_preserves_existing_child_custody() {
+    use crate::native::service_model::BrowserTab;
+    use crate::native::service_profile_access_policy::ProfileChildAccess;
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("navigation-child-custody");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let child = ProfileChildAccess {
+        subject_id: Some("original-client".into()),
+        connection_instance_id: Some("original-connection".into()),
+        ..ProfileChildAccess::default()
+    };
+    let mut snapshot = ServiceState::default();
+    snapshot.tabs.insert(
+        "target:owned".into(),
+        BrowserTab {
+            id: "target:owned".into(),
+            browser_id: "session:owned".into(),
+            target_id: Some("owned".into()),
+            owner_session_id: Some("owned".into()),
+            profile_access: Some(child.clone()),
+            work_lease_id: Some("original-lease".into()),
+            work_lease_revision: 7,
+            lifecycle: TabLifecycle::Ready,
+            ..BrowserTab::default()
+        },
+    );
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&snapshot).unwrap();
+    persist_service_owned_tab_new(
+        &json!({"action":"navigate", "serviceName":"P160"}),
+        "owned",
+        Some("owned"),
+        Some("about:blank#new"),
+        Some("New title"),
+        &serde_json::to_value(ServiceTabHandle {
+            browser_id: "session:owned".into(),
+            tab_id: "target:owned".into(),
+            target_id: Some("owned".into()),
+            ..ServiceTabHandle::default()
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let current = store.load().unwrap();
+    let tab = &current.tabs["target:owned"];
+    assert_eq!(tab.profile_access, Some(child));
+    assert_eq!(tab.work_lease_id.as_deref(), Some("original-lease"));
+    assert_eq!(tab.work_lease_revision, 7);
+    assert_eq!(tab.url.as_deref(), Some("about:blank#new"));
+    assert_eq!(tab.title.as_deref(), Some("New title"));
+}
+
+#[test]
 fn test_tab_handle_refresh_classifies_retained_candidates() {
     let ready_browser = BrowserProcess {
         id: "browser-ready".to_string(),

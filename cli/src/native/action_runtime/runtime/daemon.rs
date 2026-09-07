@@ -856,37 +856,36 @@ pub(crate) fn apply_existing_session_profile_selection(
             return Err("existing_session_profile_identity_inconsistent".to_string());
         }
     }
-    let exact_command_profile_overrides_inherited_default = command.get("runtimeProfile").is_none()
-        && command.get("profileId").is_none()
-        && optional_command_or_params_string(command, "profile")
-            .map(|requested_profile| {
-                resolved_service_profile_identity_path(Some(&requested_profile), profile_id)
-                    .and_then(|requested_path| {
-                        crate::runtime_profile::canonical_profile_identity_digest(&requested_path)
-                    })
-                    .is_ok_and(|requested_digest| requested_digest == profile_digest)
-            })
-            .unwrap_or(false);
-    // The configured runtime name and catalog ID select the same verified owner.
-    let retained_focus_uses_current_owner_profile = command.get("action").and_then(Value::as_str)
-        == Some("view_focus")
-        && command.get("runtimeProfile").is_none()
-        && command.get("profileId").is_none()
-        && optional_command_or_params_string(command, "profile").is_none();
-    if options.runtime_profile.as_deref().is_some_and(|requested| {
-        requested != profile_id && profile.user_data_dir.as_deref() != Some(requested)
-    }) && !exact_command_profile_overrides_inherited_default
-        && !retained_focus_uses_current_owner_profile
-    {
-        return Err("explicit_profile_conflicts_with_current_owner".to_string());
-    }
-    if let Some(requested_path) = options.profile.as_deref() {
-        let requested_path =
-            resolved_service_profile_identity_path(Some(requested_path), profile_id)?;
-        let requested_digest =
-            crate::runtime_profile::canonical_profile_identity_digest(&requested_path)?;
-        if requested_digest != binding.claim.profile_identity_digest {
-            return Err("explicit_profile_conflicts_with_current_owner".to_string());
+    // LaunchOptions also contains host startup defaults. Once the current owner
+    // proves this session's physical profile, only selectors on this request may
+    // conflict with that identity. Validate every field so a matching top-level
+    // selector cannot hide a conflicting nested one.
+    for fields in [Some(command), command.get("params")].into_iter().flatten() {
+        for field in ["runtimeProfile", "profileId", "profile"] {
+            let Some(value) = fields.get(field).filter(|value| !value.is_null()) else {
+                continue;
+            };
+            let matches = value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_some_and(|requested| {
+                    if field == "profile" {
+                        resolved_service_profile_identity_path(Some(requested), profile_id)
+                            .and_then(|path| {
+                                crate::runtime_profile::canonical_profile_identity_digest(&path)
+                            })
+                            .is_ok_and(|digest| digest == profile_digest)
+                    } else {
+                        requested == profile_id
+                            || profile.user_data_dir.as_deref() == Some(requested)
+                    }
+                });
+            if !matches {
+                return Err(format!(
+                    "explicit_profile_conflicts_with_current_owner: field={field}; expected=current_owner_profile; observed=conflicting_or_invalid_selector; source=native/action_runtime/runtime/daemon.rs::apply_existing_session_profile_selection"
+                ));
+            }
         }
     }
     (options.runtime_profile, options.profile) =

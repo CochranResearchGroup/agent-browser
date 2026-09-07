@@ -2007,7 +2007,12 @@ pub fn merge_reconciled_service_state(
     }
 
     for (id, reconciled_tab) in &reconciled.tabs {
-        target.tabs.insert(id.clone(), reconciled_tab.clone());
+        // CDP observations cannot overwrite custody granted or narrowed while
+        // the probe was in flight, nor resurrect a concurrently removed tab.
+        // Preserve the newer record; a subsequent probe can refresh its view.
+        if target.tabs.get(id) == before.tabs.get(id) {
+            target.tabs.insert(id.clone(), reconciled_tab.clone());
+        }
     }
     for id in before.tabs.keys() {
         if reconciled.tabs.contains_key(id) {
@@ -4056,6 +4061,53 @@ mod tests {
             Some(0)
         );
         let _ = fs::remove_dir_all(profile_root);
+    }
+
+    #[test]
+    fn reconciliation_cannot_erase_newer_tab_custody_or_resurrect_removed_tabs() {
+        use crate::native::service_profile_access_policy::ProfileChildAccess;
+        let tab = BrowserTab {
+            id: "target:owned".into(),
+            browser_id: "browser".into(),
+            target_id: Some("owned".into()),
+            lifecycle: TabLifecycle::Ready,
+            ..BrowserTab::default()
+        };
+        // A probe begins before the broker records its newly admitted child.
+        for already_observed in [false, true] {
+            let mut before = ServiceState::default();
+            if already_observed {
+                before.tabs.insert(tab.id.clone(), tab.clone());
+            }
+            let mut reconciled = before.clone();
+            let mut observed = tab.clone();
+            observed.title = Some("Observed title".into());
+            reconciled.tabs.insert(tab.id.clone(), observed.clone());
+            let mut current = before.clone();
+            let mut owned = tab.clone();
+            owned.profile_access = Some(ProfileChildAccess {
+                subject_id: Some("original-client".into()),
+                connection_instance_id: Some("original-connection".into()),
+                ..ProfileChildAccess::default()
+            });
+            owned.work_lease_id = Some("current-work-lease".into());
+            owned.work_lease_revision = 2;
+            current.tabs.insert(tab.id.clone(), owned.clone());
+            merge_reconciled_service_state(&mut current, &before, &reconciled);
+            assert_eq!(current.tabs[&tab.id].profile_access, owned.profile_access);
+            assert_eq!(current.tabs[&tab.id].work_lease_revision, 2);
+
+            let mut unchanged = before.clone();
+            merge_reconciled_service_state(&mut unchanged, &before, &reconciled);
+            assert_eq!(unchanged.tabs[&tab.id].title, observed.title);
+
+            if already_observed {
+                let mut removed = before.clone();
+                removed.tabs.remove(&tab.id);
+                merge_reconciled_service_state(&mut removed, &before, &reconciled);
+                assert!(!removed.tabs.contains_key(&tab.id));
+            }
+        }
     }
 
     #[test]

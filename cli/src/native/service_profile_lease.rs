@@ -2430,6 +2430,7 @@ mod tests {
 
     #[test]
     fn named_profile_registration_and_lease_projection_use_launch_identity() {
+        let _guard = EnvGuard::new(&["HOME"]);
         let (mut state, authority, _) = state_with_lease();
         let profile_id = authority.profile_id.clone();
         let profile = state.profiles.get_mut(&profile_id).unwrap();

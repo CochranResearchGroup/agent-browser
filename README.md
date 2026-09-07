@@ -3979,7 +3979,14 @@ Lease metadata from an older valid handle is checked against the current tab and
 session records. A runtime name is accepted as an alias only when it matches the
 current profile's configured directory hint. Retained-browser requests also accept
 that configured runtime name or its catalog ID, provided current-owner selection,
-physical directory and browser endpoint evidence agree. Released, foreign or
+physical directory and browser endpoint evidence agree. A request targeting an
+existing session without a profile selector inherits that verified owner's
+profile, ahead of host startup defaults. Explicit selectors, including nested
+fields, must still agree with the current owner. Background reconciliation
+preserves tab ownership and grants changed after its probe began. Navigation
+updates page metadata without replacing child custody. Native commands supplied
+with a tab handle validate its current child permission and select its exact
+target before navigation or input; conflicting target selectors are rejected. Released, foreign or
 conflicting identities remain denied. `service_tab_profile_selector_conflict`
 identifies an explicit selector that disagrees with the current handle, including
 one supplied in `params`; compare that field with the current profile before retrying. Use

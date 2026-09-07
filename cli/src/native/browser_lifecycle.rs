@@ -75,22 +75,35 @@ pub(crate) mod action_commands {
         let agent_name = optional_command_string(cmd, "agentName");
         let task_name = optional_command_string(cmd, "taskName");
         repository.mutate(|state| {
-            state.tabs.insert(
-                tab_id.clone(),
-                BrowserTab {
-                    id: tab_id.clone(),
-                    browser_id: browser_id.clone(),
-                    target_id: Some(target_id.to_string()),
-                    session_id: Some(session_id.to_string()),
-                    lifecycle: TabLifecycle::Ready,
-                    url: url.map(str::to_string),
-                    title: title.filter(|value| !value.is_empty()).map(str::to_string),
-                    owner_session_id: Some(session_id.to_string()),
-                    profile_access: handle.profile_access.clone(),
-                    service_tab_handle: Some(handle.clone()),
-                    ..BrowserTab::default()
-                },
-            );
+            if cmd.get("action").and_then(Value::as_str) == Some("navigate")
+                && state.tabs.contains_key(&tab_id)
+            {
+                // Navigation observes an existing child; it does not issue a
+                // new grant. Preserve the current custody and lease metadata.
+                let tab = state.tabs.get_mut(&tab_id).expect("existing tab");
+                if tab.browser_id != browser_id || tab.target_id.as_deref() != Some(target_id) {
+                    return Err("service_navigation_tab_identity_conflict".to_string());
+                }
+                tab.url = url.map(str::to_string);
+                tab.title = title.filter(|value| !value.is_empty()).map(str::to_string);
+            } else {
+                state.tabs.insert(
+                    tab_id.clone(),
+                    BrowserTab {
+                        id: tab_id.clone(),
+                        browser_id: browser_id.clone(),
+                        target_id: Some(target_id.to_string()),
+                        session_id: Some(session_id.to_string()),
+                        lifecycle: TabLifecycle::Ready,
+                        url: url.map(str::to_string),
+                        title: title.filter(|value| !value.is_empty()).map(str::to_string),
+                        owner_session_id: Some(session_id.to_string()),
+                        profile_access: handle.profile_access.clone(),
+                        service_tab_handle: Some(handle.clone()),
+                        ..BrowserTab::default()
+                    },
+                );
+            }
             if let Some(session) = state.sessions.get_mut(session_id) {
                 if !session.tab_ids.contains(&tab_id) {
                     session.tab_ids.push(tab_id.clone());

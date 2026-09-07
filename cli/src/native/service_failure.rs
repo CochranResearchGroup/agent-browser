@@ -83,11 +83,32 @@ pub struct ServiceFailureRecourse {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if error.split(':').next() == Some("explicit_profile_conflicts_with_current_owner") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "explicit_profile_conflicts_with_current_owner".to_string(),
+            axis: ServiceFailureAxis::ProfileLease,
+            phase: ServiceFailurePhase::LaunchAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "compare_requested_profile_to_current_owner".to_string(),
+            safe_next_actions: vec![
+                "inspect_service_trace".to_string(),
+                "compare_requested_profile_to_current_owner".to_string(),
+            ],
+            hard_stops: vec![
+                "blind_retry".to_string(),
+                "launch_duplicate_profile_lane".to_string(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if let Some((code, _)) = error.split_once(':') {
         if matches!(
             code,
             "tab_close_invalid_selector"
                 | "service_tab_profile_selector_conflict"
+                | "service_tab_target_selector_conflict"
                 | "tab_close_selector_conflict"
                 | "tab_close_target_unproven"
                 | "tab_close_target_missing"
@@ -118,6 +139,8 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                     "inspect_service_trace".to_string(),
                     if code == "service_tab_profile_selector_conflict" {
                         "compare_requested_profile_to_current_owner"
+                    } else if code == "service_tab_target_selector_conflict" {
+                        "compare_requested_target_to_current_handle"
                     } else {
                         "inspect_exact_target_cleanup"
                     }

@@ -1098,3 +1098,87 @@ operator journey, doctor readiness and scheduled cycles remain required.
 
 next_action_or_stop_reason: Freeze and qualify the full release binary, publish
 under standing authority, and continue the remaining frozen acceptance rows.
+
+## Checkpoint 19: session inference and native child custody
+
+state_transition: W1 session-only reproduction to repaired isolated control
+
+acceptance_state: A1–A4 and AX remain incomplete
+
+progress_classification: blocker_reduction
+
+A session-only tab switch reproduced explicit_profile_conflicts_with_current_owner
+because owner selection compared the host's inherited startup default with the
+session's verified profile. Selection now checks explicit request selectors,
+including every nested field, while inheriting the exact current owner when no
+selector is supplied. Conflicts report the field, source function and no_effect
+recourse. The focused regression failed before repair. The 94 routing tests and
+14 recourse tests pass. Fixture session-only-check-XGOgjL passes session-only
+control, exact cleanup, retained release, original peer control, complete
+attestation, and session-only/catalog/runtime-alias control after restart.
+Its ledger SHA256 is
+afb28b1666da029caf53cc7512654502c000eb1285cb68c6a52351976f27e518.
+
+The expanded navigation/input workflow exposed two additional blockers:
+
+- persist_service_owned_navigate_tab used the new-tab writer with no newly
+  issued child grant. That overwrote the existing tab's profileAccess with null.
+  Navigation now preserves existing custody and lease metadata while updating
+  page observations. The original handle remains usable after navigation.
+- Raw native fill accepted another registered client's handle and changed that
+  client's synthetic input. Fixture a1-raw-input-664nE9 records the successful
+  forbidden request and both clients' independent readback. Native commands
+  carrying handles now validate current child permission, select the exact
+  authorized target, reject conflicting selectors and avoid auto-launch around
+  a refusal. Specialized handle actions retain their existing checks.
+
+A separate reconciliation race also reproduced in a unit test: an async probe
+could replace a newer tab grant or resurrect a removed tab. Tab merge now applies
+an observation only if the current record still matches the probe's starting
+snapshot. This race repair alone did not fix navigation: live attempt
+a1-operational-Ig2J5F still failed, which led to the navigation writer diagnosis.
+The first race-test invocation had a test-fixture type error; the corrected test
+then failed on the actual erased grant before the fix. All 69 service-health
+tests and 21 tab-lifecycle tests now pass. These results are separate from the
+live navigation root cause, not an attribution of that failure to the race.
+
+Final optimized candidate SHA256:
+2f014ee7fc20b70a8959a582651b59553718b036aacaaefd83fe84d103ca18ea.
+Its full source patch and binary are retained privately. Two independent
+registered clients with named and custom-directory profiles each navigate to a
+synthetic page, fill a field, click a button and verify the result before and
+after one exact disposable host interruption. Both original handle objects and
+both original browser process identities survive. Cross-client evaluate and
+raw fill are denied; field readback proves no foreign input effect.
+
+Headless fixture a1-operational-Dc2M4z ledger SHA256:
+1070507403b047a28d4e1f8673d00fce00eb4035a782a4342341d369976f8111.
+Remote-headed fixture a1-operational-uGQtdX ledger SHA256:
+9cfa26c5b9baa00857a5cd67e0596307319236ea22b6f2907c80716f6d4aa471.
+Both pass. Own-handle releases succeed; exact residue cleanup reports zero
+remaining processes, including two headed-fixture helpers removed by pidfd.
+All failed fixtures are retained and their exact cleanup is complete. Earlier
+working candidates are identified by digest and working-source label, not a
+frozen commit; their saved probe receipts do not claim an archived binary.
+
+Workspace Clippy, formatting, docs build, route-confusion gates and remote-view
+handoff documentation checks pass. The first full Rust run passed the CDP tests
+but failed the parallel CLI partition: 2006 passed, one named-profile identity
+test failed, 57 ignored. That regression read HOME without an environment guard
+while tests in its module changed HOME. The module was absent from the serial
+partition list. It now runs in that existing serial lane, and the regression
+holds the environment guard. The first failure is retained; the corrected full
+suite is running. Private validation artifacts, the source patch and a manifest
+are under campaigns/p160/session-native-custody-validation; fixture manifests
+bind each ledger, probe source and saved state. No production publication or
+consumer business input occurred in this checkpoint.
+
+material_blockers: Whole A1 still needs terminal browser close/reopen and final
+installed qualification. Raw commands without handles need explicit ownership
+coverage. AX causal reconstruction, the A2 authenticated external operator
+journey, A3 supported upgrade/doctor readiness and A4 scheduled cycles remain.
+
+next_action_or_stop_reason: Finish the running full Rust suite, freeze the
+validated source and qualify the release binary. Continue the named remaining
+A1 cases before final installed acceptance; do not treat successful synthetic
+input as full operational readiness or retry business payment work here.

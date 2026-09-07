@@ -67,6 +67,7 @@ serial_filters=(
   "native::policy::tests"
   "native::providers::tests"
   "native::service_health::tests"
+  "native::service_profile_lease::tests"
   "native::service_renderer_crash::tests"
   "runtime_profile::tests"
 )

@@ -639,7 +639,54 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         }
         return response;
     }
+    let native_handle_command =
+        !action_skips_browser_launch(action) && cmd.get("serviceTabHandle").is_some();
+    if native_handle_command {
+        // A supplied child handle is an exact authority and target boundary for
+        // ordinary native commands too. Never auto-launch around its refusal.
+        if let Err(error) =
+            crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await
+        {
+            return error_response(&id, &error);
+        }
+        let Some(target_id) = cmd["serviceTabHandle"]["targetId"].as_str() else {
+            return error_response(
+                &id,
+                "service_tab_target_selector_conflict: missing handle targetId",
+            );
+        };
+        let conflicting_target = cmd
+            .get("targetId")
+            .is_some_and(|value| value.as_str() != Some(target_id))
+            || cmd.get("tabId").is_some_and(|value| {
+                value.as_str() != Some(format!("target:{target_id}").as_str())
+            });
+        if conflicting_target {
+            return error_response(&id, "service_tab_target_selector_conflict: explicit target differs from authorized handle");
+        }
+        if let Some(manager) = state.browser.as_mut() {
+            if action == "tab_switch" {
+                let requested = cmd
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .and_then(|index| usize::try_from(index).ok())
+                    .and_then(|index| {
+                        manager
+                            .pages_list()
+                            .get(index)
+                            .map(|page| page.target_id.clone())
+                    });
+                if requested.as_deref() != Some(target_id) {
+                    return error_response(&id, "service_tab_target_selector_conflict: index differs from authorized handle");
+                }
+            }
+            if let Err(error) = manager.tab_switch_target_id(target_id).await {
+                return error_response(&id, &error);
+            }
+        }
+    }
     let skip_launch = action_skips_browser_launch(action)
+        || native_handle_command
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
     if !skip_launch {
         if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
