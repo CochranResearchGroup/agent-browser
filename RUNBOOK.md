@@ -4,25 +4,25 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 228 | 2026-09-07
+## Turn 229 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Progress: reproduced capacity ownership loss in the existing production inventory
-recovery test by invoking the actual reconciliation transition before recovery.
-The test failed before repair. Source `c0201044` preserves an admitted orphaned
-slot only when browser, session, route and display custody still agree, without
-promoting presentation readiness. Foreign-browser recovery remains denied and
-released routes still free capacity. All 57 selected presentation tests passed;
-the extended regression, format and workspace Clippy also passed.
-The previous private-copy Service Status attempt failed at `d682ae6c`: its route
-retained the browser while its capacity slot became idle and unbound. Preserve
-that failure. Optimized `c0201044` passed the same isolated Service Status replay:
-`production-inventory/isolated-readback-g51y46lj` retains the original browser
-binding in an active slot while route and display remain orphaned. Reattach
-and the original durable URL remain untested with this candidate.
-The bounded successor completed one build and one isolated replay. Cumulative
-effort: two optimized builds, three readbacks. Production remains on dfbcd2aa.
-Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
+Progress: `c0201044` preserved the original capacity browser binding through
+reconciliation in `production-inventory/isolated-readback-g51y46lj`, without
+promoting orphaned route/display readiness. A subsequent missing-inventory replay
+returned successful Service Status with an empty browser inventory after the
+store load failed: `production-inventory/isolated-readback-4ua58d3l`.
+Source `d22ed31d` contains inventory failures: Service State retains custody and
+exposes `presentationCapacity.admissionError`; admitted capacity becomes zero.
+New presentation requests/transitions are fenced until successful requalification.
+All five user-facing docs and the plan are updated. Validation passed: 30 store
+and 57 presentation tests, service-client checks, format and workspace Clippy.
+Exact release `d46cf77f8f36` passed valid/missing/restored inventory readbacks in
+`production-inventory/isolated-readback-nc0brlld`, preserving six browser records.
+The first sequence failed a fixture assertion about unpersisted capacity; one
+corrected replay passed. Evidence and binary are in `publication-d22ed31d/`.
+Production remains on dfbcd2aa; guarded installation preparation is next.
+Reattach and the original durable URL remain unaccepted. Full A1–A4/AX is OPEN.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
