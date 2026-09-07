@@ -107,8 +107,7 @@ fn recovery_profile_identity_digest(profile: &BrowserProfile) -> Result<String, 
         .user_data_dir
         .as_deref()
         .ok_or_else(|| "profile_recovery_identity_unavailable".to_string())?;
-    let resolved = crate::runtime_profile::resolve_profile(Some(profile_hint), Some(&profile.id))?;
-    crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir)
+    crate::runtime_profile::resolved_profile_identity_digest(profile_hint, &profile.id)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

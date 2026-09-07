@@ -937,3 +937,24 @@ next_action_or_stop_reason: Repair the lease/handle attestation contract and
 registration's canonical profile identity, then qualify and publish the combined
 candidate under existing authority. Continue full A1/AX and A2–A4 acceptance;
 do not bypass the consumer's identity gate or claim Plan 0160 complete.
+
+## Checkpoint 15: named-profile identity reconciliation
+
+Integrated consumer contribution 3cb446bd2f3906c7cf58bcbec15caf23d3bd3813
+through the primary Plan0160 branch. Registration, rotation, unbound lease
+projection and recovery now resolve profile names through the same resolver as
+browser acquisition before hashing the physical directory. An independently
+written regression failed on the prior implementation with different digests
+for one named profile, then passed with the contribution. All 25 profile-lease
+tests passed, including guarded rejoin with an existing capability and denial
+of a conflicting foreign principal. Workspace Clippy passed. Evidence logs:
+/tmp/p160-r2-profile-identity-red.log, /tmp/p160-named-profile-lease-green.log
+and /tmp/p160-named-profile-clippy.log. These are local source qualification;
+production publication and consumer readback remain outstanding.
+
+The separate diagnostics repair remains in progress: the caller handle carries
+older lease metadata, while the current snapshot derives an exclusive lease.
+The current owner has no transfer receipt; its separately persisted lifecycle
+record carries Ready/Owned custody and a package-launch identity digest. The
+repair must verify that custody against the exact owner generation and process,
+without manufacturing a handoff or weakening foreign-owner rejection.

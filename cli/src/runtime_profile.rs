@@ -247,6 +247,16 @@ pub(crate) fn canonical_profile_identity_digest(path: &Path) -> Result<String, S
     ))
 }
 
+/// Resolve named profiles and explicit paths exactly as browser acquisition does.
+/// A profile hint such as `Default` is not a path relative to the caller's cwd.
+pub(crate) fn resolved_profile_identity_digest(
+    profile_hint: &str,
+    profile_id: &str,
+) -> Result<String, String> {
+    let resolved = resolve_profile(Some(profile_hint), Some(profile_id))?;
+    canonical_profile_identity_digest(&resolved.user_data_dir)
+}
+
 pub fn runtime_profile_state_path(name: &str) -> Result<PathBuf, String> {
     Ok(runtime_profile_root(name)?.join(RUNTIME_STATE_FILENAME))
 }
