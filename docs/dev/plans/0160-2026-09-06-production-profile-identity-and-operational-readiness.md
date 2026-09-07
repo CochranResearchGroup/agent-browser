@@ -2412,3 +2412,232 @@ next_action_or_stop_reason: Finish the existing release build, qualify and publi
 that exact binary with original-browser custody preserved, and complete consumer
 identity acceptance, inactive-allocation repair, readiness and scheduled-cycle
 requirements. No production replacement occurred for this checkpoint.
+
+## Checkpoint 43: qualified grant candidate installed with original custody
+
+state_transition: Completed release qualification and controlled production host
+replacement with the supervised display-grant repair.
+
+acceptance_state: Installed own-tab identity and causal denial checks pass;
+doctor exits1. Final A1–A4/AX acceptance remains open.
+
+progress_classification: blocker_reduction
+
+The release build completed successfully in 9m31s and embeds source
+be6748fd85bb77f0c4977bcefc0c5071ba4ba8e0. Its archived binary SHA256 is
+f0a1edfb7b808a1b54429656ade24b75d278968b1a5209c70f8bcf4a8d4e5043.
+Exact-release namespace proof, remote-headed original-client continuity and
+terminal reopen, and restricted-grant failure transport all passed. The
+continuity fixture left no owned process residue. Evidence hashes are bound in
+campaigns/p160/publication-be6748fd/qualification-status.json.
+
+Production now selects generation 0.28.0-f0a1edfb7b80-879b8a263f21, support hash
+879b8a263f217f76223b2316bbb15b383ee41c2e53904513c9bf5242e972e4f9.
+Verified controller/provider assets and unit payloads were reused unchanged.
+Controlled host replacement preserved all five live browser process identities,
+including the retained synthetic operator browser. All 47 original tab-custody
+records remained unchanged. The activation receipt binds observed host PID92837,
+socket identity, ingress and executable generation; it is not a readiness receipt.
+
+Installed own-tab smoke opened two authorized blank tabs in the retained Default
+browser, obtained complete attestations and evaluated both successfully. A
+cross-client operation was denied before effects, and exactly one causal journal
+occurrence matched the installed binary, source and support identity. Both own
+test tabs were released. Supported doctor still exited1; its full current result
+is retained in the publication directory as doctor-after.json.
+
+next_action_or_stop_reason: Revalidate the retained operator handoff on this
+installed candidate, synchronize installed guidance, resolve current consumer
+identity and automatic allocation blockers, and complete doctor/monitor and
+scheduled-cycle acceptance. Preserve the historical failures and original custody.
+
+## Checkpoint 44: installed retained-browser proof and visual-oracle failure
+
+state_transition: Refreshed installed consumer lease recourse and exercised the
+retained operator browser after host replacement.
+
+acceptance_state: Retained synthetic attestation and input delivery pass; the
+complete current-candidate viewer oracle did not pass. A1–A4/AX remain open.
+
+progress_classification: blocker_reduction
+
+Read-only installed lease explanation still offers rejoin_owned_browser for the
+consumer's existing capability and identifies runtime_owner_principal_binding_missing.
+The named-profile mismatch reported earlier is no longer the observed blocker.
+No consumer capability was read or used, and no consumer binding was changed.
+Original-connection acceptance remains required. Current readback is retained at
+publication-be6748fd/consumer-lease-explain-current.json. The preceding malformed
+read-only CLI argument attempt is retained separately; it performed no mutation.
+
+The retained synthetic handle obtained complete attestation on the newly installed
+binary, and its original input counters remained one each before the viewer test.
+The installed shared skill received the exact grant-diagnosis paragraph with a
+backup and before/after hashes in the publication directory.
+
+Current-candidate viewer attempt local-viewers-47eJUu resolved the same durable
+handoff for both authenticated viewers, displayed the synthetic browser, and
+denied the anonymous viewer. Its mouse pixel acknowledgment passed, but its
+keyboard pixel hash timed out before the final reconnect checks. Both client
+contexts closed. This attempt remains failed; no unchanged retry followed.
+
+Subsequent exact-target readback retained complete attestation and counted two
+trusted mouse events and two keyboard events, proving that both new inputs were
+delivered. Direct inspection of the failed crop showed blue marker pixels and
+white lettering instead of the required solid-blue baseline. The full synthetic
+page screenshot also showed the blue marker. This is a visual-oracle discrepancy,
+not evidence that keyboard delivery failed; the precise geometry/focus transition
+still needs diagnosis before another attempt. The second viewer independently
+displayed profile_child_subject_mismatch for tab_control_own despite a ready
+viewport. That authorization failure remains an A1/A2/AX defect to disposition.
+
+next_action_or_stop_reason: Fix the dashboard operator focus/child-authorization
+path and diagnose the unstable synthetic sample before repeating the installed
+journey. Preserve original browser/target identity and all failed evidence.
+Complete consumer acceptance, allocation recovery, doctor and scheduled cycles.
+
+## Checkpoint 45: operator focus authorization seam established
+
+state_transition: Traced the observed dashboard subject mismatch to the automatic
+focus request and the daemon's child-access decision.
+
+acceptance_state: Diagnosis established; operator-focus repair and its regression
+proof are pending. A1–A4/AX remain open.
+
+progress_classification: blocker_reduction
+
+workspace-remote-viewport.tsx queues view_focus in control mode when the selected
+browser projection says canControl. That projection is not the current viewer's
+controller lease. The request uses dashboard service/agent/task attribution, while
+cdp_free_execute.rs::authorize_profile_child_access requires TabControlOwn for
+view_focus and compares that subject with the existing tab child. Both identities
+are legitimate but represent different authority. Changing the caller labels to
+the tab owner would conceal this mismatch and is not an acceptable repair.
+
+The HTTP broker already authenticates dashboard credentials separately, but only
+uses that identity as fallback request attribution when caller labels are absent.
+The actual focus authorization therefore has no distinct authenticated operator
+proof. Existing browser reattach performs route recovery and checkout effects;
+it is not a suitable replacement for ordinary tab focus. The native focus handler
+also permits index fallback after an explicit target fails, which must not be
+used to establish exact operator target selection.
+
+Bounded repair contract for this A1/A2/AX seam:
+
+- Preserve transport-authenticated operator identity separately from caller
+  labels. Public request fields cannot manufacture or override that proof.
+- Permit operator focus only after current authorization for the exact browser,
+  profile, target and controller/viewer role is established. An observer must not
+  automatically issue a control operation merely because the browser supports it.
+- Keep the tab's existing child owner and agent capability binding unchanged.
+  Ordinary agent control continues to require the current child-access contract.
+- Reject a missing or changed explicit target before focus; never substitute an
+  index. Return a typed causal failure identifying the failed authority seam.
+- Verify an authenticated authorized controller can focus an agent-owned target,
+  while anonymous, forged metadata, observer-only, expired and mismatched
+  browser/target cases are refused before effects. Include a two-viewer installed
+  check and before/after child-owner evidence.
+
+next_action_or_stop_reason: Implement this bounded operator authority path through
+the existing view_focus transport and execution seams, with regression proof.
+Then repair the independent synthetic sampling instability and resume final
+installed acceptance. No browser, lease or production binary changed here.
+
+Implementation follow-up: the archived installed binary rejected an isolated
+missing-target-plus-index request at child admission with service_tab_target_unproven
+and no_effect. This qualifies the existing public admission guard, not the native
+handler's later race. Private fixture focus-exact-target-E04kod retained its
+request/response and completed cleanup with no owned residue. A preceding driver
+syntax error occurred before any fixture execution and was corrected before use.
+The native handler now propagates exact-target switch failure rather than falling
+back to an index if the target disappears after admission. All five documentation
+surfaces reflect exact selection. Formatting passed; Clippy and focused view_focus
+tests are running. The operator-authority path remains unimplemented, and this
+source change is not installed.
+
+The eight existing view_focus tests and workspace Clippy passed for the exact
+target change. The operator proof primitive is now implemented under
+stream/dashboard_auth/operator_focus.rs and is compiled only in tests until its
+admission integration is ready. It signs a purpose-separated, 30-second binding
+to request ID, browser, session, profile, target and browser PID with the existing
+dashboard secret. Verification rechecks the current account's superuser role,
+signature, full binding and time bounds. The focused test covers changed fields,
+tampering, future/expired proof, unknown user, observer issuance and role revocation.
+That test is running; no proof is issued or accepted by production code yet.
+Integration must still bind current profile policy and operator/controller
+permissions, strip caller-authored proof fields at transport normalization, avoid
+persisting the transient token, preserve child ownership, and qualify the complete
+operator path. Passing the primitive alone cannot satisfy operator acceptance.
+
+The signed-proof test passed. The pending admission implementation now also
+recomputes profile view permission using AuthenticatedIngress assurance and checks
+the exact ready browser/target/session, PID, route/display binding, controller
+lease, controller epoch, authenticated dashboard viewer identity and parsed lease
+expiry. It takes an immutable state reference and does not rebind child ownership.
+A focused state test covers policy denial, controller/target drift, observer and
+released leases, invalid expiry and unchanged original state. Its first compile
+found that this workspace enables formatting but not parsing in the time crate;
+the implementation now uses the existing chrono RFC3339 parser. Both corrected
+operator-focus tests passed. This code remains test-only until HTTP, daemon and dashboard
+integration is complete. Existing viewer issuance accepts caller viewerId labels;
+integration must derive the dashboard viewer identity from authenticated ingress,
+and the UI must focus only after its own explicit controller acquisition succeeds.
+
+
+Integration follow-up: operator focus is now wired through authenticated HTTP
+issuance, daemon admission, and the native focus handler. The handler holds the
+route controller fence while revalidating the signed binding and focusing the
+exact target. Dashboard viewer identity is derived from authenticated ingress;
+the RDP workspace waits for its own explicit controller acquisition before
+requesting operator focus. These changes remain uncommitted and uninstalled.
+The earlier test-only descriptions above record intermediate states.
+
+The first integrated stream selection finished with 217 passes and one failure:
+a routing-only test injected the fictional authenticated account test-adapter,
+which the new current-superuser check rejected. That routing test now uses an
+attributed service request without pretending to authenticate a dashboard
+account. The full stream selection is running again, including the added forged
+operator-proof rejection and typed no-effect recourse test. Formatting was
+corrected after its check found two unformatted assertions; Clippy is running.
+
+Dashboard durable-handoff and authentication-status checks passed. The workspace
+view-projection check failed at scripts/test-dashboard-workspace-view-projection.js:283:
+its loopback /route-b fixture expects a public URL, but the existing helper only
+rebases /guacamole paths and returns null. The test, projection and URL-helper
+files are unchanged from HEAD. This failure needs a separate disposition; it is
+not a successful frontend regression run. No installed acceptance is claimed.
+
+
+Verification readback: the second stream run finished with 218 passes and one
+routing-fixture failure because removing fictional authentication exposed the
+fixture's missing agent/task attribution. After supplying all three attribution
+fields, that exact routing regression passed (one selected test, zero failures).
+The forged operator-proof HTTP regression passed in the 218-test result. Workspace
+Clippy passed before the final test-data-only edit, and git diff --check passed.
+The two failed selections remain recorded rather than being described as a clean
+full-suite pass. Positive HTTP-to-daemon operator integration, token-retention
+inspection, isolated real-browser qualification and installed two-viewer acceptance
+remain required before publication. A1–A4/AX remain open.
+
+
+Execution-fence correction: review found that the pending operator-focus handler
+used begin_service_controller_mutation, which cancels existing desktop claims
+before its final proof check. That contradicts no-effect rejection. Focus now
+uses a non-cancelling interaction claim and event guard together with the same
+external route fence. It verifies proof before acquisition and again under the
+fence; rejection drops only its own guards. Competing desktop interaction is
+refused without cancelling the original claim. Controller takeover retains its
+existing mutation semantics. A focused coordinator regression exercises retained
+claim usability and local/external fence release. The first compile failed on
+missing test imports; those were corrected and the selection is running.
+Workspace Clippy passed for the corrected production path. This source is not
+installed and does not establish final operator or consumer acceptance.
+
+
+The corrected coordinator selection passed all five tests, including rejected
+focus preserving the original interaction and releasing its own external fence.
+Formatting check passed. The source checkpoint includes the authenticated
+operator-focus integration and the non-cancelling execution guard; it is a
+qualification checkpoint, not production publication or completed A1/A2 evidence.
+Next: run positive authenticated HTTP-to-daemon focus against an isolated browser,
+verify no transient proof appears in retained records, then qualify the complete
+candidate and its dashboard assets before controlled production replacement.

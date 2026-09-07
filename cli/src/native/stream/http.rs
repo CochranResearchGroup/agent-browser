@@ -2000,6 +2000,53 @@ fn service_request_command_with_state_and_authority(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
+    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+        let proof = authenticated_dashboard_user
+            .zip(service_state)
+            .ok_or_else(|| {
+                "operator_focus_authority_required: authenticated dashboard required".to_string()
+            })
+            .and_then(|(username, state)| {
+                dashboard_auth::issue_operator_focus(state, &command, username)
+            })
+            .map_err(|message| {
+                ServiceRequestRejection::record(
+                    "http_service_request",
+                    Some(action_hint),
+                    &request_id,
+                    effective_session,
+                    ServiceRequestIssue::new(
+                        ServiceRequestIssueKind::OperatorFocusAuthority,
+                        message,
+                    ),
+                )
+            })?;
+        command["operatorFocusProofToken"] = json!(proof);
+    }
+    if let Some(username) = authenticated_dashboard_user {
+        if matches!(
+            action_hint,
+            "service_viewer_lease_request" | "service_controller_lease_takeover"
+        ) {
+            let controller = action_hint == "service_controller_lease_takeover"
+                || command.get("viewerRole").and_then(Value::as_str) == Some("controller");
+            if controller {
+                dashboard_auth::require_current_operator_role(username).map_err(|message| {
+                    ServiceRequestRejection::record(
+                        "http_service_request",
+                        Some(action_hint),
+                        &request_id,
+                        effective_session,
+                        ServiceRequestIssue::new(
+                            ServiceRequestIssueKind::OperatorFocusAuthority,
+                            message,
+                        ),
+                    )
+                })?;
+            }
+            command["viewerId"] = json!(format!("dashboard:{username}"));
+        }
+    }
     if authenticated_dashboard_user.is_some() {
         apply_dashboard_deployment_generation(
             &mut command,
@@ -5503,6 +5550,25 @@ mod tests {
     }
 
     #[test]
+    fn operator_focus_labels_and_forged_proof_do_not_authenticate_dashboard() {
+        let error = service_request_command_with_state_and_authority(
+            r#"{"action":"view_focus","serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"focus","params":{"operatorFocus":true,"operatorFocusProofToken":"forged"}}"#,
+            None, None, "default", None,
+        ).unwrap_err();
+        let response = error.response();
+        assert_eq!(
+            response["failure"]["code"],
+            "operator_focus_authority_required"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recommendedAction"],
+            "inspect_operator_focus_authority"
+        );
+        assert!(!response.to_string().contains("forged"));
+    }
+
+    #[test]
     fn service_request_rejection_response_exposes_route_conflict_recourse() {
         let response = ServiceRequestRejection::record(
             "http_service_request",
@@ -5778,9 +5844,17 @@ mod tests {
             "service_controller_lease_takeover",
         ] {
             let body = format!(
-                r##"{{"action":"{action}","params":{{"sessionName":"p158-external-vantage-e4","browserId":"session:p158-external-vantage-e4","routeId":"development-route-1"}},"serviceName":"agent-browser-dashboard"}}"##
+                r##"{{"action":"{action}","params":{{"sessionName":"p158-external-vantage-e4","browserId":"session:p158-external-vantage-e4","routeId":"development-route-1"}},"serviceName":"routing-fixture","agentName":"test-agent","taskName":"lease-routing"}}"##
             );
-            let command = service_request_command(&body).unwrap();
+            // This test covers routing of attributed service requests, not an
+            // authenticated dashboard account or its controller permissions.
+            let command = service_request_command_with_state_and_principal(
+                &body,
+                None,
+                None,
+                "AgentBrowserDashboard",
+            )
+            .unwrap();
 
             assert_eq!(
                 service_request_relay_session("AgentBrowserDashboard", &body, &command),

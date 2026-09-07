@@ -509,7 +509,15 @@ pub(crate) fn validate_service_tab_handle_for_daemon(
         let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
         validate_handle_profile_selectors(&snapshot, handle, cmd)?;
     }
-    let access = authorize_profile_child_access(handle, cmd)?;
+    let access = if action == "view_focus"
+        && cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+    {
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+        None
+    } else {
+        authorize_profile_child_access(handle, cmd)?
+    };
     if action != "tab_handle_refresh" {
         if let Some(error) = stale_error {
             return Err(error);

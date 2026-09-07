@@ -1184,6 +1184,28 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
+        let operator_repository = (cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true))
+            .then(LockedServiceStateRepository::default_json)
+            .transpose()?;
+        let _operator_fence = if let Some(repository) = operator_repository.as_ref() {
+            let snapshot = repository.load_snapshot()?;
+            let route_id = cmd
+                .get("routeId")
+                .and_then(Value::as_str)
+                .ok_or("operator_focus_binding_required: missing routeId")?;
+            crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+            let request_id = cmd
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or("operator_focus_binding_required: missing id")?;
+            let guard = crate::native::desktop_control_coordinator::begin_service_operator_focus(
+                &snapshot, route_id, request_id,
+            )?;
+            crate::native::stream::verify_operator_focus(&repository.load_snapshot()?, cmd)?;
+            Some(guard)
+        } else {
+            None
+        };
         let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
         state.ref_map.clear();
         state.iframe_sessions.clear();
@@ -1203,19 +1225,10 @@ pub(crate) mod action_commands {
             if mgr.active_target_id().ok() == Some(target_id) {
                 tab_switched = Some(json!({ "targetId" : target_id, "state" : "already_active", }));
             } else {
-                match mgr.tab_switch_target_id(target_id).await {
-                    Ok(value) => tab_switched = Some(value),
-                    Err(target_err) => {
-                        if let Some(index) = fallback_index {
-                            let mut fallback = mgr.tab_switch(index).await?;
-                            fallback["fallbackFromTargetId"] = json!(target_id);
-                            fallback["fallbackReason"] = json!(target_err);
-                            tab_switched = Some(fallback);
-                        } else {
-                            return Err(target_err);
-                        }
-                    }
-                }
+                // Admission can precede target closure. An explicit target
+                // remains authoritative at execution; its former index may
+                // now identify a different caller's tab.
+                tab_switched = Some(mgr.tab_switch_target_id(target_id).await?);
             }
         } else if let Some(index) = fallback_index {
             tab_switched = Some(mgr.tab_switch(index).await?);

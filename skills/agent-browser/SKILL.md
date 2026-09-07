@@ -3130,3 +3130,23 @@ separate bounded supervised unit; do not disable the browser runtime sandbox.
 For `display_access_grant_failed` or `display_access_grant_timeout`, follow
 `inspect_privileged_display_grant` and the returned bounded stderr. Reservation
 rollback does not prove a timed-out X access grant had no effect.
+
+
+For `view_focus`, an explicit `targetId` must still exist when focus executes.
+A supplied index never substitutes for a missing explicit target, including a
+target that closes after admission. Refresh the intended target identity before
+issuing a new focus request.
+
+
+Authenticated dashboard operator focus uses the account's current controller
+lease and the profile's `view_open` permission. The viewport requests focus only
+after explicit controller takeover succeeds. The broker binds that request to
+the exact browser, session, profile, target, controller epoch and policy revision;
+the daemon rechecks it while holding the route effect fence. Agent tab ownership
+stays unchanged. Observer accounts cannot acquire controller authority. For
+`operator_focus_*` failures, inspect the request's Service trace, current profile
+policy and controller lease before requesting focus again.
+
+Operator focus refuses an existing desktop interaction instead of cancelling it.
+A refused authority check releases its temporary focus guards and preserves the
+agent's tab ownership and interaction authority.

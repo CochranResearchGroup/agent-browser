@@ -1345,6 +1345,9 @@ export function WorkspaceRemoteViewport({
   const [error, setError] = useState("");
   const [focusMessage, setFocusMessage] = useState("");
   const [focusPending, setFocusPending] = useState(false);
+  const [operatorController, setOperatorController] = useState<{
+    browserId: string; routeId: string; leaseId: string;
+  } | null>(null);
   const [takeoverPending, setTakeoverPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState<string | null>(null);
   const [foreignBorrow, setForeignBorrow] = useState<ForeignCdpBorrowStatus | null>(null);
@@ -1970,13 +1973,21 @@ export function WorkspaceRemoteViewport({
   useEffect(() => {
     if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream) return;
     if (!browser || !stream || !canControl) return;
+    const operatorFocus = stream.provider === "rdp_gateway";
+    if (operatorFocus && (!operatorController
+      || operatorController.browserId !== browser.id
+      || operatorController.routeId !== stream.routeId)) return;
     const tabIndex = tabSelection.tabIndex;
     const targetId = tabSelection.tab?.targetId?.trim();
-    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? ""].join("|");
+    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? "", operatorController?.leaseId ?? ""].join("|");
     if (focusedKeyRef.current === focusKey) return;
     focusedKeyRef.current = focusKey;
     const browserForFocus = browser;
     const selectionForFocus = viewportSelection.selection;
+    if (operatorFocus && !targetId) {
+      setFocusMessage("Select a current target before requesting operator focus.");
+      return;
+    }
     if (!targetId && tabIndex === null) {
       setFocusMessage("No stable tab index was available; showing the stream without a queued focus request.");
       return;
@@ -1994,10 +2005,16 @@ export function WorkspaceRemoteViewport({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "view_focus",
+            browserId: browserForFocus.id,
+            ...(sessionName ? { sessionName } : {}),
             serviceName: "agent-browser-dashboard",
             agentName: activeSessionName || "operator",
             taskName: "workspace-viewport-control",
-            params,
+            params: { ...params, ...(operatorFocus && operatorController ? {
+              operatorFocus: true,
+              routeId: operatorController.routeId,
+              controllerLeaseId: operatorController.leaseId,
+            } : {}) },
             jobTimeoutMs: 5000,
           }),
         });
@@ -2019,7 +2036,7 @@ export function WorkspaceRemoteViewport({
     }
 
     void queueFocus();
-  }, [activePort, activeSessionName, browser, canControl, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
+  }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {
     if (!frameUrl || !canRenderFrame || !canControl) return;
@@ -2251,7 +2268,7 @@ export function WorkspaceRemoteViewport({
     setFrameIssue(null);
     setFocusMessage("Requesting explicit controller takeover for this workspace route.");
     try {
-      await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
+      const response = await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
         routeId: workspaceRouteId,
         browserId: browser.id,
         ...(sessionName ? { sessionName } : {}),
@@ -2260,6 +2277,11 @@ export function WorkspaceRemoteViewport({
         viewerRole: "controller",
         openMode: "embedded",
       });
+      const lease = (response.data as { viewerLease?: { id?: string; state?: string; viewerRole?: string } } | undefined)?.viewerLease;
+      if (!lease?.id || lease.state !== "controlling" || lease.viewerRole !== "controller") {
+        throw new Error("Controller takeover did not return a current controlling lease.");
+      }
+      setOperatorController({ browserId: browser.id, routeId: workspaceRouteId, leaseId: lease.id });
       streamFrameRetryRef.current = 0;
       setStreamRefreshNonce(Date.now());
       setFocusMessage("Controller lease takeover was accepted and the viewport is reconnecting.");

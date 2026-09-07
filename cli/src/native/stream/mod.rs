@@ -5,6 +5,7 @@ mod cdp_loop;
 pub(crate) mod chat;
 mod dashboard;
 mod dashboard_auth;
+pub(crate) use dashboard_auth::verify_operator_focus;
 mod discovery;
 mod foreign_cdp_control;
 mod guacamole_primary_binding;

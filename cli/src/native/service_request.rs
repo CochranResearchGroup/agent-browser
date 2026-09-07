@@ -384,6 +384,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ServiceRequestIssueKind {
     InvalidRequest,
+    OperatorFocusAuthority,
     MissingAction,
     UnsupportedAction,
     UnknownField,
@@ -423,6 +424,10 @@ impl ServiceRequestIssue {
             return "profile_access_denied";
         }
         match self.kind {
+            ServiceRequestIssueKind::OperatorFocusAuthority => {
+                super::service_failure::operator_focus_failure_code(&self.message)
+                    .unwrap_or("operator_focus_authority_unproven")
+            }
             ServiceRequestIssueKind::InvalidRequest => "invalid_request",
             ServiceRequestIssueKind::MissingAction => "missing_action",
             ServiceRequestIssueKind::UnsupportedAction => "unsupported_action",
@@ -672,7 +677,10 @@ pub(crate) fn normalize_service_request(
         for (key, value) in params {
             if !matches!(
                 key.as_str(),
-                "id" | "action" | "connectionInstanceId" | "profileChildAccess"
+                "id" | "action"
+                    | "connectionInstanceId"
+                    | "profileChildAccess"
+                    | "operatorFocusProofToken"
             ) {
                 command[key] = value.clone();
             }
@@ -2558,6 +2566,7 @@ mod tests {
                 "id": "caller-id",
                 "action": "screenshot",
                 "connectionInstanceId": "caller-connection",
+                "operatorFocusProofToken": "caller-forged-proof",
                 "profileChildAccess": {
                     "subjectId": "caller-subject",
                     "permissions": ["profile-admin"]
@@ -2570,6 +2579,8 @@ mod tests {
         .unwrap();
         assert!(normalized.command.get("id").is_none());
         assert!(normalized.command.get("connectionInstanceId").is_none());
+        assert!(normalized.command.get("operatorFocusProofToken").is_none());
+        assert!(normalized.trace.get("operatorFocusProofToken").is_none());
         assert!(normalized.command.get("profileChildAccess").is_none());
         assert_eq!(normalized.command["action"], "navigate");
         assert_eq!(normalized.command["url"], "https://top.example");

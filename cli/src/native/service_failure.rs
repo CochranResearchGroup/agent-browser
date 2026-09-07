@@ -115,7 +115,45 @@ pub(crate) fn child_access_failure_evidence(failure: &ServiceFailureRecourse) ->
     .and_then(|evidence| serde_json::to_value(evidence).ok())
 }
 
+pub(crate) fn operator_focus_failure_code(error: &str) -> Option<&str> {
+    let code = error.split(':').next()?;
+    matches!(
+        code,
+        "operator_focus_authority_required"
+            | "operator_focus_authority_unproven"
+            | "operator_focus_binding_required"
+            | "operator_focus_binding_changed"
+            | "operator_focus_profile_policy_denied"
+            | "operator_focus_controller_required"
+            | "operator_focus_action_mismatch"
+            | "operator_focus_browser_missing"
+            | "operator_focus_profile_missing"
+            | "operator_focus_route_missing"
+            | "operator_focus_process_missing"
+            | "operator_focus_proof_encoding_failed"
+            | "operator_controller_authority_required"
+    )
+    .then_some(code)
+}
+
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if let Some(code) = operator_focus_failure_code(error) {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: code.to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::ChildAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_operator_focus_authority".to_string(),
+            safe_next_actions: vec![
+                "inspect_service_trace".into(),
+                "inspect_operator_focus_authority".into(),
+            ],
+            hard_stops: vec!["blind_retry".into(), "impersonate_profile_subject".into()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     for code in [
         "display_access_grant_failed",
         "display_access_grant_timeout",

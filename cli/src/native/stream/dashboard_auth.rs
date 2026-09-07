@@ -8,6 +8,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod operator_focus;
+pub(crate) use operator_focus::{issue_operator_focus, verify_operator_focus};
+
+pub(super) fn require_current_operator_role(username: &str) -> Result<(), String> {
+    if load_auth_store()?
+        .users
+        .iter()
+        .any(|user| user.username == username && user.role == DASHBOARD_ROLE_SUPERUSER)
+    {
+        Ok(())
+    } else {
+        Err("operator_controller_authority_required: current superuser role required".into())
+    }
+}
+
 const AUTH_FILE_ENV: &str = "AGENT_BROWSER_DASHBOARD_AUTH_FILE";
 const AUTH_DIR_ENV: &str = "AGENT_BROWSER_DASHBOARD_AUTH_DIR";
 const AUTH_FILE_NAME: &str = "dashboard-auth.json";
