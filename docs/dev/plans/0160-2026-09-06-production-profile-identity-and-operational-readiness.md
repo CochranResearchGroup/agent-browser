@@ -1763,3 +1763,72 @@ exited. Its synthetic journal and red response bodies are retained.
 next_action_or_stop_reason: Build the optimized candidate and prove short-write
 HTTP success plus persistent-lock refusal without browsers; then qualify the
 combined production candidate and resume the original acceptance contract.
+
+## Checkpoint 31: combined identity and journal candidate installed and verified
+
+state_transition: 2b9640b8 release candidate selected in production
+
+acceptance_state: installed two-client control and causal denial pass; full A1–A4/AX remain incomplete
+
+progress_classification: blocker_reduction
+
+The full Rust gate passed. The frozen release build completed in 9m10s.
+The exact release binary passed headless and remote-headed two-client original
+registered-handle continuity through disposable host interruption, terminal
+close/reopen, dashboard foreign-handle evaluation denial, raw foreign-input
+denial, explicit profile preservation and causal readback across two restarted
+authenticated dashboard readers. Owned-process cleanup censuses found zero
+residue. The release journal fixture returned HTTP 200 after 83 ms for a short
+writer hold and HTTP 500 after 253 ms for a persistent lock, preserving the
+coherent record and bounded refusal contract.
+
+Installed generation: 0.28.0-bce7a26617d2-3039ae26bf90.
+Source: 2b9640b86b9dc3998c8ef4f68498adbd34f1be7e.
+Binary SHA256:
+bce7a26617d25859651ce82144b67246fed6a4f5279e1d16cbd916fa0c776a6f.
+Support-manifest SHA256:
+3039ae26bf90f64f94129a058da54d35916bc946aebc3e86889550dc9474a507.
+
+All 26 support assets and unit files matched their immutable manifest. Controlled
+activation found no active production jobs and preserved all four original
+browser process identities. All 54 preactivation tab custody projections,
+including the 47 original protected records, remained unchanged. Fresh readback
+verified all three production unit executables, both dashboard manifest endpoints
+and consistent fail_open_ephemeral configuration. The new runtime host PID was
+26518 at activation. The previous installed payload and configuration backups
+remain available for rollback; no formal release was performed.
+
+The installed two-client blank-tab test passed in full. Both clients obtained
+controlPlaneAttestation.complete=true and evaluated their own blank tabs.
+Cross-client evaluation returned profile_child_subject_mismatch with no_effect.
+The immediate authenticated journal read succeeded and returned exactly one
+occurrence joined by the request ID, with matching source, binary, support
+generation, hashed causal comparison and recommended action. Both newly created
+tabs were physically removed with target-removal proof and unrelated targets
+preserved. Final readback preserved all four original browsers and 47 original
+custody records. No business input or consumer capability use occurred.
+
+The installed shared skill received a scoped identity and journal guidance update,
+with its previous bytes backed up and other guidance preserved. The client fix
+is active in the workspace package used by the smoke; other consumer copies and
+the original consumer connection still require their own acceptance evidence.
+The source tree state remains honestly dirty because the separately maintained
+consumer incident note was modified during the frozen build.
+
+Doctor still returns nonzero with 12 findings: operator journey, selected-generation
+readiness, retained transaction history, seven profile/principal observations,
+stale monitor and unknown process-memory ownership. The profile findings remain
+warnings and have not been adopted, erased or treated as authority for cleanup.
+Maintenance remains inactive. Controlled publication does not prove supported
+upgrade acceptance or unattended operation.
+
+Private evidence: campaigns/p160/publication-2b9640b8 contains qualification,
+support-source review, activation backups and receipt, installed smoke, shared
+skill publication hashes, and before/after doctor readback. Release fixtures:
+journal-http-kOCD9g, a1-terminal-reopen-VZ06Rm, a1-terminal-reopen-4NkKZo,
+a1-dashboard-isolation-KVoFHb and a1-explicit-profile-Mpc1F0.
+
+next_action_or_stop_reason: Complete remaining profile dispositions and original
+consumer continuity, run the dedicated synthetic authenticated operator journey,
+then reconcile supported generation/monitor/resource readiness and perform the
+scheduled A4 cycles. The full AX fixture matrix remains required.
