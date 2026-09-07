@@ -1961,3 +1961,56 @@ operator qualification only on positively proved production resources, retaining
 this failed fixture and the failed continuity evidence. Focus authorization,
 iframe readiness reporting, provider provisioning, original consumer acceptance,
 A3/A4 and the remaining AX matrix still require completion.
+
+## Checkpoint 34: kernel display-owner admission and attestation repair
+
+state_transition: False-complete attestation reproduced in a provider-free test;
+shared live display-owner proof now gates route launch, preflight and diagnostics.
+
+acceptance_state: Source qualification passes; installed A1–A4 and AX remain open.
+
+progress_classification: blocker_reduction
+
+The launch seam returned already_ready immediately after successful xdpyinfo,
+before requiring a route user. Control-plane attestation checked browser/process,
+profile lease and owner custody but did not check display ownership. A regression
+with otherwise complete custody and an unproved remote display returned
+complete=true on the prior source, then passed after the repair.
+
+The new remote_view/display_owner module compares the expected route account UID
+with SO_PEERCRED from the actual X server socket. It probes the abstract socket
+and filesystem socket without an X authentication grant, using nonblocking
+connections. Inaccessible, conflicting or ambiguous peers do not establish
+ownership. This also works when the service's private temporary namespace hides
+the filesystem socket. A provider-free abstract socket fixture proves matching
+UID success and rejection of a different UID despite socket accessibility.
+
+Route-bound launch checks ownership before xdpyinfo, privileged display access
+or Chrome launch. Preflight reports the same ownership refusal. Diagnostics add
+displayOwner and require its proof for remote-headed complete attestation;
+missing or conflicting evidence adds display_owner to missingProofs. Standalone
+private displays require the runtime account's socket ownership; route-bound
+allocations cannot fall back to that account when provider identity is missing.
+Typed presentation/launch-admission failures direct callers to
+repair_route_display_binding and preserve uncertainty about reservation cleanup
+until the enclosing operation reports its terminal result.
+
+Validation: the false-complete regression failed before repair with observed
+true versus expected false. Two focused display tests passed; all 121 affected
+remote-view, diagnostics and failure-recourse tests passed serially. Workspace
+Clippy with warnings denied, formatting check and diff check passed. README,
+CLI help, repository skill, docs site and source comments describe the new proof.
+Private source hashes and validation results are retained at
+campaigns/p160/display-owner-repair/source-validation.json.
+
+The installed production candidate is unchanged. No production browser was
+launched, no display grants were changed, and the contained misrouted synthetic
+handoff was not reopened in this slice. Original-consumer acceptance remains
+unproved. Source checks do not establish full display or runtime acceptance.
+
+next_action_or_stop_reason: Build the optimized development candidate and verify
+the exact kernel-observed correct-owner and wrong-owner route cases through the
+real preflight/launch boundary in isolation. Reconcile production route3 with its
+own live X server through the supported provider workflow before another browser
+launch. Qualify and install the resulting production candidate under standing
+authority, then resume the original consumer and all remaining A1–A4/AX gates.

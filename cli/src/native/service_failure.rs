@@ -117,6 +117,33 @@ pub(crate) fn child_access_failure_evidence(failure: &ServiceFailureRecourse) ->
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     for code in [
+        "route_display_owner_unproven",
+        "route_display_owner_mismatch",
+        "route_display_server_unavailable",
+        "route_display_server_ambiguous",
+    ] {
+        if error.split(':').next() == Some(code) {
+            return ServiceFailureRecourse {
+                schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+                code: code.to_string(),
+                axis: ServiceFailureAxis::Presentation,
+                phase: ServiceFailurePhase::LaunchAdmission,
+                effect_state: ServiceEffectState::EffectUncertain,
+                retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+                recommended_action: "repair_route_display_binding".to_string(),
+                safe_next_actions: vec![
+                    "inspect_service_trace".to_string(),
+                    "inspect_route_display_owner".to_string(),
+                ],
+                hard_stops: vec![
+                    "blind_retry".to_string(),
+                    "grant_access_to_foreign_display".to_string(),
+                ],
+                ..ServiceFailureRecourse::default()
+            };
+        }
+    }
+    for code in [
         "retained_browser_close_identity_unproven",
         "browser_terminal_close_unproven",
     ] {

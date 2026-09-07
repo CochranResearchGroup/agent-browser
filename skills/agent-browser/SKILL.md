@@ -3109,3 +3109,13 @@ Lease rows with an exact terminal owner generation, satisfied cleanup evidence,
 no browser projection and no active subordinate work remain visible as
 `historical` with read actions only. They do not create current lease blockers.
 Mismatched generations, pending transfers and current work remain blocking.
+
+### Remote display ownership proof
+
+For Linux remote-headed control, require `controlPlaneAttestation.displayOwner.verified`
+as well as complete attestation. The service checks kernel-reported X socket
+ownership against the selected route user. An accessible X server is not proof
+of the correct route or environment. `display_owner` in `missingProofs` or a
+`route_display_owner_mismatch` failure requires `repair_route_display_binding`;
+trace the returned correlation ID and preserve foreign displays. Do not grant
+access to a different environment to bypass the refusal.

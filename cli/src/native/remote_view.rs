@@ -19,6 +19,7 @@ use super::service_model::{
 #[cfg(test)]
 mod helper_action_tests;
 
+pub(crate) mod display_owner;
 pub(crate) mod open;
 pub(crate) mod route_pool_repair;
 pub(crate) mod viewer_lease;

@@ -3981,6 +3981,12 @@ identity and current exclusive profile lease to agree in one persisted service
 snapshot. Owner custody requires either the current transfer receipt or an exact
 managed-launch lifecycle record for the current boot, owner generation and process.
 `ownerCustody` identifies that basis; an absent transfer receipt is never invented.
+On Linux, remote-headed `displayOwner` evidence also checks the X socket peer
+against the configured route user. Missing or conflicting ownership adds
+`display_owner` to `missingProofs`; X access alone cannot establish ownership.
+Route-bound launch rejects that mismatch before granting access or starting Chrome.
+Inspect the returned failure correlation ID and repair the route/display binding
+before retrying.
 Lease metadata from an older valid handle is checked against the current tab and
 session records. A runtime name is accepted as an alias only when it matches the
 current profile's configured directory hint. Retained-browser requests also accept

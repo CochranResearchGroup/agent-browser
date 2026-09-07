@@ -475,7 +475,16 @@ fn service_control_plane_attestation(
         "source": "native/service_diagnostics.rs:service_control_plane_attestation",
     });
 
+    let display_owner = browser.map(|browser| {
+        super::remote_view::display_owner::browser_display_owner(service_state, browser)
+    });
     let mut missing_proofs = Vec::new();
+    if display_owner
+        .as_ref()
+        .is_some_and(|proof| proof["verified"] != true)
+    {
+        missing_proofs.push("display_owner");
+    }
     if !owner_authoritative {
         missing_proofs.push("browser_owner");
     }
@@ -497,6 +506,7 @@ fn service_control_plane_attestation(
         "profileLease": profile_lease,
         "handoffReceipt": handoff_receipt,
         "ownerCustody": owner_custody,
+        "displayOwner": display_owner,
         "missingProofs": missing_proofs,
     }))
 }
@@ -753,6 +763,21 @@ mod tests {
             .runtime_owner_registry
             .lifecycle_records
             .insert(owner.browser_id.clone(), record);
+    }
+
+    #[test]
+    fn remote_headed_attestation_requires_physical_display_owner_proof() {
+        let mut state = state_with_attestation(true);
+        let browser = state.browsers.get_mut("browser-1").unwrap();
+        browser.host = super::super::service_model::BrowserHost::RemoteHeaded;
+        browser.display_name = Some(":12345".to_string());
+        browser.display_allocation_id = Some("display-unproven".to_string());
+        let result = attest(&state, &handle());
+        assert_eq!(result["complete"], false);
+        assert!(result["missingProofs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("display_owner")));
     }
 
     #[test]

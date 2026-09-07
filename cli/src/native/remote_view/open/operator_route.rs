@@ -14,6 +14,19 @@ pub(crate) fn remote_view_open_ensure_display_access(
             route_binding.route_id
         ));
     };
+    let owner = super::super::display_owner::route_display_owner(
+        Some(display_name),
+        route_binding.route_user.as_deref(),
+    );
+    if owner.get("verified").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "{}: displayOwnerEvidence={owner}",
+            owner
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or("route_display_owner_unproven")
+        ));
+    }
     let initial_probe = remote_view_open_display_access_probe(display_name);
     if initial_probe
         .get("success")
