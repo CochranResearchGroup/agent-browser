@@ -9,14 +9,18 @@ Git checkpoints and linked archives preserve history. Keep this file at or below
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
 Previous publication history is preserved at `f269ce64`. This successor began
-21:27Z with a 30-minute ceiling through 21:57Z; all previous effort is cumulative.
+21:27Z; the evidence-backed successor is bounded through 22:27Z, within this
+hour. All previous effort remains cumulative. Legacy transactional repair and
+one exact release build are the current work units.
 The preceding turn advanced AX and reproduced an A1 refusal. This turn repaired
 new-connection host lifetime tracking and proved original-handle control after
 abrupt host death in a disposable runtime. Source `3dfd4d09` is qualified for
 that case; production remains on `d6d99e43`. All effort remains cumulative.
 Focused lifetime and existing custody tests, format, workspace Clippy and the
 optimized build pass. Prior MCP correlation validation remains applicable.
-No build or fixture remains running. Full A1–A4/AX readiness remains OPEN.
+The legacy operator maintenance candidate is building; focused custody/parser
+checks, Clippy and API parity passed. Isolated application proof is pending.
+Full A1–A4/AX readiness remains OPEN.
 No consumer capability was borrowed, profile lease reassigned or consumer browser
 restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
 

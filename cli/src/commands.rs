@@ -3392,6 +3392,15 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("connections") => {
+                if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
+                    return Err(ParseError::InvalidValue {
+                        message: "Expected one absolute reconciliation plan and optional --apply".to_string(),
+                        usage: "service connections reconcile --plan <absolute-path> [--apply]",
+                    });
+                }
+                Ok(json!({"id":id,"action":"service_connections_reconcile","planPath":rest[3],"apply":rest.len()==5}))
+            }
             Some("state") => match rest.get(1).copied() {
                 Some("validate") => {
                     let mut path = None;
@@ -8610,6 +8619,30 @@ mod tests {
             .as_array()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn test_service_connections_reconcile_requires_explicit_local_plan() {
+        let preview = parse_command(
+            &args("service connections reconcile --plan /tmp/plan.json"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(preview["action"], "service_connections_reconcile");
+        assert_eq!(preview["apply"], false);
+        let apply = parse_command(
+            &args("service connections reconcile --plan /tmp/plan.json --apply"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["apply"], true);
+        for command in [
+            "service connections",
+            "service connections reconcile --plan relative.json",
+            "service connections reconcile --plan /tmp/a --apply --apply",
+        ] {
+            assert!(parse_command(&args(command), &default_flags()).is_err());
+        }
     }
 
     #[test]

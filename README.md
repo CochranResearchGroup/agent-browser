@@ -1832,6 +1832,19 @@ old host ended and the same subject still has permission. Live owners remain
 exclusive. Legacy IDs, unreadable process evidence, and ambiguous PID namespaces
 remain unresolved; matching labels alone never authorize takeover.
 
+Local operators can preview `agent-browser --json service connections reconcile
+--plan /absolute/plan.json`, then use `--apply` for the reviewed transition.
+The plan uses `agent-browser.legacy-connection-reconciliation.v1` and contains
+`statePath`, `custodySnapshotPath`, `custodySnapshotSha256`, `connectionId`, and
+`expectedTabs`. Each expected tab records `browserId`, `targetId`,
+`ownerSessionId`, and the complete `profileAccess`. Preserve the original
+snapshot timestamp. Every current producer of that state root must be identified
+through its exact process and systemd service and have started after the snapshot.
+Changed custody or unknown producers refuse the operation. Apply uses the native
+transaction store and returns an audit `eventId`; it changes only connection
+state and derived handles. This Linux maintenance command is not available
+through consumer HTTP or MCP service requests.
+
 After a runtime-host interruption, reuse the original `serviceTabHandle` for
 bounded `evaluate`, `probe`, or permitted `cdp_attach`. The service reconnects
 the exact retained target after validating child access, runtime ownership,

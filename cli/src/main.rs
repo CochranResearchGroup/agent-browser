@@ -2228,6 +2228,30 @@ fn main() {
         return;
     }
 
+    // Local operator maintenance never routes through consumer service ingress.
+    if let Some(result) = native::service_connection_reconcile::dispatch(&cmd) {
+        let response = match result {
+            Ok(data) => connection::Response {
+                success: true,
+                data: Some(data),
+                ..Default::default()
+            },
+            Err(error) => connection::Response {
+                error: Some(error),
+                ..Default::default()
+            },
+        };
+        output::print_response_with_opts(
+            &response,
+            Some("service_connections_reconcile"),
+            &OutputOptions::from_flags(&flags),
+        );
+        if !response.success {
+            exit(1);
+        }
+        return;
+    }
+
     // Validate an explicitly selected Service State file before any daemon or
     // default-store path. The receipt binds the exact bytes to this executable.
     if let Some(result) = native::service_state_validation::dispatch_service_state_validation(&cmd)
