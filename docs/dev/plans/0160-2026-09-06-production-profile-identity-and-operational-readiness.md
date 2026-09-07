@@ -36,6 +36,21 @@ During execution, apply that authority to its actual scope without requesting
 it again. Do not infer authority for unrelated client eviction, broader grants,
 private content capture, new external systems, or formal release.
 
+Operator clarification: self-identification is the default for ordinary
+permitted use under `shared-local`. Stale registered-capability or principal
+binding warnings must not impose stronger credentials on those clients. Resolve
+or classify each warning against that permission contract. Physical browser,
+profile, session, process and target identity checks remain required; they are
+distinct from proving the client's declared identity.
+
+The operator also supplied [incident 0156](../notes/0156-2026-09-06-tab-release-skipped-close-and-wrong-tab-close.md).
+It reports successful logical release despite skipped physical cleanup, followed
+by a close operation that apparently removed a different tab. Treat this as an
+A1/AX investigation case: establish the actual serialized selector and historical
+build, then reproduce detach/release and exact-target close with three disposable
+targets. The cause remains unverified. Do not replay the incident identifiers or
+perform cleanup in its shared browser.
+
 ## Current state and reconciliation
 
 [Plan 0159](0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md)
