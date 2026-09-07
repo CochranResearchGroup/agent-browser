@@ -1538,3 +1538,26 @@ original-connection proof, other selected AX failures and A2–A4 remain open.
 next_action_or_stop_reason: Build the frozen optimized candidate and read one
 actual denied cross-client input occurrence through authenticated dashboard
 readback, including reader restart and exact build identity.
+
+
+Checkpoint 26 live qualification:
+
+The frozen optimized candidate passed the disposable two-client native input
+fixture a1-shared-native-45iYfe. Foreign input was denied, own input succeeded,
+and conflicting targets were denied. The returned request ID resolves through
+authenticated dashboard readback to exactly one journal occurrence, one job and
+one terminal event. All three carry the same child comparison evidence, including
+unequal expected/observed subject hashes, the requested permission, both permission
+checks, the deciding source function and the recommended use-own-handle action.
+Two separate dashboard reader processes return the identical journal record after
+the producer host exited. Exact source/build identity matches the frozen candidate.
+No owned fixture residue remained; no production browser was changed.
+
+Binary SHA256: a51db766584dcb25f8c22b95dcdc034a3c7fdace5088203f656afff3e5a79be6.
+Readback receipt SHA256: dc676286cfcbff668d1262ad668307c76fe2586bc2dc068646b2ce2e81265ac9.
+Private receipt: campaigns/p160/a1-shared-native-45iYfe/dashboard-readback-receipt.json.
+
+This closes live causal reconstruction for the selected subject-mismatch case on
+the isolated candidate. Installed qualification, other AX cases, consumer original
+connection acceptance and A2–A4 remain required. The production candidate is still
+ec04ad55.
