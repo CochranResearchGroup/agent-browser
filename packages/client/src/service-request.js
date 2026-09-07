@@ -524,9 +524,10 @@ function requireRefreshableServiceTabHandle(response) {
 }
 
 /**
- * Preserve the complete routing identity carried by a service-owned tab handle.
+ * Preserve target routing carried by a service-owned tab handle.
  * Explicit caller fields remain authoritative, including independent profile
- * aliases for compatibility with older service clients.
+ * aliases for compatibility with older service clients. Caller identity and
+ * assurance must never be borrowed from the handle owner's profile grant.
  *
  * @param {Partial<ServiceRequest>} request
  * @param {ServiceTabHandle} handle
@@ -538,8 +539,8 @@ function serviceTabHandleRouting(request, handle) {
   const targetId = request.targetId ?? handle.targetId;
   const runtimeProfile = request.runtimeProfile ?? request.profileId ?? handle.profileId;
   const profileId = request.profileId ?? request.runtimeProfile ?? handle.profileId;
-  const clientSubjectId = request.clientSubjectId ?? handle.profileAccess?.subjectId;
-  const identityAssurance = request.identityAssurance ?? handle.profileAccess?.identityAssurance;
+  const clientSubjectId = request.clientSubjectId;
+  const identityAssurance = request.identityAssurance;
   return {
     ...(browserId !== undefined && browserId !== null ? { browserId } : {}),
     ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),

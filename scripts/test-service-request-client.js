@@ -1818,6 +1818,32 @@ async function main() {
       serviceTabHandle: tabHandle,
     },
   );
+  // A borrowed handle identifies the target, never the requesting client.
+  const borrowedHandleRequest = {
+    serviceName: 'AnotherService',
+    agentName: 'another-agent',
+    taskName: 'cross-client-evaluation',
+    serviceTabHandle: {
+      ...tabHandle,
+      profileAccess: {
+        subjectId: 'client:owner',
+        identityAssurance: 'registered-capability',
+      },
+    },
+    script: 'document.title',
+    timeoutMs: 1000,
+    maxReturnBytes: 128,
+  };
+  const borrowedHandleEvaluate = createServiceEvaluateRequest(borrowedHandleRequest);
+  assert.equal(borrowedHandleEvaluate.clientSubjectId, undefined);
+  assert.equal(borrowedHandleEvaluate.identityAssurance, undefined);
+  const explicitCallerEvaluate = createServiceEvaluateRequest({
+    ...borrowedHandleRequest,
+    clientSubjectId: 'client:caller',
+    identityAssurance: 'self-declared',
+  });
+  assert.equal(explicitCallerEvaluate.clientSubjectId, 'client:caller');
+  assert.equal(explicitCallerEvaluate.identityAssurance, 'self-declared');
   const overriddenEvaluateRequest = createServiceEvaluateRequest({
     serviceTabHandle: tabHandle,
     browserId: 'session:override',

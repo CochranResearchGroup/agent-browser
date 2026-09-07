@@ -1678,3 +1678,53 @@ journey, A3 doctor/supported upgrade and A4 scheduled cycles remain open.
 next_action_or_stop_reason: Reproduce the dashboard-to-runtime relay path in the
 isolated fixture and trace the effective command identity at child authorization.
 Do not repeat production smoke until the remaining bypass is explained and repaired.
+
+## Checkpoint 29: client handle identity borrowing repaired
+
+state_transition: workspace client repair verified against the installed ebf0f0d0 runtime
+
+acceptance_state: cross-client denial passes; journal read reliability and full A1–A4/AX remain open
+
+progress_classification: blocker_reduction
+
+The request helper copied clientSubjectId and identityAssurance from a handle's
+profileAccess grant when the caller omitted those fields. Consequently, a second
+client's labels appeared in attribution while authorization used the owner's
+subject. The common handle-routing helper now inherits only target routing;
+caller identity and assurance come only from explicit request fields or normal
+server self-identification. Explicit caller identity remains supported.
+
+An existing evaluate-builder regression was extended with an owner-bearing handle
+and different caller labels. It failed before the fix with client:owner and passed
+afterward. The full service-client suite, Rust format and workspace clippy gates
+passed. The documentation build and remote-view guidance check passed. The isolated
+authenticated dashboard fixture also denied foreign-handle
+evaluation and raw foreign input while preserving ordinary own-client input.
+A fixture setup attempt used a relative executable path and was rejected before
+browser launch; the corrected absolute-path fixture passed. Both were terminal
+and their owned-process census found zero residue.
+
+The third installed smoke used the corrected workspace client against the existing
+8cc912b4d251 binary. Both callers obtained complete attestation. Foreign-handle
+evaluation returned profile_child_subject_mismatch with no_effect and expected/
+observed hashed identity evidence. Both newly created blank tabs were physically
+closed, with unrelated targets preserved. All four original process identities
+and all 47 original tab custody records remain unchanged.
+
+The immediate journal request returned HTTP 500, so the overall smoke failed and
+its subsequent own-tab evaluation checks did not run. A separate read-only follow-up
+returned HTTP 200 and exactly one occurrence for the denied request. Its source
+revision, binary and support-manifest digests, child-access evidence and recommended
+action matched the response and installed generation. This confirms durable causal
+recording for this denial but does not excuse the unexplained initial read failure.
+
+Private evidence: campaigns/p160/a1-dashboard-isolation-jsRqKb and
+campaigns/p160/publication-ebf0f0d0, including second-installed-smoke preservation,
+third-installed-journal-matched.json and third-installed-readback.json.
+The installed executable was not replaced in this checkpoint. The corrected
+client is the workspace package imported by these tests; propagation to other
+consumer copies is not yet established. No consumer payment input occurred.
+
+next_action_or_stop_reason: Diagnose the journal HTTP 500 without another browser
+attempt; complete consumer identity continuity and client propagation, then the
+remaining installed A1/AX and A2–A4 gates. Maintenance remains disabled.
