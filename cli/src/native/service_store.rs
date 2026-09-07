@@ -529,6 +529,28 @@ where
         timeout: Duration,
         mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
+        self.mutate_if_with_lock_timeout(timeout, |_| true, mutator)
+            .map(|result| result.expect("unconditional mutation is always admitted"))
+    }
+
+    /// Evaluate a mutation predicate against the current snapshot under the same
+    /// exclusive lock as the update. A false predicate performs no save and does
+    /// not advance the authority revision. Pending transaction recovery retains
+    /// its ordinary load semantics.
+    pub(crate) fn mutate_if<R>(
+        &self,
+        predicate: impl FnOnce(&ServiceState) -> bool,
+        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<Option<R>, String> {
+        self.mutate_if_with_lock_timeout(self.lock_timeout, predicate, mutator)
+    }
+
+    fn mutate_if_with_lock_timeout<R>(
+        &self,
+        timeout: Duration,
+        predicate: impl FnOnce(&ServiceState) -> bool,
+        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<Option<R>, String> {
         let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
         if self.store.supports_prepared_save() {
@@ -549,6 +571,9 @@ where
             } else {
                 self.store.load_without_recovery()?
             };
+            if !predicate(&baseline) {
+                return Ok(None);
+            }
             let baseline_revision = baseline.state_revision;
             let mut candidate = baseline;
             candidate.state_revision = baseline_revision
@@ -561,7 +586,7 @@ where
                 .prepare_save(&candidate)?
                 .ok_or_else(|| "service_state_prepared_save_missing".to_string())?;
             self.store.save_prepared(&transaction)?;
-            return Ok(result);
+            return Ok(Some(result));
         }
 
         if let Some(path) = self.store.state_path() {
@@ -573,17 +598,23 @@ where
             )?;
             let process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
             let mut state = self.store.load()?;
+            if !predicate(&state) {
+                return Ok(None);
+            }
             let result = mutator(&mut state)?;
             drop(process_guard);
             self.store.save(&state)?;
-            return Ok(result);
+            return Ok(Some(result));
         }
 
         let _process_guard = acquire_service_state_process_lock(lock, deadline, "mutate")?;
         let mut state = self.store.load()?;
+        if !predicate(&state) {
+            return Ok(None);
+        }
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
-        Ok(result)
+        Ok(Some(result))
     }
 }
 

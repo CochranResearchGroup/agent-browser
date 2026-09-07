@@ -892,6 +892,9 @@ CLI and HTTP Service reads do not implicitly persist profile-seeding handoff
 refreshes. Service reconciliation, including its background cycle, records
 seeding-browser exits and preserves concurrent re-seeding updates or deletion.
 Operators can request <code>service reconcile</code> for an immediate refresh.
+Closing a diagnostic connection with no active profile tabs leaves authority
+state unchanged. A real disconnect marks only that connection's active tabs as
+disconnected; repeating the disconnect does not advance the state revision.
 
 Service Status also includes additive <code>runtimeLifecycle</code> readback for
 CLI JSON, HTTP <code>GET /api/service/status</code>, typed MCP

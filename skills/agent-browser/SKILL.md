@@ -2198,6 +2198,10 @@ consistent same-executable ancestry chain. This supplies resource protection
 only, not client permission or cleanup authority. Missing executable evidence,
 changed generations and conflicting child profiles cannot establish this proof.
 
+Closing a diagnostic connection with no active profile tabs leaves authority
+state unchanged. A real disconnect marks only its own active tabs disconnected;
+repeated disconnects do not advance the authority revision.
+
 Service and runtime reads do not implicitly persist seeding-handoff refreshes.
 Background Service reconciliation records seeding-browser exits; an operator
 can request `service reconcile` for an immediate refresh. Reconciliation must

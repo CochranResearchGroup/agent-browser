@@ -641,8 +641,31 @@ pub(crate) fn persist_profile_connection_disconnected(
     connection_instance_id: &str,
 ) -> Result<usize, String> {
     let repository = LockedServiceStateRepository::default_json()?;
+    persist_profile_connection_disconnected_in_repository(&repository, connection_instance_id)
+}
+
+fn persist_profile_connection_disconnected_in_repository<
+    S: super::service_store::ServiceStateStore,
+>(
+    repository: &LockedServiceStateRepository<S>,
+    connection_instance_id: &str,
+) -> Result<usize, String> {
+    // Read-only transports own no profile children. Test current ownership and
+    // persist a real disconnect atomically so polling cannot churn lease revisions.
     repository
-        .mutate(|state| Ok(state.mark_profile_connection_disconnected(connection_instance_id)))
+        .mutate_if(
+            |state| {
+                state.tabs.values().any(|tab| {
+                    tab.profile_access.as_ref().is_some_and(|access| {
+                        access.connection_instance_id.as_deref() == Some(connection_instance_id)
+                        && access.connection_state
+                            == super::service_profile_access_policy::ProfileConnectionState::Active
+                    })
+                })
+            },
+            |state| Ok(state.mark_profile_connection_disconnected(connection_instance_id)),
+        )
+        .map(|changed| changed.unwrap_or(0))
 }
 
 pub(crate) fn service_status_result_envelope(
@@ -3543,6 +3566,75 @@ mod tests {
         if std::env::var("AGENT_BROWSER_EMIT_FIXED_STATUS_HARNESS").as_deref() == Ok("1") {
             println!("AGENT_BROWSER_FIXED_STATUS_DATA={action}");
         }
+    }
+
+    #[test]
+    fn connection_disconnect_persists_only_matching_active_children() {
+        use super::super::service_model::BrowserTab;
+        use super::super::service_profile_access_policy::{
+            ProfileChildAccess, ProfileConnectionState,
+        };
+
+        let home = temp_home("connection-disconnect-persistence");
+        let path = home.join("state.json");
+        let store = JsonServiceStateStore::new(&path);
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let mut state = ServiceState::default();
+        for connection in ["closing", "surviving"] {
+            state.tabs.insert(
+                connection.to_string(),
+                BrowserTab {
+                    id: connection.to_string(),
+                    browser_id: "shared-browser".to_string(),
+                    profile_access: Some(ProfileChildAccess {
+                        subject_id: Some("client:disconnect-fixture".to_string()),
+                        connection_instance_id: Some(connection.to_string()),
+                        ..ProfileChildAccess::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            );
+        }
+        store.save(&state).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "status-reader")
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "a read-only connection rewrote authority state"
+        );
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "closing").unwrap(),
+            1
+        );
+        let after = repository.load_snapshot().unwrap();
+        assert_eq!(
+            after.tabs["closing"]
+                .profile_access
+                .as_ref()
+                .unwrap()
+                .connection_state,
+            ProfileConnectionState::Disconnected
+        );
+        assert_eq!(
+            after.tabs["surviving"].profile_access,
+            state.tabs["surviving"].profile_access
+        );
+        let once = std::fs::read(&path).unwrap();
+        assert_eq!(
+            persist_profile_connection_disconnected_in_repository(&repository, "closing").unwrap(),
+            0
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            once,
+            "duplicate disconnect rewrote authority state"
+        );
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

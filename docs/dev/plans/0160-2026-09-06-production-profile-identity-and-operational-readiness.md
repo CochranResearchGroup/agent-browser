@@ -3294,3 +3294,40 @@ is under campaigns/p160/read-command-proof; production remains on 35611c64.
 Next: build committed source and repeat the candidate resource syscall audit,
 then resume consolidated qualification. Consumer original-connection attestation,
 remaining pressure and monitoring findings, and A4/AX acceptance remain required.
+
+### HTTP status disconnect persistence repair
+
+state_transition: Candidate CLI syscall audit passed; native HTTP status exposed a second unconditional persistence path, now repaired in source.
+acceptance_state: Source regression and storage validation pass; consolidated candidate HTTP verification and installed qualification remain pending.
+progress_classification: progress
+
+The optimized 167f9246 candidate resource command issued zero Service authority
+file writes in its syscall trace, excluding the lock file. Other production
+processes still changed the shared files during that observation, so this does
+not establish global state immutability. A corrected disposable native HTTP
+fixture then preserved exact authority bytes for profiles and access-plan reads,
+but status advanced stateRevision from 7 to 8 and created authority sidecars.
+The earlier fixture stopped before requests because its setup wrongly expected
+the host to create an initial state file. Both fixture hosts terminated with no
+matching process residue. Evidence is under campaigns/p160/read-command-proof.
+
+The daemon connection disconnect guard always called a repository mutation,
+including a diagnostic connection with no active profile children. This explains
+the status response retaining revision7 while the subsequent persisted state had
+revision8. The new regression reproduced this unconditional rewrite before the
+repair. Disconnect persistence now evaluates matching active child ownership
+under the same exclusive repository lock as the update. A false predicate skips
+both save and revision advancement. Real disconnects continue marking only their
+own active children disconnected; ordinary transaction recovery is unchanged.
+
+The focused regression passes for a read-only connection, a real child disconnect,
+foreign child preservation and a repeated disconnect. All 29 existing storage
+tests passed serially. Formatting, workspace Clippy with warnings denied and the
+docs production build passed. Help, README, repository skill, docs site and inline
+comments describe the persistence boundary. No production generation, browser,
+consumer capability or retained synthetic handle was changed.
+
+Next: build the committed candidate, repeat the native HTTP fixture including a
+post-shutdown authority snapshot, then continue consolidated installed qualification
+and the full A1/A2/A3/A4/AX acceptance contract. Original-consumer attestation is
+still unproven; this read-path correction does not establish consumer recovery.

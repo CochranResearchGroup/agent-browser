@@ -2308,6 +2308,9 @@ CLI and HTTP Service reads do not implicitly persist profile-seeding handoff
 refreshes. Service reconciliation, including its background cycle, records
 seeding-browser exits. Its merge preserves records changed by concurrent
 re-seeding. An operator can run `service reconcile` for an immediate refresh.
+Closing a diagnostic connection with no active profile tabs leaves authority
+state unchanged. A real disconnect marks only that connection's active tabs as
+disconnected; repeating the disconnect does not advance the state revision.
 
 The dashboard includes an app-owned login screen. On first start it creates
 `~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
