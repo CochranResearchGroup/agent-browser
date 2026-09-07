@@ -61,7 +61,7 @@ reassigned. Unrelated note 0156 and untracked note 0159 remain preserved.
 
 ### Follow-up source batch, not installed
 
-Two concrete diagnostic defects are repaired in the working source:
+Two concrete diagnostic defects are repaired in source commit `d523aaeb`:
 
 1. The dashboard sent fractional `performance.now()` durations to a receiver
    requiring unsigned integer milliseconds. HTTP 400 retained the same invalid
@@ -79,8 +79,10 @@ Two concrete diagnostic defects are repaired in the working source:
    and legacy owners without a covering lease remain visible.
 
 All 26 focused lease tests pass. Failure-journal/client-observation checks and
-Dashboard build/TypeScript pass. Final formatting and workspace Clippy with warnings denied pass for this
-follow-up batch. These source fixes have not replaced the
+Dashboard build/TypeScript, formatting and workspace Clippy with warnings denied
+pass. The optimized candidate also passed the retained-consumer reconciliation
+fixture with one lease row, both original handles usable and no remaining
+fixture processes. These source fixes have not replaced the
 installed dc570e5b binary or its shared skill. Do not report them as live.
 
 ### Retention and next work
@@ -97,8 +99,11 @@ and supervisor references. Repair a supported publication/retention path before
 maintenance resumes. Never fabricate accepted transactions or green monitor
 receipts to protect a rollback target.
 
-Finish qualification and custody of the follow-up source batch. Before another
-operator attempt, isolate the mouse-delivery failure with an observable input
+Next hour: spend at most ten minutes mapping the remaining identity findings
+to concrete failures, then up to 35 minutes repairing the highest-impact case
+in isolation, and reserve 15 minutes for focused validation and custody. Keep
+identity proof first; a warning inventory alone is not acceptance progress.
+Before another operator attempt, isolate mouse delivery with an observable input
 path; pixel readiness and operator-focus success alone proved insufficient.
 Preserve the failed attempt and its unchanged page counters. Do not spend an
 unchanged viewer retry. Then consolidate the remaining identity, logging and
@@ -120,6 +125,8 @@ Evidence stays under `~/.local/state/agent-browser/campaigns/p160/`:
   current doctor, GC preview, verified rollback backup and installed skill sync.
   `local-viewers-1I12nr/events.json` retains the failed mouse journey.
 - `missing-binding-sim-4c1esh`: exact release reconciliation and persisted receipt.
+- `missing-binding-sim-UOeTwk`: d523aaeb optimized follow-up qualification,
+  duplicate-free lease projection and retained handles, cleanup complete.
 - `primary-endpoint-sim-Xrh9tr`: fractional rejection, corrected client delivery,
   journal correlation and terminated disposable backend/provider.
 - `publication-c36ce2b0/`: prior cold-viewer pass and previous-generation backup.
