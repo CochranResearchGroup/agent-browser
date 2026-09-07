@@ -509,6 +509,49 @@ fn has_current_acquisition_reservation(state: &ServiceState, route: &RemoteViewR
         })
 }
 
+/// Recognize the exact in-flight acquisition across all three custody records.
+/// Pending provider records alone are never permission to admit capacity.
+pub(crate) fn has_current_acquisition_binding(
+    state: &ServiceState,
+    route: &RemoteViewRoute,
+) -> bool {
+    if !has_current_acquisition_reservation(state, route) {
+        return false;
+    }
+    let lease_id = route
+        .readiness
+        .as_ref()
+        .and_then(|value| value["leaseId"].as_str())
+        .unwrap();
+    let lease = &state.remote_view_acquisition_leases[lease_id];
+    let Some(entry) = lease
+        .route_pool_entry_id
+        .as_ref()
+        .and_then(|id| state.route_pool.get(id))
+    else {
+        return false;
+    };
+    let Some(display) = state.display_allocations.get(&lease.display_allocation_id) else {
+        return false;
+    };
+    let matches_lease = |readiness: Option<&serde_json::Value>| {
+        readiness.is_some_and(|value| {
+            value["component"] == "remote_view_open_acquisition" && value["leaseId"] == lease_id
+        })
+    };
+    Some(&entry.id) == lease.route_pool_entry_id.as_ref()
+        && entry.route_id == route.id
+        && entry.current_route_allocation_id.as_ref() == Some(&route.id)
+        && entry.state == "pending"
+        && matches_lease(entry.readiness.as_ref())
+        && display.owner_browser_id == route.browser_id
+        && display.owner_session_id == route.session_id
+        && display.boot_epoch == lease.boot_epoch
+        && display.route_ids.contains(&route.id)
+        && (matches!(display.state.as_str(), "ready" | "active")
+            || (display.state == "pending" && matches_lease(display.readiness.as_ref())))
+}
+
 fn has_provider_inventory_readiness(readiness: Option<&serde_json::Value>) -> bool {
     readiness
         .and_then(|value| value.get("source"))

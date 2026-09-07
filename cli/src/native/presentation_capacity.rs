@@ -927,10 +927,14 @@ impl PresentationCapacityAuthority {
                 .zip(slot.display_allocation_id.as_deref())
                 .and_then(|(route_id, display_allocation_id)| {
                     let route = state.remote_view_routes.get(route_id)?;
+                    let pending_acquisition =
+                        super::presentation_inventory::has_current_acquisition_binding(
+                            state, route,
+                        );
                     // An unavailable presentation does not release its incumbent.
                     // Preserve an already admitted binding when all durable owners
                     // still agree; this does not promote route/display readiness.
-                    if route.state == "orphaned"
+                    if (route.state == "orphaned" || pending_acquisition)
                         && slot.state == PresentationSlotState::Active
                         && slot.browser_id.is_some()
                         && slot.browser_id == route.browser_id
@@ -947,8 +951,11 @@ impl PresentationCapacityAuthority {
                                 browser.active_session_ids.contains(session)
                             })
                             && display.route_ids.contains(&route.id)
-                            && matches!(display.state.as_str(), "ready" | "active" | "orphaned"))
-                        .then_some(browser_id);
+                            && (matches!(
+                                display.state.as_str(),
+                                "ready" | "active" | "orphaned"
+                            ) || pending_acquisition))
+                            .then_some(browser_id);
                     }
                     if !matches!(
                         route.state.as_str(),

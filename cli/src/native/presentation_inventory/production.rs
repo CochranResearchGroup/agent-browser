@@ -123,6 +123,7 @@ impl ProductionInventory {
                 .display_allocations
                 .get(&expected.display_allocation_id)
                 .ok_or_else(invalid)?;
+            let pending_acquisition = has_current_acquisition_binding(state, route);
             if entry.provider != ViewStreamProvider::RdpGateway
                 || route.provider != entry.provider
                 || entry.id != expected.route_pool_entry_id
@@ -139,9 +140,12 @@ impl ProductionInventory {
                 || !display.route_ids.contains(&route.id)
                 || route.browser_id != display.owner_browser_id
                 || route.session_id != display.owner_session_id
-                || !matches!(route.state.as_str(), "ready" | "orphaned" | "checked_out")
-                || !matches!(display.state.as_str(), "ready" | "active" | "orphaned")
-                || !matches!(entry.state.as_str(), "available" | "checked_out")
+                || (!matches!(route.state.as_str(), "ready" | "orphaned" | "checked_out")
+                    && !pending_acquisition)
+                || (!matches!(display.state.as_str(), "ready" | "active" | "orphaned")
+                    && !pending_acquisition)
+                || (!matches!(entry.state.as_str(), "available" | "checked_out")
+                    && !pending_acquisition)
                 || entry
                     .current_route_allocation_id
                     .as_ref()
@@ -344,6 +348,98 @@ mod tests {
         assert!(refreshed.admission_error.is_none());
         assert_eq!(state.remote_view_routes["route"].state, "orphaned");
         assert_eq!(state.display_allocations["display"].state, "orphaned");
+    }
+
+    #[test]
+    fn production_inventory_preserves_real_pending_handoff_acquisition() {
+        use crate::native::remote_view::RemoteViewAcquisitionPlan;
+        use crate::native::remote_view_handoff::{
+            begin_route_bound_handoff_acquisition, BeginRouteBoundHandoffAcquisitionInput,
+        };
+        use crate::native::service_store::{
+            JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
+        };
+        let (mut inventory, mut state, config) = fixture();
+        let boot = crate::process_identity::current_boot_epoch().unwrap();
+        inventory.boot_epoch = boot.clone();
+        state.browsers.get_mut("browser").unwrap().boot_epoch = Some(boot.clone());
+        state
+            .display_allocations
+            .get_mut("display")
+            .unwrap()
+            .boot_epoch = Some(boot.clone());
+        state.presentation_capacity = Some(
+            inventory
+                .qualify(&state, config, "production", &boot, |_, _| true)
+                .unwrap(),
+        );
+        let directory = std::env::temp_dir().join(format!(
+            "production-pending-handoff-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("state.json");
+        fs::write(&path, serde_json::to_vec(&state).unwrap()).unwrap();
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        let plan: RemoteViewAcquisitionPlan = serde_json::from_value(json!({
+            "mode":"strict_operator_open", "reusePolicy":"retained", "tabPolicy":"reuse",
+            "requestedBrowserHost":"remote_headed", "requestedViewStreamProvider":"rdp_gateway",
+            "requestedControlInput":"manual_attached_desktop", "selectedRoutePoolEntryId":"pool",
+            "selectedRouteId":"route", "displayAllocationId":"display", "displayName":":14",
+            "routeBinding":{"routeId":"route", "routePoolEntryId":"pool",
+                "displayAllocationId":"display", "displayName":":14", "launchDisplayName":":14",
+                "displayIsolation":"shared_display", "routeUser":"route-user",
+                "provider":"rdp_gateway", "providerMode":"simultaneous_view", "connectionId":"3"},
+            "decisions":[], "blockers":[], "proofRequired":[], "cleanupOnFailure":[], "suggestedCommands":[]
+        })).unwrap();
+        let lease = begin_route_bound_handoff_acquisition(
+            &repository,
+            BeginRouteBoundHandoffAcquisitionInput {
+                inline_route_pool_entry: None,
+                acquisition_plan: &plan,
+                browser_id: "browser",
+                session_id: "session",
+                observed_at: "2026-09-07T23:00:00Z",
+                default_control_input: None,
+            },
+        )
+        .unwrap();
+        let pending = repository.load_snapshot().unwrap();
+        let mut capacity = inventory
+            .qualify(&pending, config, "production", &boot, |_, _| true)
+            .expect("the native acquisition reservation must survive inventory reload");
+        assert_eq!(capacity.reconcile_authoritative_bindings(&pending), 0);
+        assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
+        capacity
+            .activate_bound_browser("route", "display", "browser")
+            .unwrap();
+        assert_eq!(pending.remote_view_routes["route"].state, "pending");
+        assert_eq!(pending.display_allocations["display"].state, "pending");
+        for drift in ["browser", "boot", "completed", "pool"] {
+            let mut conflicting = pending.clone();
+            let record = conflicting
+                .remote_view_acquisition_leases
+                .get_mut(&lease.id)
+                .unwrap();
+            match drift {
+                "browser" => record.browser_id = "foreign".into(),
+                "boot" => record.boot_epoch = Some("prior-boot".into()),
+                "completed" => record.completed_at = Some("2026-09-07T23:00:01Z".into()),
+                "pool" => record.route_pool_entry_id = Some("foreign-pool".into()),
+                _ => unreachable!(),
+            }
+            assert!(
+                inventory
+                    .qualify(&conflicting, config, "production", &boot, |_, _| true)
+                    .is_err(),
+                "{drift}"
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
