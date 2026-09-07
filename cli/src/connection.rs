@@ -38,6 +38,17 @@ pub struct Response {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// Daemon correlation and recourse must survive socket decoding for MCP clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Value>,
+    #[serde(
+        default,
+        rename = "terminalOutcome",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub terminal_outcome: Option<Value>,
 }
 
 #[allow(dead_code)]

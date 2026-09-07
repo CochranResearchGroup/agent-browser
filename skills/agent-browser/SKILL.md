@@ -476,6 +476,12 @@ MCP `service_request` routes a handle-only browser operation using the returned
 original handle; there is no need to duplicate its route fields. Explicit route
 selectors remain subject to conflict and ownership checks.
 
+MCP daemon-backed tool results preserve the daemon's `id`, `failure`, and
+`terminalOutcome` when present. Use `terminalOutcome.provenance.requestId` and
+`jobId` to correlate an ownership refusal with Service records; inspect the
+structured failure recourse before retrying. Older responses may omit these
+fields. The daemon request ID is distinct from the outer MCP JSON-RPC ID.
+
 After runtime-host interruption, bounded `evaluate`, `probe`, and permitted
 `cdp_attach` reconnect the exact original handle's retained target after child,
 owner, process and endpoint checks. Do not reacquire a tab to mask recovery

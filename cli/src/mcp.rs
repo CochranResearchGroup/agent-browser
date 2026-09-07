@@ -11169,14 +11169,12 @@ fn tool_response_from_daemon(
     trace: Value,
     response: Response,
 ) -> Value {
-    let payload = json!({
-        "tool": tool_name,
-        "session": session,
-        "trace": trace,
-        "success": response.success,
-        "data": response.data,
-        "error": response.error,
-    });
+    // Preserve the daemon's optional correlation and typed recourse fields.
+    // Do not manufacture a terminal result when an older daemon omits one.
+    let mut payload = serde_json::to_value(&response).expect("response is JSON serializable");
+    payload["tool"] = json!(tool_name);
+    payload["session"] = json!(session);
+    payload["trace"] = trace;
     json!({
         "content": [
             {
@@ -15737,12 +15735,19 @@ mod tests {
 
     #[test]
     fn tool_response_includes_trace_and_error_flag() {
-        let response = Response {
-            success: false,
-            data: None,
-            error: Some("Service job not found: job-1".to_string()),
-            warning: None,
-        };
+        // Exercise the socket JSON decode as well as the MCP projection.
+        let wire = json!({
+            "id": "request-ownership-1",
+            "success": false,
+            "data": null,
+            "error": "Service job not found: job-1",
+            "failure": {"code": "service_job_not_found", "effectState": "no_effect"},
+            "terminalOutcome": {
+                "state": "failed",
+                "provenance": {"requestId": "request-ownership-1"}
+            }
+        });
+        let response: Response = serde_json::from_value(wire.clone()).unwrap();
         let tool_response = tool_response_from_daemon(
             "service_job_cancel",
             "default",
@@ -15757,6 +15762,25 @@ mod tests {
         assert_eq!(payload["session"], "default");
         assert_eq!(payload["trace"]["serviceName"], "svc");
         assert_eq!(payload["error"], "Service job not found: job-1");
+        for field in ["id", "failure", "terminalOutcome"] {
+            assert_eq!(payload[field], wire[field], "lost daemon field: {field}");
+        }
+
+        let legacy: Response = serde_json::from_value(json!({
+            "success": true, "data": {"value": 42}, "error": null
+        }))
+        .unwrap();
+        let result = tool_response_from_daemon("service_request", "default", json!({}), legacy);
+        let payload: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(result["isError"], false);
+        assert_eq!(payload["data"]["value"], 42);
+        for field in ["id", "failure", "terminalOutcome"] {
+            assert!(
+                payload.get(field).is_none(),
+                "invented daemon field: {field}"
+            );
+        }
     }
 
     #[test]

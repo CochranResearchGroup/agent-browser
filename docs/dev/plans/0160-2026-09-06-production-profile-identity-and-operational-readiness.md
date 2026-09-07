@@ -56,6 +56,13 @@ perform cleanup in its shared browser.
 
 ### Execution strategy amendment, 2026-09-07
 
+Operator follow-up: complete MCP request correlation and structured failure
+propagation first, then use that evidence for unresolved consumer ownership
+refusals. Owner/lease usability remains ahead of remote-view work. For the
+unresolved Guacamole input observation, check refresh/reconnect, effective
+settings, and scoped browser/provider service recovery before assuming a code
+defect. Use disposable sessions and preserve ongoing consumer browsers.
+
 Prioritize the remaining A1 ownership and identity failures before rollback
 retention work. Use the current installed candidate and isolated consumer
 simulations to distinguish a real action refusal from an owner-maintenance

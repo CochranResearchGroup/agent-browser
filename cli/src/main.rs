@@ -2202,12 +2202,18 @@ fn main() {
         let action = cmd.get("action").and_then(|v| v.as_str());
         let resp = match result {
             Ok(data) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
                 success: true,
                 data: Some(data),
                 error: None,
                 warning: None,
             },
             Err(e) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
                 success: false,
                 data: None,
                 error: Some(e),
@@ -2235,6 +2241,9 @@ fn main() {
                     .as_ref()
                     .map(|validation_error| validation_error.message.clone());
                 connection::Response {
+                    id: None,
+                    failure: None,
+                    terminal_outcome: None,
                     success,
                     data: serde_json::to_value(receipt).ok(),
                     error,
@@ -2242,6 +2251,9 @@ fn main() {
                 }
             }
             Err(error) => connection::Response {
+                id: None,
+                failure: None,
+                terminal_outcome: None,
                 success: false,
                 data: None,
                 error: Some(error),
@@ -2265,6 +2277,12 @@ fn main() {
         let mut state = native::action_runtime::DaemonState::new();
         let raw = rt.block_on(native::actions::execute_command(&cmd, &mut state));
         let resp = connection::Response {
+            id: raw
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
+            failure: raw.get("failure").cloned(),
+            terminal_outcome: raw.get("terminalOutcome").cloned(),
             success: raw
                 .get("success")
                 .and_then(|value| value.as_bool())
@@ -2291,6 +2309,9 @@ fn main() {
         match force_close_session_from_metadata(&flags.session) {
             Ok(true) => {
                 let resp = connection::Response {
+                    id: None,
+                    failure: None,
+                    terminal_outcome: None,
                     success: true,
                     data: Some(json!({
                         "closed": true,
@@ -2333,6 +2354,9 @@ fn main() {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
                             let resp = connection::Response {
+                                id: None,
+                                failure: None,
+                                terminal_outcome: None,
                                 success: true,
                                 data: Some(json!({
                                     "closed": true,
@@ -2380,6 +2404,9 @@ fn main() {
                     match force_close_session_from_metadata(&flags.session) {
                         Ok(true) => {
                             let resp = connection::Response {
+                                id: None,
+                                failure: None,
+                                terminal_outcome: None,
                                 success: true,
                                 data: Some(json!({
                                     "closed": true,

@@ -8,14 +8,15 @@ Git checkpoints and linked archives preserve history. Keep this file at or below
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
-This hour is bounded by 17:17:48Z–18:17:48Z. All previous effort remains cumulative.
-The first batch qualified and installed pending storage and diagnostic fixes.
-A separate exact MCP reproduction then justified one additional publication
-within the unchanged hour, raising this hour's total publication allowance to
-two. Both publications completed. No third publication is authorized by this
-execution record. Previous goal turn was a verified wait on build session30120;
-this turn made outcome progress on A1 and removed a storage recurrence risk.
-Full A1–A4/AX readiness remains OPEN. No build, fixture or activation is running.
+The previous bounded hour completed two publications; its execution record is
+preserved at `f269ce64`. This successor begins 21:27Z with a 30-minute ceiling
+through 21:57Z, one MCP diagnostic propagation repair and focused validation.
+All prior effort remains cumulative. No production publication in this batch.
+Recent conversational status replies were no progress. Current work traces
+response-field loss before resolving the historical consumer ownership refusal.
+Full A1–A4/AX readiness remains OPEN. The regression reproduced request-ID loss before the repair; all 129 MCP tests,
+format, workspace Clippy and API parity now pass. Isolated causal-correlation
+proof is next; production remains unchanged.
 No consumer capability was borrowed, profile lease reassigned or consumer browser
 restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
 
@@ -137,8 +138,8 @@ rollback target. Preserve original recovery storage through any future change.
 Next carry structured MCP failure and correlation data through the returned tool
 result, then resolve the historical consumer connection-ownership refusal against
 its actual transport evidence. Keep self-identification as the ordinary default.
-Complete scoped consumer artifact transport and A1 dispositions. Isolate mouse
-delivery with observable input-path evidence before another viewer attempt.
+Complete scoped consumer artifact transport and A1 dispositions. For Guacamole input, first check refresh/reconnect, effective settings, and
+scoped browser/provider recovery in a disposable session before code diagnosis.
 Consolidate those repairs before another production candidate. After A1–A3 pass,
 observe three scheduled cycles, a controlled restart and its next cycle using
 original handles and the durable handoff URL. Plan0158 external-vantage dispatch
