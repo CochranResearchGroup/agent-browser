@@ -22,6 +22,21 @@
 - When a suite exceeds its local budget, profile before changing the gate. Prefer cheaper seams, shared-fixture optimization without weakened isolation, case consolidation, tier correction, trustworthy selection, caching on declared inputs, or duration-aware sharding. Raising a budget requires an explicit risk/economics decision and a follow-up date.
 - Record exactly which tier, selection, environment, retries, shards, and exclusions ran. Validation claims must distinguish `focused`, `presubmit`, `comprehensive`, and `live_or_soak`, and must report any budget breach, flake, quarantine, or unexecuted risk.
 
+## Repair Batch Validation
+
+- Run required integration gates at the completed repair batch or governed
+  execution boundary, not after each intermediate custody commit. Use focused
+  checks while repairing a coherent batch; record full gates as pending and do
+  not describe intermediate checkpoints as merge-ready.
+- Run the required gates once against the final batch before merge readiness
+  or governed runtime effects. Preserve all changed-surface coverage, including
+  changes in earlier commits of that batch.
+- Do not repeat a passed gate without a relevant change, failure, or unresolved
+  risk. A docs follow-up does not invalidate current code validation evidence.
+- Prose-only changes need relevant documentation, link, and contract checks,
+  not application suites. Executable configuration, schemas, and test-selection
+  logic still require checks for their code impact.
+
 ## Adoption Notes
 
 Each adopting repo should define a local test-suite contract with concrete values for:

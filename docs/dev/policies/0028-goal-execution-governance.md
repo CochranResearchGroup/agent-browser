@@ -4,6 +4,10 @@
 
 - Apply this policy when autonomous work is expected to span multiple bounded
   slices, context windows, sessions, or human/runtime gates.
+- Minimize total work to the user’s outcome, including model calls, tests,
+  documentation, review, and replanning. Safety and explicit acceptance checks
+  remain mandatory. Authorization permits an action; evidence of expected
+  acceptance progress justifies spending effort on it.
 - Preserve the user-approved objective as the stable goal contract. Do not
   silently narrow, expand, or rewrite it to match the work already completed.
 - Treat that approved goal as standing authority for ordinary in-envelope
@@ -53,11 +57,28 @@
   metric is unavailable, another observable bound must still cover the loop.
   Repo-local defaults may supply these values; an individual packet need not
   restate them, and missing packet metadata does not block a first safe attempt.
-  Bounds prevent runaway work; they are not consumable approval tokens. When a
-  local bound is reached, first reassess, split the unit, change tactics, or
-  continue a different safe ready unit under the same authority. Escalate only
-  when no meaningful safe action remains or an exact action-specific gate is
-  reached.
+  Bounds prevent runaway work; they are not consumable approval tokens.
+  Reassess within the remaining goal-level allowance. Splitting, renaming,
+  reframing, replacing a worker, or opening a successor does not reset effort,
+  retry, or no-outcome-progress accounting for the same unmet criterion.
+- Establish a finite overall time or cost ceiling in the existing goal control
+  record before sustained execution. Include governance and all successor work;
+  a local tactic change cannot increase that ceiling.
+- Unless the approved plan sets a different finite allowance, reassess after
+  two consecutive checkpoints without `outcome_progress` or 30 minutes of
+  active work without it, whichever comes first. Include repair, validation,
+  model waiting, review, documentation, and replanning in elapsed effort.
+  `blocker_reduction` and `hardening` do not reset this allowance. Measure
+  progress against a named acceptance milestone; trivial metric movement does
+  not restart a stalled deliverable's allowance.
+- At that bound, end the unsuccessful repair/retry approach. Continue a
+  different ready approach autonomously only when current evidence explains
+  how it will advance acceptance within the remaining overall budget. A new
+  filename, fixed exception, passing suite, or larger context limit alone is
+  insufficient. Preserve cumulative effort and report the changed tactic once
+  in the current execution note. If no evidence-backed route remains, report
+  the incomplete outcome and the specific missing information or decision;
+  do not manufacture another governance task or request routine permission.
 - Keep one primary orchestrator responsible for authority, the critical path,
   work-unit selection, integration, progress classification, and the final
   completion claim.
@@ -93,18 +114,28 @@
   of that overlap; an accepted blocking finding blocks the affected criterion
   or integration; and an exhausted loop bound blocks repeating that same loop.
   Continue unrelated safe work when it can still advance the approved goal.
-- Stop autonomous execution only when no meaningful safe in-envelope action
-  remains, an exact applicable gate requires a user decision, or the objective
-  is complete, cancelled, or disproven. Repeated hardening or no-progress first
-  requires a local tactic change or bounded reframe; it does not automatically
-  require operator approval.
-- Continue automatically whenever a useful in-scope action is available and no
-  exact applicable gate blocks it. A recent checkpoint may support that choice,
-  but creating another checkpoint is not a prerequisite for taking an obvious
-  low-risk next step.
+- Continue automatically with a safe, authorized action when current evidence
+  supports acceptance progress and the cumulative bounds permit it. Stop the
+  affected approach when those conditions fail, even if more safe hardening
+  or bookkeeping is possible. Continue independent work that can advance the
+  goal; do not claim the whole goal is blocked merely because one route failed.
+- An operator stop takes precedence over standing continuation authority.
+  Preserve the incomplete result without further repairs or retries. Changing
+  policy or recording a handoff does not resume a stopped experiment.
 - Completion requires current evidence for every acceptance criterion. Token
   spend, elapsed time, test count, schema growth, documentation volume, and
   completed slice count are not completion evidence by themselves.
+
+## Costly Replay
+
+- Before a costly model/provider replay, name the acceptance milestone expected
+  to move and the evidence that the repaired path can reach it. Prefer a local
+  replay of the failing state plus the next transition when feasible. A passing
+  regression proves the repair, not end-to-end readiness. Batch related known
+  blockers before replay; do not spend a live attempt to discover a condition
+  that can be checked locally. Keep this rationale in the existing checkpoint,
+  not a new approval document. All successors inherit cumulative goal bounds.
+
 ## Adoption Notes
 
 Use this module for repos that run `/goal`, unattended campaigns, multi-session
@@ -117,14 +148,17 @@ goal-plan versioning, checkpoint identifiers, progress classification, and the
 configured bounds. Keep exact token counters, time windows, command names, and
 runbook schemas repo-local.
 
-Use a machine-checkable repo-local section such as:
+The following defaults apply unless an approved plan supplies a different finite bound:
 
 ```text
 ## Local Goal Bounds
-max_work_unit_attempts: 2
+max_work_unit_attempts: 3
 max_review_rework_cycles: 1
 max_hardening_checkpoints: 2
-checkpoint_interval: 3 slices or 90 minutes
+checkpoint_interval: 30 minutes
+max_checkpoints_without_outcome_progress: 2
+max_active_minutes_without_outcome_progress: 30
+overall_effort_ceiling: finite_value_required_in_goal_control_record
 authorization_gate: material_departure_or_explicit_action_gate_only
 continuation_default: execute_obvious_in_scope_low_risk
 bound_exhaustion_mode: local_replan_before_escalation

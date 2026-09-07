@@ -256,8 +256,10 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Service Client, Rust Quality, and Rust. Service Client runs `pnpm test:browser-capability-registry-draft` and `pnpm test:service-client`, which check the draft browser capability registry sample, generated service client files, JavaScript type coverage, service request helper contracts, service observability helper contracts, managed-profile flow contracts, and the no-launch service-client example broker-first contract without launching Chrome. Dashboard action-surface changes should run `pnpm test:dashboard-inspector-actions` so the Service right-pane inspector keeps selected-record state separate from mutable incident and job actions. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run parallel-safe tests first, then env-mutating test modules serially in the same job so coverage is preserved without duplicate CI compile work. Service request action changes must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`, `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`, HTTP `/api/service/request`, and generated `@agent-browser/client` helpers aligned; the fast parity, client, and Rust gates include no-launch guards for that invariant. The Rust job also runs the no-launch service contract metadata smoke, no-launch MCP resource-read smoke, no-launch profile-source smoke, no-launch site-policy source smoke, and no-launch HTTP and MCP incident-summary smokes after the Rust suite, so the service contracts, MCP read resources, effective profile and site-policy provenance, and grouped incident summary contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
 
-Before pushing, match local validation to every touched surface since the last
-green CI, not only the files in the final commit. If any Rust source under
+At a completed repair batch, before merge readiness or governed runtime
+effects, match validation to every touched surface since the batch baseline,
+not only the final commit. Follow policy 0042 for intermediate custody commits
+and reuse of passed gates. If any Rust source under
 `cli/src/` or `crates/` changed in the current slice, run
 `scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check` and
 `scripts/ci/cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings`. If a service
@@ -402,6 +404,12 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
 - re-read branch, commit, and integration policy before starting a multi-file or multi-step implementation slice
 
+For sustained execution and repair/retry decisions, read policy 0028. For
+validation batch boundaries, read policies 0010 and 0042. Before updating
+execution status or compacting history, read policies 0020 and 0043. The dated
+[LitScout adoption record](docs/dev/notes/2026-09-07-outcome-first-policy-adoption.md)
+records the local override of conflicting older selector guidance.
+
 ## Policy Entry
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
@@ -443,6 +451,7 @@ Read and follow:
 - `docs/dev/policies/0038-multi-agent-reconciliation.md`
 - `docs/dev/policies/0039-policy-harvest-loop.md`
 - `docs/dev/policies/0042-code-testing-discipline.md`
+- `docs/dev/policies/0043-roadmap-runbook-governance.md`
 
 ## Scope
 

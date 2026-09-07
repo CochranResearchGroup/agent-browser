@@ -148,11 +148,11 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 ### Next Recommendation
 
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
-governs execution of the four remaining production readiness items. Execution
-has started with the fresh census and profile ownership diagnosis. Profile ownership/identity proof and causal error diagnosis are first,
-followed by the authenticated operator journey, maintenance reconciliation and
-unattended operation. Begin execution with the current census and highest-impact
-profile blocker. Plan 0159's bounded completion and installed profile repair do
+governs the four remaining production readiness items. Current execution,
+acceptance evidence, cumulative effort, and the next bounded action are owned by
+[RUNBOOK.md](RUNBOOK.md). Profile ownership/identity proof and causal error
+diagnosis remain first, followed by the authenticated operator journey,
+maintenance reconciliation and unattended operation. Plan 0159's bounded completion and installed profile repair do
 not establish whole production readiness. P158's historical calibration sequence
 remains paused and its incomplete criteria remain visible.
 

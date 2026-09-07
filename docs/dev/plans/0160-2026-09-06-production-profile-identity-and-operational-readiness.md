@@ -4,7 +4,8 @@ Date: 2026-09-06
 
 State: OPEN
 
-Execution state: `active_profile_ownership_diagnosis`
+Current execution status: [RUNBOOK.md](../../../RUNBOOK.md). Historical
+execution checkpoints below are retained evidence, not current status.
 
 Lane: P157
 
@@ -209,8 +210,9 @@ to W1 or W3. Preserve timer state and the reason for any safety stop.
 
 ## Validation, bounds and completion
 
-For changed Rust surfaces, run focused regressions plus repository-safe format
-and workspace clippy checks. Run Service/client contract parity checks when
+For changed Rust surfaces, run focused regressions during the repair batch;
+run repository-safe format and workspace clippy at the completed batch boundary
+before integration or governed runtime effects, following policy 0042. Run Service/client contract parity checks when
 models, schemas or diagnostics change; update CLI help, README, repository skill,
 docs site and inline contracts for changed user-facing behavior. Use
 `pnpm validation:select` against the slice baseline. Documentation-only planning
@@ -231,8 +233,14 @@ checkpoint_mode: material_boundary_with_cadence_backstop
 The primary controls each reproduce/repair/retest loop. Three materially distinct
 attempts per unit is the hard local bound; do not repeat unchanged failed live
 operations. The external lane retains its stricter no-retry rule. At a bound,
-record the causal result, split or reframe locally, and continue unaffected safe
-work. A bound does not authorize broader mutation or erase a blocked criterion.
+record the causal result and end that unsuccessful approach. Any different
+approach must have evidence of acceptance progress within the remaining overall
+effort ceiling, following policy 0028. Successors do not reset cumulative effort,
+retry counts, or the default two-checkpoint/30-minute no-outcome-progress bound.
+Set a finite overall ceiling in the existing runbook control record before
+further sustained execution; retain prior effort rather than granting a fresh
+allowance through this policy update. A bound does not authorize broader
+mutation or erase a blocked criterion.
 One final acceptance review checks the frozen criteria; one rework cycle may
 address accepted blocking findings. Other concerns go to an explicit backlog.
 
