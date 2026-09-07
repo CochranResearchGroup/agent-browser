@@ -958,3 +958,44 @@ The current owner has no transfer receipt; its separately persisted lifecycle
 record carries Ready/Owned custody and a package-launch identity digest. The
 repair must verify that custody against the exact owner generation and process,
 without manufacturing a handoff or weakening foreign-owner rejection.
+
+## Checkpoint 16: current lease and launch-custody attestation
+
+Diagnostics now join the supplied active handle with current tab/session lease
+records. A configured runtime name can identify its catalog profile without
+being mistaken for a different physical profile. Released handles, foreign
+profiles/targets and conflicting current records remain denied. Custody accepts
+a current transfer receipt or an exact Ready/Owned managed-launch lifecycle
+record bound to the current boot, generation and process digest. No handoff
+receipt is manufactured. The ownerCustody projection identifies the basis and
+individual launch predicates for diagnosis. Client types and all five guidance
+surfaces describe the corrected contract.
+
+Two focused regressions reproduced the old lease-snapshot and missing-handoff
+failures. Six diagnostics tests now pass, including configured-alias acceptance
+and foreign-alias denial, stale generation/digest/boot/cleanup evidence, missing
+custody and released handles. Workspace Clippy, formatting, client suite and
+documentation build passed. Private logs use the /tmp/p160-attestation prefix;
+final source tests are p160-attestation-alias-tests.log and Clippy is
+p160-attestation-alias-clippy.log.
+
+The optimized combined candidate SHA256 is
+2cd3bc25245d43622b27e0ebaa6286b4e31402733e2f0f2911ba5824144f6d51.
+The disposable named-profile fixture attestation-green-Ji8iGE passed initial
+and post-host-restart attestation, four no-effect negative cleanup requests,
+exact-target close, retained release, peer preservation and original-handle
+evaluation returning 42. Fixture cleanup reports zero residue. Private evidence
+under the P160 campaign has ledger SHA256
+8b48a0c137bab29bff328667165e3b7899fc6079b9d595be7d5b0585379aaab4
+and probe-source SHA256
+b329c995b0c5627544be7063ae5dab74683a8d6b43adcdaf0b5db1b69fc78599.
+
+Preserved limitations: atPhai reproduced the diagnostics catalog/runtime-name
+mismatch and led to the configured-alias correction. YtBRkU and 0dy9Uh then
+passed alias diagnostics but exposed contradictory raw tab-switch profile
+guards when catalog ID and runtime name differ. After that bounded sequence,
+the unit was reframed: Ji8iGE qualifies matching names, as in consumer Default.
+The raw alias-routing defect remains a W1/A1 blocker and is not counted as
+resolved or hidden by the passing fixture. All failed fixture roots and cleanup
+receipts remain private. Production publication, consumer readback, complete
+A1/AX and A2–A4 acceptance remain outstanding.

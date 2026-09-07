@@ -3971,8 +3971,14 @@ snapshot summary, caller context, trace filters, and an optional screenshot
 path. Diagnostics also return `controlPlaneAttestation`; callers should allow
 effect-capable input only when `complete` is true and `missingProofs` is empty.
 That proof requires the current owner generation, browser process start
-identity, exclusive profile lease, and current owner-transfer handoff receipt
-to agree in one persisted service snapshot. Use
+identity and current exclusive profile lease to agree in one persisted service
+snapshot. Owner custody requires either the current transfer receipt or an exact
+managed-launch lifecycle record for the current boot, owner generation and process.
+`ownerCustody` identifies that basis; an absent transfer receipt is never invented.
+Lease metadata from an older valid handle is checked against the current tab and
+session records. A runtime name is accepted as an alias only when it matches the
+current profile's configured directory hint. Released, foreign or conflicting
+identities remain denied. Use
 `classifyServiceControlPlaneAuthority()` to convert that proof and the current
 handle into an explicit `unavailable`, `observation_only`, or `effect_capable`
 decision. Use `probeServiceTab()` or

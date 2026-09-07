@@ -475,6 +475,15 @@ export interface ServiceDiagnosticsHandoffReceiptAttestation {
   [key: string]: unknown;
 }
 
+export interface ServiceDiagnosticsOwnerCustodyAttestation {
+  verified: boolean;
+  basis: "owner_transfer" | "managed_launch" | "unproven";
+  launchRecordMatches: boolean;
+  handoffAccepted: boolean;
+  source: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceControlPlaneAttestation {
   schemaVersion: "agent-browser.service-control-plane-attestation.v1";
   observedAt: string;
@@ -483,12 +492,14 @@ export interface ServiceControlPlaneAttestation {
   processIdentity?: ServiceDiagnosticsProcessIdentityAttestation | null;
   profileLease?: ServiceDiagnosticsProfileLeaseAttestation | null;
   handoffReceipt?: ServiceDiagnosticsHandoffReceiptAttestation | null;
+  ownerCustody?: ServiceDiagnosticsOwnerCustodyAttestation | null;
   missingProofs: Array<
     | "service_state"
     | "browser_owner"
     | "process_identity"
     | "profile_lease"
     | "handoff_receipt"
+    | "owner_custody"
     | string
   >;
   [key: string]: unknown;

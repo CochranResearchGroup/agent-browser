@@ -175,9 +175,13 @@ and optional diagnostics on failure. Prefer this action over direct CDP
 Before effect-capable input, request service action `diagnostics` for the valid
 `serviceTabHandle`. Its `controlPlaneAttestation` is complete only when the
 current owner generation, browser process start identity, exclusive profile
-lease, and current owner-transfer handoff receipt agree in one persisted
-service snapshot. Fail closed when `complete` is false or `missingProofs` is
-nonempty.
+lease, and owner custody agree in one persisted
+service snapshot. Custody requires the current transfer receipt or an exact
+managed-launch lifecycle record matching the current boot, owner generation and
+process. `ownerCustody` reports the basis and individual launch checks without
+inventing a handoff. The current profile's configured runtime name is an accepted
+alias for its catalog ID. Fail closed when `complete` is false or `missingProofs`
+is nonempty.
 
 Use service request `action: "network_capture"` when a client needs capped
 provider-neutral network response evidence against a valid
