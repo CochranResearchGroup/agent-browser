@@ -1622,3 +1622,59 @@ Private evidence: campaigns/p160/a1-explicit-profile-8ljzVK.
 Next: qualify the combined source through the full Rust gate and final production
 candidate build, then preserve original production browser identities during
 installation and resume installed A1/A2 acceptance. No formal release is planned.
+
+
+## Checkpoint 28: combined production candidate installed; dashboard ownership gap remains
+
+state_transition: ebf0f0d0 release candidate installed with exact browser preservation
+
+acceptance_state: installed cross-client isolation fails; A1–A4 and full AX remain incomplete
+
+progress_classification: blocker_reduction
+
+The frozen full Rust gate passed. The final release build completed in 8m58s.
+Exact release-binary qualification passed headless and remote-headed original
+registered-handle continuity through host interruption, terminal close/reopen,
+foreign input denial, explicit unknown-profile preservation and build-bound
+causal readback through two authenticated dashboard reader processes. All four
+disposable fixtures had zero owned residue.
+
+Installed generation: 0.28.0-8cc912b4d251-ea005893e8fb.
+Binary SHA256:
+8cc912b4d251375aca532209937df4445821159fab408387cd79079c51a2f9bf.
+Support-manifest SHA256:
+ea005893e8fb6709d66598ba0d05745d16cabbbd110500193295bdea4a74acf4.
+
+Controlled activation preserved all four original browser PID/start/executable/
+cgroup identities and all 47 pre-existing tab custody records. The runtime host
+changed to PID30808; no active jobs existed at activation. Maintenance remains
+disabled. Rollback payload and configuration backups are retained. Activation
+does not constitute supported-upgrade or operator-journey acceptance.
+
+The first installed two-client blank-tab smoke produced complete browser
+attestation but no child grants; a cross-client evaluation of 6*7 succeeded.
+Dashboard processes inherited unsafe_claim_any from the private EnvironmentFile,
+overriding their fail_open_ephemeral systemd setting. The host already used
+fail_open_ephemeral. The environment file was backed up and aligned with the
+configured host mode; only the dashboard services restarted. Fresh process
+readback confirms all three now agree.
+
+The second smoke assigned and retained distinct child grants, but cross-client
+evaluation still succeeded. This is unresolved production request-path behavior,
+not a passing isolation result. Both attempts used only newly opened synthetic
+blank tabs, and all four test tabs were physically closed with browser preservation.
+Final verification confirms the same four browser identities and all 47 original
+tab custody projections remain unchanged. No consumer page or payment input was used.
+
+Private evidence: campaigns/p160/publication-ebf0f0d0, including qualification,
+activation, first-installed-smoke, dashboard-mode-reconciliation, second smoke,
+post-install doctor and original-custody records. Doctor still has 12 findings.
+
+material_blockers: Cross-client evaluation is still allowed through the installed
+dashboard path despite distinct grants. The isolated direct service path denies
+it. Original consumer acceptance, installed AX denial reconstruction, A2 operator
+journey, A3 doctor/supported upgrade and A4 scheduled cycles remain open.
+
+next_action_or_stop_reason: Reproduce the dashboard-to-runtime relay path in the
+isolated fixture and trace the effective command identity at child authorization.
+Do not repeat production smoke until the remaining bypass is explained and repaired.
