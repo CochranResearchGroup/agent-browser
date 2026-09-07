@@ -2734,3 +2734,51 @@ The preceding 60W88o fixture failed before focus because its dashboard environme
 omitted shared-host relay mode. That setup error was corrected and retained.
 A new optimized candidate is building for the identical standalone-dashboard
 fixture. No post-fix installed acceptance is claimed.
+
+
+Production follow-up 5e0abfb1: the exact release binary passed the standalone
+dashboard operator-focus fixture and both headless and remote-headed original
+handle interruption/terminal-reopen fixtures. All three left zero owned residue.
+Generation 0.28.0-a7fd467a5548-5d9a9891ddf6 is selected, with all five live browser
+identities and 68 tab-custody projections preserved. Installed embedded dashboard
+assets matched and shared guidance was synced. Doctor remains nonzero.
+
+The first installed attempt, local-viewers-GHmvpT, failed before input because
+the durable-handoff dashboard shortcut used a retained HTTP stream port without
+preparing the owner lane after the host restart. Journal occurrence IDs
+90266e16-a458-4ae4-b45e-6f4d0aad00c0 and b056b906-e0b2-4945-a9eb-8703aefd4a31
+bind backend_unavailable at connect to this build. The returned fixture projection
+lost the gateway error detail; later attempts now retain that detail. A supported
+diagnostic read of the original synthetic handle restored its lane and proved
+complete attestation with unchanged input counters. This is a warm-lane workaround,
+not cold-start acceptance. The pending source correction prepares the exact lane
+before the shortcut sends its request. Stream regression and Clippy are running.
+
+Warm-lane attempt local-viewers-aoKCek resolved the correct browser and target but
+could not see the blue marker: the page viewport was 142 pixels high and the
+marker's top was 159 pixels below its top. No input occurred. The adjusted attempt
+local-viewers-bBbB2V resolved both authenticated viewers, denied anonymous access,
+and successfully completed operator focus with dashboard:admin and authenticated-
+ingress provenance. Mouse input produced the white acknowledgement. The final
+keyboard crop did not match its solid-blue baseline, so the test remains failed.
+Readback of the same original handle proved both trusted counters increased from
+two to three and attestation remained complete. The failed keyboard crop contains
+blue plus a small part of marker lettering; the page's scroll position changed to
+33 and its viewport became 462 pixels high. That supports a moving-sample diagnosis
+but does not establish a passing fixed-region pixel protocol. Both viewers closed.
+No additional input retry has run. Reconnect and full A2 acceptance remain open.
+
+Read-only pressure attribution is retained in publication-5e0abfb1. Nineteen
+observed stock-Chrome browser roots include other application profiles, retained
+P158/P159/P160 campaign fixtures and the separately preserved P158 development
+runtime. Several Chrome processes expose a flattened command line and scrubbed
+HOME rather than ordinary argv/environment fields. Profile arguments and cgroups
+provide attribution evidence, not cleanup authority. No process was signaled and
+no blanket doctor exemption was applied. A1, A2, A3, A4 and AX remain open.
+
+The cold-handoff follow-up passed the focused stream selection: 220 tests, zero
+failures, 43.14 seconds after compilation. Final help-text formatting and
+workspace Clippy readback passed. This coverage includes
+the existing live-listener readiness predicate and authenticated handoff contracts,
+but does not yet prove the newly connected shortcut on a cold real browser lane.
+That installed regression remains an explicit next gate.

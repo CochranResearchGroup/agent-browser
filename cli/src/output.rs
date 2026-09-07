@@ -5678,7 +5678,10 @@ receipt. Failure to prove presentation rolls back the staged candidate and
 preserves the selected generation. Stable ingress stays on the old backend until that receipt exists,
 then moves to the managed candidate backend on the next port. The explicit
 dashboard ingress commit command remains a recovery path for an already-ready
-receipt. Workstation gc remains available as a
+receipt. Durable-handoff resolution prepares the exact retained owner lane
+before using its saved HTTP port after a runtime-host restart. Failed preparation
+returns durable_handoff_owner_prepare_failed before forwarding the request.
+Workstation gc remains available as a
 reviewed operator operation. It retains the selected generation and every
 generation referenced by a live process, supervisor, rollback-capable, failed,
 or unclosed transaction. Dry run reports candidates without deleting them.

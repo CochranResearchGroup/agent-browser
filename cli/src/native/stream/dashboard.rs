@@ -781,6 +781,31 @@ async fn handle_service_api_request(
                     return;
                 }
             };
+            // A retained owner may outlive its host's HTTP listener. Prepare the
+            // exact owner lane before using its persisted stream port, just as
+            // the canonical service request path does.
+            let service_command = serde_json::from_str::<Value>(&command_body).ok();
+            if let Err(err) =
+                ensure_service_daemon_session(&session_name, service_command.as_ref()).await
+            {
+                if let Some(command) = service_command.as_ref() {
+                    record_durable_handoff_gateway_failure(
+                        command,
+                        &session_name,
+                        "durable_handoff_owner_prepare_failed",
+                        &err,
+                    );
+                }
+                write_json_error_with_code(
+                    stream,
+                    "502 Bad Gateway",
+                    &format!("Durable handoff owner preparation failed: {err}"),
+                    Some("durable_handoff_owner_prepare_failed"),
+                    None,
+                )
+                .await;
+                return;
+            }
             if let Some(port) = session_port_for_name(&session_name) {
                 match proxy_dashboard_service_api_request(
                     port,

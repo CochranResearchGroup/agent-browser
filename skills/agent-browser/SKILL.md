@@ -3160,3 +3160,8 @@ The dashboard sends operator focus through its authenticated request path.
 A current controller lease may have no expiry; it remains valid until release
 or controller replacement. Each signed focus request still has its own short
 expiry and must match the current controller epoch.
+
+After a runtime-host restart, durable-handoff resolution prepares the exact
+retained owner lane before using its saved HTTP port. A failed preparation
+returns `durable_handoff_owner_prepare_failed` without sending the resolve
+command to a stale listener.
