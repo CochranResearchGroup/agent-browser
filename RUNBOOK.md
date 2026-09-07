@@ -73,6 +73,16 @@ consumer's supported rejoin path as the next investigation.
   session-tabs caused the missing iframe or rerun an unchanged viewer test.
   The next bounded repair must join request timing and gateway/primary evidence
   or reproduce the cold condition locally before changing runtime behavior.
+- AX repair batch started: dashboard fetch instrumentation now fills the existing
+  `elapsedMs` field when fetch settles, including failures delivered after later
+  recovery. The regression failed before the fix and passed afterward; it proves
+  queued delivery delay is excluded and existing privacy/no-retry checks pass.
+  `pnpm test:service-failure-journal` passes. Full dashboard integration and Rust
+  format/clippy for the CLI help edit remain pending before merge readiness or
+  publication. This source checkpoint is not installed and does not resolve A2.
+- The 30-minute round ends at the deadline above. No new expensive build or
+  unchanged live attempt is started at this checkpoint. Retain the unfinished
+  AX batch and A2 causal investigation for the next evidence-backed execution.
 - Progress classification: `outcome_progress` for isolated retained-handle and
   custody acceptance within A1; full A1, A2, A3, A4 and AX remain open.
 

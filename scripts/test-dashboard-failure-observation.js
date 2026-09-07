@@ -101,7 +101,12 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
   const calls = [];
   const reports = [];
   let recovered = false;
+  let clock = 0;
+  const previousPerformance = globalThis.performance;
+  globalThis.performance = { now: () => clock };
+  try {
   await withInstrumentedFetch(async (input, init = {}) => {
+    clock += 17;
     const parsed = new URL(String(input), globalThis.location.href);
     calls.push({ path: parsed.pathname, search: parsed.search, init: structuredClone(init) });
     if (parsed.pathname === '/api/service/failure-observation') {
@@ -143,6 +148,7 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
 
     reinstall();
     recovered = true;
+    clock += 10000;
     await globalThis.fetch('/api/service/status?projection=dashboard-summary');
     await tick();
     await tick();
@@ -152,12 +158,17 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
       ['runtime_health_read', 'response_non_json'],
       ['session_tabs_read', 'fetch_rejected'],
     ]);
+    assert.deepEqual(reports.map(report => report.elapsedMs), [17, 17, 17, 17],
+      'failure duration must exclude deferred reporting and recovery delay');
     const serializedReports = JSON.stringify(reports);
     for (const forbidden of ['secret-body', 'secret-message', 'token=secret', 'secret=query', '9222']) {
       assert(!serializedReports.includes(forbidden), `failure report leaked ${forbidden}`);
     }
     assert(reports.every((report) => typeof report.observationId === 'string'));
   });
+  } finally {
+    globalThis.performance = previousPerformance;
+  }
 }
 
 async function testQueueDedupeAndGapAccounting() {

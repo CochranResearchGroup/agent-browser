@@ -6124,6 +6124,7 @@ reopening the durable URL does not elect another viewer as primary.
 Primary guards distinguish state/authority read failures from identity changes.
 Primary termination records retain the typed cause, elapsed lifetime and
 route/session/display references in the private failure journal.
+Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it.
 Failed primary responses include occurrenceId and, when known, terminalOccurrenceId
 for journal correlation; retrySafe remains false.
 

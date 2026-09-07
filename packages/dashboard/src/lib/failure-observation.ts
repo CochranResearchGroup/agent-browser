@@ -150,15 +150,18 @@ export async function hashOpaqueIdentifier(value: string): Promise<string | null
 /**
  * Observe dashboard fetch failures globally. The wrapper never consumes or
  * changes the response returned to the caller and never records request URLs,
- * bodies, headers, or credentials.
+ * bodies, headers, or credentials. Duration ends when fetch settles, so delayed
+ * failure delivery does not inflate the observed request time.
  */
 export function installDashboardFetchFailureInstrumentation(): () => void {
   if (typeof window === "undefined") return () => undefined;
   const current = window.fetch.bind(window);
   const instrumented: FetchImplementation = async (input, init) => {
     const metadata = observableFetchMetadata(input, init);
+    const startedAt = performance.now();
     try {
       const response = await current(input, init);
+      if (metadata) metadata.observation.elapsedMs = Math.max(0, performance.now() - startedAt);
       if (metadata?.deferUntilRecovery && !response.ok) {
         dashboardReadFailureDeliveryQueue.enqueue({
           ...metadata.observation,
@@ -209,6 +212,7 @@ export function installDashboardFetchFailureInstrumentation(): () => void {
       return response;
     } catch (error) {
       if (metadata) {
+        metadata.observation.elapsedMs = Math.max(0, performance.now() - startedAt);
         const observation = {
           ...metadata.observation,
           code: error instanceof DOMException && error.name === "AbortError" ? "request_aborted" : "fetch_rejected",

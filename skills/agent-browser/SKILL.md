@@ -2265,6 +2265,8 @@ permission. Stable profile, logical-browser, route, connection, route-user,
 and durable handoff IDs survive reboot. Profile-lease reconciliation plans are
 sealed to the current epoch and fail closed if it changes or is unavailable.
 
+Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it.
+
 ## Batch Execution
 
 Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.
