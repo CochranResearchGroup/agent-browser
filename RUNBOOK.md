@@ -14,8 +14,8 @@ rewriting presentation custody or ready states. Active reservations and human
 controller protection remain intact; development inventory remains separate.
 All ten inventory tests, format, Clippy and optimized build pass at `d682ae6c`.
 All five documentation surfaces are updated. Private-state-copy readback returned
-capacity but normalized away incumbent route ownership: live qualification FAILED
-its custody requirement. Do not enable this candidate inventory in production.
+capacity with an idle, unbound slot despite the route retaining its browser.
+Live qualification FAILED capacity ownership preservation. Do not enable this candidate inventory in production.
 Private `production-inventory/candidate-inventory.json` is prepared for the exact
 synthetic route but is not enabled. This unit is bounded through 23:05:24Z with
 one optimized candidate build and two isolated attempts; effort is cumulative.
@@ -145,8 +145,8 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next use an originally owned disposable browser/display fixture, not a copied
-production-state host, to qualify real reattach and custody preservation;
+Next trace why capacity clears its browser binding while the route retains it;
+then qualify with an originally owned disposable browser/display fixture;
 actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
