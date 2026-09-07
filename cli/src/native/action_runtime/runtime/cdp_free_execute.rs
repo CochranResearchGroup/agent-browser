@@ -662,7 +662,7 @@ fn authorize_profile_child_access_in_state(
         }
         return Ok(None);
     };
-    let Some(child) = tab.profile_access.clone() else {
+    let Some(mut child) = tab.profile_access.clone() else {
         if handle
             .get("profileAccess")
             .is_some_and(|value| !value.is_null())
@@ -671,6 +671,16 @@ fn authorize_profile_child_access_in_state(
         }
         return Ok(None);
     };
+    // Reconnect only with positive evidence that the service host which minted
+    // the persisted connection ended. Never trust the caller's handle copy.
+    if child
+        .connection_instance_id
+        .as_deref()
+        .is_some_and(crate::native::service_connection_lifetime::connection_host_ended)
+    {
+        child.connection_state =
+            crate::native::service_profile_access_policy::ProfileConnectionState::Disconnected;
+    }
     // One-shot HTTP and MCP requests receive a fresh service-generated
     // connection. A disconnected child may therefore reconnect as part of
     // its next authorized operation. An active child remains exclusive to

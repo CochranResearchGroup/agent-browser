@@ -390,7 +390,7 @@ impl ControlPlaneHandle {
     }
 
     pub async fn submit(&self, command: Value) -> Value {
-        let connection_instance_id = format!("connection-{}", uuid::Uuid::new_v4());
+        let connection_instance_id = super::service_connection_lifetime::new_connection_id();
         let response = self
             .submit_from_connection(command, &connection_instance_id)
             .await;
@@ -1491,7 +1491,7 @@ fn enqueue_due_monitor_run(
         "id": id,
         "action": SERVICE_MONITORS_RUN_DUE_ACTION,
     });
-    let connection_instance_id = format!("connection-monitor-{}", uuid::Uuid::new_v4());
+    let connection_instance_id = super::service_connection_lifetime::new_connection_id();
     let provenance = ServiceRequestProvenance::capture(
         &command,
         &id,

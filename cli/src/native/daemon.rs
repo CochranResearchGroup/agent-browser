@@ -845,7 +845,7 @@ async fn handle_connection<S>(
     let (reader, mut writer) = tokio::io::split(stream);
     let mut buf_reader = BufReader::new(reader);
     let mut line = String::new();
-    let connection_instance_id = format!("connection-{}", uuid::Uuid::new_v4());
+    let connection_instance_id = super::service_connection_lifetime::new_connection_id();
     let _disconnect_guard = ProfileConnectionDisconnectGuard(&connection_instance_id);
 
     loop {

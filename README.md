@@ -1826,6 +1826,12 @@ MCP daemon-backed tool results preserve the daemon's `id`, `failure`, and
 structured failure recourse before retrying. Older responses may omit these
 fields. The daemon request ID is distinct from the outer MCP JSON-RPC ID.
 
+New service-generated connection IDs carry host lifetime evidence. After an
+abrupt host exit, the original handle may reconnect when the service proves the
+old host ended and the same subject still has permission. Live owners remain
+exclusive. Legacy IDs, unreadable process evidence, and ambiguous PID namespaces
+remain unresolved; matching labels alone never authorize takeover.
+
 After a runtime-host interruption, reuse the original `serviceTabHandle` for
 bounded `evaluate`, `probe`, or permitted `cdp_attach`. The service reconnects
 the exact retained target after validating child access, runtime ownership,
