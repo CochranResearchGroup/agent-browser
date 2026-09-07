@@ -3104,3 +3104,18 @@ also passed, as did workspace Clippy with warnings denied, formatting and the
 docs production build. No red-before-fix execution is claimed. An optimized
 candidate build is running for read-only validation against the actual installed
 runtime; production still runs c249c531.
+
+Current-selection live readback: the optimized candidate build passed in 2m 13s.
+The installed c249c531 status command reports selectedGenerationReady=false and
+overall workstation-upgrade readiness=false. The candidate's read-only status
+command against that same production installation reports
+currentSelectionEvidence.ready=true, selectedGenerationReady=true and overall
+workstation-upgrade readiness=true. Both retain
+upgradeTransactionState=failed_preserved_old_generation. Hash comparisons prove
+that neither ingress registry nor any existing transaction file changed, and
+the installation selector is unchanged. This proves the new observation against
+current production evidence; it does not publish the candidate, clear the other
+doctor findings, or complete the full plan. Evidence and the optimized binary
+are archived under current-selection-proof. The optimized build began on base
+795d7c18 with the source changes later committed as 8c3ee439; final publication
+must use a fresh release build from committed source.
