@@ -635,7 +635,7 @@ fn bind_registered_principal_to_current_owner(
         return Ok(false);
     };
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+        crate::runtime_profile::resolved_profile_identity_digest(profile_path, &registered.capability.profile_id)?;
     let Some(owner) = state
         .runtime_owner_registry
         .owners
@@ -676,7 +676,7 @@ fn rotate_registered_principal_owner_binding(
         return Ok(false);
     };
     let profile_identity_digest =
-        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+        crate::runtime_profile::resolved_profile_identity_digest(profile_path, &registered.capability.profile_id)?;
     if let Some(existing) = state
         .runtime_owner_registry
         .principal_bindings
@@ -1776,7 +1776,7 @@ fn unbound_capability_profile_lease(
         .get(&capability.profile_id)
         .and_then(|profile| profile.user_data_dir.as_deref())
         .and_then(|path| {
-            crate::runtime_profile::canonical_profile_identity_digest(Path::new(path)).ok()
+            crate::runtime_profile::resolved_profile_identity_digest(path, &capability.profile_id).ok()
         });
     let owner = profile_identity_digest
         .as_deref()
@@ -2503,6 +2503,53 @@ mod tests {
         .unwrap();
         let lease_id = profile_leases_for_state(&state, NOW)[0].id.clone();
         (state, authority, lease_id)
+    }
+
+    #[test]
+    fn named_profile_registration_projection_and_foreign_guard() {
+        let (mut state, authority, _) = state_with_lease();
+        let profile_id = authority.profile_id.clone();
+        state.profiles.get_mut(&profile_id).unwrap().user_data_dir = Some("Default".to_string());
+        let resolved = crate::runtime_profile::resolve_profile(Some("Default"), Some(&profile_id)).unwrap();
+        let expected = crate::runtime_profile::canonical_profile_identity_digest(&resolved.user_data_dir).unwrap();
+        let raw = crate::runtime_profile::canonical_profile_identity_digest(Path::new("Default")).unwrap();
+        assert_ne!(expected, raw, "named profile must not be rooted at caller cwd");
+        let mut owner = state.runtime_owner_registry.owners.values().next().unwrap().clone();
+        owner.profile_identity_digest = expected.clone();
+        state.runtime_owner_registry.owners.clear();
+        state.runtime_owner_registry.owners.insert(expected.clone(), owner);
+        state.runtime_owner_registry.principal_bindings.clear();
+        let registered = super::super::service_principal::RegisteredProfileCapability {
+            principal: state.service_principals.principals[&authority.principal_id].clone(),
+            capability: state.service_principals.profile_capabilities[&authority.capability_id].clone(),
+        };
+        let projected = unbound_capability_profile_lease(&state, &registered.capability, NOW);
+        assert_eq!(projected.profile_identity_digest.as_deref(), Some(expected.as_str()));
+        // Previously issued capability repairs the one exact legacy session through
+        // the existing guarded rejoin API; no re-registration or rotation.
+        let mut existing = state.clone();
+        let session = existing.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.work_lease_revision = 0;
+        session.expires_at = None;
+        let lease = unbound_capability_profile_lease(&existing, &registered.capability, NOW);
+        assert!(lease.authorized_actions.contains(&"rejoin".to_string()));
+        let repaired = rejoin_profile_lease(&mut existing, &lease.id, &lease.lease_revision,
+            &authority, NOW, Some("2026-08-27T13:00:00Z")).unwrap();
+        assert!(!repaired.observation_only);
+        assert_eq!(existing.runtime_owner_registry.principal_bindings[&expected].capability_id,
+            authority.capability_id);
+        assert!(bind_registered_principal_to_current_owner(&mut state, &registered).unwrap());
+        assert_eq!(state.runtime_owner_registry.principal_bindings[&expected].principal_id, authority.principal_id);
+        let foreign = register_profile_capability(&mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:foreign".to_string(), display_name: None,
+                profile_id, registered_at: Some(NOW.to_string()), registered_by: None,
+            }, "foreign-capability-token-more-than-thirty-two-characters").unwrap();
+        assert!(bind_registered_principal_to_current_owner(&mut state, &foreign).is_err());
+        assert_eq!(state.runtime_owner_registry.principal_bindings[&expected].principal_id, authority.principal_id);
     }
 
     fn temp_service_home(label: &str) -> PathBuf {
