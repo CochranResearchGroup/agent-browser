@@ -430,16 +430,25 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
-    // This exact guard precedes orphan adoption's first state mutation. A
-    // rejected binding requires inspection, not a replacement browser or a
-    // claim that the retained process is permanently lost.
-    if error.starts_with("runtime_handoff_orphan_browser_hint_mismatch:") {
+    // Hint mismatch precedes attachment; an existing-owner refusal can follow
+    // CDP attachment. Both require inspection, while effect certainty differs.
+    let orphan_guard = error.split_once(':').map(|(code, _)| code).filter(|code| {
+        matches!(
+            *code,
+            "runtime_handoff_orphan_browser_hint_mismatch" | "runtime_handoff_orphan_owner_present"
+        )
+    });
+    if let Some(code) = orphan_guard {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
-            code: "runtime_handoff_orphan_browser_hint_mismatch".to_string(),
+            code: code.to_string(),
             axis: ServiceFailureAxis::LifecycleOwner,
             phase: ServiceFailurePhase::LaunchAdmission,
-            effect_state: ServiceEffectState::NoEffect,
+            effect_state: if code == "runtime_handoff_orphan_browser_hint_mismatch" {
+                ServiceEffectState::NoEffect
+            } else {
+                ServiceEffectState::EffectUncertain
+            },
             retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
             recommended_action: "inspect_profile_recovery_plan".to_string(),
             reuse_allowed: false,

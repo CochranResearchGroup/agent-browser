@@ -3165,3 +3165,9 @@ After a runtime-host restart, durable-handoff resolution prepares the exact
 retained owner lane before using its saved HTTP port. A failed preparation
 returns `durable_handoff_owner_prepare_failed` without sending the resolve
 command to a stale listener.
+
+A retained browser with a current Ready owner reconnects to the exact handoff
+target after profile, process, endpoint and owner checks. This preserves the
+existing ownership generation and does not create a replacement browser or tab.
+An ownership refusal remains a failed resolution with its original cause and
+inspection recourse; it must not be treated as an automatic convergence retry.

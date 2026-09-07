@@ -2782,3 +2782,112 @@ workspace Clippy readback passed. This coverage includes
 the existing live-listener readiness predicate and authenticated handoff contracts,
 but does not yet prove the newly connected shortcut on a cold real browser lane.
 That installed regression remains an explicit next gate.
+
+
+Installed warm-lane A2 readback now passes in local-viewers-vXO6zP. The driver
+chooses a fixed solid-blue controller crop with 40 pixels of vertical blue margin,
+excluding marker lettering and accommodating the previously observed 33-pixel
+focus scroll. The existing fixed-region hash protocol was unchanged. Both
+concurrent authenticated viewers showed synthetic pixels, anonymous access was
+denied, trusted mouse and keyboard acknowledgements passed, and the original
+durable URL reconnected while the peer remained usable. Subsequent original-
+handle diagnostics remained complete and both trusted counters were four. This
+proves the installed warm journey, not cold host recovery or P158 external vantage.
+
+Cold routing regression: operator-cold-handoff-Wi50im failed on installed-source
+5e0abfb1 with connection refused at the retained owner HTTP port after a disposable
+host interruption. The same fixture passed on optimized candidate 6d4e0f15 in
+operator-cold-handoff-pVUdQN. It creates and closes a disposable peer tab through
+supported actions, then seeds only an isolated handoff hint referencing that
+closed peer while its host is stopped. No owner or permission record is authored.
+The dashboard restores the exact listener, returns status closed without reopening
+the peer, and preserves the original live browser process and complete original-
+handle attestation. This is a routing regression, not a ready-provider handoff.
+The earlier e78cwG setup passed the old binary because its closed target sent the
+request down the already-correct canonical fallback; it is not red evidence.
+All three fixtures left zero owned residue. The full 6d4e0f15 release is building.
+
+Readiness remains incomplete despite the warm A2 pass: the synthetic handoff has
+a fresh ready presentation receipt in Service State, while dashboard ingress has
+no lastPresentationReceipt for its already-selected backend. Workstation status
+still reports selectedGenerationReady false against the old failed-preserved
+transaction. These are separate remaining reconciliation gaps. No acceptance
+receipt or transaction history was hand-edited. The consumer's own rejoin and
+subsequent attestation result has been requested while independent work continues.
+
+
+Cold installed handoff follow-up on 6d4e0f15: the exact release passed the
+isolated cold-listener fixture and both original-handle continuity fixtures.
+Generation 0.28.0-a2f1ce276fbf-cc8aafde7920 was activated with all five browser
+process identities and 68 tab-custody projections preserved. The activation
+helpers have run and must not be replayed from the earlier continuation text.
+
+The first valid retained-handoff journey after activation, local-viewers-bvPpHr,
+failed before page input. The listener now starts, but adoption rejects the
+existing Ready owner with runtime_handoff_orphan_owner_present. Directed response
+readback is retained in publication-6d4e0f15/cold-handoff-response.json under
+request http-service-request-service_remote_view_handoff_resolve-324d0831-05c7-47bb-892c-8e5123883a8a.
+It incorrectly returns success true, status converging and retryable true. This
+is an A1/A2 recovery defect and an AX causal-classification defect. The original
+warm journey on 5e0abfb1 does not establish cold recovery on this candidate.
+
+Source review locates the wrong branch: the remote-view runtime adapter always
+calls runtime handoff resume; without a transfer descriptor that handler attempts
+orphan adoption, which correctly refuses a Ready owner. Original service-tab
+recovery already verifies the handle, canonical profile, process, endpoint and
+owner fence before attaching the exact retained target. The next repair must
+share the appropriate existing-owner verification without weakening orphan or
+foreign-owner rejection, replacing tabs, or promoting observation to authority.
+The cold-listener fixture references a closed hint and cannot cover this valid
+retained-browser branch; add coverage at that actual seam.
+
+The refreshed consumer report at note0156 confirms that registration and a Ready
+owner did not prove profile_lease or handoff_receipt. Its named-profile correction
+is integrated, but a successful rejoin and complete attestation from the original
+consumer remain unverified. Self-identification alone cannot satisfy those proofs.
+Keep that consumer acceptance first, together with exact tab release, cold retained
+recovery and causal error reporting. Payment tests, joined emails, CSV/browser
+checks and final consumer cleanup remain downstream; no business action or
+consumer-capability use was performed during this review. A1 through A4 and AX
+remain open.
+
+
+Cold-owner repair candidate: durable resolution now passes the retained handoff
+identity to the runtime adapter. For an exact current Ready owner, it shares the
+original service-handle profile/process/endpoint/owner fence and attaches only
+the recorded target. It preserves the ownership generation; actual orphan and
+transfer paths retain their guards. A post-attachment process identity check
+also prevents installing a connection after process replacement.
+
+The production-source isolated reproduction operator-cold-ready-handoff-p3PbXn
+failed with the same owner-present refusal. It seeds only an isolated handoff
+reference to its original live target, without authoring owner or permission
+records, and left zero owned residue. The coordinator regression independently
+failed because that refusal became Converging. After the error-path correction,
+all 29 remote-view coordinator tests and 15 failure-classification tests passed;
+workspace Clippy and formatting checks passed. Existing-owner refusal retains
+uncertain effects because the old orphan path may already have attached CDP;
+the earlier pre-attachment hint guard remains no-effect. Optimized real-browser
+qualification and production publication of this repair remain pending.
+
+
+Optimized cold-owner candidate 4549eecd1abcba545663bf8e685c7ddcd559a22787caf2ec8c4ea9156557519c
+passed operator-cold-ready-handoff-0SY9PJ: a cold authenticated dashboard resolve
+reattaches the exact original target and preserves the owner registry generation.
+The deliberately unproven local display is refused with geometry_not_authorized;
+route compensation is verified rolled_back, the closed peer stays closed, and
+original-client diagnostics remain complete. This qualifies owner recovery and
+refusal preservation, not a ready remote presentation. Headless ztL8Ww and
+remote-headed OSVkkH also passed both independently authenticated original-client
+interruption, foreign-denial and terminal-reopen checks. All left zero owned
+residue. Source and binary binding is retained in candidate-cold-ready-owner.
+
+Retained failed fixture attempts remain part of the evidence: qkxW6K omitted
+retained route selectors and reached route_pool_exhausted; aJ0TXL and NSqgey
+exhausted the inherited ten-second closed-hint budget. A 45-second disposable
+run, 50Vzcp, exposed the actual presentation refusal, geometry_not_authorized,
+with route rollback. No product timeout or presentation gate was relaxed. The
+final fixture explicitly tests that refusal, original owner continuity and
+complete original-client attestation. Old-source CFdNvs still fails earlier at
+runtime_handoff_orphan_owner_present. Production A2 must independently pass the
+real authorized display, synthetic input, concurrent viewers and durable reconnect.

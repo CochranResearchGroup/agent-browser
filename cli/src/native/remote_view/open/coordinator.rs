@@ -649,6 +649,11 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .forward(
                 "adopt_retained_browser",
                 runtime.adopt_retained_browser(AdoptRetainedBrowserRequest {
+                    handoff_id: retained_handoff
+                        .as_ref()
+                        .expect("validated retained handoff")
+                        .id
+                        .clone(),
                     source_session,
                     logical_browser_id,
                 }),
@@ -1460,16 +1465,27 @@ pub(crate) async fn execute_durable_resolution<
             return Ok(RouteBoundOpenOutcome::Planned { plan });
         }
         Ok(RouteBoundDirectOpenResult::Opened(opened)) => opened.into_value(),
-        // The orphan identity guard rejects before adoption effects. Preserve this
-        // failure for Service recourse and journaling instead of inviting retries.
-        // It does not establish permanent loss of the retained browser.
+        // Explicit owner and identity refusals need inspection, not automatic
+        // convergence. Preserve the cause for Service recourse and journaling;
+        // the classifier retains uncertainty when CDP attachment already began.
         Err(error)
             if matches!(
                 error.runtime_issue.as_ref(),
                 Some(RouteBoundRuntimeIssue::EffectFailed {
                     operation: "adopt_retained_browser",
                     message,
-                }) if message.starts_with("runtime_handoff_orphan_browser_hint_mismatch:")
+                }) if message.split_once(':').is_some_and(|(code, _)| matches!(code,
+                    "runtime_handoff_orphan_browser_hint_mismatch"
+                    | "runtime_handoff_orphan_owner_present"
+                    | "service_tab_recovery_owner_missing"
+                    | "service_tab_recovery_identity_mismatch"
+                    | "service_tab_recovery_process_unproven"
+                    | "service_tab_recovery_endpoint_unproven"
+                    | "service_tab_recovery_target_missing"
+                    | "service_tab_recovery_attach_failed"
+                    | "runtime_owner_generation_stale"
+                    | "runtime_owner_observation_only"
+                ))
             ) =>
         {
             return Err(error);

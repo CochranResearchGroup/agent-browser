@@ -1292,41 +1292,48 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
 
     // An explicit identity rejection cannot become an automatic convergence
     // retry merely because it occurred during adoption. Preserve the handle.
-    runtime.adoption_issue = Some(RouteBoundRuntimeIssue::EffectFailed {
-        operation: "adopt_retained_browser",
-        message: "runtime_handoff_orphan_browser_hint_mismatch: source session is not bound"
-            .to_string(),
-    });
-    runtime.events.lock().unwrap().clear();
-    let rejected = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::durable_resolution(
-            "handoff-a".to_string(),
-            false,
-            authorized_attribution(),
+    for (code, effect_state) in [
+        (
+            "runtime_handoff_orphan_browser_hint_mismatch",
+            crate::native::service_failure::ServiceEffectState::NoEffect,
+        ),
+        (
+            "runtime_handoff_orphan_owner_present",
+            crate::native::service_failure::ServiceEffectState::EffectUncertain,
+        ),
+    ] {
+        runtime.adoption_issue = Some(RouteBoundRuntimeIssue::EffectFailed {
+            operation: "adopt_retained_browser",
+            message: format!("{code}: retained owner guard refused"),
+        });
+        runtime.events.lock().unwrap().clear();
+        let rejected = RouteBoundOpenCoordinator::open(
+            RouteBoundOpenInvocation::durable_resolution(
+                "handoff-a".to_string(),
+                false,
+                authorized_attribution(),
+            )
+            .unwrap(),
+            &mut runtime,
+            &repository,
+            &supervisor,
         )
-        .unwrap(),
-        &mut runtime,
-        &repository,
-        &supervisor,
-    )
-    .await
-    .expect_err("unbound identity must remain a failed resolution");
-    assert!(rejected.starts_with("runtime_handoff_orphan_browser_hint_mismatch:"));
-    let failure = crate::native::service_failure::classify_service_failure(&rejected);
-    assert_eq!(failure.code, "runtime_handoff_orphan_browser_hint_mismatch");
-    assert_eq!(
-        failure.effect_state,
-        crate::native::service_failure::ServiceEffectState::NoEffect
-    );
-    assert_eq!(failure.recommended_action, "inspect_profile_recovery_plan");
-    assert_eq!(
-        *runtime.events.lock().unwrap(),
-        vec!["observe_browser", "adopt_retained_browser"]
-    );
-    assert_eq!(
-        serde_json::to_value(store.load().unwrap()).unwrap(),
-        serde_json::to_value(&retained).unwrap()
-    );
+        .await
+        .expect_err("unbound identity must remain a failed resolution");
+        assert!(rejected.starts_with(&format!("{code}:")));
+        let failure = crate::native::service_failure::classify_service_failure(&rejected);
+        assert_eq!(failure.code, code);
+        assert_eq!(failure.effect_state, effect_state);
+        assert_eq!(failure.recommended_action, "inspect_profile_recovery_plan");
+        assert_eq!(
+            *runtime.events.lock().unwrap(),
+            vec!["observe_browser", "adopt_retained_browser"]
+        );
+        assert_eq!(
+            serde_json::to_value(store.load().unwrap()).unwrap(),
+            serde_json::to_value(&retained).unwrap()
+        );
+    }
 
     runtime.adoption_issue = None;
     runtime.adoption_observation = Some(RouteBoundBrowserObservation {

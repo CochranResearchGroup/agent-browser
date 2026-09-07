@@ -42,8 +42,6 @@ pub(crate) async fn ensure_retained_service_tab_browser(
     cmd: &Value,
     state: &mut DaemonState,
 ) -> Result<(), String> {
-    use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
-    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     let handle = cmd
         .get("serviceTabHandle")
         .and_then(Value::as_object)
@@ -68,6 +66,35 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         // release empties that manager. Re-run the full identity fence and
         // replace only the borrowed connection; never drop an owned process.
     }
+    reattach_verified_retained_target(
+        handle
+            .get("browserId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.browserId is required")?,
+        handle
+            .get("profileId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.profileId is required")?,
+        handle
+            .get("targetId")
+            .and_then(Value::as_str)
+            .ok_or("serviceTabHandle.targetId is required")?,
+        state,
+    )
+    .await
+}
+
+/// Rehydrate a retained connection after the caller has authorized the exact
+/// target through a service handle or authenticated durable-handoff resolution.
+/// This shared identity fence neither acquires a profile nor transfers ownership.
+pub(crate) async fn reattach_verified_retained_target(
+    browser_id: &str,
+    requested_profile_id: &str,
+    target_id: &str,
+    state: &mut DaemonState,
+) -> Result<(), String> {
+    use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     let repository = LockedServiceStateRepository::default_json()?;
     let mut binding =
         crate::runtime_owner_transfer::owner_binding_for_session(&repository, &state.session_id)?
@@ -80,9 +107,9 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         .browsers
         .get(&binding.claim.logical_browser_id)
         .filter(|browser| {
-            handle.get("browserId").and_then(Value::as_str) == Some(browser.id.as_str())
+            browser_id == browser.id
                 && browser.profile_id.as_deref().is_some_and(|profile_id| {
-                    let requested = handle.get("profileId").and_then(Value::as_str);
+                    let requested = Some(requested_profile_id);
                     requested == Some(profile_id)
                         || requested.is_some_and(|requested| {
                             snapshot
@@ -143,22 +170,24 @@ pub(crate) async fn ensure_retained_service_tab_browser(
                 .to_string(),
         );
     }
-    let target = handle
-        .get("targetId")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "serviceTabHandle.targetId is required".to_string())?;
-    let manager = BrowserManager::connect_retained_service_tab(endpoint, target, resolved_profile)
-        .await
-        .map_err(|error| {
-            if error.starts_with("service_tab_recovery_target_missing:") {
-                error
-            } else {
-                format!("service_tab_recovery_attach_failed: {error}")
-            }
-        })?;
+    let manager =
+        BrowserManager::connect_retained_service_tab(endpoint, target_id, resolved_profile)
+            .await
+            .map_err(|error| {
+                if error.starts_with("service_tab_recovery_target_missing:") {
+                    error
+                } else {
+                    format!("service_tab_recovery_attach_failed: {error}")
+                }
+            })?;
     RuntimeLifecycleAuthority::new(&repository)
         .authorize_effect(&mut binding)
         .map_err(|error| format!("service_tab_recovery_attach_failed: {error}"))?;
+    if crate::process_identity::capture_process_identity(process.pid, None, None).as_ref()
+        != Some(&process)
+    {
+        return Err("service_tab_recovery_attach_failed: process changed during attachment".into());
+    }
     state.reset_input_state();
     state.attached_runtime_profile = manager.runtime_profile_name().map(str::to_string);
     state.attached_browser_pid = browser.pid;
