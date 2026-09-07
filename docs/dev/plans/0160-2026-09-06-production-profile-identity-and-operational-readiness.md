@@ -837,3 +837,34 @@ then finish current ownership dispositions and the final installed control
 matrix. Continue the operator journey, supported maintenance readiness and
 scheduled-operation acceptance without treating this reuse pass as whole-plan
 completion.
+
+## Execution checkpoint 13: tab identity and cleanup failures reproduced
+
+state_transition: active → active
+
+acceptance_state: A1–A4 and AX remain incomplete. Incident 0156 now has an
+isolated reproduction of both reported failure patterns on the exact installed
+candidate binary; no product repair is claimed.
+
+progress_classification: outcome_progress
+
+evidence: The updated incident note records the exact binary, saved request,
+before/after CDP target sets, controlled disposable host interruption, source
+causes and hashed private receipts. Explicit target close removed another target.
+Release after host interruption returned successful verified effect despite
+skipping physical closure and leaving the intended target alive. Three fixture
+attempts included two preserved setup failures; all fixture resources were
+disposed with exact ownership checks. Production browsers were untouched.
+
+material_blockers: Close execution ignores target selection and discards CDP
+close errors; release omits retained-target recovery and marks skipped physical
+cleanup closed. Existing regression coverage encodes that incorrect lifecycle.
+Named-profile inference during direct tab control and its unhelpful failure
+classification also remain A1/AX cases. Historical incident request/build
+provenance remains missing, distinct from the confirmed current reproduction.
+
+next_action_or_stop_reason: Repair exact-target selection and authorization,
+retained release recovery, physical target-set verification and truthful cleanup
+outcomes. Reuse the disposable reproducer for green verification, including
+negative selectors and unrelated-target preservation. Continue remaining A1/AX,
+then A2–A4; no broad incident-profile cleanup or new approval is needed.

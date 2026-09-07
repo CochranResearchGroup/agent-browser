@@ -136,3 +136,66 @@ correction and does not resolve this browser incident.
 Report validation: directly reread the release, close, readback and incident
 identity receipts. Graphiti discovery was healthy but returned no specific
 matching incident; no historical memory claim is used as incident evidence.
+
+## Repository investigation: isolated reproduction, 2026-09-06
+
+Both failure patterns reproduce with the installed candidate binary, SHA256
+`d870205e3bed66e882a40b4d17a54d153e183eb8fcb2e2dd1f45c90f87e597e3`,
+source `f2786e1a`, in a disposable development HOME and runtime host. This proves
+current candidate defects; it does not establish the historical incident build
+or recover its missing outbound request.
+
+The fixture created three requested blank tabs plus the browser's initial page,
+selected index zero, then sent an explicit top-level `targetId` for another
+fixture tab through `postServiceRequest`. The exact request was retained before
+dispatch. CDP target inventories showed four pages before and three after: the
+specified target survived and a different target disappeared. The response
+reported success. All targets belonged to the disposable fixture.
+
+Next the fixture attached and detached the surviving intended handle, interrupted
+only its own host, restarted that host and requested handle release. Release
+returned success, `verified_effect` and `no_live_browser`. Independent CDP
+readback showed that the intended target still existed. The controlled host
+interruption is a proven reproducer of the missing manager condition, not a
+claim that the historical reporter caused such an interruption.
+
+Source findings:
+
+- `service-request.js::createServiceRequest` preserves the input fields.
+  `service_request.rs::normalize_service_request` projects the schema-recognized
+  top-level `targetId` into the command. The selector reaches execution.
+- `browser_lifecycle.rs::handle_tab_close` reads only `index`; an absent index
+  becomes the manager's active index. It ignores the explicit target selector.
+- `browser.rs::tab_close` removes the local page entry before issuing
+  `Target.closeTarget`, discards that command's error and returns the selected
+  index as `closed`. Therefore `closed:0` means index zero, not zero effects.
+- Release is permitted without a daemon-local browser manager. Its physical
+  helper returns `no_live_browser`; unlike service CDP attach, it does not call
+  the existing identity-fenced retained-target recovery helper.
+- `release_service_tab_handle_record` unconditionally marks the tab closed.
+  The existing unit test explicitly expects closed lifecycle after a skipped
+  physical close. That expectation needs correction, not preservation as a
+  compatibility requirement.
+- The release-specific CDP close also removes its local entry before command
+  acknowledgement and does not verify target disappearance. Recovery attaches
+  only one authorized target, so the attached-page count cannot establish that
+  it is the browser's last physical page.
+
+Private evidence is under campaigns/p160/tab-cleanup-red-eTgjm8 in the existing
+user-scoped campaign root. `ledger.jsonl` SHA256 is
+`c89fd9e352728324837fbf82aa9a25f5b17448f281a16e228bada46951f53aa3`;
+`probe-source.mjs` SHA256 is
+`53c08cda6a0432a8e7050d04db00c34e3c95979ad1011c1f4bc6d8341686006a`.
+An evidence manifest binds the saved state as well. Two preceding fixture setup
+attempts stopped before tab close: an unattributed CLI switch hit
+`existing_session_profile_identity_unproven`, and a service switch without the
+named profile hit `explicit_profile_conflicts_with_current_owner`. The third
+attempt supplied the named profile and completed both cases. These setup
+failures remain retained; the profile inference and weak error classification
+are additional A1/AX cases, not successful control evidence.
+
+After the interrupted-host fixture, ten positively identified disposable
+processes were terminated through PID descriptors with start/executable checks.
+No matching fixture HOME processes remained across all three attempts. The
+first two normal host shutdowns had left no owned residue. No production browser
+or incident tab was touched. Product repair and green verification remain open.
