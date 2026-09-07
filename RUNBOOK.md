@@ -4,19 +4,19 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 217 | 2026-09-07
+## Turn 218 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
-The previous bounded hour completed two publications; its execution record is
-preserved at `f269ce64`. This successor begins 21:27Z with a 30-minute ceiling
-through 21:57Z, one MCP diagnostic propagation repair and focused validation.
-All prior effort remains cumulative. No production publication in this batch.
-Recent conversational status replies were no progress. Current work traces
-response-field loss before resolving the historical consumer ownership refusal.
-Full A1–A4/AX readiness remains OPEN. The regression reproduced request-ID loss before the repair; all 129 MCP tests,
-format, workspace Clippy and API parity now pass. Isolated causal-correlation
-proof is next; production remains unchanged.
+Previous publication history is preserved at `f269ce64`. This successor began
+21:27Z with a 30-minute ceiling through 21:57Z; all previous effort is cumulative.
+Recent status replies were no progress. This turn advanced AX with real MCP
+failure-to-job correlation and reproduced an A1 stale-connection refusal after
+abrupt host interruption. No production publication in this batch.
+Source `a9830cfa` is qualified in isolation; production remains on `d6d99e43`.
+The expanded existing regression failed before repair, then all 129 MCP tests,
+format, workspace Clippy and API parity passed. Optimized build passed.
+No build or fixture remains running. Full A1–A4/AX readiness remains OPEN.
 No consumer capability was borrowed, profile lease reassigned or consumer browser
 restarted. Unrelated modified note0156 and untracked note0159 remain preserved.
 
@@ -77,10 +77,17 @@ refusal. The original synthetic profile has complete attestation and successful
 control despite its legacy warning. Consumer capabilities were not borrowed to
 apply ownership changes or claim their workflows accepted.
 
-The stored SoyLei MCP `owner_connection_still_active` refusal has a different
-error from the routing reproduction. Current isolated MCP teardown/reconnection
-passes, but that does not establish the historical refusal's cause. Consumer
-identity dispositions and actual consumer artifact transport remain incomplete.
+The stored consumer `owner_connection_still_active` refusal has matching
+self-declared subjects and both permissions. Fresh readback finds the identical
+historical owner-connection hash still marked active after host replacement.
+The isolated `retained-unit-sim-Q2Hc69` reproduction held an authenticated socket
+open, killed only its disposable host, preserved Chrome, then restarted the host.
+The original handle was refused with that same typed error because the dead
+connection remained active. Normal connection teardown passes; abrupt host death
+bypasses its disconnect guard. This reproduces the failure mode, while the exact
+historical interruption remains unproven. Repair needs positive host-lifetime
+proof so dead connections can be retired without taking over live owners.
+Consumer acceptance and actual consumer artifact transport remain incomplete.
 
 ### Storage recovery and prevention
 
@@ -117,10 +124,13 @@ still needs a reusable product diagnosis/recovery surface.
   the wire value. A fractional-clock regression and real receiver/journal
   correlation passed. Its duplicate legacy-owner projection fix also passed
   all 26 focused lease tests and retained-handle simulation. Genuine unresolved
-  bindings remain visible. The MCP negative test exposed a further gap: tool
-  results preserve error prose and trace labels but omit structured failure,
-  terminal outcome and a request identifier. That is the next concrete causal
-  logging repair; preserve the captured failure rather than searching blindly.
+  bindings remain visible. Source `a9830cfa` preserves daemon `id`, `failure`,
+  and `terminalOutcome` through CLI decoding and MCP formatting. The existing
+  regression proves field retention and compatibility with older responses.
+  In `retained-unit-sim-gSifp9`, both actual MCP denials returned request/job
+  correlation and the exact persisted terminal outcome. Original-handle
+  reconnect, foreign denial without effects and exact release also passed.
+  This repair is not installed in production yet. Full AX remains open.
 
 ### Retention and next work
 
@@ -135,12 +145,12 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next carry structured MCP failure and correlation data through the returned tool
-result, then resolve the historical consumer connection-ownership refusal against
-its actual transport evidence. Keep self-identification as the ordinary default.
-Complete scoped consumer artifact transport and A1 dispositions. For Guacamole input, first check refresh/reconnect, effective settings, and
-scoped browser/provider recovery in a disposable session before code diagnosis.
-Consolidate those repairs before another production candidate. After A1–A3 pass,
+Next repair dead-host connection lifecycle using the reproduced A1 failure,
+preserving denial for live foreign connections. Keep self-identification as the
+ordinary default. Complete consumer artifact transport and A1 dispositions.
+For Guacamole input, check refresh/reconnect, effective settings, and scoped
+browser/provider recovery in a disposable session before code diagnosis.
+Consolidate repairs before another production candidate. After A1–A3 pass,
 observe three scheduled cycles, a controlled restart and its next cycle using
 original handles and the durable handoff URL. Plan0158 external-vantage dispatch
 boundaries remain unchanged.
@@ -149,6 +159,12 @@ boundaries remain unchanged.
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 
+- `retained-unit-sim-gSifp9/`: optimized a9830cfa real MCP error correlation,
+  exact persisted outcomes, ordinary reconnect/control, and zero-residue cleanup;
+  private `consumer-stale-connection-readback.json` anchors historical comparison.
+- `retained-unit-sim-Q2Hc69/`: abrupt host death with active socket reproduces
+  stale active ownership and original-handle refusal; original Chrome preserved;
+  cleanup terminated three fixture-owned processes, zero remaining.
 - `publication-d6d99e43/`: frozen source, exact release, qualification, sealed
   generation, activation/custody/storage receipts, installed original-handle
   readback, doctor, rollback backup, skill sync and the next AX finding.
