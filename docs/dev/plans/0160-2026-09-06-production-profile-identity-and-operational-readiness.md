@@ -2641,3 +2641,21 @@ qualification checkpoint, not production publication or completed A1/A2 evidence
 Next: run positive authenticated HTTP-to-daemon focus against an isolated browser,
 verify no transient proof appears in retained records, then qualify the complete
 candidate and its dashboard assets before controlled production replacement.
+
+
+Candidate and integration readback: optimized build 708bfd4b passed and was
+archived with its source commit and binary SHA256 under the private P160 campaign
+candidate-708bfd4b directory. It has not been installed. A subprocess-isolated
+regression now passes authenticated request construction through the same proof
+verifier used by daemon admission. It preserves the original tab owner, strips
+caller-authored proof, rejects changed request/browser/session/target/route/lease
+and controller epoch, and excludes the signed token from retained provenance.
+This uses modeled service state, not a real browser or provider, and therefore
+does not satisfy installed A1/A2 acceptance.
+
+Follow-up AX repair: successful focus now stamps the authenticated dashboard
+account and authenticated-ingress assurance into command provenance separately
+from caller service/agent/task labels. The regression now checks that distinction;
+the updated isolated regression passed, as did formatting and diff checks.
+This source change is newer than archived 708bfd4b
+and requires a newly bound final candidate before production acceptance.

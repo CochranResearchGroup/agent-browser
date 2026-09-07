@@ -3150,3 +3150,8 @@ policy and controller lease before requesting focus again.
 Operator focus refuses an existing desktop interaction instead of cancelling it.
 A refused authority check releases its temporary focus guards and preserves the
 agent's tab ownership and interaction authority.
+
+Operator-focus request provenance records the authenticated dashboard account as
+`clientSubjectId` with `authenticated-ingress` assurance, while retaining the
+caller-provided service, agent and task labels separately. The signed focus token
+is not a provenance field.

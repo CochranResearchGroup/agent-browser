@@ -2022,6 +2022,10 @@ fn service_request_command_with_state_and_authority(
                 )
             })?;
         command["operatorFocusProofToken"] = json!(proof);
+        // Retain the authenticated actor for diagnosis, separately from the
+        // caller's service/agent/task labels and without retaining the token.
+        command["clientSubjectId"] = json!(dashboard_principal);
+        command["identityAssurance"] = json!("authenticated-ingress");
     }
     if let Some(username) = authenticated_dashboard_user {
         if matches!(
@@ -5547,6 +5551,104 @@ mod tests {
         .unwrap_err();
 
         assert!(error.contains("requires serviceName, agentName, and taskName"));
+    }
+
+    #[test]
+    fn authenticated_operator_focus_survives_broker_to_daemon_verification() {
+        const CHILD: &str = "P160_OPERATOR_FOCUS_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let root =
+                std::env::temp_dir().join(format!("p160-operator-proof-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let auth = root.join("dashboard-auth.json");
+            std::fs::write(&auth, serde_json::to_vec(&json!({
+                "version":1,"createdAt":"fixture","sessionSecret":"ERERERERERERERERERERERERERERERERERERERERERE",
+                "users":[{"username":"operator","displayName":"Operator","role":"superuser",
+                "passwordHash":"","createdAt":"fixture","bootstrap":false}]
+            })).unwrap()).unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["native::stream::http::tests::authenticated_operator_focus_survives_broker_to_daemon_verification", "--exact", "--nocapture"])
+                .env(CHILD, "1")
+                .env("HOME", &root)
+                .env("AGENT_BROWSER_HOME", root.join(".agent-browser"))
+                .env("AGENT_BROWSER_DASHBOARD_AUTH_FILE", &auth)
+                .env("AGENT_BROWSER_DASHBOARD_AUTH_DIR", &root)
+                .status().unwrap();
+            assert!(
+                status.success(),
+                "isolated operator proof fixture failed: {}",
+                root.display()
+            );
+            std::fs::remove_dir_all(root).unwrap();
+            return;
+        }
+        let state: ServiceState = serde_json::from_value(json!({
+            "profiles":{"profile-a":{"id":"profile-a"}},
+            "browsers":{"browser-a":{"id":"browser-a","profileId":"profile-a","health":"ready","pid":100,
+                "activeSessionIds":["session-a"],"displayAllocationId":"display-a"}},
+            "tabs":{"target:target-a":{"id":"target:target-a","browserId":"browser-a","targetId":"target-a",
+                "sessionId":"session-a","ownerSessionId":"session-a","lifecycle":"ready","principalId":"original-agent"}},
+            "remoteViewRoutes":{"route-a":{"id":"route-a","browserId":"browser-a","sessionId":"session-a",
+                "displayAllocationId":"display-a","state":"ready","readOnly":false,
+                "controllerLeaseId":"controller-a","controllerEpoch":1,"viewerLeaseIds":["controller-a"]}},
+            "viewerLeases":{"controller-a":{"id":"controller-a","routeId":"route-a","browserId":"browser-a",
+                "viewerId":"dashboard:operator","viewerRole":"controller","state":"controlling",
+                "expiresAt":"2099-01-01T00:00:00Z"}}
+        })).unwrap();
+        let original = serde_json::to_value(&state).unwrap();
+        let body = json!({"action":"view_focus","serviceName":"caller-label","agentName":"caller-agent","taskName":"focus",
+            "browserId":"browser-a","sessionName":"session-a",
+            "params":{"operatorFocus":true,"targetId":"target-a","routeId":"route-a","controllerLeaseId":"controller-a",
+            "operatorFocusProofToken":"caller-forged"}}).to_string();
+        let command = service_request_command_with_state_and_authority(
+            &body,
+            Some(&state),
+            Some("operator"),
+            "session-a",
+            None,
+        )
+        .unwrap();
+        assert_ne!(command["operatorFocusProofToken"], "caller-forged");
+        dashboard_auth::verify_operator_focus(&state, &command).unwrap();
+        assert_eq!(serde_json::to_value(&state).unwrap(), original);
+        let provenance =
+            crate::native::service_request_provenance::ServiceRequestProvenance::capture(
+                &command,
+                "request",
+                "job",
+                "connection",
+                "lane",
+            );
+        assert_eq!(
+            provenance.client_subject_id.as_deref(),
+            Some("dashboard:operator")
+        );
+        assert_eq!(provenance.identity_assurance, "authenticated-ingress");
+        assert_eq!(provenance.service_name.as_deref(), Some("caller-label"));
+        let retained = serde_json::to_string(&provenance).unwrap();
+        assert!(!retained.contains(command["operatorFocusProofToken"].as_str().unwrap()));
+        for key in [
+            "id",
+            "browserId",
+            "sessionName",
+            "targetId",
+            "routeId",
+            "controllerLeaseId",
+        ] {
+            let mut changed = command.clone();
+            changed[key] = json!("changed");
+            assert!(
+                dashboard_auth::verify_operator_focus(&state, &changed).is_err(),
+                "{key}"
+            );
+        }
+        let mut changed = state.clone();
+        changed
+            .remote_view_routes
+            .get_mut("route-a")
+            .unwrap()
+            .controller_epoch += 1;
+        assert!(dashboard_auth::verify_operator_focus(&changed, &command).is_err());
     }
 
     #[test]
