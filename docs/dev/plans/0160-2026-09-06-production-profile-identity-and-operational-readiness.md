@@ -2659,3 +2659,78 @@ from caller service/agent/task labels. The regression now checks that distinctio
 the updated isolated regression passed, as did formatting and diff checks.
 This source change is newer than archived 708bfd4b
 and requires a newly bound final candidate before production acceptance.
+
+
+Real-browser qualification: candidate 09fd769f passed operator-focus-live-lsrOHb
+using a disposable headed Chrome, private Xvfb display and window manager,
+registered original agent capability, supported route checkout, and an isolated
+dashboard account. Controller acquisition derived its viewer identity from the
+account rather than the supplied label. Operator focus succeeded; original tab
+principal/session custody remained unchanged, and the original agent still
+passed evaluation and complete control-plane attestation afterward. Retained
+Service State contained no operatorFocusProofToken field. The trace recorded
+clientSubjectId dashboard:admin with authenticated-ingress assurance. This
+qualifies real browser focus, not Guacamole transport or production acceptance.
+
+The preceding operator-focus-live-oBdcxI attempt stopped after browser/route
+setup because the fixture expected an auth credential file before initializing
+dashboard auth. The fixture now invokes the supported auth-status endpoint
+first. Both fixtures completed cleanup with zero remaining owned processes.
+The first failure remains retained. No production browser was touched.
+
+The dashboard production build passed. Full release compilation of 09fd769f is
+running after that build, so its embedded dashboard will contain the changed UI.
+External controller/provider assets and unit templates are unchanged from
+be6748fd; publication helpers and asset hashes are prepared under private
+publication-09fd769f. Production readback still showed five live browsers, zero
+active jobs, and nonzero doctor. Selection remains unchanged pending release
+qualification and fresh preservation checks.
+
+The pending two-viewer driver now waits for the successful operator-focus
+response after takeover and maps its synthetic pixel sample into native desktop
+coordinates using the existing geometry helper. It chooses an interior uniform
+patch. These remove focus-completion and iframe-scaling ambiguities; the previous
+crop shift's exact cause is not claimed as proven. No new viewer attempt has run.
+
+
+Production activation 09fd769f: the exact release binary passed operator focus,
+headless two-client interruption/terminal-reopen, and remote-headed equivalents.
+All fixtures completed with zero owned residue. Generation
+0.28.0-00a9aac42f64-c367eed6e549 is now selected; activation preserved all five
+browser processes and 68 tab-custody records. Installed binary and dashboard
+focus-asset hashes matched; retained synthetic attestation remained complete and
+its two prior mouse/keyboard events were unchanged. Shared guidance was synced.
+Doctor still exits 1. The interlock timer remains inactive. A1–A4/AX remain open.
+
+Two-viewer attempt local-viewers-pjKrTk reached the correct Ready browser but its
+new 40-pixel uniform patch exceeded the scaled marker height. No input was sent;
+the client closed. After correcting that sampling-size error, local-viewers-ssDlh0
+verified both viewers' pixels but received profile_child_subject_mismatch during
+operator focus, before input. Its dashboard-view-focus request ID and preserved
+self-declared backend attribution identify the legacy dashboard focus adapter.
+That adapter rebuilt the command while dropping operator authority fields. The
+isolated prior fixture exercised the lane HTTP broker, not this dashboard branch.
+
+The pending fix bypasses the legacy adapter for operatorFocus requests so the
+existing authenticated canonical dashboard path handles them. Its regression now
+checks that routing choice and uses the dashboard generation-aware normalizer.
+The current ordinary controller lease also has expiresAt null. The pending proof
+verifier now honors that existing active-until-release/replacement contract;
+explicit invalid or expired lease dates remain denied, and the signed request
+still expires after 30 seconds. This follow-up is source-only; a full stream
+selection is running. The first intermediary routing regression passed before
+simplifying the fix to use the existing canonical fallback. No passing installed
+operator journey or post-fix browser test is claimed yet.
+
+
+The final focused stream selection passed all 220 tests, including authenticated
+operator routing and controller lease expiry cases. Formatting and workspace
+Clippy passed. The standalone-dashboard fixture operator-dashboard-focus-8IDXUE
+reproduced the installed failure before the fix: controller acquisition succeeded,
+but focus arrived as self-declared and failed profile_child_subject_mismatch.
+The original client retained custody and released its exact target; dashboard,
+host, display and window manager exited, with zero owned process residue.
+The preceding 60W88o fixture failed before focus because its dashboard environment
+omitted shared-host relay mode. That setup error was corrected and retained.
+A new optimized candidate is building for the identical standalone-dashboard
+fixture. No post-fix installed acceptance is claimed.

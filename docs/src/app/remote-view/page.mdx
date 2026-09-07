@@ -458,3 +458,8 @@ Operator-focus request provenance records the authenticated dashboard account as
 `clientSubjectId` with `authenticated-ingress` assurance, while retaining the
 caller-provided service, agent and task labels separately. The signed focus token
 is not a provenance field.
+
+The dashboard sends operator focus through its authenticated request path.
+A current controller lease may have no expiry; it remains valid until release
+or controller replacement. Each signed focus request still has its own short
+expiry and must match the current controller epoch.

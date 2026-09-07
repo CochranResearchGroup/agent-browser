@@ -1408,6 +1408,13 @@ fn is_remote_view_service_action(action: &str) -> bool {
 fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String, String)> {
     let session_name = service_request_target_session_name(path, body)?;
     let request: Value = serde_json::from_str(body).ok()?;
+    if request
+        .pointer("/params/operatorFocus")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return None;
+    }
     let mut command = json!({
         "id": request
             .get("id")
@@ -4942,6 +4949,12 @@ mod tests {
             false
         );
         assert!(command.get("sessionName").is_none());
+        let mut operator: Value = serde_json::from_str(body).unwrap();
+        operator["params"]["operatorFocus"] = json!(true);
+        assert!(
+            service_request_focus_command_body("/api/service/request", &operator.to_string())
+                .is_none()
+        );
     }
 
     #[test]

@@ -174,11 +174,14 @@ fn authorize_current(
         .viewer_leases
         .get(&binding.controller_lease_id)
         .ok_or_else(denied)?;
-    let expires = lease
-        .expires_at
-        .as_deref()
-        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-        .map(|value| value.timestamp());
+    // Viewer leases without an expiry remain active until release or controller
+    // replacement. The signed focus proof itself is always short-lived.
+    let unexpired = lease.expires_at.as_deref().is_none_or(|value| {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .ok()
+            .map(|value| value.timestamp())
+            .is_some_and(|expires| expires > 0 && expires as u64 > now)
+    });
     if route.browser_id.as_ref() != Some(&binding.browser_id)
         || route.session_id.as_ref() != Some(&binding.session_name)
         || route.display_allocation_id != browser.display_allocation_id
@@ -196,7 +199,7 @@ fn authorize_current(
         || lease.viewer_id.as_ref() != Some(&subject)
         || lease.viewer_role != "controller"
         || lease.state != "controlling"
-        || !expires.is_some_and(|expires| expires > 0 && expires as u64 > now)
+        || !unexpired
     {
         return Err(
             "operator_focus_controller_required: acquire current controller authority".into(),
@@ -345,6 +348,13 @@ mod tests {
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
         assert!(authorize_current(&state, "other", &binding, 1000).is_err());
         assert!(authorize_current(&state, "operator", &binding, 3600).is_err());
+        let mut unbounded = state.clone();
+        unbounded
+            .viewer_leases
+            .get_mut("controller-a")
+            .unwrap()
+            .expires_at = None;
+        authorize_current(&unbounded, "operator", &binding, 3600).unwrap();
         for (pointer, value) in [
             ("/browsers/browser-a/pid", json!(101)),
             ("/browsers/browser-a/profileId", json!("other")),

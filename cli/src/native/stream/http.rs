@@ -5554,7 +5554,7 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_operator_focus_survives_broker_to_daemon_verification() {
+    fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {
         const CHILD: &str = "P160_OPERATOR_FOCUS_TEST_CHILD";
         if std::env::var_os(CHILD).is_none() {
             let root =
@@ -5567,7 +5567,7 @@ mod tests {
                 "passwordHash":"","createdAt":"fixture","bootstrap":false}]
             })).unwrap()).unwrap();
             let status = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["native::stream::http::tests::authenticated_operator_focus_survives_broker_to_daemon_verification", "--exact", "--nocapture"])
+                .args(["native::stream::http::tests::authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification", "--exact", "--nocapture"])
                 .env(CHILD, "1")
                 .env("HOME", &root)
                 .env("AGENT_BROWSER_HOME", root.join(".agent-browser"))
@@ -5600,10 +5600,10 @@ mod tests {
             "browserId":"browser-a","sessionName":"session-a",
             "params":{"operatorFocus":true,"targetId":"target-a","routeId":"route-a","controllerLeaseId":"controller-a",
             "operatorFocusProofToken":"caller-forged"}}).to_string();
-        let command = service_request_command_with_state_and_authority(
+        let command = service_request_command_with_dashboard_generation(
             &body,
             Some(&state),
-            Some("operator"),
+            "operator",
             "session-a",
             None,
         )
