@@ -2364,3 +2364,51 @@ repaired production display permits a separately recorded operator attempt using
 the existing empty r2 profile. Complete that journey, automatic inactive-allocation
 recovery, original-consumer acceptance, doctor/monitor readiness and the full AX
 matrix on the final accepted installed candidate.
+
+## Checkpoint 42: local operator acceptance and native grant failure proof
+
+state_transition: Verified the local synthetic operator journey after the scoped
+display grant and qualified the optimized supervised-grant candidate.
+
+acceptance_state: Local operator evidence passes on the installed 8e0fd8b8
+generation. Candidate be6748fd remains unpublished; A1–A4/AX remain open.
+
+progress_classification: blocker_reduction
+
+The r2 access-grant-attempt opened the intended synthetic browser with complete
+attestation. Two authenticated local viewers saw the synthetic marker, trusted
+mouse and keyboard input changed its pixels, and reconnect reused the same
+durable handoff while the other viewer remained visible. An anonymous viewer
+was denied. Independent fixture readback recorded exactly one trusted mouse and
+one keyboard event. The server browser and durable handoff remain available for
+continuity validation; the disposable client browser closed.
+
+Private evidence is retained under
+campaigns/p160/a2-operator-journey-r2/access-grant-attempt, including
+local-viewers-g7IBrz/events.json and trusted-input-readback.json. The preceding
+local-viewers-51BHR6 attempt stopped before remote input because its baseline
+crop mixed white and blue after the frame moved. The private driver now requires
+a fully blue crop and stable frame geometry before accepting that baseline.
+Both attempts remain inspectable. Local acceptance does not satisfy the protected
+external-vantage gate or final-candidate acceptance.
+
+Optimized candidate be6748fd85bb77f0c4977bcefc0c5071ba4ba8e0, binary SHA256
+f380956ce4d1397ff53c3d54c527ccf54564b77616b014f4212e1f4da45d003d,
+passed the namespace probe and remote-headed terminal-reopen fixture. The latter
+retained the existing capability, rejected the old handle, proved the old process
+absent, exercised the new target and preserved the peer. Exact fixture cleanup
+inspection found no remaining owned process to signal.
+
+The native grant failure fixture display-grant-boundary-5dWekv used its own
+authenticated Xvfb display. Display ownership passed, then the restricted helper
+rejected the intentionally unsupported route username. The response preserved
+display_access_grant_failed at launch_admission, effect_uncertain, and the helper's
+specific username rejection instead of replacing it with rollback metadata.
+No browser or tab was created. The fixture host and Xvfb stopped successfully.
+This proves native failure transport and first-cause preservation; the positive
+grant effect remains the separate scoped operational proof in Checkpoint41.
+
+next_action_or_stop_reason: Finish the existing release build, qualify and publish
+that exact binary with original-browser custody preserved, and complete consumer
+identity acceptance, inactive-allocation repair, readiness and scheduled-cycle
+requirements. No production replacement occurred for this checkpoint.
