@@ -4,20 +4,20 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 224 | 2026-09-07
+## Turn 225 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Lane P157; branch `plan/profile-permissions-and-request-provenance`.
-Progress: combined identity rejoin passes on the installed binary in disposable
-`retained-unit-sim-b3k3L1`; original handles, attestation and cleanup pass. Only
-fixture state was seeded; consumer application remains unverified.
-Fresh durable-link attempt `local-viewers-azhO8s` failed before Guacamole loaded:
-`route_display_owner_unproven` on :12, expected UID absent, observed UID65534.
-The retained synthetic browser allocation is :14. No input test ran. All five
-browser identities remain intact; returned request ID joins the persisted cause.
-Evidence: `publication-dfbcd2aa/handoff-display-owner-failure.json`.
-Next inspect and reproduce this route/display mismatch before retrying the link.
-All effort remains cumulative. No source change or rebuild was made.
+Progress: causal route-recovery diagnosis, no source or production repair.
+The retained :14 allocation was orphaned during a prior CDP disconnect and stayed
+orphaned after browser recovery. Durable resolution rejected that route, then
+failed display-owner proof on fallback :12. Explicit same-route reattach refused
+`operator_presentation_authority_unavailable`: production has no presentation
+capacity authority and no provider-inventory environment configuration.
+Route, display, pool, owner and lease state were unchanged by the refusal.
+Evidence: `publication-dfbcd2aa/route-recovery-diagnosis.json`.
+Next qualify inventory from existing production route/display ownership. Do not
+borrow development inventory or manufacture ready capacity. Effort is cumulative.
 Full A1–A4/AX remains OPEN. Consumer workflows have not been impersonated or accepted.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
@@ -143,7 +143,7 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next investigate the durable handoff route/display ownership mismatch;
+Next qualify the missing production presentation-capacity inventory;
 actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
