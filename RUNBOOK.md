@@ -8,7 +8,8 @@ Git checkpoints and linked archives preserve history. Keep this file at or below
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
-The identity-first batch runs from 2026-09-07T15:58:19Z through 16:58:19Z.
+The identity-first batch is closed within its 2026-09-07T15:58:19Z through
+16:58:19Z bound. No build, fixture or publication process remains running.
 Controller: primary. Prior approximately 12-hour effort, the completed
 30-minute round and the preceding 60-minute round remain cumulative.
 The preceding recommendation-only turn made no outcome progress; this turn
@@ -98,7 +99,7 @@ stopping the parent service preserved its child PID and namespace but changed
 `/tmp` link count from 2 to 0; mkdir then failed with ENOENT. This proves the
 mechanism, not the historical deletion event for a consumer browser.
 
-The supervisor renderer now binds private mode-0700, unit-scoped state directories
+Preventive source commit `bee768ed` binds private mode-0700, unit-scoped state directories
 at `/tmp` and `/var/tmp`. The rendered configuration preserved the backing inode
 and successful mkdir after service retirement. State storage avoids moving browser
 temporary files onto the user runtime tmpfs. It remains private and must not be
@@ -116,6 +117,16 @@ further production retirement, preserve existing temporary-storage dependencies.
 The next repair must cover existing-browser recovery, the shared-profile
 download-policy boundary and typed diagnosis of missing storage.
 
+Final read-only production evidence at 16:57:35Z found all five retained
+Service State browser PIDs still referencing unlinked `/tmp` and `/var/tmp`
+directories. Process start tokens were checked before and after observation;
+no browser action or filesystem write was performed in those namespaces.
+This is current damaged-state evidence, not proof of which historical stop
+removed each directory. Preserved PID and tab custody did not establish usable
+runtime storage. Existing-browser namespace recovery is the next production
+dependency; do not claim installing the preventive template restores it.
+Private readback: `reconcile-rejoin/retained-temporary-storage-readback.json`.
+
 ### Retention and next work
 
 Generation-GC preview lists 22 candidates, including the immediately previous
@@ -130,10 +141,10 @@ and supervisor references. Repair a supported publication/retention path before
 maintenance resumes. Never fabricate accepted transactions or green monitor
 receipts to protect a rollback target.
 
-Next hour: spend at most ten minutes mapping the remaining identity findings
-to concrete failures, then up to 35 minutes repairing the highest-impact case
-in isolation, and reserve 15 minutes for focused validation and custody. Keep
-identity proof first; a warning inventory alone is not acceptance progress.
+Next execution must simulate recovery from an already-unlinked namespace while
+preserving the exact browser process and original handles. Establish private
+artifact retrieval and shared-profile download authority before consumer replay.
+Identity proof remains the priority; a warning inventory alone is not progress.
 Before another operator attempt, isolate mouse delivery with an observable input
 path; pixel readiness and operator-focus success alone proved insufficient.
 Preserve the failed attempt and its unchanged page counters. Do not spend an
