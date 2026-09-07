@@ -56,6 +56,16 @@ perform cleanup in its shared browser.
 
 ### Execution strategy amendment, 2026-09-07
 
+For stranded legacy connections, use preserved host-replacement custody and a
+fresh census of connection-producing processes, scoped to the same Service State
+root. Require an exact unchanged child-access record and affected-tab set under
+the native repository transaction lock. A local operator maintenance path may
+mark the proven dead transport disconnected while preserving subjects,
+permissions, profiles, leases, browser processes and targets. Unknown producers,
+state roots or changed custody must refuse the update. Validate the transition
+in isolation before applying it; keep it outside ordinary consumer request
+admission. Do not edit the primary JSON independently of its transaction store.
+
 Operator follow-up: complete MCP request correlation and structured failure
 propagation first, then use that evidence for unresolved consumer ownership
 refusals. Owner/lease usability remains ahead of remote-view work. For the

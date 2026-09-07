@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 219 | 2026-09-07
+## Turn 220 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
@@ -74,7 +74,10 @@ without page effects. An initial attempt `retained-unit-sim-Xpwqqx` recovered
 custody but correctly refused control with conflicting fixture profile hints;
 correcting those hints before launch passed. The failure remains preserved.
 The consumer legacy access record exactly matches the pre-publication custody
-snapshot and remains active. UUID-only legacy reconciliation, consumer acceptance
+snapshot and remains active. Fresh census finds three production processes, all
+started after that snapshot, and six development processes with separate homes.
+The reviewed legacy transition affects one tab; no jobs were active. Native
+transactional application remains unimplemented and no state repair was applied. UUID-only legacy reconciliation, consumer acceptance
 and actual consumer artifact transport remain incomplete.
 
 ### Storage recovery and prevention
@@ -149,7 +152,8 @@ boundaries remain unchanged.
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 
 - `retained-unit-sim-8rJXkf/`: 3dfd4d09 abrupt-host recovery and live/foreign
-  ownership protection, zero-residue cleanup, plus legacy reconciliation evidence.
+  ownership protection, zero-residue cleanup, plus legacy reconciliation evidence,
+  writer census and exact one-tab transition review.
 - `retained-unit-sim-Xpwqqx/`: first attempt's conflicting physical-profile hints;
   custody recovery passed, control refused, three owned processes cleaned.
 - `retained-unit-sim-gSifp9/`: optimized a9830cfa real MCP error correlation,
