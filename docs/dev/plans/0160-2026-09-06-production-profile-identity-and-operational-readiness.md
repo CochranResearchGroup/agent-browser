@@ -2126,3 +2126,54 @@ synthetic operator journey on positively owned production resources, preserving
 the failed prior fixture and its continuity evidence. Complete original-consumer
 acceptance on its own connection, repair focus/iframe readiness and remaining
 provider readiness, then finish A3/A4 and the full causal-error matrix.
+
+
+## Checkpoint 37: installed namespace boundary rejects the correct route owner
+
+state_transition: Installed operator preflight and launch reveal distinct stale
+allocation and user-namespace proof failures. No new browser was launched.
+
+acceptance_state: A2 remains failed; A1 display proof needs namespace correction.
+The previous headless/private-display installed checks remain bounded evidence.
+
+progress_classification: blocker_reduction
+
+A new synthetic profile p160-operator-journey-r2 was registered, preserving the
+prior misrouted fixture. Initial explicit route3 preflight failed with
+route_pool_target_mismatch because the orphaned original display allocation still
+retains :12 while the corrected route-pool entry targets :14. Request ID
+http-service-remote-view-route-preflight-1913dd34-6b29-4dd8-b470-b85d4d1b95f6
+returned generic service_operation_failed/unknown classification. Inactive
+allocation reconciliation and causal classification remain product defects to
+resolve, not acceptance passes.
+
+The supported explicit displayAllocationId selected a new allocation
+p160-operator-display-r2 for the new fixture. Preflight reported preflight_ready
+and dry-run succeeded on :14. This permits a distinct new fixture without
+rewriting the old failed allocation; it does not repair automatic stale-allocation
+recovery or establish continuity for the old fixture.
+
+Actual open failed with route_display_owner_mismatch. Outside user isolation,
+SO_PEERCRED observed Xorg PID60951 as UID1010, matching the route account. Inside
+the installed runtime host, the same socket peer PID was UID65534. The host's
+uid_map contains only 1000 to1000, length1. Other host users are unmapped there;
+comparing the namespace-visible overflow UID with host account UID1010 therefore
+produces a false mismatch. Earlier isolated fixtures did not exercise this
+production user-namespace boundary.
+
+Request http-service-request-remote_view_open-8abf61ae-b19a-474c-9257-36db5ac3b6c1
+retains typed launch-admission failure and display-owner evidence. Compensation
+reported skipped_before_browser_launch and rolled_back. Fresh readback found zero
+new-fixture browsers and route3 available. No viewer, screenshot or remote-input
+attempt followed the failed launch. Private evidence and guarded drivers are under
+campaigns/p160/a2-operator-journey-r2 and /tmp/p160-a2-r2-*.mjs; the live viewer
+driver has not run. The earlier fixture remains failed evidence.
+
+next_action_or_stop_reason: Extend display-owner observation with a bounded
+read-only namespace-neutral probe, following the existing process-observer
+transport pattern. Bind the returned socket peer to the locally observed PID and
+stable process instance; never accept UID65534 as the route user. Add installed
+PrivateUsers coverage proving the correct host route user passes while a different
+host user fails. Preserve runtime isolation. Then qualify/publish the correction,
+repair automatic inactive-allocation reconciliation, and resume the complete
+operator journey, original-consumer acceptance, A3/A4 and AX.
