@@ -2295,6 +2295,10 @@ isolated development install as recognized runtime surfaces. They remain
 protected and do not create false `unowned_agent_browser_processes_observed`
 pressure merely because they are absent from production Service State.
 
+Process kinds use the executable name, not its parent directory: managed Chrome
+is a browser even when installed below `.agent-browser`. Classification does
+not establish ownership or authorize cleanup of an otherwise unproven process.
+
 The dashboard includes an app-owned login screen. On first start it creates
 `~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
 mode-0600 bootstrap credential file at

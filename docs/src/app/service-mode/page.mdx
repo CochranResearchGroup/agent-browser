@@ -879,6 +879,10 @@ process exit plus profile-lock release. Named or persistent profile data stays
 protected from deletion while an exact lifecycle-owned <code>closing</code>
 process tree can still be reclaimed.
 
+Resource kinds use executable names rather than installation directory names.
+Managed Chrome below <code>.agent-browser</code> is classified as a browser.
+Classification alone does not establish ownership or authorize cleanup.
+
 Service Status also includes additive <code>runtimeLifecycle</code> readback for
 CLI JSON, HTTP <code>GET /api/service/status</code>, typed MCP
 <code>service_status</code>, the generated client helpers, Service State, and the dashboard. It

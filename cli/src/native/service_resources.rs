@@ -941,11 +941,16 @@ fn resource_kind(
     if executable_name == "xvfb" {
         return ResourceKind::RemoteDisplay;
     }
-    if executable.contains("agent-browser") {
+    // Installation directories identify storage, not the running program. In
+    // particular, managed Chrome lives below .agent-browser/browsers/.
+    if matches!(
+        executable_name,
+        "agent-browser" | "agent-browser.exe" | "agent-browser-dev" | "agent-browser-dev.exe"
+    ) {
         return ResourceKind::AgentBrowser;
     }
-    if executable.contains("chrome")
-        || executable.contains("chromium")
+    if executable_name.contains("chrome")
+        || executable_name.contains("chromium")
         || profile_path.is_some()
         || cdp_port.is_some()
     {
@@ -2386,6 +2391,36 @@ mod tests {
         );
         assert_eq!(response["summary"]["candidateCount"], 0);
         assert_eq!(response["resources"], json!([]));
+    }
+
+    #[test]
+    fn resource_kind_uses_executable_name_not_installation_directory() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![
+                sample(
+                    510,
+                    &["/home/me/.agent-browser/browsers/chrome-152/chrome"],
+                    Some(5),
+                ),
+                sample(511, &["/opt/agent-browser/chromium"], Some(5)),
+                sample(512, &["/tmp/chrome-test/agent-browser"], Some(5)),
+                sample(513, &["/tmp/agent-browser-fixture/node"], Some(5)),
+            ],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        let resources = response["resources"].as_array().unwrap();
+        assert_eq!(resources.len(), 3);
+        for resource in &resources[..2] {
+            assert_eq!(resource["kind"], "browser");
+            assert_eq!(resource["disposition"], "observed");
+            assert_eq!(resource["reasons"], json!(["no_safe_gc_predicate_matched"]));
+            assert!(resource["gcAction"].is_null());
+        }
+        assert_eq!(resources[2]["kind"], "agent_browser");
+        assert_eq!(resources[2]["disposition"], "observed");
     }
 
     #[test]

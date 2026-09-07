@@ -3160,3 +3160,32 @@ therefore receive misleading agent-browser process reasons. Correcting executabl
 classification must preserve unknown ownership and must not grant cleanup
 authority. Descendant ownership correlation and the stale monitor require their
 own evidence; changing a resource label alone cannot satisfy A3.
+
+### Executable classification source repair
+
+state_transition: Misleading process-kind classification repaired and validated in source.
+acceptance_state: Installed verification remains pending; A1, A3, A4 and AX remain open.
+progress_classification: progress
+
+Process classification now recognizes the agent-browser executable names and
+uses the browser executable basename, rather than matching either program name
+against the entire installation path. Chrome below .agent-browser remains a
+browser; unrelated Node in an agent-browser fixture directory is not projected
+as an agent-browser daemon. Browser classification alone retains observed
+disposition and no GC action when ownership is unproven.
+
+The new regression failed before repair because an unrelated executable was
+included through its directory name. After repair it proves both managed Chrome
+paths classify as browsers, an actual agent-browser executable below a
+chrome-named directory remains a daemon, the unrelated program is excluded, and
+no cleanup candidates are introduced. All 24 focused resource tests and four
+browser-session-authority tests passed serially. Formatting, workspace Clippy
+with warnings denied and the docs production build passed. These are source
+checks, not installed or consumer acceptance. All five documentation surfaces
+were updated; the shared installed skill remains bound to the installed source.
+
+Production still runs 35611c64. No process cleanup, consumer capability use or
+timer restoration occurred in this slice. Next: establish positive retained
+browser descendant evidence, resolve current observed-pressure dispositions and
+monitor freshness, then qualify the consolidated repair. Consumer original-handle
+attestation and the remaining A4/AX acceptance contract still govern completion.
