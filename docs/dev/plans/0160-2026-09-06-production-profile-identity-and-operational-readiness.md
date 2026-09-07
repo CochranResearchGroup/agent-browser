@@ -2260,3 +2260,54 @@ original browser/custody preservation. Resume the existing empty r2 fixture usin
 its explicit allocation only after installed namespace proof passes, retaining
 both prior failures. Automatic inactive-allocation recovery, complete operator
 journey, original-consumer acceptance, doctor/monitor readiness and AX remain due.
+
+
+## Checkpoint 40: namespace repair installed; display grant boundary diagnosed
+
+state_transition: Namespace-aware release installed and proved through the
+previous ownership gate. Operator launch now reaches a separate privileged grant
+failure, with no browser launch and completed reservation rollback.
+
+acceptance_state: Installed own-tab checks pass; A2 and full A1/A3/A4/AX remain open.
+
+progress_classification: blocker_reduction
+
+Source 8e0fd8b8 release binary SHA256
+`e00cc6254ed18f85db4d4ebd108d6914ac59c92158e022a3a5820f8b086c8104`
+passed namespace probe display-namespace-17918018, real remote-headed continuity
+and terminal reopen a1-terminal-reopen-urUrss, and actual wrong-owner launch denial
+at display-owner-boundary-dqREg1. All exited successfully. Fixture residue was zero.
+
+Selected generation is 0.28.0-e00cc6254ed1-5ad5a9320e6f with support manifest SHA256
+`5ad5a9320e6f1d4f9baee0c2bf20222008c718e26de8d1a523d8a4c7855f0973`.
+Controlled replacement preserved all four original browser process identities and
+47 original tab-custody records. Installed authenticated own-tab smoke passed two
+complete attestations, successful evaluation, cross-client denial and exactly one
+build/source/support-bound causal journal occurrence. Both own test tabs were
+released. Shared skill namespace guidance was synchronized with backup. Doctor
+still exited1; its remaining findings are retained, not converted into acceptance.
+
+The empty r2 profile was reused for one changed-binary operator attempt in
+campaigns/p160/a2-operator-journey-r2/namespace-repair-attempt. Preflight and dry-run
+passed. Actual open passed display-owner proof but failed display_access_grant_failed
+before launching Chrome. Request
+http-service-request-remote_view_open-d511875a-6f1e-44a9-a7d8-a5af7b7c0962
+reported skipped_before_browser_launch and rolled_back. Fresh readback found zero
+r2 browsers, route3 available, and original browser/tab custody unchanged. No
+viewer or remote-input attempt followed.
+
+Source inspection found that the grant path invokes sudo directly inside the
+runtime sandbox, with stdout and stderr discarded. A generated read-only sudo
+listing probe under NoNewPrivileges and PrivateUsers reproduced exit1: root-owned
+sudo.conf appears as UID65534, and NoNewPrivileges prevents root elevation.
+The existing formatter accepts stderr but its caller passes an empty string,
+hiding the actionable cause. This probe did not attempt a display grant.
+Private installed and diagnostic evidence is retained at
+campaigns/p160/publication-8e0fd8b8.
+
+next_action_or_stop_reason: Repair the privileged display-grant execution boundary
+using the existing restricted grant helper in a separate bounded supervised
+operation, while keeping runtime isolation enabled. Retain bounded causal stderr
+and namespace/elevation evidence. Qualify the real grant path and its failure
+recourse, then resume operator acceptance and all remaining A1–A4/AX requirements.
+Automatic inactive-allocation recovery remains separately unresolved.
