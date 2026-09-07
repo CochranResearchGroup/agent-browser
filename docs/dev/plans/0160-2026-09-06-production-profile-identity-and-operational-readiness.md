@@ -2021,8 +2021,8 @@ authority, then resume the original consumer and all remaining A1–A4/AX gates.
 state_transition: Candidate 621b8db8 passed isolated route-owner admission, but
 real remote-headed continuity exposed a private-allocation attestation regression.
 
-acceptance_state: Repair passes focused source checks; rebuilt browser validation
-and production publication remain pending. A1–A4 and AX remain open.
+acceptance_state: Repair passes focused source checks and rebuilt isolated browser
+qualification. Production publication remains pending. A1–A4 and AX remain open.
 
 progress_classification: blocker_reduction
 
@@ -2052,3 +2052,16 @@ remote-headed continuity and wrong-owner admission, then reconcile the productio
 route display and publish under standing authority. The original consumer's own
 connection acceptance, physical tab safety, operator journey, installed doctor,
 monitor continuity and complete causal error matrix remain required.
+
+Checkpoint 35 live readback: source 789cb780, binary SHA256
+`d064563c630f963c1f1427d3f3c6b01f5ad3b33194ff1473172c050ccd6bd1d9`,
+passed a1-terminal-reopen-1GGVSX with original authenticated handles surviving
+host interruption, terminal close/reopen, synthetic interaction and peer checks.
+The same binary passed display-owner-boundary-mLkGHI: correct-owner preflight
+ready and wrong-owner preflight/open denied with zero browsers and tabs.
+Both fixtures exited successfully. Exact continuity-fixture residue inspection
+found zero owned processes to signal; the boundary fixture stopped its own host
+and Xvfb unit. Candidate metadata and hashed live ledgers are bound in
+campaigns/p160/display-owner-repair/private-allocation/live-validation.json.
+Production remains unchanged. The next step is the production release build and
+controlled installation, with exact route-display reconciliation before launch.
