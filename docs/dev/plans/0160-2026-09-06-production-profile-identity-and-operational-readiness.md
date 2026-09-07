@@ -2219,3 +2219,44 @@ proving correct host-owner acceptance and wrong-owner rejection on the exact
 production X socket without browser/provider mutation. Then complete candidate
 continuity qualification, production publication, stale-allocation repair and the
 remaining operator, original-consumer, doctor, monitor and AX gates.
+
+
+## Checkpoint 39: real namespace and continuity qualification pass
+
+state_transition: Optimized namespace-aware candidate passes the previously
+missing production-style isolation boundary and real browser continuity.
+
+acceptance_state: Candidate qualification passes; release build and installation
+are pending. A1–A4 and AX remain open on the final production candidate.
+
+progress_classification: blocker_reduction
+
+Source 8e0fd8b8 produced optimized binary SHA256
+`2459a5fc10c749d4af2b829c44a0746924b61be1a23ec4e335bf6263196da894`.
+The read-only display-namespace-f333ca91 probe ran this executable in generated
+user units with PrivateUsers=true and PrivateTmp=true. It observed production
+route3's X socket only: no browser, provider session or display grant was created.
+The local namespace saw overflow UID65534; delegated observation matched the same
+PID/start instance and correctly accepted host UID1010. A separate expected-root
+observation correctly returned route_display_owner_mismatch for that same server.
+Both probe units exited successfully. Isolation remained enabled on the callers.
+
+The same binary passed real remote-headed a1-terminal-reopen-MBgXpp: original
+independently authenticated handles survived host interruption, and terminal
+close/reopen plus synthetic interaction passed. The host exited successfully;
+exact fixture residue inspection found zero owned processes to signal.
+Hashed namespace and continuity evidence is bound in
+campaigns/p160/display-namespace-repair/optimized-validation.json.
+
+The production release build is running as the existing admitted Cargo invocation.
+Publication preparation at campaigns/p160/publication-8e0fd8b8 preserves the prior
+generation and binds all 47 unchanged original tab-custody records. Production
+still selects the preceding e7d3e8ea4384 candidate. No acceptance receipt was
+rewritten and the monitor timer remains inactive.
+
+next_action_or_stop_reason: Resume the existing release build, qualify its exact
+binary through the namespace and continuity probes, then stage and install with
+original browser/custody preservation. Resume the existing empty r2 fixture using
+its explicit allocation only after installed namespace proof passes, retaining
+both prior failures. Automatic inactive-allocation recovery, complete operator
+journey, original-consumer acceptance, doctor/monitor readiness and AX remain due.
