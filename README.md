@@ -3986,7 +3986,10 @@ against the configured route user. Missing or conflicting ownership adds
 `display_owner` to `missingProofs`; X access alone cannot establish ownership.
 Route-bound launch rejects that mismatch before granting access or starting Chrome.
 Inspect the returned failure correlation ID and repair the route/display binding
-before retrying.
+before retrying. When user isolation hides the route account UID, a bounded
+read-only helper observes socket ownership outside that namespace. Its peer PID
+and process start time must match the local observation; UID65534 is not ownership
+proof. Runtime isolation remains enabled.
 Lease metadata from an older valid handle is checked against the current tab and
 session records. A runtime name is accepted as an alias only when it matches the
 current profile's configured directory hint. Retained-browser requests also accept

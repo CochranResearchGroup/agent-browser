@@ -2,11 +2,17 @@
 //! establish that a display belongs to the selected provider route.
 use serde_json::{json, Value};
 
+#[cfg(target_os = "linux")]
+mod namespace;
+#[cfg(target_os = "linux")]
+pub(crate) use namespace::run_entry as run_namespace_observer_entry;
+
 pub(crate) fn route_display_owner(display: Option<&str>, user: Option<&str>) -> Value {
     #[cfg(target_os = "linux")]
     {
         let expected = user.and_then(linux::user_uid);
-        linux::observe(display, expected)
+        let observed = linux::observe(display, expected);
+        namespace::observe_if_needed(display, expected, observed)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -182,7 +188,8 @@ mod linux {
         };
         json!({"required": true, "verified": code == "route_display_owner_verified",
             "code": code, "displayName": display, "expectedUid": expected_uid,
-            "observedPeers": peers.iter().map(|p| json!({"pid":p.pid,"uid":p.uid})).collect::<Vec<_>>(),
+            "observedPeers": peers.iter().map(|p| json!({"pid":p.pid,"uid":p.uid,
+                "processStartTicks": namespace::start_ticks(p.pid)})).collect::<Vec<_>>(),
             "source": "native/remote_view/display_owner.rs::observe",
             "nextAction": if code == "route_display_owner_verified" { "none" } else { "repair_route_display_binding" }})
     }

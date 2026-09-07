@@ -3119,3 +3119,8 @@ of the correct route or environment. `display_owner` in `missingProofs` or a
 `route_display_owner_mismatch` failure requires `repair_route_display_binding`;
 trace the returned correlation ID and preserve foreign displays. Do not grant
 access to a different environment to bypass the refusal.
+
+If user isolation hides the route UID, the service uses a bounded read-only
+namespace-neutral socket observation tied to the same peer PID and process start.
+An overflow UID is never accepted as owner proof. Helper failure remains unproved;
+inspect `namespaceObservationError` without disabling runtime isolation.

@@ -2177,3 +2177,45 @@ PrivateUsers coverage proving the correct host route user passes while a differe
 host user fails. Preserve runtime isolation. Then qualify/publish the correction,
 repair automatic inactive-allocation reconciliation, and resume the complete
 operator journey, original-consumer acceptance, A3/A4 and AX.
+
+
+## Checkpoint 38: namespace-neutral display-owner source repair
+
+state_transition: Implemented bounded namespace-neutral X socket ownership proof
+for host route UIDs not represented by the installed runtime's uid_map.
+
+acceptance_state: Eleven focused tests and workspace Clippy pass. Real namespace
+qualification and publication remain pending; A1–A4 and AX remain open.
+
+progress_classification: blocker_reduction
+
+The display-owner module now delegates only when the expected host UID lacks an
+identity mapping. A generated user-manager unit runs the same executable with
+PrivateUsers and PrivateTmp disabled for a read-only socket observation. The
+calling runtime retains its isolation. The helper has a two-second runtime limit,
+one-second stop limit, four-second parent deadline and 8192-byte output bound.
+It grants no display access and launches no browser. Its host-only mode rejects
+an unmapped UID instead of recursively delegating.
+
+Acceptance requires the same display and expected UID, matching local/delegated
+socket peer PIDs and process start ticks, and unchanged local process instances
+after the helper returns. Different visibility of abstract/filesystem socket
+addresses is accepted only for the same server instances. Changed or absent
+process evidence remains unproved. A delegated negative owner result remains
+negative; overflow UID65534 is never interpreted as the configured route account.
+Failures report namespaceObservationError while successful delegated observations
+identify their transport and retain the namespace-local peer evidence.
+
+Focused tests cover UID mapping, exact instance agreement, negative result
+preservation, duplicate socket spellings and changed-instance rejection alongside
+existing ownership and attestation checks. README, CLI help, repository skill,
+docs site and inline source describe the behavior. Private source validation is
+retained at campaigns/p160/display-namespace-repair. The installed production
+binary has not changed in this slice.
+
+next_action_or_stop_reason: Build the optimized candidate and run the prepared
+read-only /tmp/p160-display-namespace-live.py probe with PrivateUsers/PrivateTmp,
+proving correct host-owner acceptance and wrong-owner rejection on the exact
+production X socket without browser/provider mutation. Then complete candidate
+continuity qualification, production publication, stale-allocation repair and the
+remaining operator, original-consumer, doctor, monitor and AX gates.
