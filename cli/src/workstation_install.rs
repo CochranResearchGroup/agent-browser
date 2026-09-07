@@ -42,6 +42,8 @@ use crate::runtime_replacement::{
     RuntimeReplacementDisposition, RuntimeReplacementPlan, RuntimeReplacementPolicy,
 };
 
+mod current_selection;
+
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
 const DEFAULT_DASHBOARD_PORT: u16 = 4848;
 const DEFAULT_GUACAMOLE_PORT: u16 = 8092;
@@ -1983,6 +1985,7 @@ fn workstation_upgrade_readiness(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    let mut current_selection_evidence = Value::Null;
     let (upgrade_state, selected_generation_ready, runtime_convergence_ready, rollback_ready) =
         if let Some(transaction) = transaction {
             let candidate_selected =
@@ -2023,7 +2026,24 @@ fn workstation_upgrade_readiness(
                     | UpgradeTransactionState::ClosedZeroEffect
                     | UpgradeTransactionState::FailedPreservedOldGeneration
             );
-            let selected_ready = (expects_candidate && candidate_selected && payload_ready)
+            let current_selected = if zero_effect_terminal
+                && !old_selected
+                && !candidate_selected
+                && !admission_draining
+            {
+                let proof = selected_generation_id
+                    .ok_or_else(|| "current_selection_missing".to_string())
+                    .and_then(|id| current_selection::validate(paths, id, dashboard_ingress));
+                current_selection_evidence = serde_json::json!({
+                    "ready": proof.is_ok(),
+                    "error": proof.as_ref().err(),
+                });
+                proof.is_ok()
+            } else {
+                false
+            };
+            let selected_ready = current_selected
+                || (expects_candidate && candidate_selected && payload_ready)
                 || (expects_old
                     && old_selected
                     && transaction
@@ -2087,6 +2107,7 @@ fn workstation_upgrade_readiness(
     serde_json::json!({
         "payloadReady": payload_ready,
         "selectedGenerationReady": selected_generation_ready,
+        "currentSelectionEvidence": current_selection_evidence,
         "runtimeConvergenceReady": runtime_convergence_ready,
         "upgradeTransactionState": upgrade_state,
         "dashboardIngressReady": dashboard_ingress_ready,

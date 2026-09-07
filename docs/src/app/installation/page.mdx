@@ -352,6 +352,8 @@ one exact guarded <code>close</code> action to normalize the record. There
 is no inferred latest mutation or broad force unlock. A post-commit rollback
 restores the exact state snapshot and previous generation selector or records
 typed operator recovery with rollback evidence retained.
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, <code>currentSelectionEvidence</code> reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+
 The <code>readiness</code> object separates
 <code>payloadReady</code>, <code>selectedGenerationReady</code>,
 <code>runtimeConvergenceReady</code>,

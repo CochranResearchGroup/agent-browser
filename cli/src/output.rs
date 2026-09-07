@@ -5608,6 +5608,9 @@ same recovery-only result.
 Successful JSON output includes runtimeCensusTransaction. Use workstation
 status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
+currentSelectionEvidence reports whether a later selected Linux installation
+proves its payload, dashboard and live host identity despite unrelated failed
+upgrade history. Active and uncertain transactions remain blocking.
 Every workstation dry-run includes serviceStateMigrationPreview. It reads
 Service State without writing and reports exact changed IDs by record class,
 candidate-led browser contamination, preserved unknown fields, recovery-artifact

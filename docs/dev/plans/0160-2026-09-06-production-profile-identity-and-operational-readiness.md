@@ -3062,3 +3062,45 @@ Next: repair the separate current-generation readiness comparison with exact
 selected payload, live host and dashboard manifest evidence while retaining
 historical failures. Continue consumer original-connection acceptance, cold
 viewer startup diagnosis, remaining ownership dispositions and A4/AX gates.
+
+## Current-selection readiness proof repair
+
+state_transition: Source repair validated for unrelated failed upgrade history.
+acceptance_state: Current candidate readback and installed qualification remain pending; A1, A3, A4 and AX remain open.
+progress_classification: progress
+
+The selected-generation axis previously required the current selector to equal
+the old or candidate generation of the latest upgrade transaction. That cannot
+recognize a subsequent controlled installation even when its actual payload,
+host and authenticated dashboard are healthy. The original terminal transaction
+must remain history rather than being rewritten into an invented successful
+upgrade.
+
+A focused workstation_install/current_selection module now provides read-only
+Linux proof when the latest transaction is closed zero-effect, rolled back
+before commit, or failed with its old generation preserved, and the current
+selection differs from both historical generations. Active admission drains,
+active transactions and uncertain failures cannot use this path. It verifies the
+stable selector and entrypoint, sealed generation and binary/support manifest
+hashes, executable-bound live dashboard manifest and existing accepted journey,
+current-boot settled host ingress, process start/executable identity, live binary
+hash and socket identity. A final observation fences host and selector changes.
+The ordinary dashboard's package-level label need not equal the installation ID;
+its executable manifest supplies the identity join. No selector, transaction,
+browser, owner or acceptance receipt is mutated by this proof.
+
+Readiness adds currentSelectionEvidence with ready and error fields for this
+specific observation; it is null when the path does not apply. Refusals expose
+bounded diagnostic codes. All original readiness axes and terminal history are
+preserved. Help, README, skill, installation docs and inline source guidance now
+explain this behavior.
+
+The focused regression uses a disposable process, socket and local manifest
+server. It verifies positive current proof, preserved transaction content, an
+active drain, active and uncertain transaction states, stale dashboard manifest,
+missing accepted journey, mismatched payload hash, prior-boot host record and a
+dead process. It passed. The existing seven-axis active-transaction regression
+also passed, as did workspace Clippy with warnings denied, formatting and the
+docs production build. No red-before-fix execution is claimed. An optimized
+candidate build is running for read-only validation against the actual installed
+runtime; production still runs c249c531.

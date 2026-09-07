@@ -519,6 +519,8 @@ normalize that record.
 Rollback after generation and state commit restores the exact state snapshot
 and previous selector or enters typed operator recovery. There is no inferred
 latest transaction and no broad force-unlock operation.
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+
 Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
 `runtimeConvergenceReady`, `upgradeTransactionState`,
 `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall

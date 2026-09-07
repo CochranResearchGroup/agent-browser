@@ -187,7 +187,11 @@ reclaimable, and unowned RSS, cleanup obligations, retention results, monitor
 freshness, and blocking reconciliation incidents. Use
 `agent-browser install workstation status --json` for a redacted view of the
 selected generation, latest transaction, runtime dispositions, blocker, and
-seven readiness axes. The axes are `payloadReady`,
+seven readiness axes.
+
+After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
+
+The axes are `payloadReady`,
 `selectedGenerationReady`, `runtimeConvergenceReady`,
 `upgradeTransactionState`, `dashboardIngressReady`, `operatorJourneyReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
