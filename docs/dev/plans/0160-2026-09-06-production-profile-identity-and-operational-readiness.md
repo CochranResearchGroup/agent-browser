@@ -109,6 +109,35 @@ W1 takes precedence over unrelated maintenance or presentation polish. Ownership
 findings from W3 that affect profile usability are pulled into W1 immediately.
 Read-only evidence collection for later units may proceed without delaying W1.
 
+## Strategy amendment, 2026-09-07
+
+Preserve A1, A2, A3, A4 and AX in full. Execute consumer recovery before further
+presentation, maintenance, or unattended work. The next milestone is the
+original blocked consumer safely rejoining with its existing identity and
+obtaining complete attestation, preserving its browser, targets, and handles.
+A synthetic client cannot substitute for this consumer result.
+
+1. Read current installed recovery and ownership evidence for that consumer.
+   Use the supported own-lease rejoin path if offered; do not rotate identity,
+   borrow a capability, replace its browser, or replay historical selectors.
+2. If blocked, reproduce the exact failed transition and join requested profile,
+   physical profile, lease, live owner, and principal evidence into one causal
+   explanation before changing code. Ordinary shared-local self-identification
+   remains the default; physical resource ownership checks remain mandatory.
+3. Repair one coherent batch only when that explanation supports the repair.
+   Include causal diagnostics at the failed decision. Use focused checks during
+   repair and required integration gates once before governed publication.
+4. After consumer recovery, resume cold operator access, maintenance, and
+   unattended acceptance in the existing dependency order.
+
+The operator authorized the proposed additional 30-minute round to establish
+consumer recovery or a reproduced causal defect. Count diagnosis, validation,
+waiting, and documentation within it. RUNBOOK.md records its exact start and
+end. Retain the approximately 12 hours already reported; no successor resets
+that effort. An inconclusive round does not automatically trigger a rebuild,
+new live attempt, or further allowance. A reproduced defect is a diagnosis
+milestone, not completion of A1 or the whole plan.
+
 ## W1 ownership proof and failure matrix
 
 For each blocker, distinguish requested identity, inherited/default selection,

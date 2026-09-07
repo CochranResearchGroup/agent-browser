@@ -6,9 +6,15 @@ lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
 ## Turn 214 | 2026-09-07
 
-Current task: adopt LitScout outcome-first policy and runbook compaction.
-Scope is repository documentation; this task does not resume browser tests.
-Policy adoption is independent of production runtime acceptance.
+Current task: execute the Plan 0160 consumer-first strategy amendment.
+The operator authorized amendment and execution after the reassessment.
+Additional round starts 2026-09-07T14:04:08+00:00 and ends
+2026-09-07T14:34:08+00:00 (30 minutes total, including governance).
+Controller: primary agent. Milestone: original consumer recovery or one
+reproduced causal defect. Existing approximately 12-hour effort is retained.
+Prior turn classification: progress, because evidence established that the
+named-profile mismatch was no longer the recorded blocker and selected the
+consumer's supported rejoin path as the next investigation.
 
 ### Plan 0160: OPEN, production operational acceptance incomplete
 
@@ -29,11 +35,25 @@ Policy adoption is independent of production runtime acceptance.
 - Cumulative effort: the operator reports approximately 12 hours in the current
   repair/verification run. Exact aggregate accounting was not established.
   This adoption does not reset effort or manufacture a new remaining budget.
-- Progress classification for production during this policy task: `no_progress`.
-- Next runtime decision: reconcile cumulative effort and establish a finite
-  remaining ceiling in this entry before sustained work; identify an
-  evidence-backed route to a named unmet acceptance milestone before another
-  costly replay. Passing local regressions alone is insufficient.
+- Current state: read-only installed diagnosis completed; original-consumer
+  execution and attestation are pending. Fresh lease explanation still offers
+  `rejoin_owned_browser` for missing owner/principal binding. The existing
+  consumer capability is active; rotation is forbidden by active work.
+- Evidence: `consumer-first-20260907/lease-explain.json` and
+  `capability-status.json` under the same private P160 campaign root.
+  Installed generation matches the recorded candidate above.
+- Backend source uses the same exact-owner eligibility check when advertising
+  and executing rejoin. No new backend defect has been reproduced in this round.
+- Next action: original consumer executes its supported rejoin with its existing
+  private capability, then obtains attestation through its original handle.
+  A prepared `consumer-first-20260907/consumer-rejoin-once.py` refreshes the
+  revision, checks recorded identity, submits once, and checks custody readback.
+  Syntax checked; not executed here. It does not supply consumer attestation.
+- This repository session has requested that consumer-side result from the
+  operator. It has not borrowed the capability, changed its binding, submitted
+  page input, or started a replacement browser. No runtime retry is scheduled.
+- Production progress classification: `no_progress`; the verified diagnosis
+  narrows the next action but does not advance A1 acceptance or reset the clock.
 
 ### Retained execution boundaries
 
