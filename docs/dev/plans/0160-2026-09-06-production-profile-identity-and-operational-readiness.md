@@ -54,6 +54,32 @@ perform cleanup in its shared browser.
 
 ## Current state and reconciliation
 
+### Execution strategy amendment, 2026-09-07
+
+Prioritize the remaining A1 ownership and identity failures before rollback
+retention work. Use the current installed candidate and isolated consumer
+simulations to distinguish a real action refusal from an owner-maintenance
+warning. Preserve ordinary self-identified use under shared-local and exact
+physical custody checks. Do not weaken recovery, transfer or cleanup authority
+to clear a doctor finding.
+
+The next bounded repair batch must identify the affected action, reproduce its
+failure, repair its cause, and verify the original action plus foreign-owner
+rejection. Diagnostics must identify missing proof and supported recourse, with
+correlation sufficient to trace the failure. Existing green viewer acceptance
+does not need replay unless this batch changes that path.
+
+Allocate at most one hour to this batch: ten minutes for classification,
+approximately 35 for a causal repair, and the remainder for focused validation
+and one qualification/publication decision. Reassess at 30 minutes without A1
+outcome progress. All prior effort remains cumulative; this is a tactic change,
+not a reset of the full goal or its acceptance requirements.
+
+After the identity batch, repair supported rollback retention before maintenance
+can resume. Complete A1/A3 dispositions and doctor acceptance before A4's actual
+scheduled cycles. A2 and AX retain their existing scope; the full A1–A4/AX
+contract remains open until each requirement has current evidence.
+
 [Plan 0159](0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md)
 closed a bounded repair/delivery contract; it did not establish whole production
 readiness. Its [acceptance audit](../notes/0155-2026-09-06-plan-0159-acceptance-audit.md)

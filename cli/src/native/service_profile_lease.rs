@@ -1137,7 +1137,10 @@ pub(crate) fn doctor_profile_leases(state: &ServiceState, now: &str) -> ProfileL
                 .to_string(),
                 lease_id: lease.id.clone(),
                 profile_id: lease.profile_id.clone(),
-                message: format!("Profile lease {} is blocked by {}", lease.id, axis),
+                message: format!(
+                    "Profile-owner lease {} requires {}. Inspect its authorizedActions and recourse for an exact repair; ordinary tab permission is evaluated separately.",
+                    lease.id, axis
+                ),
                 safe_actions: lease
                     .authorized_actions
                     .iter()
@@ -1178,7 +1181,7 @@ pub(crate) fn rejoin_profile_lease(
         return Ok(lease);
     }
     let expires_at = expires_at
-        .filter(|expires_at| *expires_at > now)
+        .filter(|expires_at| rfc3339_at_or_after(now, expires_at) == Ok(false))
         .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     let has_principal_binding = state
         .runtime_owner_registry
@@ -1281,8 +1284,9 @@ pub(crate) fn release_profile_lease(
 
 #[allow(clippy::too_many_arguments)]
 /// Builds a sealed, no-effect descriptor for exact stale-session release or
-/// same-capability owner-generation refresh. A binding refresh is proposed
-/// only when the ready owner and every retained lease identity already agree.
+/// same-capability owner-generation refresh, or an already-authorized exact
+/// owner rejoin. Rejoin uses the same unique, uncontested custody predicate as
+/// the direct operation and is sealed alone to preserve its lease revision.
 pub(crate) fn plan_profile_lease_reconciliation(
     state: &ServiceState,
     lease_id: &str,
@@ -1358,6 +1362,27 @@ pub(crate) fn plan_profile_lease_reconciliation(
                 from_state: binding.owner_generation.to_string(),
                 to_state: owner.owner_generation.to_string(),
             });
+        }
+    }
+    if lease.observation_only
+        && lease
+            .authorized_actions
+            .iter()
+            .any(|action| action == "rejoin")
+    {
+        if let Some((session_id, _)) = lease
+            .profile_identity_digest
+            .as_deref()
+            .and_then(|digest| exact_rejoin_target_for_owner(state, authority, digest, now))
+        {
+            // Do not mix rejoin with stale-session changes that would invalidate
+            // its sealed lease revision before the guarded operation executes.
+            proposed_transitions = vec![ProfileLeaseTransition {
+                action: "rejoin_owned_browser".to_string(),
+                session_id,
+                from_state: lease.state.clone(),
+                to_state: "active".to_string(),
+            }];
         }
     }
     let mut blocked_reasons = Vec::new();
@@ -1469,6 +1494,32 @@ pub(crate) fn apply_profile_lease_reconciliation(
         ));
     }
     for transition in &plan.proposed_transitions {
+        if transition.action == "rejoin_owned_browser" {
+            let target = lease
+                .profile_identity_digest
+                .as_deref()
+                .and_then(|digest| exact_rejoin_target_for_owner(state, authority, digest, now));
+            if plan.proposed_transitions.len() != 1
+                || transition.from_state != lease.state
+                || transition.to_state != "active"
+                || target.as_ref().map(|(session, _)| session.as_str())
+                    != Some(transition.session_id.as_str())
+            {
+                return Err(lease_error(
+                    ProfileLeaseFailureCode::PlanInvalid,
+                    &plan.lease_id,
+                ));
+            }
+            rejoin_profile_lease(
+                state,
+                &plan.lease_id,
+                &plan.lease_revision,
+                authority,
+                now,
+                Some(&plan.expires_at),
+            )?;
+            continue;
+        }
         if transition.action == "refresh_principal_owner_binding" {
             let binding = state
                 .runtime_owner_registry
@@ -3016,6 +3067,91 @@ mod tests {
         assert_eq!(binding.principal_id, authority.principal_id);
         assert_eq!(binding.capability_id, authority.capability_id);
         assert_eq!(binding.owner_generation, 9);
+    }
+
+    #[test]
+    fn reconcile_plan_rejoins_missing_binding_and_rejects_changed_custody() {
+        let (mut state, authority, _) = state_with_lease();
+        state.runtime_owner_registry.principal_bindings.clear();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.work_lease_revision = 0;
+        session.expires_at = None;
+        state.tabs.insert(
+            "tab-odollo".to_string(),
+            BrowserTab {
+                id: "tab-odollo".to_string(),
+                browser_id: "browser-odollo".to_string(),
+                owner_session_id: Some("session-odollo".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+        let lease = profile_leases_for_state(&state, NOW)
+            .into_iter()
+            .find(|lease| lease.principal_id.as_deref() == Some(authority.principal_id.as_str()))
+            .unwrap();
+        let plan = plan_profile_lease_reconciliation(
+            &state,
+            &lease.id,
+            &lease.lease_revision,
+            &authority,
+            NOW,
+            "2026-08-27T08:00:00-05:00",
+            Some("boot-epoch-1".to_string()),
+            "rejoin-missing-binding".to_string(),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert!(plan.effect_capable, "{:?}", plan.blocked_reasons);
+        assert_eq!(plan.proposed_transitions.len(), 1);
+        assert_eq!(plan.proposed_transitions[0].action, "rejoin_owned_browser");
+        assert_eq!(plan.proposed_transitions[0].session_id, "session-odollo");
+
+        let mut changed = state.clone();
+        changed.tabs.values_mut().next().unwrap().principal_id =
+            Some("foreign-principal".to_string());
+        let before = changed.clone();
+        assert!(apply_profile_lease_reconciliation(
+            &mut changed,
+            &plan,
+            &authority,
+            NOW,
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .is_err());
+        assert_eq!(changed, before);
+
+        let receipt = apply_profile_lease_reconciliation(
+            &mut state,
+            &plan,
+            &authority,
+            NOW,
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert_eq!(receipt.transition_count, 1);
+        let result = inspect_profile_lease(&state, &lease.id, NOW).unwrap();
+        assert_eq!(result.state, "active");
+        assert!(result.blocking_identity_axes.is_empty());
+        let after = state.clone();
+        assert!(
+            apply_profile_lease_reconciliation(
+                &mut state,
+                &plan,
+                &authority,
+                NOW,
+                Some("boot-epoch-1"),
+                SEAL_KEY,
+            )
+            .unwrap()
+            .replayed
+        );
+        assert_eq!(state, after);
     }
 
     #[test]

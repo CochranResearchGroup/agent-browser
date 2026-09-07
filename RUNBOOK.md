@@ -4,19 +4,25 @@ This is the sole current execution status. Plans own acceptance and strategy;
 linked archives and Git checkpoints preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 214 | 2026-09-07
+## Turn 215 | 2026-09-07
 
-The operator authorized an approach review and up to 60 additional minutes,
-from 2026-09-07T14:49:48Z through 15:49:48Z. Prior approximately 12-hour effort
-and the completed 30-minute round (14:04:08–14:34:08 UTC) remain cumulative.
-Controller: primary agent. This allowance does not reset the overall history.
+The active identity repair batch runs from 2026-09-07T15:58:19Z through
+16:58:19Z under the amended Plan 0160 strategy and standing execution authority.
+Prior approximately 12-hour effort, the completed 30-minute round and the
+completed 60-minute cold-viewer round remain cumulative. Controller: primary.
+The full operational-readiness objective remains open.
 
-Approach correction: requiring the original consumer to interrupt its work was
-unnecessary. Simulate its retained credential, handle and host interruption;
-then test the failing operational path. Passing an intermediate check is not
-completion. This round reproduced and repaired a cold-stream delay, installed
-the qualified candidate and passed the first cold operator journey. Production
-operational acceptance remains incomplete for the specific reasons below.
+The installed candidate reproduced `no_safe_reconciliation_transition` in an
+isolated retained-consumer fixture even though its exact lease authorized rejoin.
+The planner omitted that supported operation. Source now seals a single guarded
+`rejoin_owned_browser` transition; apply uses existing exact custody checks.
+The regression failed before repair. All 26 focused lease tests now pass,
+including changed foreign-tab custody refusal with no state mutation and
+idempotent replay. A fixture setup omission was corrected after the first green
+attempt exposed a missing test tab; that attempt is not a product regression.
+Client contract checks, formatting, Clippy and docs build passed. Optimized
+candidate qualification and production publication are pending. No consumer
+capability was borrowed and no production lease repair was applied.
 
 ### Installed candidate and acceptance
 
@@ -106,7 +112,13 @@ No formal release was created.
   an accepted upgrade transaction.
 - The supported installer dry-run returned a non-mutating planned result with
   `ready=false`; it did not establish a retention reference or acceptance.
-- Next: repair the supported controlled-publication/retention path so an actual
+- Next: resolve A1 ownership failures with operation-specific evidence and an
+  isolated consumer reproduction. The active bounded batch starts at
+  2026-09-07T15:58:19Z and ends by 16:58:19Z, including validation and governance.
+  Reassess after 30 minutes without A1 outcome progress. Prior effort remains
+  cumulative. The preceding recommendation-only turn made no outcome progress;
+  execution resumes under the amended Plan 0160 strategy.
+- Then repair the supported controlled-publication/retention path so an actual
   prior rollback generation remains protected until operational acceptance.
   Do not create a fake accepted transaction, green monitor receipt, supervisor
   reference or live-process placeholder to influence GC.

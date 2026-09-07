@@ -1662,6 +1662,8 @@ replacing the signer behind the existing trust root. File permissions alone are
 not the final production custody boundary. Plan 0144 still requires an
 independently supervised signer identity before installation.
 
+Reconciliation also seals a single <code>rejoin_owned_browser</code> transition when the current lease explicitly authorizes <code>rejoin</code>. It reuses the direct rejoin checks for one exact uncontested ready owner and binds only that session and its same-browser active tabs, through the plan expiry. Apply rechecks current capability, lease revision, owner, process, routes, boot epoch and custody before mutation. A missing owner binding therefore has a supported plan/apply repair when rejoin is already permitted; ambiguous or foreign work remains blocked. Lease doctor findings concern profile-owner authority, while ordinary tab permission is evaluated separately.
+
 Observation-only legacy and unbound identity rows advertise
 <code>profile_acquire</code> when the capability-bound acquisition coordinator
 is their executable recourse. The dashboard exposes that route as Acquire
