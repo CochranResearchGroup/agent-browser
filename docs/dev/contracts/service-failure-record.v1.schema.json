@@ -10,6 +10,61 @@
     "occurrenceId": { "type": "string", "minLength": 1 },
     "occurredAt": { "type": "string", "format": "date-time" },
     "bootEpoch": { "type": "string" },
+    "buildIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packageVersion",
+        "sourceRevision",
+        "sourceTreeState",
+        "binarySha256",
+        "supportGenerationId",
+        "supportManifestSha256",
+        "unavailableReasons"
+      ],
+      "properties": {
+        "packageVersion": {
+          "type": "string"
+        },
+        "sourceRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceTreeState": {
+          "enum": [
+            "clean",
+            "dirty",
+            "unknown"
+          ]
+        },
+        "binarySha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supportGenerationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supportManifestSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unavailableReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "runtimeEnvironment": { "enum": ["development", "production"] },
     "category": { "enum": ["browser_launch", "guacamole_load", "handoff_link", "cdp_stream", "dashboard_action", "service_action"] },
     "source": { "type": "string", "minLength": 1, "maxLength": 128 },

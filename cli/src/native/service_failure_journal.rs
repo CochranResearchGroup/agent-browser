@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+mod build_identity;
 mod pending;
 
 use chrono::Utc;
@@ -270,6 +271,10 @@ pub struct ServiceFailureRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub boot_epoch: Option<String>,
     pub runtime_environment: String,
+    /// Captured by the producer, never inferred from a later selected runtime.
+    /// Absent on historical records; unavailable fields carry explicit reasons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_identity: Option<Value>,
     pub category: ServiceFailureCategory,
     pub source: String,
     pub stage: String,
@@ -334,6 +339,7 @@ impl ServiceFailureRecord {
                 .filter(|value| matches!(value.as_str(), "development" | "production"))
                 .unwrap_or_else(|| "production".to_string()),
             category,
+            build_identity: Some(build_identity::current()),
             source: bounded_token(source.into(), "unknown"),
             stage: bounded_token(stage.into(), "unknown"),
             code: bounded_token(code.into(), "unknown_failure"),

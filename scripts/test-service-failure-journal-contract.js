@@ -37,6 +37,9 @@ const record = {
   details: { elapsedMs: 15000 },
 };
 assert(validateRecord(record), JSON.stringify(validateRecord.errors));
+const boundRecord = {...record, buildIdentity: {packageVersion: '0.28.0', sourceRevision: 'a'.repeat(40), sourceTreeState: 'clean', binarySha256: 'b'.repeat(64), supportGenerationId: null, supportManifestSha256: null, unavailableReasons: ['matching_support_generation_unavailable']}};
+assert(validateRecord(boundRecord), JSON.stringify(validateRecord.errors));
+assert(!validateObservation({category:'dashboard_action', stage:'client', code:'test', summary:'test', observationId:'test', buildIdentity: boundRecord.buildIdentity}), 'client must not forge producer identity');
 assert(validateReadback({
   schemaVersion: 'agent-browser.service-failure-journal-readback.v1',
   records: [record],

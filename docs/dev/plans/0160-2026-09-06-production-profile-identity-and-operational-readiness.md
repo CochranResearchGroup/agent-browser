@@ -1421,3 +1421,44 @@ scheduled cycles, and AX build-bound causal reconstruction remain required.
 next_action_or_stop_reason: Continue the outstanding installed acceptance and
 diagnostic repairs against the selected generation; do not mark Plan0160 complete
 or enable the maintenance timer from this successful publication alone.
+
+## Checkpoint 24: installed lease disposition and producer build identity
+
+state_transition: installed recovery path refreshed; AX build-identity repair validated in source
+
+acceptance_state: A1–A4 and AX remain incomplete
+
+progress_classification: blocker_reduction
+
+Installed lease readback still has seven findings across six records: two
+legacy unproven profiles, three registered capabilities without owner binding,
+and one record with generation and session-authority mismatches. They have not
+been dismissed as historical or automatically adopted. The consumer's registered
+capability now resolves to the current owner's physical profile digest and its
+installed explanation offers rejoin_owned_browser with authorized rejoin. That
+is a repaired available path, not original-connection acceptance. No consumer
+capability was used or rebound. Private readback and disposition are under
+campaigns/p160/installed-lease-disposition.
+
+New failure records now capture producer buildIdentity with package version,
+compiled source revision and repository tree state, exact executable digest,
+and support generation/manifest digest only when the adjacent immutable manifest
+matches that executable. Missing fields carry explicit reasons. The cached
+producer identity never follows the later current-generation selector. Build
+metadata refreshes on source and Git revision changes. Historical records retain
+an absent identity when read; the reader does not invent their provenance.
+Authenticated client observations cannot supply producer buildIdentity.
+
+The optional record schema extension preserves historical v1 records. The
+contract check, journal tests including mismatched support identity and historical
+readback, workspace Clippy and docs build pass. Source build identity is not yet
+installed or proven through a new live journal occurrence. Validation is retained
+under campaigns/p160/build-identity-validation. Production remains on ec04ad55.
+
+material_blockers: Consumer original-connection acceptance, remaining lease
+dispositions, installed build-bound AX lookup and other selected causal cases,
+A2 operator journey, A3 doctor/upgrade readiness and A4 cycles remain open.
+
+next_action_or_stop_reason: Qualify the new record through an isolated producer
+and restart readback, then include it in the next frozen candidate while pursuing
+the remaining installed acceptance gates. No ownership checks were weakened.
