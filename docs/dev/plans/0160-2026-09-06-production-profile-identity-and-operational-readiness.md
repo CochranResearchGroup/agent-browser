@@ -1046,3 +1046,55 @@ in runtime/profile_lease.rs compares it with the active runtime name. Join both
 through the exact configured physical identity; retain foreign-profile denial.
 Use the preserved alias counterexamples, not another broad failure review.
 Then continue remaining A1/AX and A2–A4 evidence and final installed qualification.
+
+## Checkpoint 18: alias routing and explicit-selector fencing
+
+state_transition: W1 alias repair active to isolated qualification complete
+
+acceptance_state: A1–A4 and AX remain incomplete pending final installed proof
+
+progress_classification: blocker_reduction
+
+The catalog ID and configured runtime name now pass the same current-owner
+selection. Active-browser alias reconciliation additionally checks the physical
+directory and current endpoint identity. Retained-tab recovery resolves and
+verifies the configured physical directory against the owner digest, accepts
+only its exact configured alias and preserves that verified profile metadata on
+the borrowed browser connection. Process ownership and child permission checks
+remain required; borrowed metadata never grants process cleanup ownership.
+
+The first live alias verification exposed a separate explicit-selector gap:
+tab_close could discard a conflicting runtimeProfile despite closing only an
+authorized target. The shared handle validator now checks every explicit
+runtimeProfile, profileId and profile field, including nested params, before
+child admission or effects. service_tab_profile_selector_conflict identifies
+the field and source function, classifies no_effect and directs comparison of
+the requested profile with the current owner. This also protects other handle
+actions that intentionally skip browser auto-launch.
+
+evidence: The original alias-selection unit test failed before repair. The
+93 runtime routing tests, four child/selector tests, 14 recourse tests, 20
+lifecycle tests and exact-close transport regression pass, as do workspace
+Clippy, formatting and documentation build. Private logs use the
+/tmp/p160-routing prefix. Final optimized candidate SHA256:
+ada9cae92dd710fbf1bac53b32007aa7894f0f8381cea4ec382afb6925c990aa.
+Disposable fixture routing-alias-green-Uu3rMr passes both raw alias spellings,
+five no-effect negative selectors/subjects, exact target close, retained release
+after host interruption, original peer-handle evaluation42 and complete
+attestation before and after restart. Ledger SHA256:
+deb851eb440aa6fd1dbad90db50f2df36ab27743929e16169fc3562e77d71ac3.
+Probe source SHA256:
+b5b1f7671f9efab6457aecabb4c9472f9ea1d02796051edff79d924257caae69.
+
+The three materially distinct fixture attempts are preserved: apVr58 exposed
+the discarded conflicting selector; DdPtDm passed that denial but exposed the
+retained alias comparison; Uu3rMr passes the repaired sequence. All exact
+fixture cleanup receipts report no remaining owned residue. No production
+browser was used for these failure reproductions.
+
+material_blockers: This source is not installed yet. Whole A1 positive/negative
+coverage, two independently authenticated original handles, AX reconstruction,
+operator journey, doctor readiness and scheduled cycles remain required.
+
+next_action_or_stop_reason: Freeze and qualify the full release binary, publish
+under standing authority, and continue the remaining frozen acceptance rows.

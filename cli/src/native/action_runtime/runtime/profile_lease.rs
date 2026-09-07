@@ -563,6 +563,26 @@ pub(crate) fn active_browser_profile_mismatch(
     );
     mismatch.as_ref()?;
 
+    // A catalog ID and its configured runtime name can identify the same
+    // directory. Reuse current-owner selection, then verify the active browser
+    // evidence; a label match alone must never suppress a profile conflict.
+    if let Some(active_path) = active_user_data_dir {
+        if let Ok(repository) = LockedServiceStateRepository::default_json() {
+            if let Ok(service_state) = repository.load_snapshot() {
+                if configured_profile_alias_matches_active_browser(
+                    command,
+                    &state.session_id,
+                    active_path,
+                    browser.browser_pid(),
+                    browser.get_cdp_url(),
+                    &service_state,
+                ) {
+                    return None;
+                }
+            }
+        }
+    }
+
     // Older retained connections can lack launch metadata even though the
     // service repository proves the exact live browser, session, and profile
     // route. Accept only that complete identity match.
@@ -582,6 +602,82 @@ pub(crate) fn active_browser_profile_mismatch(
         }
     }
     mismatch
+}
+
+/// Resolve an alias only through the exact effect-capable owner and its
+/// configured physical directory. This is label reconciliation, not process
+/// adoption; ordinary effect admission and child ownership still apply.
+pub(crate) fn configured_profile_alias_matches_active_browser(
+    command: &Value,
+    session_id: &str,
+    active_path: &Path,
+    active_pid: Option<u32>,
+    active_cdp_url: &str,
+    service_state: &ServiceState,
+) -> bool {
+    let Ok(Some(binding)) = service_state
+        .runtime_owner_registry
+        .binding_for_session(session_id)
+    else {
+        return false;
+    };
+    if !binding.effect_capable {
+        return false;
+    }
+    if super::cdp_free_plan::optional_command_or_params_string(command, "sessionName")
+        .is_some_and(|id| id != session_id)
+        || super::cdp_free_plan::optional_command_or_params_string(command, "browserId")
+            .is_some_and(|id| id != binding.claim.logical_browser_id)
+    {
+        return false;
+    }
+    let Some(browser) = service_state
+        .browsers
+        .get(&binding.claim.logical_browser_id)
+    else {
+        return false;
+    };
+    if browser.health != ServiceBrowserHealth::Ready
+        || active_pid.is_some_and(|pid| browser.pid != Some(pid))
+        || browser
+            .cdp_endpoint
+            .as_deref()
+            .is_none_or(|endpoint| cdp_identity(endpoint) != cdp_identity(active_cdp_url))
+    {
+        return false;
+    }
+    let Some(owner) = service_state
+        .runtime_owner_registry
+        .owner(&binding.claim.profile_identity_digest)
+    else {
+        return false;
+    };
+    if owner.cdp_endpoint_identity_digest
+        != format!("{:x}", Sha256::digest(active_cdp_url.as_bytes()))
+    {
+        return false;
+    }
+    let mut options = LaunchOptions {
+        runtime_profile: super::cdp_free_plan::optional_command_or_params_string(
+            command,
+            "runtimeProfile",
+        ),
+        profile: super::cdp_free_plan::optional_command_or_params_string(command, "profile"),
+        ..LaunchOptions::default()
+    };
+    if !super::daemon::apply_existing_session_profile_selection(
+        &mut options,
+        command,
+        Some(session_id),
+        service_state,
+    )
+    .is_ok_and(|selection| {
+        selection == Some(crate::native::service_model::ProfileSelectionReason::ExistingOwner)
+    }) {
+        return false;
+    }
+    crate::runtime_profile::canonical_profile_identity_digest(active_path)
+        .is_ok_and(|digest| digest == binding.claim.profile_identity_digest)
 }
 
 pub(crate) fn retained_route_matches_selected_profile(

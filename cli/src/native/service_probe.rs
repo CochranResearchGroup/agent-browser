@@ -81,12 +81,41 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         .get(&binding.claim.logical_browser_id)
         .filter(|browser| {
             handle.get("browserId").and_then(Value::as_str) == Some(browser.id.as_str())
-                && handle.get("profileId").and_then(Value::as_str) == browser.profile_id.as_deref()
+                && browser.profile_id.as_deref().is_some_and(|profile_id| {
+                    let requested = handle.get("profileId").and_then(Value::as_str);
+                    requested == Some(profile_id)
+                        || requested.is_some_and(|requested| {
+                            snapshot
+                                .profiles
+                                .get(profile_id)
+                                .and_then(|profile| profile.user_data_dir.as_deref())
+                                == Some(requested)
+                        })
+                })
         })
         .ok_or_else(|| {
             "service_tab_recovery_identity_mismatch: retained browser or Profile binding differs"
                 .to_string()
         })?;
+    let profile_id = browser
+        .profile_id
+        .as_deref()
+        .ok_or("service_tab_recovery_identity_mismatch: profile record missing")?;
+    let profile = snapshot
+        .profiles
+        .get(profile_id)
+        .ok_or("service_tab_recovery_identity_mismatch: profile record missing")?;
+    let resolved_profile = crate::runtime_profile::resolve_profile(
+        profile.user_data_dir.as_deref(),
+        (!profile_id.starts_with("custom:")).then_some(profile_id),
+    )?;
+    if crate::runtime_profile::canonical_profile_identity_digest(&resolved_profile.user_data_dir)?
+        != binding.claim.profile_identity_digest
+    {
+        return Err(
+            "service_tab_recovery_identity_mismatch: configured physical profile differs".into(),
+        );
+    }
     let owner = snapshot
         .runtime_owner_registry
         .owner(&binding.claim.profile_identity_digest)
@@ -118,7 +147,7 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         .get("targetId")
         .and_then(Value::as_str)
         .ok_or_else(|| "serviceTabHandle.targetId is required".to_string())?;
-    let manager = BrowserManager::connect_retained_service_tab(endpoint, target)
+    let manager = BrowserManager::connect_retained_service_tab(endpoint, target, resolved_profile)
         .await
         .map_err(|error| {
             if error.starts_with("service_tab_recovery_target_missing:") {
@@ -131,7 +160,7 @@ pub(crate) async fn ensure_retained_service_tab_browser(
         .authorize_effect(&mut binding)
         .map_err(|error| format!("service_tab_recovery_attach_failed: {error}"))?;
     state.reset_input_state();
-    state.attached_runtime_profile = browser.profile_id.clone();
+    state.attached_runtime_profile = manager.runtime_profile_name().map(str::to_string);
     state.attached_browser_pid = browser.pid;
     state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::Detach;
     state.runtime_owner_binding = Some(binding);

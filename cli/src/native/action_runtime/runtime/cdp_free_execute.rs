@@ -396,6 +396,19 @@ pub(crate) fn validate_service_tab_handle_for_daemon(
     });
     let browser_id = service_tab_handle_browser_id(state);
     validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))?;
+    if ["runtimeProfile", "profileId", "profile"]
+        .iter()
+        .any(|field| {
+            cmd.get(field).is_some_and(|value| !value.is_null())
+                || cmd
+                    .get("params")
+                    .and_then(|params| params.get(field))
+                    .is_some_and(|value| !value.is_null())
+        })
+    {
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        validate_handle_profile_selectors(&snapshot, handle, cmd)?;
+    }
     let access = authorize_profile_child_access(handle, cmd)?;
     if action != "tab_handle_refresh" {
         if let Some(error) = stale_error {
@@ -403,6 +416,65 @@ pub(crate) fn validate_service_tab_handle_for_daemon(
         }
     }
     Ok(access)
+}
+
+/// Every explicit selector must agree with the handle's current configured
+/// profile, including actions that deliberately skip browser auto-launch.
+fn validate_handle_profile_selectors(
+    snapshot: &crate::native::service_model::ServiceState,
+    handle: &Map<String, Value>,
+    cmd: &Value,
+) -> Result<(), String> {
+    let conflict = |field: &str| {
+        format!("service_tab_profile_selector_conflict: field={field}; expected=current_handle_profile; observed=unproven_or_conflicting_selector; source=native/action_runtime/runtime/cdp_free_execute.rs::validate_handle_profile_selectors")
+    };
+    let tab = handle
+        .get("tabId")
+        .and_then(Value::as_str)
+        .and_then(|id| snapshot.tabs.get(id))
+        .ok_or_else(|| conflict("tabId"))?;
+    let profile_id = snapshot
+        .browsers
+        .get(&tab.browser_id)
+        .and_then(|browser| browser.profile_id.as_deref())
+        .ok_or_else(|| conflict("profileId"))?;
+    let profile = snapshot
+        .profiles
+        .get(profile_id)
+        .ok_or_else(|| conflict("profileId"))?;
+    for field in ["runtimeProfile", "profileId", "profile"] {
+        for value in [
+            cmd.get(field),
+            cmd.get("params").and_then(|params| params.get(field)),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if value.is_null() {
+                continue;
+            }
+            let requested = value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| conflict(field))?;
+            let matches = if field == "profile" {
+                let expected = crate::runtime_profile::resolved_profile_identity_digest(
+                    profile.user_data_dir.as_deref().unwrap_or(profile_id),
+                    profile_id,
+                );
+                let observed =
+                    crate::runtime_profile::resolved_profile_identity_digest(requested, profile_id);
+                matches!((expected, observed), (Ok(expected), Ok(observed)) if expected == observed)
+            } else {
+                requested == profile_id || profile.user_data_dir.as_deref() == Some(requested)
+            };
+            if !matches {
+                return Err(conflict(field));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn authorize_profile_child_access(
@@ -666,6 +738,64 @@ mod tests {
                 process_instance_digest: "process-digest".to_string(),
             }));
         state
+    }
+
+    #[test]
+    fn explicit_handle_profile_selectors_cannot_be_discarded() {
+        let mut snapshot = ServiceState::default();
+        snapshot.profiles.insert(
+            "catalog".into(),
+            BrowserProfile {
+                id: "catalog".into(),
+                user_data_dir: Some("RuntimeName".into()),
+                ..BrowserProfile::default()
+            },
+        );
+        snapshot.browsers.insert(
+            "browser".into(),
+            BrowserProcess {
+                id: "browser".into(),
+                profile_id: Some("catalog".into()),
+                ..BrowserProcess::default()
+            },
+        );
+        snapshot.tabs.insert(
+            "target:owned".into(),
+            BrowserTab {
+                id: "target:owned".into(),
+                browser_id: "browser".into(),
+                ..BrowserTab::default()
+            },
+        );
+        let handle = json!({"tabId":"target:owned"});
+        let handle = handle.as_object().unwrap();
+        for selector in ["catalog", "RuntimeName"] {
+            let cmd =
+                json!({"action":"tab_close", "runtimeProfile":selector, "profile":"RuntimeName"});
+            validate_handle_profile_selectors(&snapshot, handle, &cmd).unwrap();
+            for field in ["runtimeProfile", "profileId", "profile"] {
+                for nested in [false, true] {
+                    let mut wrong = cmd.clone();
+                    if nested {
+                        wrong["params"] = json!({field:"foreign"});
+                    } else {
+                        wrong[field] = json!("foreign");
+                    }
+                    let before = snapshot.clone();
+                    let error =
+                        validate_handle_profile_selectors(&snapshot, handle, &wrong).unwrap_err();
+                    assert!(error.starts_with("service_tab_profile_selector_conflict:"));
+                    assert!(error.contains(&format!("field={field}")));
+                    let recourse = serde_json::to_value(
+                        crate::native::service_failure::classify_service_failure(&error),
+                    )
+                    .unwrap();
+                    assert_eq!(recourse["effectState"], "no_effect");
+                    assert_eq!(recourse["phase"], "child_admission");
+                    assert_eq!(snapshot, before);
+                }
+            }
+        }
     }
 
     #[test]

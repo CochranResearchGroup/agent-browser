@@ -4164,6 +4164,95 @@ fn retained_profile_route_state() -> ServiceState {
 }
 
 #[test]
+fn configured_runtime_alias_preserves_exact_owner_selection() {
+    use sha2::Digest;
+    let endpoint = "ws://127.0.0.1:39111/devtools/browser/current";
+    let mut state = retained_profile_route_state();
+    let profile_id = "managed-one-time-route";
+    let runtime_name = "p160-distinct-runtime-name";
+    state.profiles.get_mut(profile_id).unwrap().user_data_dir = Some(runtime_name.into());
+    let path = crate::runtime_profile::resolve_profile(Some(runtime_name), Some(profile_id))
+        .unwrap()
+        .user_data_dir;
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "p160-alias-owner".into(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(&path)
+            .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 4,
+        browser_id: "session:carrier-evidence".into(),
+        daemon_session_route: "carrier-evidence".into(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: format!("{:x}", sha2::Sha256::digest(endpoint.as_bytes())),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    state.runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    for selector in [profile_id, runtime_name] {
+        let command = json!({"action":"tab_switch", "runtimeProfile":selector,
+            "browserId":"session:carrier-evidence", "sessionName":"carrier-evidence"});
+        let accepts = |cmd: &Value,
+                       candidate_path: &Path,
+                       pid: Option<u32>,
+                       url: &str,
+                       state: &ServiceState| {
+            super::profile_lease::configured_profile_alias_matches_active_browser(
+                cmd,
+                "carrier-evidence",
+                candidate_path,
+                pid,
+                url,
+                state,
+            )
+        };
+        assert!(accepts(&command, &path, Some(4242), endpoint, &state));
+        assert!(!accepts(&command, &path, Some(9999), endpoint, &state));
+        assert!(!accepts(
+            &command,
+            Path::new("/tmp/foreign-profile"),
+            Some(4242),
+            endpoint,
+            &state
+        ));
+        assert!(!accepts(
+            &command,
+            &path,
+            Some(4242),
+            "ws://127.0.0.1:39111/devtools/browser/foreign",
+            &state
+        ));
+        for field in ["runtimeProfile", "profile", "sessionName", "browserId"] {
+            let mut foreign = command.clone();
+            foreign[field] = json!("foreign");
+            assert!(
+                !accepts(&foreign, &path, Some(4242), endpoint, &state),
+                "{field}"
+            );
+        }
+        let mut unowned = state.clone();
+        unowned.runtime_owner_registry.owners.clear();
+        assert!(!accepts(&command, &path, Some(4242), endpoint, &unowned));
+        let mut options = LaunchOptions {
+            runtime_profile: Some(selector.into()),
+            ..LaunchOptions::default()
+        };
+        assert_eq!(
+            apply_existing_session_profile_selection(
+                &mut options,
+                &command,
+                Some("carrier-evidence"),
+                &state
+            )
+            .unwrap(),
+            Some(ProfileSelectionReason::ExistingOwner)
+        );
+    }
+}
+
+#[test]
 fn test_retained_profile_route_accepts_exact_current_owner() {
     let state = retained_profile_route_state();
     let command = json!({

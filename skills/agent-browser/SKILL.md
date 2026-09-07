@@ -1247,6 +1247,10 @@ an active-tab close. `tab_close` honors explicit target/handle selectors, reject
 conflicts and checks current child close permission. `closed` is an index;
 `targetRemovalVerified` confirms physical removal. Explicit release-only or
 `closePhysicalTab: false` requests release logical custody without physical close.
+For retained-browser requests, `runtimeProfile` may identify the configured
+catalog ID or its exact runtime name. The service requires current-owner,
+physical-directory and endpoint agreement before accepting that alias. An
+unrelated selector or mismatched browser remains denied.
 After detached manual seeding closes, verify the profile through the service
 control plane rather than editing profile JSON. Use
 `agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`

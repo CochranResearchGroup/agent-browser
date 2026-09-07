@@ -3977,8 +3977,12 @@ managed-launch lifecycle record for the current boot, owner generation and proce
 `ownerCustody` identifies that basis; an absent transfer receipt is never invented.
 Lease metadata from an older valid handle is checked against the current tab and
 session records. A runtime name is accepted as an alias only when it matches the
-current profile's configured directory hint. Released, foreign or conflicting
-identities remain denied. Use
+current profile's configured directory hint. Retained-browser requests also accept
+that configured runtime name or its catalog ID, provided current-owner selection,
+physical directory and browser endpoint evidence agree. Released, foreign or
+conflicting identities remain denied. `service_tab_profile_selector_conflict`
+identifies an explicit selector that disagrees with the current handle, including
+one supplied in `params`; compare that field with the current profile before retrying. Use
 `classifyServiceControlPlaneAuthority()` to convert that proof and the current
 handle into an explicit `unavailable`, `observation_only`, or `effect_capable`
 decision. Use `probeServiceTab()` or

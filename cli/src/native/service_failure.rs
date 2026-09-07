@@ -87,6 +87,7 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         if matches!(
             code,
             "tab_close_invalid_selector"
+                | "service_tab_profile_selector_conflict"
                 | "tab_close_selector_conflict"
                 | "tab_close_target_unproven"
                 | "tab_close_target_missing"
@@ -115,7 +116,12 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                 recommended_action: "inspect_service_trace".to_string(),
                 safe_next_actions: vec![
                     "inspect_service_trace".to_string(),
-                    "inspect_exact_target_cleanup".to_string(),
+                    if code == "service_tab_profile_selector_conflict" {
+                        "compare_requested_profile_to_current_owner"
+                    } else {
+                        "inspect_exact_target_cleanup"
+                    }
+                    .to_string(),
                 ],
                 hard_stops: vec![
                     "blind_retry".to_string(),

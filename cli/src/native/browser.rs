@@ -521,6 +521,8 @@ impl BrowserProcess {
 pub struct BrowserManager {
     pub client: Arc<CdpClient>,
     browser_process: Option<BrowserProcess>,
+    /// Profile metadata authenticated by retained service-owner recovery.
+    retained_profile: Option<crate::runtime_profile::ResolvedProfile>,
     ws_url: String,
     pages: Vec<PageInfo>,
     active_page_index: usize,
@@ -631,6 +633,8 @@ impl BrowserManager {
             let mut manager = Self {
                 client,
                 browser_process: Some(process),
+
+                retained_profile: None,
                 ws_url,
                 pages: Vec::new(),
                 active_page_index: 0,
@@ -703,6 +707,7 @@ impl BrowserManager {
     pub(crate) async fn connect_retained_service_tab(
         url: &str,
         target_id: &str,
+        verified_profile: crate::runtime_profile::ResolvedProfile,
     ) -> Result<Self, String> {
         let ws_url = resolve_cdp_url(url).await?;
         let client = Arc::new(CdpClient::connect(&ws_url).await?);
@@ -729,6 +734,8 @@ impl BrowserManager {
         let manager = Self {
             client,
             browser_process: None,
+
+            retained_profile: Some(verified_profile),
             ws_url,
             pages: vec![PageInfo {
                 target_id: target.target_id,
@@ -758,6 +765,8 @@ impl BrowserManager {
         let mut manager = Self {
             client,
             browser_process: None,
+
+            retained_profile: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -797,6 +806,8 @@ impl BrowserManager {
         let mut manager = Self {
             client,
             browser_process: None,
+
+            retained_profile: None,
             ws_url,
             pages: Vec::new(),
             active_page_index: 0,
@@ -2367,12 +2378,22 @@ impl BrowserManager {
         self.browser_process
             .as_ref()
             .and_then(|p| p.runtime_profile())
+            .or_else(|| {
+                self.retained_profile
+                    .as_ref()
+                    .and_then(|profile| profile.runtime_profile.as_deref())
+            })
     }
 
     pub fn browser_user_data_dir(&self) -> Option<&Path> {
         self.browser_process
             .as_ref()
             .and_then(|p| p.user_data_dir())
+            .or_else(|| {
+                self.retained_profile
+                    .as_ref()
+                    .map(|profile| profile.user_data_dir.as_path())
+            })
     }
 
     pub fn browser_stderr_log_path(&self) -> Option<&Path> {
@@ -2529,6 +2550,8 @@ async fn initialize_lightpanda_manager(
         let mut manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: ws_url.clone(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -3075,6 +3098,8 @@ mod tests {
             let mut manager = BrowserManager {
                 client: Arc::new(client),
                 browser_process: None,
+
+                retained_profile: None,
                 ws_url: format!("ws://{address}"),
                 pages: vec![PageInfo {
                     target_id: "owned".into(),
@@ -3202,6 +3227,8 @@ mod tests {
         let mut manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: "ws://fixture".to_string(),
             pages: Vec::new(),
             active_page_index: 0,
@@ -3382,6 +3409,8 @@ mod tests {
         let manager = BrowserManager {
             client: Arc::new(client),
             browser_process: None,
+
+            retained_profile: None,
             ws_url: format!("ws://{address}"),
             pages: vec![PageInfo {
                 target_id: "target-1".to_string(),
