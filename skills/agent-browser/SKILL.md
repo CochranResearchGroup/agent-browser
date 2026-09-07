@@ -1755,7 +1755,7 @@ replays pending occurrences without resubmitting failed requests. Queue or
 journal contention preserves pending custody. Inspect `pendingRecordCount`
 separately from projected journal rows and process-local delivery counters.
 `custody_failed` means persistence failed; do not claim durable evidence.
-Journal reads fail promptly on lock contention. Never delete pending files to
+Journal reads wait up to 250 ms for a concurrent writer, then report lock contention if it persists. Never delete pending files to
 clear a delivery error. Power-loss and non-Unix durability need platform proof.
 
 New failure records include producer buildIdentity: package version, source revision and tree state, binary digest, and a verified matching support generation. Missing identity is explicit; historical records remain unchanged. Identity is captured from the producing executable, so a later selected generation cannot rewrite the cause history. Child access denials also preserve the failed comparison in `failure.subject` and journal `details.childAccessEvidence`: hashed expected and observed subject/connection identities, identity assurance, permission checks, policy revisions, and the deciding source function. Use the returned request ID to join the failure record and its recommended repair action. Raw client identities and connection identifiers are excluded. An explicit access-plan runtime profile stays selected even when it is not yet cataloged; automatic selection cannot substitute another profile, directory, readiness record, or retained browser.

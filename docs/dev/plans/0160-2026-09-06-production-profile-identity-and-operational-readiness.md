@@ -1728,3 +1728,38 @@ consumer copies is not yet established. No consumer payment input occurred.
 next_action_or_stop_reason: Diagnose the journal HTTP 500 without another browser
 attempt; complete consumer identity continuity and client propagation, then the
 remaining installed A1/AX and A2–A4 gates. Maintenance remains disabled.
+
+## Checkpoint 30: bounded journal read contention repair
+
+state_transition: source repair qualified; optimized HTTP acceptance pending
+
+acceptance_state: full installed A1–A4/AX remain incomplete
+
+progress_classification: blocker_reduction
+
+An isolated no-browser dashboard fixture using the installed release binary
+reproduced HTTP 500 within 2 ms when a writer held the journal lock. Both a short
+write and a retained lock produced the same read-lock failure. This establishes
+a concrete failure path, but the third installed smoke did not capture the first
+500 response body, so its exact historical cause remains unproven.
+
+The reader now allows up to 250 ms for concurrent writers before returning a
+lock error. Shared-lock admission still protects a coherent journal snapshot;
+no unlocked partial read or fabricated empty result is used. Dashboard journal
+reads execute on a blocking worker so disk I/O and bounded lock admission do not
+stall asynchronous request workers. Persistent lock contention still fails.
+
+The existing malformed-line/latest-record regression was extended to hold an
+exclusive writer lock while a reader starts, then release it and require a
+successful coherent read. It failed before the repair and passed afterward.
+All 13 journal tests passed, including pending-custody preservation under a held
+lock. Journal contract and dashboard observation checks, workspace clippy,
+format and documentation build passed. No production executable was replaced.
+
+Private red HTTP evidence: campaigns/p160/journal-http-O4Ornq. The fixture launched
+only an isolated dashboard and a positively identified lock-holder process; both
+exited. Its synthetic journal and red response bodies are retained.
+
+next_action_or_stop_reason: Build the optimized candidate and prove short-write
+HTTP success plus persistent-lock refusal without browsers; then qualify the
+combined production candidate and resume the original acceptance contract.

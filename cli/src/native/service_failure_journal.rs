@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod build_identity;
 mod pending;
@@ -27,6 +27,7 @@ const FAILURE_JOURNAL_FILENAME: &str = "failure-journal.jsonl";
 const MAX_TEXT_BYTES: usize = 1_024;
 const MAX_DETAILS_BYTES: usize = 8_192;
 const FAILURE_JOURNAL_QUEUE_CAPACITY: usize = 256;
+const FAILURE_JOURNAL_READ_LOCK_WAIT: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
 struct FailureJournalDeliveryCounters {
@@ -442,6 +443,8 @@ pub fn read_service_failures(limit: usize) -> Result<ServiceFailureJournalReadba
     read_service_failures_at(&path, limit)
 }
 
+/// Read a coherent snapshot, allowing a short writer to finish. Lock admission
+/// is bounded so a stuck writer cannot indefinitely block diagnostic reads.
 pub fn read_service_failures_at(
     path: &Path,
     limit: usize,
@@ -464,12 +467,24 @@ pub fn read_service_failures_at(
             path.display()
         )
     })?;
-    file.try_lock_shared().map_err(|error| {
-        format!(
-            "failed to read-lock service failure journal {}: {error}",
-            path.display()
-        )
-    })?;
+    let lock_deadline = Instant::now() + FAILURE_JOURNAL_READ_LOCK_WAIT;
+    loop {
+        match file.try_lock_shared() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) if Instant::now() < lock_deadline => {
+                thread::sleep(
+                    Duration::from_millis(5)
+                        .min(lock_deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            Err(error) => {
+                return Err(format!(
+                    "failed to read-lock service failure journal {}: {error}",
+                    path.display()
+                ));
+            }
+        }
+    }
     let mut records = VecDeque::with_capacity(limit);
     let mut malformed_line_count = 0_u64;
     for line in BufReader::new(file).lines() {
@@ -981,7 +996,26 @@ mod tests {
         let mut file = OpenOptions::new().append(true).open(&path).unwrap();
         file.write_all(b"not-json\n").unwrap();
 
-        let readback = read_service_failures_at(&path, 2).unwrap();
+        // A reader arriving during a short append must wait for a coherent
+        // snapshot instead of reporting an operational read failure.
+        file.lock().unwrap();
+        let reader_path = path.clone();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let reader = thread::spawn(move || {
+            result_tx
+                .send(read_service_failures_at(&reader_path, 2))
+                .unwrap();
+        });
+        assert!(matches!(
+            result_rx.recv_timeout(Duration::from_millis(20)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(file);
+        let readback = result_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        reader.join().unwrap();
         assert_eq!(readback.records.len(), 2);
         assert_eq!(readback.records[0].code, "two");
         assert_eq!(readback.records[1].code, "three");

@@ -52,8 +52,8 @@ projection, while queue pressure preserves disk custody. Replay checks
 occurrence identity and content before retiring pending files. Readback reports
 <code>pendingRecordCount</code> separately from projected records and
 process-local overload and failure counters. A persistence failure reports
-<code>custody_failed</code>, not durable custody. Reads fail promptly on journal
-lock contention. Power-loss and non-Unix directory durability require separate
+<code>custody_failed</code>, not durable custody. Reads wait up to 250 ms for a concurrent journal writer, then report lock
+contention if it persists. Power-loss and non-Unix directory durability require separate
 platform validation. The authenticated
 dashboard uses
 <code>POST /api/service/failure-observation</code> for failures visible only in

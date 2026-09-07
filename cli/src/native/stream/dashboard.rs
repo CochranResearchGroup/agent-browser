@@ -670,7 +670,12 @@ async fn handle_service_api_request(
                 })
             })
             .unwrap_or(100);
-        match read_service_failures(limit) {
+        // Disk reads and bounded writer-lock admission must not stall the
+        // dashboard's asynchronous request workers.
+        let readback = tokio::task::spawn_blocking(move || read_service_failures(limit))
+            .await
+            .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
+        match readback {
             Ok(readback) => {
                 write_json_value(
                     stream,

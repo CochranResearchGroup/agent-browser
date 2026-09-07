@@ -807,8 +807,8 @@ resubmitting requests. Journal contention defers projection; queue pressure
 retains disk custody. Replay checks occurrence identity and content before
 retiring pending files. Readback reports `pendingRecordCount` separately from
 projected records and process-local delivery counters. Persistence failure
-reports `custody_failed`; it never establishes durable custody. Journal reads
-fail promptly on lock contention. Host power-loss durability and non-Unix
+reports `custody_failed`; it never establishes durable custody. Journal reads wait up to 250 ms for a concurrent writer, then report lock
+contention if it persists. Host power-loss durability and non-Unix
 directory persistence require separate platform validation. The dashboard retains up to 4,096
 privacy-bounded same-origin status, resource, tab, and runtime-health read
 failures per document and submits them after a later valid recovery response.
