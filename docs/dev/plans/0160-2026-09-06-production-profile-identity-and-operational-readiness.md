@@ -56,6 +56,21 @@ perform cleanup in its shared browser.
 
 ### Execution strategy amendment, 2026-09-07
 
+Production presentation recovery requires a supported production inventory
+adapter before another provider-backed acceptance attempt. The current inventory
+schema explicitly accepts development only. Do not relabel production as
+development or remove that environment guard. Add an explicit production
+contract bound to the actual runtime environment and provider ownership evidence.
+Preserve incumbent route, display, browser, viewer and controller custody across
+projection, including orphaned records. Available recovery capacity must not
+assert that an operator presentation is already ready. Qualify the transition
+from a disconnected retained browser through recovered browser control, stale
+presentation records, guarded same-route reattach, and the original durable URL.
+Deny foreign or ambiguous owners and environment mismatches before state effects.
+Use existing production provider routes; this work does not authorize expansion
+or borrowing development resources. Include namespace-aware display UID evidence
+and original browser/process continuity in the acceptance receipt.
+
 For stranded legacy connections, use preserved host-replacement custody and a
 fresh census of connection-producing processes, scoped to the same Service State
 root. Require an exact unchanged child-access record and affected-tab set under
