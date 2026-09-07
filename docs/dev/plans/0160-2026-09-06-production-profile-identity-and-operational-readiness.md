@@ -1603,3 +1603,22 @@ connection proof, selected AX cases and A2–A4 remain open.
 
 next_action_or_stop_reason: Verify the frozen candidate's no-launch access-plan
 response, then include this profile-selection repair in installed qualification.
+
+
+Checkpoint 27 interface qualification:
+
+The optimized candidate passed no-launch fixture a1-explicit-profile-8ljzVK.
+The fixture first proves that its existing catalog profile wins automatic ranking,
+then sends an explicit different profile through the service client and HTTP
+access-plan path. The response preserves the requested name, has no selected
+foreign profile/source/match, no borrowed directory or browser/session route, and
+readiness names the requested profile. Service State contains zero browsers and
+zero tabs. The fixture host exited normally.
+
+Candidate binary SHA256: 58477aae1a965ba93acbb0669a2858ac3b637b047b4f485dfe8f92a174cefa12.
+Ledger SHA256: cbff78248e4515a88250998190d7be3a18f76be4a405ee1028db7c0a83cd8289.
+Private evidence: campaigns/p160/a1-explicit-profile-8ljzVK.
+
+Next: qualify the combined source through the full Rust gate and final production
+candidate build, then preserve original production browser identities during
+installation and resume installed A1/A2 acceptance. No formal release is planned.
