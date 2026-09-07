@@ -2244,6 +2244,8 @@ agent-browser dashboard stop
 
 The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. All sessions automatically stream to the dashboard.
 
+Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance.
+
 For `POST /api/service/request`, stable ingress waits for the request's bounded
 `jobTimeoutMs` plus response grace before declaring the selected backend
 unavailable. If delivery may have occurred but no response arrives, ingress

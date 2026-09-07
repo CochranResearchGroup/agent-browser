@@ -5899,6 +5899,9 @@ Subcommands:
   ingress status       Show selected, candidate, fallback, and presentation state
   ingress stage        Validate and stage one shadow dashboard backend
   ingress commit       Select the staged backend from authenticated journey evidence or a durable handoff receipt
+
+Authenticated ready handoff resolution records acceptance for the selected dashboard
+after live manifest and ownership checks, preserving candidate and rollback custody.
   ingress rollback     Discard the matching staged backend before commit
 
 Running 'agent-browser dashboard' with no subcommand is equivalent to 'dashboard start'.

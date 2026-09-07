@@ -5,6 +5,8 @@ Guacamole and preserve one durable link across route changes. The operator
 opens an authenticated `/remote-view/<handoff-id>` URL. Provider URLs remain
 diagnostic evidence and must not become handoff links.
 
+Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance.
+
 Guacamole viewer failures and unusable durable handoff links are appended to
 the privacy-bounded Service failure journal. Records contain route and display
 correlation identifiers plus a hash of the handoff identifier. They never

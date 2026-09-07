@@ -2942,3 +2942,38 @@ needs disposition. The original consumer's own rejoin and attestation result is
 still pending. A1, A3, A4 and AX remain open; local A2 journey evidence now passes
 on this installed candidate. No timer restoration or full-plan acceptance is
 claimed.
+
+## Selected dashboard acceptance repair
+
+state_transition: Source repair validated for missing selected-backend journey acceptance.
+acceptance_state: A1, A3, A4 and AX remain open; installed acceptance of this repair is pending.
+progress_classification: progress
+
+The authenticated durable-handoff ingress hook previously returned without
+recording acceptance whenever the requesting dashboard was already selected.
+Controlled production activation therefore left operatorJourneyReady false even
+after the retained synthetic viewer journey passed. This is distinct from the
+older transaction's selected-generation comparison and from consumer ownership.
+
+The hook now derives selected-backend evidence through the same owner, route,
+display, target, provider and generation validator used by candidate selection.
+It rechecks the selected backend's live manifest under the ingress revision
+lock, then updates only its presentation receipt and revision. Repeated identical
+evidence is idempotent. Candidate, fallback and rollback custody remain intact;
+stale dashboard generations cannot record acceptance. The hook's boolean still
+means candidate selection, preserving its existing contract.
+
+Focused dashboard-ingress validation passed all 29 tests. The extended existing
+repository fixture covers missing acceptance with another candidate staged,
+repeat resolution, preserved complete registry custody, a stale generation, and
+refusal after the route becomes orphaned. No red-before-fix execution is claimed.
+Workspace Clippy with warnings denied, formatting check, remote-view documentation
+check and the docs production build passed. Help, README, Service skill, docs site
+and inline comments describe the behavior. No production state or consumer
+capability was changed, and the consumer investigation note remains separate.
+
+Next: qualify and publish the acceptance repair, verify the original retained
+handoff through the authenticated installed dashboard, and reconcile the separate
+selected-generation/history readiness comparison using current installation
+proof. Consumer original-connection attestation, remaining doctor findings,
+scheduled cycles and the full causal-error matrix remain required.

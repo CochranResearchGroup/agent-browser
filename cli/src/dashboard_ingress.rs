@@ -119,6 +119,82 @@ impl CandidateOperatorJourney {
         }
     }
 
+    fn into_receipt(
+        self,
+        generation_id: &str,
+    ) -> Result<crate::runtime_adoption::PresentationReceipt, String> {
+        let journey = self;
+        if journey.generation_id != generation_id
+            || !journey.authenticated
+            || !journey.runtime_manifest_valid
+            || !journey.operator_surface_ready
+        {
+            return Err(
+                "dashboard candidate operator journey is not ready for selection".to_string(),
+            );
+        }
+        let evidence = journey
+            .evidence
+            .ok_or_else(|| "dashboard candidate presentation evidence is missing".to_string())?;
+        if evidence.required_stream_provider != evidence.observed_stream_provider {
+            return Err("dashboard candidate presented the wrong stream provider".to_string());
+        }
+        for (label, value) in [
+            ("receipt ID", evidence.receipt_id.as_str()),
+            (
+                "coordinator generation",
+                evidence.coordinator_generation.as_str(),
+            ),
+            ("daemon generation", evidence.daemon_generation.as_str()),
+            ("logical browser ID", evidence.logical_browser_id.as_str()),
+            (
+                "process identity",
+                evidence.process_instance_digest.as_str(),
+            ),
+            (
+                "selected target identity",
+                evidence.selected_target_identity_digest.as_str(),
+            ),
+            (
+                "stream provider",
+                evidence.required_stream_provider.as_str(),
+            ),
+            (
+                "display allocation",
+                evidence.display_allocation_id.as_str(),
+            ),
+            ("geometry epoch", evidence.geometry_epoch.as_str()),
+            (
+                "authenticated ingress probe time",
+                evidence.authenticated_ingress_probe_at.as_str(),
+            ),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!("dashboard candidate {label} is missing"));
+            }
+        }
+        Ok(crate::runtime_adoption::PresentationReceipt {
+            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+            receipt_id: evidence.receipt_id,
+            dashboard_deployment_generation: evidence.dashboard_deployment_generation,
+            coordinator_generation: evidence.coordinator_generation,
+            daemon_generation: evidence.daemon_generation,
+            logical_browser_id: evidence.logical_browser_id,
+            process_instance_digest: evidence.process_instance_digest,
+            selected_target_generation: evidence.selected_target_generation,
+            selected_target_identity_digest: evidence.selected_target_identity_digest,
+            required_stream_provider: evidence.required_stream_provider,
+            display_allocation_id: evidence.display_allocation_id,
+            geometry_epoch: evidence.geometry_epoch,
+            route_generation: evidence.route_generation,
+            guacamole_connection_generation: evidence.guacamole_connection_generation,
+            authenticated_ingress_probe_at: evidence.authenticated_ingress_probe_at,
+            operator_surface_load_result: evidence.operator_surface_load_result,
+            state: crate::runtime_adoption::PresentationState::Ready,
+            reason_codes: Vec::new(),
+        })
+    }
+
     pub(crate) fn ready(evidence: PresentationEvidence) -> Self {
         Self {
             generation_id: evidence.dashboard_deployment_generation.clone(),
@@ -208,75 +284,7 @@ impl DashboardIngressRegistry {
             .candidate_backend
             .as_ref()
             .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
-        if journey.generation_id != candidate.generation_id
-            || !journey.authenticated
-            || !journey.runtime_manifest_valid
-            || !journey.operator_surface_ready
-        {
-            return Err(
-                "dashboard candidate operator journey is not ready for selection".to_string(),
-            );
-        }
-        let evidence = journey
-            .evidence
-            .ok_or_else(|| "dashboard candidate presentation evidence is missing".to_string())?;
-        if evidence.required_stream_provider != evidence.observed_stream_provider {
-            return Err("dashboard candidate presented the wrong stream provider".to_string());
-        }
-        for (label, value) in [
-            ("receipt ID", evidence.receipt_id.as_str()),
-            (
-                "coordinator generation",
-                evidence.coordinator_generation.as_str(),
-            ),
-            ("daemon generation", evidence.daemon_generation.as_str()),
-            ("logical browser ID", evidence.logical_browser_id.as_str()),
-            (
-                "process identity",
-                evidence.process_instance_digest.as_str(),
-            ),
-            (
-                "selected target identity",
-                evidence.selected_target_identity_digest.as_str(),
-            ),
-            (
-                "stream provider",
-                evidence.required_stream_provider.as_str(),
-            ),
-            (
-                "display allocation",
-                evidence.display_allocation_id.as_str(),
-            ),
-            ("geometry epoch", evidence.geometry_epoch.as_str()),
-            (
-                "authenticated ingress probe time",
-                evidence.authenticated_ingress_probe_at.as_str(),
-            ),
-        ] {
-            if value.trim().is_empty() {
-                return Err(format!("dashboard candidate {label} is missing"));
-            }
-        }
-        let receipt = crate::runtime_adoption::PresentationReceipt {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
-            receipt_id: evidence.receipt_id,
-            dashboard_deployment_generation: evidence.dashboard_deployment_generation,
-            coordinator_generation: evidence.coordinator_generation,
-            daemon_generation: evidence.daemon_generation,
-            logical_browser_id: evidence.logical_browser_id,
-            process_instance_digest: evidence.process_instance_digest,
-            selected_target_generation: evidence.selected_target_generation,
-            selected_target_identity_digest: evidence.selected_target_identity_digest,
-            required_stream_provider: evidence.required_stream_provider,
-            display_allocation_id: evidence.display_allocation_id,
-            geometry_epoch: evidence.geometry_epoch,
-            route_generation: evidence.route_generation,
-            guacamole_connection_generation: evidence.guacamole_connection_generation,
-            authenticated_ingress_probe_at: evidence.authenticated_ingress_probe_at,
-            operator_surface_load_result: evidence.operator_surface_load_result,
-            state: crate::runtime_adoption::PresentationState::Ready,
-            reason_codes: Vec::new(),
-        };
+        let receipt = journey.into_receipt(&candidate.generation_id)?;
         let prior = std::mem::replace(&mut self.selected_backend, candidate.clone());
         if prior.generation_id != candidate.generation_id {
             self.rollback_backend = Some(prior.clone());
@@ -380,6 +388,25 @@ impl DashboardIngressRepository {
         let receipt = registry.commit_candidate(journey)?;
         write_registry_atomic(&self.path, &registry)?;
         Ok(receipt)
+    }
+
+    /// Records current authenticated presentation without changing backend custody.
+    fn accept_selected_journey(
+        &self,
+        expected_revision: u64,
+        journey: CandidateOperatorJourney,
+    ) -> Result<(), String> {
+        let _lock = acquire_ingress_lock(&self.path)?;
+        let mut registry = load_registry(&self.path)?;
+        require_revision(&registry, expected_revision)?;
+        validate_dashboard_backend(registry.selected_backend())?;
+        let receipt = journey.into_receipt(&registry.selected_backend().generation_id)?;
+        if registry.last_presentation_receipt.as_ref() != Some(&receipt) {
+            registry.last_presentation_receipt = Some(receipt);
+            registry.revision = registry.revision.saturating_add(1);
+            write_registry_atomic(&self.path, &registry)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn rollback_candidate(
@@ -721,8 +748,8 @@ pub(crate) fn commit_dashboard_candidate_from_handoff(
 /// Commits the staged ingress candidate after that exact dashboard generation
 /// has completed an authenticated, ready durable-handoff resolution.
 ///
-/// Requests served by the selected or a stale dashboard generation are a
-/// no-op. The staged candidate may commit only from service-state evidence
+/// The selected generation records acceptance without changing backend custody;
+/// stale generations remain a no-op. Acceptance requires service-state evidence
 /// that passes the same owner, route, display, target, provider, and
 /// generation checks as the explicit CLI commit path.
 pub(crate) fn commit_authenticated_dashboard_candidate_from_handoff(
@@ -748,17 +775,26 @@ fn commit_authenticated_dashboard_candidate_from_handoff_at_paths(
     let repository = DashboardIngressRepository::new(ingress_path);
     let registry = repository.load()?;
     let state = JsonServiceStateStore::new(service_state_path).load()?;
-    let Some(evidence) = authenticated_candidate_handoff_evidence(
+    if let Some(evidence) = authenticated_candidate_handoff_evidence(
         &registry,
         &state,
         dashboard_generation,
         handoff_id,
-    )?
-    else {
-        return Ok(false);
-    };
-    repository.commit_candidate(registry.revision, CandidateOperatorJourney::ready(evidence))?;
-    Ok(true)
+    )? {
+        repository
+            .commit_candidate(registry.revision, CandidateOperatorJourney::ready(evidence))?;
+        return Ok(true);
+    }
+    if registry.selected_backend().generation_id == dashboard_generation {
+        let evidence =
+            presentation_evidence_for_backend(registry.selected_backend(), &state, handoff_id)?;
+        repository.accept_selected_journey(
+            registry.revision,
+            CandidateOperatorJourney::ready(evidence),
+        )?;
+    }
+    // This boolean continues to mean that a candidate was selected.
+    Ok(false)
 }
 
 fn authenticated_candidate_handoff_evidence(
@@ -781,11 +817,19 @@ fn presentation_evidence_from_durable_handoff(
     state: &crate::native::service_model::ServiceState,
     handoff_id: &str,
 ) -> Result<PresentationEvidence, String> {
-    use crate::native::service_model::ViewStreamProvider;
-
     let candidate = registry
         .candidate_backend()
         .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
+    presentation_evidence_for_backend(candidate, state, handoff_id)
+}
+
+fn presentation_evidence_for_backend(
+    candidate: &DashboardBackend,
+    state: &crate::native::service_model::ServiceState,
+    handoff_id: &str,
+) -> Result<PresentationEvidence, String> {
+    use crate::native::service_model::ViewStreamProvider;
+
     let handoff = state
         .remote_view_handoffs
         .get(handoff_id)
@@ -1888,6 +1932,76 @@ mod tests {
                 .dashboard_deployment_generation,
             "generation-new"
         );
+        // Controlled activation can select a backend before its first journey.
+        // Acceptance must fill that gap without consuming a different candidate
+        // or changing the retained fallback and rollback custody.
+        let mut missing_acceptance = selected.clone();
+        missing_acceptance.last_presentation_receipt = None;
+        missing_acceptance.candidate_backend = Some(DashboardBackend::new(
+            "generation-future",
+            candidate_port.saturating_add(2),
+            "future-manifest",
+        ));
+        write_registry_atomic(&ingress_path, &missing_acceptance).unwrap();
+        let listener = StdTcpListener::bind(("127.0.0.1", candidate_port)).unwrap();
+        let manifest_server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut connection, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 1024];
+                connection.read(&mut request).unwrap();
+                let body = manifest.to_string();
+                write!(
+                    connection,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body,
+                )
+                .unwrap();
+            }
+        });
+        for _ in 0..2 {
+            assert!(
+                !commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                    &ingress_path,
+                    &service_state_path,
+                    "generation-new",
+                    "r1",
+                )
+                .unwrap()
+            );
+        }
+        let accepted = repository.load().unwrap();
+        let mut expected = missing_acceptance.clone();
+        expected.last_presentation_receipt = selected.last_presentation_receipt.clone();
+        expected.revision += 1;
+        assert_eq!(
+            accepted, expected,
+            "acceptance preserves custody and is idempotent"
+        );
+        manifest_server.join().unwrap();
+        assert!(
+            !commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                &ingress_path,
+                &service_state_path,
+                "generation-stale",
+                "r1",
+            )
+            .unwrap()
+        );
+        state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
+        crate::native::service_store::JsonServiceStateStore::new(&service_state_path)
+            .save(&state)
+            .unwrap();
+        assert!(
+            commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                &ingress_path,
+                &service_state_path,
+                "generation-new",
+                "r1",
+            )
+            .is_err()
+        );
+        assert_eq!(repository.load().unwrap(), accepted);
         fs::remove_dir_all(fixture_root).unwrap();
 
         state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
