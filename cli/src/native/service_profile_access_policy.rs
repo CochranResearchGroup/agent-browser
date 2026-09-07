@@ -466,11 +466,54 @@ pub(crate) struct ProfileChildAccessRequest<'a> {
     pub(crate) reconnect: bool,
 }
 
+/// Bounded evidence captured at the child authorization decision. Hashes permit
+/// comparison without exposing client labels or connection identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfileChildAccessEvidence {
+    pub source_function: String,
+    pub expected_subject_hash: Option<String>,
+    pub observed_subject_hash: Option<String>,
+    pub expected_connection_hash: Option<String>,
+    pub observed_connection_hash: String,
+    pub owner_assurance: ProfileIdentityAssurance,
+    pub caller_assurance: ProfileIdentityAssurance,
+    pub connection_state: ProfileConnectionState,
+    pub permission: ProfilePermission,
+    pub child_permission_present: bool,
+    pub current_permission_present: bool,
+    pub parent_policy_revision: u64,
+    pub current_policy_revision: u64,
+    pub reconnect_requested: bool,
+}
+
+impl ProfileChildAccessEvidence {
+    const SOURCE: &'static str =
+        "native/service_profile_access_policy.rs::evaluate_profile_child_access";
+
+    pub(crate) fn decode(value: Value) -> Option<Self> {
+        let evidence: Self = serde_json::from_value(value).ok()?;
+        let valid_hash =
+            |value: &str| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+        (evidence.source_function == Self::SOURCE
+            && valid_hash(&evidence.observed_connection_hash)
+            && [
+                &evidence.expected_subject_hash,
+                &evidence.observed_subject_hash,
+                &evidence.expected_connection_hash,
+            ]
+            .iter()
+            .all(|hash| hash.as_deref().is_none_or(valid_hash)))
+        .then_some(evidence)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProfileChildAccessResult {
     pub(crate) allowed: bool,
     pub(crate) reconnected: bool,
     pub(crate) reason: &'static str,
+    pub(crate) denial_evidence: Option<ProfileChildAccessEvidence>,
     pub(crate) child: ProfileChildAccess,
 }
 
@@ -510,6 +553,23 @@ pub(crate) fn evaluate_profile_child_access(
     } else {
         "stable_subject_reconnected"
     };
+    let hash = |value: &str| format!("{:x}", Sha256::digest(value.as_bytes()));
+    let denial_evidence = (!allowed).then(|| ProfileChildAccessEvidence {
+        source_function: ProfileChildAccessEvidence::SOURCE.to_string(),
+        expected_subject_hash: input.child.subject_id.as_deref().map(hash),
+        observed_subject_hash: input.subject_id.map(hash),
+        expected_connection_hash: input.child.connection_instance_id.as_deref().map(hash),
+        observed_connection_hash: hash(input.connection_instance_id),
+        owner_assurance: input.child.identity_assurance,
+        caller_assurance: input.assurance,
+        connection_state: input.child.connection_state,
+        permission: input.permission,
+        child_permission_present: input.child.permissions.contains(&input.permission),
+        current_permission_present: current_permission_set.contains(&input.permission),
+        parent_policy_revision: input.child.parent_policy_revision,
+        current_policy_revision: input.current_policy.revision,
+        reconnect_requested: input.reconnect,
+    });
     let mut child = input.child.clone();
     if allowed && reconnect_allowed {
         child.connection_instance_id = Some(input.connection_instance_id.to_string());
@@ -524,6 +584,7 @@ pub(crate) fn evaluate_profile_child_access(
         allowed,
         reconnected: allowed && reconnect_allowed,
         reason,
+        denial_evidence,
         child,
     }
 }
@@ -1291,6 +1352,41 @@ mod tests {
 
         assert!(!wrong_subject.allowed);
         assert_eq!(wrong_subject.reason, "subject_mismatch");
+        let evidence = wrong_subject.denial_evidence.as_ref().unwrap();
+        assert_ne!(
+            evidence.expected_subject_hash,
+            evidence.observed_subject_hash
+        );
+        assert!(evidence.child_permission_present);
+        assert!(evidence.current_permission_present);
+        let encoded = crate::native::service_failure::profile_child_denial_error(
+            wrong_subject.reason,
+            Some(evidence),
+        );
+        assert!(!encoded.contains("client:other"));
+        assert!(!encoded.contains("connection:new"));
+        let failure = crate::native::service_failure::classify_service_failure(&encoded);
+        assert_eq!(failure.code, "profile_child_subject_mismatch");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::NoEffect
+        );
+        let projected =
+            crate::native::service_failure::child_access_failure_evidence(&failure).unwrap();
+        assert_eq!(projected, serde_json::to_value(evidence).unwrap());
+        assert_eq!(
+            projected["sourceFunction"],
+            ProfileChildAccessEvidence::SOURCE
+        );
+        let mut invalid = projected;
+        invalid["expectedSubjectHash"] = json!("private raw identity");
+        let malformed =
+            format!("profile child access denied: subject_mismatch; childAccessEvidence={invalid}");
+        assert_eq!(
+            crate::native::service_failure::classify_service_failure(&malformed).effect_state,
+            crate::native::service_failure::ServiceEffectState::EffectUncertain
+        );
+        assert!(reconnected.denial_evidence.is_none());
         assert!(reconnected.allowed);
         assert!(reconnected.reconnected);
         assert_eq!(

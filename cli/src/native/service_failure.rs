@@ -82,6 +82,39 @@ pub struct ServiceFailureRecourse {
     pub hard_stops: Vec<String>,
 }
 
+// The native command transport carries errors as strings. Keep the legacy
+// message and attach only strictly decoded, privacy-bounded decision evidence.
+const CHILD_EVIDENCE_SEPARATOR: &str = "; childAccessEvidence=";
+
+pub(crate) fn profile_child_denial_error(
+    reason: &str,
+    evidence: Option<&super::service_profile_access_policy::ProfileChildAccessEvidence>,
+) -> String {
+    let message = format!("profile child access denied: {reason}");
+    evidence
+        .and_then(|value| serde_json::to_string(value).ok())
+        .map(|encoded| format!("{message}{CHILD_EVIDENCE_SEPARATOR}{encoded}"))
+        .unwrap_or(message)
+}
+
+/// Only the typed child decision evidence is eligible for journal projection.
+/// Other recourse subjects may contain fields outside the journal privacy bound.
+pub(crate) fn child_access_failure_evidence(failure: &ServiceFailureRecourse) -> Option<Value> {
+    if !matches!(
+        failure.code.as_str(),
+        "profile_child_subject_mismatch"
+            | "profile_child_permission_not_inherited"
+            | "profile_child_owner_connection_still_active"
+            | "profile_child_explicit_reconnect_required"
+    ) {
+        return None;
+    }
+    super::service_profile_access_policy::ProfileChildAccessEvidence::decode(
+        failure.subject.clone()?,
+    )
+    .and_then(|evidence| serde_json::to_value(evidence).ok())
+}
+
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     for code in [
         "retained_browser_close_identity_unproven",
@@ -250,7 +283,16 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     // These exact compatibility messages originate from the child authority
     // guard before child reconnect or the guarded browser operation. Never
     // infer no-effect from a substring or an unrecognized policy reason.
-    let child_denial = match error {
+    let (child_message, child_evidence) = error
+        .split_once(CHILD_EVIDENCE_SEPARATOR)
+        .and_then(|(message, encoded)| {
+            let value = serde_json::from_str(encoded).ok()?;
+            let evidence =
+                super::service_profile_access_policy::ProfileChildAccessEvidence::decode(value)?;
+            Some((message, serde_json::to_value(evidence).ok()))
+        })
+        .unwrap_or((error, None));
+    let child_denial = match child_message {
         "profile child access record is missing" => Some((
             "profile_child_access_record_missing",
             "inspect_service_trace",
@@ -282,6 +324,7 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             effect_state: ServiceEffectState::NoEffect,
             retry_disposition: ServiceRetryDisposition::DoNotRetry,
             recommended_action: action.to_string(),
+            subject: child_evidence,
             reuse_allowed: false,
             safe_next_actions: if action == "inspect_service_trace" {
                 vec![action.to_string()]

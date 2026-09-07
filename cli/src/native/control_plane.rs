@@ -1375,6 +1375,9 @@ fn persist_service_job_terminal(
             "terminalState": outcome.state,
             "effectState": outcome.effect_state,
             "retryDisposition": outcome.retry_disposition,
+            "childAccessEvidence": outcome.failure.as_ref().and_then(
+                super::service_failure::child_access_failure_evidence),
+            "recommendedAction": outcome.failure.as_ref().map(|failure| &failure.recommended_action),
         }));
         append_service_failure_best_effort(&record);
     }

@@ -1504,3 +1504,37 @@ acceptance and A2–A4 remain open.
 next_action_or_stop_reason: Repair causal evidence at child ownership denial,
 then verify returned-ID reconstruction and the remaining selected AX cases
 before freezing the next installed candidate.
+
+
+## Checkpoint 26: child denial causal evidence preserved
+
+state_transition: child authorization now carries bounded decision evidence into recourse and journal
+
+acceptance_state: source checks pass; installed A1–A4 and full AX remain incomplete
+
+progress_classification: blocker_reduction
+
+The policy evaluator captures expected/observed subject and connection hashes,
+owner/caller assurance, requested permission, inherited and current permission
+checks, connection state, reconnect intent, parent/current policy revisions and
+the deciding source function. The existing native string-error transport carries
+only this typed bounded evidence alongside its recognized denial reason.
+Recourse preserves it in subject, and the terminal journal projects the same
+validated fields as details.childAccessEvidence with the recommended repair.
+Raw identity labels, connection identifiers and arbitrary recourse subjects are
+excluded. Historical exact denial messages remain supported. Malformed evidence
+does not gain a no-effect classification. Authorization behavior is unchanged.
+
+The existing wrong-subject regression now verifies evidence round-trip,
+privacy, malformed-input refusal and absence of denial evidence on successful
+reconnect. Policy tests, caller ownership regression, failure-recourse tests,
+workspace Clippy and docs build pass. All five user documentation surfaces are
+updated. Private validation logs are under campaigns/p160/child-causal-evidence.
+
+material_blockers: New live returned-ID causal reconstruction remains to be
+verified on the frozen candidate. These changes are not installed. Consumer
+original-connection proof, other selected AX failures and A2–A4 remain open.
+
+next_action_or_stop_reason: Build the frozen optimized candidate and read one
+actual denied cross-client input occurrence through authenticated dashboard
+readback, including reader restart and exact build identity.

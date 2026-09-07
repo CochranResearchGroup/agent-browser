@@ -699,7 +699,10 @@ fn authorize_profile_child_access_in_state(
     if !result.allowed {
         // Keep the exact reason: Service recourse classifies these pre-effect
         // authority denials without changing this ownership decision.
-        return Err(format!("profile child access denied: {}", result.reason));
+        return Err(crate::native::service_failure::profile_child_denial_error(
+            result.reason,
+            result.denial_evidence.as_ref(),
+        ));
     }
     if result.reconnected {
         if let Some(tab) = service_state.tabs.get_mut(tab_id) {

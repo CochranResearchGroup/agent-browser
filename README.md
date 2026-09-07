@@ -797,7 +797,7 @@ rejects raw URLs and handoff IDs. Failure records contain causal identifiers,
 runtime and boot epochs, typed codes, bounded redacted summaries, and no page
 content, credentials, headers, bearer material, or query strings.
 
-New failure records include producer buildIdentity: package version, source revision and tree state, binary digest, and a verified matching support generation. Missing identity is explicit; historical records remain unchanged. Identity is captured from the producing executable, so a later selected generation cannot rewrite the cause history.
+New failure records include producer buildIdentity: package version, source revision and tree state, binary digest, and a verified matching support generation. Missing identity is explicit; historical records remain unchanged. Identity is captured from the producing executable, so a later selected generation cannot rewrite the cause history. Child access denials also preserve the failed comparison in `failure.subject` and journal `details.childAccessEvidence`: hashed expected and observed subject/connection identities, identity assurance, permission checks, policy revisions, and the deciding source function. Use the returned request ID to join the failure record and its recommended repair action. Raw client identities and connection identifiers are excluded.
 
 Failure records first enter private pending files in
 `~/.agent-browser/service/failure-journal.pending/`. On Unix, the record and
