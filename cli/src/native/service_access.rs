@@ -214,7 +214,15 @@ fn service_access_plan_artifact_for_state_with_principal(
         request.browser_build = browser_build_for_access_request(service_state, &request);
     }
     let profile_request = request.profile_selection_request();
-    let selection = select_service_profile_for_request(service_state, &profile_request);
+    // Automatic catalog ranking must never substitute a different profile for
+    // an explicit named-profile intent, including a name not yet in the catalog.
+    let selection =
+        select_service_profile_for_request(service_state, &profile_request).filter(|selection| {
+            request
+                .runtime_profile
+                .as_deref()
+                .is_none_or(|requested| selection.profile_id == requested)
+        });
     let selected_profile = request
         .runtime_profile
         .as_deref()
@@ -226,11 +234,15 @@ fn service_access_plan_artifact_for_state_with_principal(
                 .and_then(|selection| service_state.profiles.get(&selection.profile_id))
                 .cloned()
         });
-    let readiness_id = request.readiness_profile_id.clone().or_else(|| {
-        selection
-            .as_ref()
-            .map(|selection| selection.profile_id.clone())
-    });
+    let readiness_id = request
+        .readiness_profile_id
+        .clone()
+        .or_else(|| request.runtime_profile.clone())
+        .or_else(|| {
+            selection
+                .as_ref()
+                .map(|selection| selection.profile_id.clone())
+        });
     let readiness_profile = readiness_id
         .as_deref()
         .and_then(|profile_id| service_state.profiles.get(profile_id));
@@ -316,8 +328,8 @@ fn service_access_plan_artifact_for_state_with_principal(
             "hasNamingWarning": has_naming_warning,
         },
         "selectedProfile": selected_profile.clone(),
-        "selectedProfileSource": selection.as_ref().map(|selection| {
-            profile_source_value(service_state, &selection.profile_id)
+        "selectedProfileSource": selected_profile.as_ref().map(|profile| {
+            profile_source_value(service_state, &profile.id)
         }),
         "selectedProfileMatch": selection.as_ref().map(|selection| {
             let (matched_field, matched_identity) = selected_profile
@@ -3496,6 +3508,7 @@ mod tests {
                 BrowserProfile {
                     id: "known-temp".to_string(),
                     name: "Known temp".to_string(),
+                    target_service_ids: vec!["fixture-site".to_string()],
                     user_data_dir: Some("/tmp/known-temp-profile".to_string()),
                     ..BrowserProfile::default()
                 },
@@ -3530,6 +3543,26 @@ mod tests {
             "/tmp/known-temp-profile"
         );
         assert!(plan["decision"]["oneTimeProfileRecommendation"].is_null());
+        let unknown = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                runtime_profile: Some("requested-new-profile".to_string()),
+                target_service_ids: vec!["fixture-site".to_string()],
+                target_url: Some("about:blank".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        assert!(
+            unknown["selectedProfile"].is_null(),
+            "an explicit unknown profile must not select another catalog profile"
+        );
+        assert_eq!(
+            unknown["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            "requested-new-profile"
+        );
+        assert!(unknown["decision"]["serviceRequest"]["request"]["profile"].is_null());
+        assert!(unknown["selectedProfileSource"].is_null());
+        assert!(unknown["selectedProfileMatch"].is_null());
     }
 
     #[test]

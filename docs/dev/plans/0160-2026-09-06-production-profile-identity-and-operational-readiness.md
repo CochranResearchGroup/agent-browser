@@ -1561,3 +1561,45 @@ This closes live causal reconstruction for the selected subject-mismatch case on
 the isolated candidate. Installed qualification, other AX cases, consumer original
 connection acceptance and A2–A4 remain required. The production candidate is still
 ec04ad55.
+
+
+## Checkpoint 27: explicit unknown profile fallback reproduced and repaired
+
+state_transition: production no-launch selection exposed a further A1 defect; source repair validated
+
+acceptance_state: A1–A4 and full AX remain incomplete
+
+progress_classification: blocker_reduction
+
+Fresh installed doctor still reports 12 findings. Its selected-generation axis
+compares the current sealed payload with a historical failed transaction naming
+a different generation. The installed payload, ingress and runtime convergence
+axes are ready, but supported transaction and operator-journey acceptance remain
+unproven. No readiness receipt was fabricated or historical transaction removed.
+
+While preparing the A2 synthetic browser through the operating guide and Service
+access-plan path, an explicit uncataloged runtime profile was replaced by the
+automatically ranked existing default profile, including that profile's directory
+and retained browser reuse hints. The returned plan was not executed. This is a
+profile selection defect independent of the already-repaired child authority
+checks. Private doctor, lease, workstation status and exact no-launch response
+are under campaigns/p160/readiness-refresh-637c6077.
+
+The access-plan selector now excludes automatic catalog candidates that differ
+from an explicit runtime profile. Explicit identity also controls default
+readiness selection, and profile-source provenance comes from the actual selected
+profile. Existing cataloged explicit profiles retain their configured directory;
+uncataloged explicit names remain the requested launch intent without borrowing
+another profile or directory. No profile or browser was created for the repair.
+
+The regression initially lacked a catalog candidate with any ranking match. After
+adding a matching target identity, it reproduced the unwanted selection before
+repair. All 56 service access-plan tests pass after repair, together with workspace
+Clippy and docs build. All five user documentation surfaces are updated.
+
+material_blockers: Candidate interface readback and installation of this repair
+remain pending. The synthetic operator journey has not started. Original consumer
+connection proof, selected AX cases and A2–A4 remain open.
+
+next_action_or_stop_reason: Verify the frozen candidate's no-launch access-plan
+response, then include this profile-selection repair in installed qualification.
