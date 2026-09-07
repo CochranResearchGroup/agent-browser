@@ -41,14 +41,20 @@ consumer's supported rejoin path as the next investigation.
   lease became active with no blocking identity axes. Both original handles
   remained usable, PID/start token and target set were preserved, and final
   attestation was complete. No product repair or rebuild was required.
-- Scope limit: this fixture naturally produced missing principal binding on a
-  fresh managed launch. Attestation was already complete before rejoin through
-  managed-launch custody. It does not reproduce the old consumer's historical
-  missing `profile_lease` and `handoff_receipt` proof combination or establish
-  consumer acceptance. A lease warning alone is not proof of unusable control.
-- Evidence: private P160 campaign `missing-binding-sim-ThA0Um/`, containing
+- Follow-up historical-case simulation also passed after a host interruption:
+  the same retained browser accepted the original handle with stale `shared`
+  lease metadata while the current session was `exclusive`, and proved managed
+  launch custody with no handoff receipt. The original test credential then
+  rejoined successfully; both handles and all process/target identities survived.
+- The recorded consumer failure predates these attestation repairs. Current
+  read-only owner evidence shows no pending transfer or transfer history, so an
+  older generation number alone does not imply missing transfer custody.
+  This simulation covers the reported stale-handle and absent-handoff conditions;
+  it does not claim a fresh attestation from the production consumer.
+- Evidence: private P160 campaigns `missing-binding-sim-ThA0Um/` (initial case)
+  and `missing-binding-sim-aAMdDU/` (retained historical case), each containing
   `probe-source.mjs`, `ledger.jsonl`, `acceptance.json`, and `cleanup.json`.
-  Cleanup found zero remaining owned fixture processes.
+  Both completed with zero remaining owned fixture processes.
 - Earlier harness setup failures are retained in `missing-binding-sim-IDfJUT`
   and `missing-binding-sim-IvUQPa`. The latter fixture's three remaining owned
   processes were terminated with PID/start/executable checks after correcting
@@ -56,12 +62,19 @@ consumer's supported rejoin path as the next investigation.
 - The simulation removes the assumed need to interrupt the original consumer
   for mechanism testing. The pending consumer request is no longer a dependency
   for investigation. Production remains untouched by these experiments.
-- Next diagnosis: reproduce the older retained-owner custody condition, including
-  its handoff/launch evidence, before attributing its historical attestation
-  failure to principal binding. Do not repeat this passing clean-launch case
-  or resume costly operator-view retries as a substitute.
-- Progress classification: `blocker_reduction`; isolated rejoin is proven,
-  original-consumer and complete A1 acceptance remain unproven.
+- Next active issue: A2 cold operator view. Recorded tab read took approximately
+  28 seconds and returned HTTP 504; primary-claim response was still absent at
+  the viewer cutoff. A later warm diagnostic passed. Source inspection shows
+  session-tabs forwards backend responses or emits 502 on fallback failure,
+  so the observed 504 alone does not locate the failing layer.
+- AX gap: the retained client failure has an observation ID but no backend port,
+  elapsed time, or joined primary-owner terminal event. No server causal failure
+  for that cold request appears in the retained failure journal. Do not claim
+  session-tabs caused the missing iframe or rerun an unchanged viewer test.
+  The next bounded repair must join request timing and gateway/primary evidence
+  or reproduce the cold condition locally before changing runtime behavior.
+- Progress classification: `outcome_progress` for isolated retained-handle and
+  custody acceptance within A1; full A1, A2, A3, A4 and AX remain open.
 
 ### Retained execution boundaries
 
