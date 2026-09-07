@@ -1361,3 +1361,63 @@ and AX causal reconstruction remain required.
 next_action_or_stop_reason: Freeze and build the full production candidate,
 qualify the exact binary, and publish through the already-authorized controlled
 replacement path while preserving original production browsers.
+
+## Checkpoint 23: frozen candidate installed with browser preservation
+
+state_transition: qualified ec04ad55 release binary installed in production
+
+acceptance_state: installed own-profile smoke passes; A1–A4 and AX remain incomplete
+
+progress_classification: outcome_progress
+
+The full release build completed in 8m50s from ec04ad55 with source unchanged.
+Binary SHA256:
+390ce3eb6ad4e0c2285a17cbc1c36183c06d53b5867c8234127df6f1b5a6d5e1.
+The copied distribution binary has the same digest. Three fixtures qualify this
+exact release binary: headless terminal close/reopen bU9U6z (ledger
+3d3715daa29f361f40d11fe2478c1ec416a945f7214024f49c7b2bab6638e219),
+headed terminal close/reopen qXATl7 (ledger
+7e74cfbca55d23126b380b5dadf2e81e6d0e41dbc5696943e8bacffc969a3566),
+and same-profile self-declared no-handle isolation ODDmJ4 (ledger
+3b0e35e36bbafd054a52a68cbbd3d3973a9137793c0585911d96088d2632a588).
+All pass and leave zero owned residue without cleanup signals. Full fixture
+names, probes, state, owner/lifecycle registries and hashes are retained privately.
+
+Controlled activation installed generation
+0.28.0-390ce3eb6ad4-4bf6a8301e06 with support manifest SHA256
+4bf6a8301e068d413d20a6f12338c5037715c48e083cd6744f24a70bf2259a47.
+Bundled support assets and unit templates were verified unchanged. Fresh gates
+found no active jobs and verified the old host identity and four browser
+identities outside its cgroup. The procedure stopped dashboard services,
+terminated only the old host, selected the sealed generation, and rebound
+ingress from the observed new host and socket identity. Rollback configuration
+and process evidence were retained. All four original browser identities and all
+45 original tab custody projections remained unchanged after activation and smoke.
+
+The installed smoke opened its own blank tab in the existing Default browser,
+evaluated 42, obtained controlPlaneAttestation.complete=true with managed_launch
+custody at the existing generation, and released only that tab. It did not use
+the consumer's payment tab or capability. A narrow shared-skill paragraph now
+documents the installed ownership behavior, retaining the complete=true business
+input gate and a backup of the previous guidance.
+
+Doctor still exits1 with 12 findings: operator journey, upgrade readiness,
+retained terminal history, seven profile/principal lease findings, stale monitor,
+and unknown pressure ownership. The workspace-candidate mismatch is resolved.
+Controlled activation is not supported upgrade acceptance. The maintenance timer
+remains off. Consumer original-connection acceptance is not claimed.
+
+Private evidence: campaigns/p160/publication-ec04ad55, including the release
+qualification, sealed generation, activation and installed-readback receipts,
+doctor before/after, original tab custody comparison, and shared-skill receipt.
+An AX preparation check found one journal record, one job and one event for a
+returned fixture denial ID, with cause, permission, policy revision and source.
+That journal record omits build identity; full AX reconstruction remains open.
+
+material_blockers: Remaining installed A1/consumer proof, A2 authenticated
+external operator journey, A3 supported upgrade and doctor dispositions, A4
+scheduled cycles, and AX build-bound causal reconstruction remain required.
+
+next_action_or_stop_reason: Continue the outstanding installed acceptance and
+diagnostic repairs against the selected generation; do not mark Plan0160 complete
+or enable the maintenance timer from this successful publication alone.
