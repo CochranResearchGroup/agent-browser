@@ -854,6 +854,7 @@ async fn handle_service_api_request(
                                 std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
                                     .ok()
                                     .filter(|value| !value.trim().is_empty())
+                                    .or_else(crate::dashboard_ingress::authenticated_selected_dashboard_generation)
                             {
                                 let commit = tokio::task::spawn_blocking(move || {
                                     crate::dashboard_ingress::

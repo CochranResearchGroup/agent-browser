@@ -217,7 +217,7 @@ ingress commit --expected-revision <revision> --handoff-id <id>` only as an
 explicit recovery command when the ready receipt landed before automatic
 selection completed. Do not synthesize file-based presentation evidence.
 
-Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. The
+Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. An ordinary dashboard without an explicit deployment-generation setting identifies itself by matching its own executable-bound runtime manifest to the selected backend; it cannot borrow a newer backend identity. The
 stable ingress remains on the old backend until the authenticated candidate
 journey is committed. Keep the accepted rollback generation for the 24-hour rollback
 window. `agent-browser install workstation gc --apply --json` automatically

@@ -2977,3 +2977,37 @@ handoff through the authenticated installed dashboard, and reconcile the separat
 selected-generation/history readiness comparison using current installation
 proof. Consumer original-connection attestation, remaining doctor findings,
 scheduled cycles and the full causal-error matrix remain required.
+
+### Ordinary dashboard startup hook correction
+
+state_transition: Live readback exposed a second acceptance gap; source correction validated.
+acceptance_state: Installed acceptance remains pending; A1, A3, A4 and AX remain open.
+progress_classification: progress
+
+The optimized 7849e18e build passed in 2m 19s and is archived with SHA256
+3fa39956b466b5a4d3817e1aafb8b6a44afa914366b1e814a15efd639d84a11c.
+It was not published. Fresh read-only production inspection found that the
+ordinary dashboard has no AGENT_BROWSER_DASHBOARD_GENERATION variable. Its ingress
+and retained handoff use dashboard-0.28.0, while its manifest executable is the
+exact selected 20476d9a production binary. The HTTP hook previously required an
+explicit generation variable, so the earlier repository-level acceptance repair
+alone would not run on this actual production path.
+
+The ordinary HTTP path now resolves its generation only when its own runtime
+manifest hash equals the selected ingress backend's manifest hash. An explicit
+shadow generation keeps the existing path. A stale process cannot borrow the
+selected generation by reading the registry. The existing ingress fixture now
+also proves matching-manifest resolution and stale-manifest denial. The 29
+focused ingress tests, Clippy with warnings denied, remote-view documentation
+check and docs production build passed after this correction. No red-before-fix
+execution is claimed. All five documentation/help surfaces were updated.
+
+Private readback is under selected-dashboard-acceptance. The initial exploratory
+comparison treated the boot-qualified process start token as a bare kernel
+counter; the corrected comparison confirms exact host PID, boot and start-token
+identity. The dashboard's generic generation label genuinely differs from the
+installation generation, so the remaining selected-generation readiness repair
+must join exact binary/manifest evidence instead of assuming those labels match.
+Production and the consumer's capability remain untouched. Next: qualify this
+combined acceptance repair on the installed runtime, then continue current-state
+readiness reconciliation without discarding historical failure evidence.

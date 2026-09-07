@@ -682,6 +682,24 @@ pub(crate) fn selected_dashboard_generation() -> Result<String, String> {
     Ok(repository.load()?.selected_backend().generation_id.clone())
 }
 
+/// Identifies an ordinary selected dashboard by its own executable-bound manifest.
+/// A stale process must not borrow the selected generation merely because it
+/// can read the ingress registry. Shadow candidates retain their explicit identity.
+pub(crate) fn authenticated_selected_dashboard_generation() -> Option<String> {
+    let registry = DashboardIngressRepository::new(DashboardIngressRepository::default_path())
+        .load()
+        .ok()?;
+    selected_dashboard_generation_for_manifest(&registry, &dashboard_runtime_manifest_sha256())
+}
+
+fn selected_dashboard_generation_for_manifest(
+    registry: &DashboardIngressRegistry,
+    manifest_sha256: &str,
+) -> Option<String> {
+    let selected = registry.selected_backend();
+    (selected.runtime_manifest_sha256 == manifest_sha256).then(|| selected.generation_id.clone())
+}
+
 fn dashboard_generation_override(configured: Result<String, std::env::VarError>) -> Option<String> {
     configured
         .ok()
@@ -1931,6 +1949,17 @@ mod tests {
                 .unwrap()
                 .dashboard_deployment_generation,
             "generation-new"
+        );
+        assert_eq!(
+            selected_dashboard_generation_for_manifest(
+                &selected,
+                &selected.selected_backend().runtime_manifest_sha256
+            ),
+            Some("generation-new".to_string()),
+        );
+        assert_eq!(
+            selected_dashboard_generation_for_manifest(&selected, "stale-process-manifest"),
+            None
         );
         // Controlled activation can select a backend before its first journey.
         // Acceptance must fill that gap without consuming a different candidate

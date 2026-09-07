@@ -5902,6 +5902,8 @@ Subcommands:
 
 Authenticated ready handoff resolution records acceptance for the selected dashboard
 after live manifest and ownership checks, preserving candidate and rollback custody.
+Without an explicit generation setting, the dashboard must match its own runtime
+manifest to the selected backend before recording acceptance.
   ingress rollback     Discard the matching staged backend before commit
 
 Running 'agent-browser dashboard' with no subcommand is equivalent to 'dashboard start'.
