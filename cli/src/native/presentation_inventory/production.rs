@@ -290,7 +290,34 @@ mod tests {
             .qualify(&state, config, "production", "boot-test", |_, _| true)
             .unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), before);
+        assert_eq!(capacity.reconcile_authoritative_bindings(&state), 0);
         assert_eq!(capacity.slots[0].browser_id.as_deref(), Some("browser"));
+        assert!(!capacity
+            .clone()
+            .request_bound_recovery(
+                PresentationRequest::recovery("foreign").for_browser("other-browser"),
+                PressureAdmission::admit(2),
+                &state,
+                "route",
+                "display"
+            )
+            .is_granted());
+        let mut released_state = state.clone();
+        released_state
+            .remote_view_routes
+            .get_mut("route")
+            .unwrap()
+            .state = "released".into();
+        let mut released_capacity = capacity.clone();
+        assert_eq!(
+            released_capacity.reconcile_authoritative_bindings(&released_state),
+            1
+        );
+        assert_eq!(
+            released_capacity.slots[0].state,
+            PresentationSlotState::WarmIdle
+        );
+        assert!(released_capacity.slots[0].browser_id.is_none());
         assert!(capacity
             .request_bound_recovery(
                 PresentationRequest::recovery("recover").for_browser("browser"),
