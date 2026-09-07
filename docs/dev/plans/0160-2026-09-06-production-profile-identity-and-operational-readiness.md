@@ -1462,3 +1462,45 @@ A2 operator journey, A3 doctor/upgrade readiness and A4 cycles remain open.
 next_action_or_stop_reason: Qualify the new record through an isolated producer
 and restart readback, then include it in the next frozen candidate while pursuing
 the remaining installed acceptance gates. No ownership checks were weakened.
+
+
+## Checkpoint 25: live producer identity and restart readback
+
+state_transition: AX producer build attribution verified through authenticated journal readback
+
+acceptance_state: A1–A4 and full AX remain incomplete
+
+progress_classification: blocker_reduction
+
+Candidate 16963b880ec6ae07bbe67a2281301e2b8ad526c6 built successfully with
+optimized binary SHA256
+2047021bf935a7fac92cdd4b452bfc33c1b007cb35e8c0faf8b6b22efe4fb75b.
+A disposable two-client browser fixture denied foreign input before effects.
+Its returned provenance request ID resolves to exactly one journal occurrence
+through the authenticated dashboard failure endpoint after the producer host
+stopped. Two separately started dashboard readers return the identical record,
+including the producing executable digest and compiled source revision.
+The source tree is honestly reported dirty because the consumer note was modified.
+Uninstalled support identity is absent with an explicit unavailable reason.
+This proves persistence across producer exit and reader restart with the same
+candidate; it does not claim an installed-generation or different-build reader test.
+
+Two setup failures remain retained: the first probe selected a nonexistent
+response correlation field; the second queried the browser stream port rather
+than the dashboard journal endpoint. The investigation was reframed to an
+isolated authenticated dashboard reading the existing occurrence, without
+another browser launch. Both browser fixtures had zero owned residue at census.
+No production or consumer browser was changed.
+
+Evidence is private under campaigns/p160/ax-build-restart-SwcQyY and
+campaigns/p160/build-identity-validation/live-readback-manifest.json. Readback
+receipt SHA256: 5e0d85099166380d21627c02ef01ce472b735661bc7154c6384295c933a340e0.
+
+material_blockers: The subject-mismatch record lacks expected/observed ownership
+evidence and the precise source decision location. Build attribution alone does
+not satisfy AX. Production still runs ec04ad55; consumer original-connection
+acceptance and A2–A4 remain open.
+
+next_action_or_stop_reason: Repair causal evidence at child ownership denial,
+then verify returned-ID reconstruction and the remaining selected AX cases
+before freezing the next installed candidate.
