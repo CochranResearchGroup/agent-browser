@@ -909,8 +909,12 @@ Validation: the new real-CDP-transport regression failed on the old last-tab
 check and passes with acknowledged removal, delayed destruction, refusal,
 target-still-present and peer-loss cases. Twenty lifecycle tests, 27 request
 contract tests, three provenance tests, 14 recourse tests and three owner-guard
-tests passed. The client suite, generated contracts, API/MCP parity, handoff
-documentation, docs build, Rust formatting and workspace clippy passed. These
+tests passed. The client suite, generated contracts, handoff documentation,
+docs build, Rust formatting and workspace clippy passed. The final API/MCP
+parity readback caught a missing MCP tabId schema field; the schema follow-up
+adds that field and passes the full API/MCP parity check, workspace clippy and
+format check. The isolated HTTP/CDP evidence above predates only that MCP schema
+addition; final combined-candidate publication remains outstanding. These
 are focused and isolated-live checks, not whole-production acceptance.
 
 Preserved failed verification: the first candidate needed bounded observation

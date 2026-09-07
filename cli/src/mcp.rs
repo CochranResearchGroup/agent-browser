@@ -1283,6 +1283,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "additionalProperties": true,
                         "description": "Lease-backed service tab handle returned by requestServiceTab and required by cdp_attach and cdp_detach."
                     },
+                    "tabId": {
+                        "type": "string",
+                        "description": "Exact retained tab identifier for tab_close; must agree with all other selectors and current child close permission."
+                    },
                     "targetId": {
                         "type": "string",
                         "description": "Optional CDP target id override when the service tab handle already authorizes the tab."
