@@ -7,7 +7,6 @@ Git checkpoints and linked archives preserve history. Keep this file at or below
 ## Turn 228 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Lane P157; branch `plan/profile-permissions-and-request-provenance`.
 Progress: reproduced capacity ownership loss in the existing production inventory
 recovery test by invoking the actual reconciliation transition before recovery.
 The test failed before repair. Source `c0201044` preserves an admitted orphaned
