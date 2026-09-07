@@ -12,8 +12,10 @@ Progress: implemented explicit production presentation inventory admission.
 It verifies existing route/display/process identity and creates capacity without
 rewriting presentation custody or ready states. Active reservations and human
 controller protection remain intact; development inventory remains separate.
-All ten inventory tests and final workspace Clippy pass. All five user-facing
-documentation surfaces are updated. Built-candidate and isolated live proof remain.
+All ten inventory tests, format, Clippy and optimized build pass at `d682ae6c`.
+All five documentation surfaces are updated. Private-state-copy readback returned
+capacity but normalized away incumbent route ownership: live qualification FAILED
+its custody requirement. Do not enable this candidate inventory in production.
 Private `production-inventory/candidate-inventory.json` is prepared for the exact
 synthetic route but is not enabled. This unit is bounded through 23:05:24Z with
 one optimized candidate build and two isolated attempts; effort is cumulative.
@@ -143,7 +145,8 @@ Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next qualify the built production-inventory adapter with real display/process proof;
+Next use an originally owned disposable browser/display fixture, not a copied
+production-state host, to qualify real reattach and custody preservation;
 actual consumer reconnect after the legacy repair remains pending. Complete
 consumer artifact transport
 and remaining A1 dispositions, preserving ordinary self-identification.
@@ -173,10 +176,6 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 - `publication-d6d99e43/`: frozen source, exact release, qualification, sealed
   generation, activation/custody/storage receipts, installed original-handle
   readback, doctor, rollback backup, skill sync and the next AX finding.
-- `retained-unit-sim-Djjk8o`: installed MCP handle-only routing failure.
-- `retained-unit-sim-VCGCs6`: optimized MCP repair, reconnect and denial proof.
-- `retained-unit-sim-VBuQI4`: exact-release MCP proof including physical release
-  and peer preservation; cleanup complete.
 - `publication-dd94dfe7/`: first publication, storage/handle proof, identity
   dispositions, current-at-that-point doctor and verified dc570e5b backup.
 - `retained-unit-sim-7QAzvP`: exact dd94dfe7 capability/rejoin/storage proof.
