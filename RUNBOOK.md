@@ -4,18 +4,17 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 215 | 2026-09-07
+## Turn 216 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md),
 lane P157, branch `plan/profile-permissions-and-request-provenance`.
-The identity-first batch is closed within its 2026-09-07T15:58:19Z through
-16:58:19Z bound. No build, fixture or publication process remains running.
-Controller: primary. Prior approximately 12-hour effort, the completed
-30-minute round and the preceding 60-minute round remain cumulative.
-The preceding recommendation-only turn made no outcome progress; this turn
-amended the strategy and executed a causal identity repair. Full readiness
-remains OPEN. No consumer capability was borrowed or production consumer lease
-reassigned. Unrelated note 0156 and untracked note 0159 remain preserved.
+The previous hour closed within 15:58:19Z–16:58:19Z. Goal continuation authorized
+this bounded recovery follow-up, 16:58:51Z–17:18:51Z, primary-controlled.
+This follow-up is checkpointed with no running repair, fixture or build process.
+All prior effort remains cumulative. Progress: recovered existing production
+storage after isolated proof. Full readiness remains OPEN. No consumer capability
+was borrowed, profile lease reassigned, browser restarted or browser input sent.
+Unrelated note0156 and untracked note0159 remain preserved.
 
 ### Installed repair and current acceptance
 
@@ -86,46 +85,53 @@ fixture with one lease row, both original handles usable and no remaining
 fixture processes. These source fixes have not replaced the
 installed dc570e5b binary or its shared skill. Do not report them as live.
 
-### Temporary-storage failure: reproduced, preventive source fix
+### Existing production storage recovered; prevention not installed
 
-Current classification found guarded rejoin available for the affected registered
-consumer leases. No consumer capability was used. The incident 0156 cleanup
-repair already has source and isolated qualification in Plan0160 checkpoint14;
-its older report is not a reason to repeat unchanged tests.
+Source `bee768ed` prevents future host retirement from deleting retained-browser
+temporary storage. It mounts private, unit-scoped disk-backed state directories
+at `/tmp` and `/var/tmp`. All 13 supervisor tests, formatting and workspace Clippy
+passed. The rendered unit and real Chrome synthetic CSV download passed after
+parent retirement. This preventive template is NOT INSTALLED.
 
-New note0159 reports a retained browser holding an unlinked private `/tmp`.
-A disposable systemd service reproduced the causal mechanism: with PrivateTmp,
-stopping the parent service preserved its child PID and namespace but changed
-`/tmp` link count from 2 to 0; mkdir then failed with ENOENT. This proves the
-mechanism, not the historical deletion event for a consumer browser.
+Read-only production observation at 16:57:35Z found all five retained browsers
+holding unlinked `/tmp` and `/var/tmp`, across three mount namespaces. Existing
+PID/tab preservation had not established usable storage. The mechanism reproduced
+in a disposable systemd service; the historical deleting stop remains unproven.
 
-Preventive source commit `bee768ed` binds private mode-0700, unit-scoped state directories
-at `/tmp` and `/var/tmp`. The rendered configuration preserved the backing inode
-and successful mkdir after service retirement. State storage avoids moving browser
-temporary files onto the user runtime tmpfs. It remains private and must not be
-removed while browsers reference it. All 13 supervisor tests, formatting and
-workspace Clippy pass. Disposable process and backing-directory cleanup passed.
-One transient-unit setup rejected an unexpanded `%t` before starting; its failed
-receipt remains preserved. No production service was restarted or reconfigured.
+A direct bind over a deleted mount failed ENOENT. A bounded disposable recovery
+then used Linux MOVE_MOUNT_BENEATH to stage private storage under the deleted
+mount before revealing it. The same browser PID/start and mount namespace survived,
+and Chrome completed an exact frame/GUID-correlated synthetic CSV download with
+matching bytes. Fixture processes, units and storage were cleaned up.
 
-A real disposable Chrome also completed a synthetic Blob CSV download after its
-parent service stopped. Begin/progress events matched the exact frame and GUID;
-retrieved bytes matched the expected CSV. The browser and its fixture storage
-were cleaned up. This prevention is NOT INSTALLED. It does not repair already-
-deleted consumer namespaces or establish shared-profile CSV acceptance. Before any
-further production retirement, preserve existing temporary-storage dependencies.
-The next repair must cover existing-browser recovery, the shared-profile
-download-policy boundary and typed diagnosis of missing storage.
+A frozen production plan bound five Ready owners, process start/executable/UID,
+three exact namespaces, deleted mount inode/device, permitted namespace members,
+mount propagation, boot and expiry. Three negative checks rejected changed start,
+unproven executable and changed mount identity. The first pilot stopped before
+any filesystem or mount effect because the ambient Python lacked pidfd_open;
+the tested /usr/bin/python3 supplied it. That failure is preserved.
 
-Final read-only production evidence at 16:57:35Z found all five retained
-Service State browser PIDs still referencing unlinked `/tmp` and `/var/tmp`
-directories. Process start tokens were checked before and after observation;
-no browser action or filesystem write was performed in those namespaces.
-This is current damaged-state evidence, not proof of which historical stop
-removed each directory. Preserved PID and tab custody did not establish usable
-runtime storage. Existing-browser namespace recovery is the next production
-dependency; do not claim installing the preventive template restores it.
-Private readback: `reconcile-rejoin/retained-temporary-storage-readback.json`.
+Recovery applied first to the owned synthetic operator namespace. Its original
+service handle retained complete attestation and unchanged 9/9 input counters.
+The two remaining namespaces then passed the same guarded repair. All six mounts
+now have positive link counts, private mode 0700 and verified write/readback;
+original nosuid/nodev/noexec restrictions were retained where present. Five browser
+PIDs, start identities and mount namespaces remained unchanged. Global `/tmp`
+remained unchanged. No browser restart, page action, download-policy change or
+consumer capability use occurred. This is a LIVE storage repair, not installation
+of the new template or full browser/download acceptance.
+
+Post-repair install doctor still exits 1 for lease identity, monitoring, unknown
+pressure ownership and retained upgrade history. Storage repair does not clear
+those findings.
+
+The report's old Playwright Node PID no longer exists. Its artifact directory
+was not recreated or bridged. Consumer CSV, current client artifact transport,
+shared-context download policy and typed product diagnosis remain unaccepted.
+Do not revive stale artifact paths or change shared download settings by guesswork.
+Recovery backing directories under user state runtime-tmp/recovered must remain
+while retained namespaces reference them. The private recovery receipt binds
+all three operation ledgers and the final five-browser readback.
 
 ### Retention and next work
 
@@ -141,10 +147,11 @@ and supervisor references. Repair a supported publication/retention path before
 maintenance resumes. Never fabricate accepted transactions or green monitor
 receipts to protect a rollback target.
 
-Next execution must simulate recovery from an already-unlinked namespace while
-preserving the exact browser process and original handles. Establish private
-artifact retrieval and shared-profile download authority before consumer replay.
-Identity proof remains the priority; a warning inventory alone is not progress.
+Next consolidate the already-tested diagnostic and preventive-template fixes
+into one installed candidate, preserving the recovered storage. Complete remaining
+identity dispositions and scoped consumer artifact transport before claiming A1.
+The recovery helper still needs a reusable product diagnostic/recovery surface;
+its private receipt must not be represented as a supported upgrade transaction.
 Before another operator attempt, isolate mouse delivery with an observable input
 path; pixel readiness and operator-focus success alone proved insufficient.
 Preserve the failed attempt and its unchanged page counters. Do not spend an
@@ -157,6 +164,10 @@ three real scheduled cycles, controlled restart and next scheduled cycle.
 
 Evidence stays under `~/.local/state/agent-browser/campaigns/p160/`:
 
+- `temporary-storage-recovery/`: frozen plan/helper, negative checks, three
+  production apply ledgers, pilot handle proof, final readback and recovery receipt.
+- `deleted-tmp-recovery-81654n_8`: failed direct bind, successful beneath/reveal
+  recovery, same-Chrome CSV and cleanup.
 - `retained-download-6xfjyhb6`: real Chrome post-retirement CSV, exact
   frame/GUID and byte readback, cleanup complete.
 - `private-tmp-lifecycle-oswt5o1o`: disposable deletion reproducer.
