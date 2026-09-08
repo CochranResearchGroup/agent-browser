@@ -775,13 +775,8 @@ pub(crate) fn apply_existing_session_profile_selection(
             Ok(None)
         };
     };
-    if exact_terminal_owner_allows_explicit_profile_relaunch(
-        options,
-        command,
-        &session_id,
-        state,
-        &binding,
-    )? {
+    if exact_terminal_owner_allows_profile_relaunch(options, command, &session_id, state, &binding)?
+    {
         return Ok(None);
     }
     if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
@@ -1101,7 +1096,7 @@ pub(crate) fn apply_authenticated_access_plan_profile_selection(
     Ok(true)
 }
 
-fn exact_terminal_owner_allows_explicit_profile_relaunch(
+fn exact_terminal_owner_allows_profile_relaunch(
     options: &mut LaunchOptions,
     command: &Value,
     session_id: &str,
@@ -1125,11 +1120,24 @@ fn exact_terminal_owner_allows_explicit_profile_relaunch(
         .as_deref()
         .or(options.profile.as_deref())
         .filter(|profile| crate::runtime_profile::looks_like_path(profile));
+    let requested_digest = if let Some(path) = requested_path {
+        Some(crate::runtime_profile::canonical_profile_identity_digest(
+            &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
+        )?)
+    } else if command_profile_id.is_none()
+        && command_profile.is_none()
+        && options.runtime_profile.is_none()
+        && options.profile.is_none()
+    {
+        // A session-only reopen has no surviving session projection after close.
+        // Recover its directory from exact owner history, then require all the
+        // terminal cleanup checks below before using that identity for admission.
+        Some(binding.claim.profile_identity_digest.clone())
+    } else {
+        None
+    };
     let path_profile_id = if command_profile_id.is_none() {
-        if let Some(path) = requested_path {
-            let digest = crate::runtime_profile::canonical_profile_identity_digest(
-                &crate::runtime_profile::resolve_profile(Some(path), None)?.user_data_dir,
-            )?;
+        if let Some(digest) = requested_digest {
             let mut matches = state.profiles.iter().filter_map(|(id, profile)| {
                 let path =
                     resolved_service_profile_identity_path(profile.user_data_dir.as_deref(), id)

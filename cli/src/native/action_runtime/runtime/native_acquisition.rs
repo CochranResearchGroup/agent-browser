@@ -50,6 +50,14 @@ pub(super) fn admit_cold_navigation(
         );
     }
     let mut options = launch_options_from_env();
+    // Resolve lane continuity before a generic access plan can insert a default
+    // profile into an otherwise session-only request.
+    super::apply_existing_session_profile_selection(
+        &mut options,
+        command,
+        Some(&daemon.session_id),
+        snapshot,
+    )?;
     let (_, selection, _, mut admitted) =
         apply_auto_launch_command_hints(&mut options, command, None, &daemon.session_id)?;
     let metadata = ServiceLaunchMetadata::from_launch_options(&options, Some(&admitted), selection);

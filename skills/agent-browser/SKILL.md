@@ -3136,7 +3136,9 @@ After an exact close proves process exit and lock release, reopening the same
 path resolves its retained profile identity. Conflicting profiles and unresolved
 ownership still fail before browser effects. Closing the last native session leaves
 the shared runtime host available for a later open. Completed owner history does
-not block reopening; unresolved cleanup still does.
+not block reopening; unresolved cleanup still does. A session-only reopen
+recovers the unique profile matching its completed owner identity. Ambiguous
+profile records or missing cleanup proof refuse before launch.
 
 ## Retained process identity diagnostics
 

@@ -4427,6 +4427,22 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         bind_native_service_tab_command(&command, &daemon).is_ok(),
         "terminal history must allow permission-checked reopen"
     );
+    let mut session_only = command.clone();
+    session_only.as_object_mut().unwrap().remove("profile");
+    session_only
+        .as_object_mut()
+        .unwrap()
+        .remove("runtimeProfile");
+    let reopened = bind_native_service_tab_command(&session_only, &daemon)
+        .expect("session-only reopen must recover the exact terminal profile identity");
+    assert_eq!(reopened["runtimeProfile"], "cold-native");
+    assert_eq!(reopened["profile"], json!(home.join("profile")));
+    let mut duplicate = snapshot.profiles["cold-native"].clone();
+    duplicate.id = "same-directory".into();
+    snapshot.profiles.insert(duplicate.id.clone(), duplicate);
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&session_only, &daemon).is_err());
+    snapshot.profiles.remove("same-directory");
     snapshot
         .runtime_owner_registry
         .lifecycle_records
@@ -4434,6 +4450,7 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         .unwrap()
         .cleanup_obligation_state = CleanupObligationState::Owned;
     store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&session_only, &daemon).is_err());
     assert!(
         bind_native_service_tab_command(&command, &daemon).is_err(),
         "unsettled cleanup still blocks reopen"
