@@ -4,23 +4,23 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 238 | 2026-09-07
+## Turn 239 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: eight disposable real-browser cases passed against installed
-`15cd8e5b`, without another build or production replacement. Named and custom
-profiles passed interaction, original two-client handles across host interruption,
-foreign-input denial and terminal close/reopen in headless and remote-headed
-postures. Session-only routing, exact tab close, detach/release after restart,
-five negative no-effect cases and peer preservation passed in both postures.
-Each fixture has a zero-residue census; all five production browsers survived.
-Fresh session-only cold launch and whole-browser close/reopen remain unproven.
-The consumer lease offers rejoin, but its own credentialed recovery is pending.
-A1–A4/AX remain OPEN; full causal reconstruction and scheduled cycles remain due.
-Prior maintenance doctor passed. Three generations remain protected, including
-both rollback holds. Source repair `d6f01b00` passed focused gates but is uninstalled.
-Next: fill the session-only lifecycle gap and obtain consumer recovery evidence.
-Keep both holds and the timer disabled; no production rebuild is underway.
+Outcome progress, scoped AX: a returned missing-target request ID resolves to one
+unchanged first-cause/build record across two fresh authenticated dashboard
+processes. The persisted job matches the returned terminal outcome. No browser
+action was replayed. The lane-listener lookup failure is preserved separately;
+that listener does not expose the dashboard-only failure-journal endpoint.
+A1 cold-session lifecycle remains unaccepted after three setup attempts: cold
+navigate lacked an acquisition grant; the broker request carried incomplete route
+hints; the standalone private home lacked an admitted single-host installation.
+All stopped before browser launch. Do not repeat these fixture setups unchanged.
+Resolve the documented CLI startup contract and proper isolated installation first.
+Earlier eight current-binary cases remain valid, with zero owned residue and all
+five production browsers preserved. Original-consumer credentialed rejoin is pending.
+A1–A4/AX remain OPEN. Production stays on `15cd8e5b`; both rollback holds and the
+disabled timer remain. Source `d6f01b00` is tested but uninstalled. No new build.
 
 ### Current installed identity
 
@@ -154,8 +154,10 @@ boundaries remain unchanged.
 ### Evidence index
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
-- `installed-15cd8e5b-a1/acceptance-matrix.json`: eight current-binary identity
-  cases with hashed evidence, cleanup and explicit acceptance gaps.
+- `installed-15cd8e5b-a1/`: acceptance matrix plus cold-lifecycle disposition;
+  three failed setup attempts, their zero-residue proof and the scoped AX join.
+- `session-cold-lifecycle-wOiz0e/dashboard-readback-receipt.json`: authenticated
+  journal lookup across dashboard restarts; original failure and job preserved.
 - `publication-15cd8e5b/`: release/activation, supported holds, verified backups,
   maintenance result/preservation, historical rollback restoration, final doctor,
   zero-candidate GC preview and `viewer-failure-disposition.json`.
