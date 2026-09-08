@@ -98,6 +98,35 @@ vantage, provider polish and unrelated application cleanup remain outside this
 batch. Product recovery-surface gaps are evaluated against A1/A3, not silently
 removed from scope. The full goal stays open when a dependency cannot be resolved.
 
+### Next ownership boundary after the installed modal repair
+
+Current-source review separates three concerns previously grouped as download
+scope. Commit12f55652 already repaired Service `file_transfer` browser capture:
+owner/process proof, target-frame and GUID correlation, preserved context policy,
+and namespace-aware delivery are present in the installed b2207d5c source. Its
+subscription briefly owns a new disposable browser context and verifies disposal
+before clicking; it does not redirect the shared default context. Do not rebuild
+this repair from incident0159's older7e329476 source description.
+
+The legacy native `download` and `waitfordownload` paths in
+`cli/src/native/browser_download.rs` still accept broader browser-level events;
+`download` also sets default-context policy through `set_download_behavior`.
+This source distinction is verified; peer misattribution and the cause of the
+consumer CSV cancellation are not newly demonstrated by it.
+
+The next bounded A1/AX check uses two authorized peer tabs in one disposable
+browser. Interleave an unrelated peer download with the owned operation, prove
+frame/GUID attribution, original handle and peer-policy preservation, and join
+its returned ID to owner/process/namespace evidence and safe recourse. Exercise
+Service capture and the legacy aliases against the same oracle. If the legacy
+counterexample reproduces, route a conditional Sol/Terra implementation lane to
+`browser_download.rs` and the existing `service_download_artifact.rs` helper;
+preserve legitimate exclusive/local CLI behavior and qualify both paths together.
+Do not repair Service capture again without contradictory evidence. Keep actual
+consumer CSV, raw Playwright settings and artifact visibility as separate checks;
+no consumer export or shared production setting change is needed for this fixture.
+The current75-minute allowance and all prior attempt counts remain unchanged.
+
 ### Delivery sequence and budget
 
 1. Reconcile existing evidence and new report scope in parallel with primary

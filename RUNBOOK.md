@@ -9,7 +9,8 @@ Keep at or below 200 lines under policy0043.
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 User approved 75 minutes, 15:14:25 to 16:29:25 UTC. No automatic extension.
 Execution and observation reached this checkpoint at16:17 UTC, within the allowance.
-Final closeout follows; the full plan remains OPEN.
+Final closeout includes source reconciliation of the next download-ownership
+boundary; the full plan remains OPEN.
 Prior overruns and spent allowances remain consumed. Production replacement used
 one qualified combined candidate before the 15:49:25 activation cutoff. No formal
 release, consumer payment/CSV action, credential borrowing or unrelated cleanup.
@@ -63,7 +64,7 @@ These stages are independent; partial or unknown is not completion.
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
-| Consumer CSV and transfer scope | partial / synthetic only / partial / incomplete | incident0159; retained-download-6xfjyhb6 | Preserve original consumer CSV and shared-target transfer gaps; do not substitute payment or private workflow execution. |
+| Consumer CSV and transfer scope | Service repair present, legacy differs / synthetic only / Service repair installed / incomplete | R/transfer-boundary-readback.json; incident0159; retained-download-6xfjyhb6 | Current Service capture has frame/GUID and namespace ownership handling; legacy native download/waitfordownload remain broader. Reuse Service repair, prove both paths with peer interleaving, and keep consumer cancellation cause separate. |
 | Final integration and completion | partial / incomplete / plan branch / incomplete | Plan0160 W5 | Full A1–A4/AX and required final integration remain open. |
 
 ### Validation, rework and bounded delegation
