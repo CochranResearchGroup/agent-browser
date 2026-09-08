@@ -21,7 +21,9 @@ explicitly requires distinct authenticated principals, not two handles for one.
 Optimized candidate build took 148s; format, workspace clippy (24s), and diff checks
 pass. Private independent-clients-700ffa8a/repair-control.json binds candidate hash,
 source patch, driver, first failure and both acceptance receipts. This repair and
-39fa614f's precise route-conflict classification are not installed. Production
+39fa614f's route classification are not installed. FDjLnM passes the combined
+candidate's MCP/HTTP causal correlation, typed no-effect route refusal, ordinary
+self-identified reconnect and exact-target release; zero residue. Production
 remains 700ffa8a with its accepted local durable-link/input journey and doctor.
 Original SoyLei reconnect remains unverified; its own retry/request ID is pending.
 Next: qualify and publish the combined repair batch, then original-consumer and
