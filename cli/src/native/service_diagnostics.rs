@@ -27,6 +27,12 @@ pub(crate) async fn handle_service_diagnostics(
         .and_then(Value::as_object)
         .ok_or_else(|| "diagnostics requires serviceTabHandle".to_string())?;
     validate_service_tab_handle_for_daemon(handle, cmd, state)?;
+    // A retained connection may contain only a different client's target.
+    // Revalidate and attach this authorized target before observing it, while
+    // preserving state-only diagnostics when no browser is connected.
+    if state.browser.is_some() {
+        crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
+    }
     let target_id = handle.get("targetId").and_then(Value::as_str);
     let observed_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)

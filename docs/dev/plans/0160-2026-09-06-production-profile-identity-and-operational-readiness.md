@@ -127,6 +127,10 @@ checkpointing. Qualification must simulate host interruption and prove original
 handles, complete identity attestation and writable private temporary storage
 survive together before production replacement. Candidate publication retains
 its existing execution deadline; this allocation does not silently extend it.
+Use two independently authenticated clients sharing one profile for this
+interruption test. Each must recover diagnostics and control with its original
+handle and credential, retain its permissions, and refuse the other client's
+handle before page effects. Two handles owned by one principal are insufficient.
 Distinguish an action refusal from an incorrect maintenance diagnostic before
 choosing a repair. Reassess at 30 minutes without A1 outcome progress and change
 the unsuccessful approach instead of repeating unchanged verification. All prior

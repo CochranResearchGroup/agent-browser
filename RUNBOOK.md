@@ -4,28 +4,28 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 252 | 2026-09-08
+## Turn 253 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: exact installed 700ffa8a passed MCP reconnect and three denied
-requests correlated identically through returned failure, persisted job and HTTP
-trace (retained-unit-sim-EpIk3F). Exact-target release preserved its peer and browser.
-A second disposable fixture, retained-unit-sim-YIl7vK, passed host interruption,
-original-credential sealed rejoin, complete attestation, two original handles and
-retained temporary storage. Both fixtures left zero residue; five production
-browser identities are unchanged. Two handles here belong to one authenticated
-principal; independent-principal interruption acceptance remains unproven.
-The actual SoyLei consumer remains disconnected with its original permissions.
-Its retry result/request ID was requested asynchronously; capability was not borrowed.
-A route conflict in the installed fixture was mislabeled unknown/effect_uncertain.
-Source now emits service_tab_route_mismatch at child_admission with no_effect and
-specific routing recourse. Four guard, 28 failure/journal and 95 routing tests pass;
-fmt, workspace clippy and journal/dashboard checks pass. Test build took 255s.
-This classification repair is not installed. Private installed-700ffa8a-a1-ax/
-indexes the proof and gap. Next: exact-candidate classification acceptance and
-independent-principal recovery, using any original-consumer retry evidence received.
-Installed handoff/input acceptance and zero-exit doctor remain at f5553843.
-A1/A3/A4/AX remain OPEN. Keep the maintenance timer inactive pending A1–A3.
+Outcome progress: two independently authenticated clients now pass original-handle
+recovery after disposable host interruption, in headless and private headed modes.
+The installed 700ffa8a failed Bob diagnostics after Alice recovered (DjLg8e).
+Diagnostics searched Alice's single-target retained connection without invoking
+existing exact-target recovery. The repair reuses its child authorization and
+physical identity fences, preserving state-only diagnostics without a connection.
+Candidate fixtures retained-unit-sim-3rORZJ and retained-unit-sim-L7C5Zt pass both
+clients' diagnostics, complete attestation, control, foreign denial without effects,
+unchanged physical target census and writable retained temporary storage. Cleanup
+left zero residue; five production browser identities are unchanged. The plan now
+explicitly requires distinct authenticated principals, not two handles for one.
+Optimized candidate build took 148s; format, workspace clippy (24s), and diff checks
+pass. Private independent-clients-700ffa8a/repair-control.json binds candidate hash,
+source patch, driver, first failure and both acceptance receipts. This repair and
+39fa614f's precise route-conflict classification are not installed. Production
+remains 700ffa8a with its accepted local durable-link/input journey and doctor.
+Original SoyLei reconnect remains unverified; its own retry/request ID is pending.
+Next: qualify and publish the combined repair batch, then original-consumer and
+remaining A1/A3/A4/AX acceptance. Keep the maintenance timer inactive pending A1–A3.
 
 ### Current installed identity
 
