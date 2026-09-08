@@ -398,6 +398,11 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 ## Policy Re-read Triggers
 
+- Before substantive bug hunting or feature work, read policies
+  `0028-goal-execution-governance.md`, `0042-code-testing-discipline.md`, and
+  `0045-model-selection-and-calibration.md` for delivery bounds, batch validation,
+  and economical task routing; read `0021-subagent-workflow-optimization.md`
+  when considering delegation. These apply to ongoing continuations too.
 - re-read planning-related policy before opening, revising, or closing a substantive plan
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete

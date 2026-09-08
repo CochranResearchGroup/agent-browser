@@ -24,6 +24,7 @@
 
 ## Repair Batch Validation
 
+- This section applies equally to bug repairs and feature implementation.
 - Run required integration gates at the completed repair batch or governed
   execution boundary, not after each intermediate custody commit. Use focused
   checks while repairing a coherent batch; record full gates as pending and do
@@ -36,6 +37,31 @@
 - Prose-only changes need relevant documentation, link, and contract checks,
   not application suites. Executable configuration, schemas, and test-selection
   logic still require checks for their code impact.
+
+## Fixture And Build Economics
+
+- Before an expensive replay, rehearse the fixture's setup, identity checks,
+  assertion and cleanup at the cheapest useful layer. Verify that the oracle
+  recognizes known-good behavior and rejects the intended failure. Syntax and
+  path checks should precede browser launches and production replacement.
+- Compare relevant fixture conditions with the failing workflow: origin,
+  permissions, process command-line format, namespace, profile, transport and
+  lifecycle. A data-origin download refusal or an argv parsing mistake is not
+  automatically a product bug. Change one causal variable when possible and
+  state attribution limits when several variables change.
+- A harness failure consumes the same milestone allowance as a product failure.
+  Repair the harness locally before another full replay. Do not repeatedly
+  deploy the product to discover test setup errors. Follow policy 0028's
+  cumulative stop and delivery-assessment rules.
+- Keep one acceptance matrix for the implementation batch: requirement,
+  evidence, source/binary identity, scope and remaining gap. Reuse valid evidence
+  when its covered behavior and dependencies have not changed, with an explicit
+  impact rationale. Never present older-binary results as final-installed proof
+  when the acceptance contract requires that exact artifact.
+- Use focused checks during implementation and the required gates once at the
+  completed batch boundary. Rebuild only when executable inputs changed or a
+  required artifact is missing; documentation checkpoints alone do not justify
+  recompilation. Reserve the full release build for production qualification.
 
 ## Adoption Notes
 

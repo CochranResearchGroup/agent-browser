@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 271 | 2026-09-08
+## Turn 272 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed f8161fd1, including 028597ea's download failure classification repair,
@@ -29,6 +29,14 @@ its original data-origin fixture failure remains narrowed to tab/origin state.
 Headless and headed cold CLI reopen evidence remains in Bk7rtr and KTEIFz.
 Plan0160 remains OPEN: original consumer recovery and remaining A1/A3/AX
 acceptance must precede A4's scheduled cycles and controlled restart.
+
+Policy follow-up requested after the repeated ten-hour runs: policies 0028,
+0042 and 0045 now require delivery-cost assessment, early external-gate checks,
+batched validation and provisional economical routing for bugs and features.
+AGENTS routes future work to them. Bounded worker economical_routing supplied
+0045's draft (requested gpt-5.6-luna/medium; effective model and cost unreported);
+primary reviewed the diff. Goal-policy audit and link/whitespace checks pass.
+This is policy-only; automated stopping and model savings remain unverified.
 
 ### Current installed identity
 

@@ -141,6 +141,55 @@
   that can be checked locally. Keep this rationale in the existing checkpoint,
   not a new approval document. All successors inherit cumulative goal bounds.
 
+## Delivery Efficiency For Bugs And Features
+
+- Apply these rules to investigations, feature implementation, integration,
+  and operational repair. Optimize for usable outcomes, not activity volume.
+  The Plan0160 runs produced installed improvements but left the leading
+  consumer acceptance unresolved after repeated ten-hour runs. Successful
+  builds, fixture repairs and documentation did not justify that elapsed cost.
+- Before sustained work, identify the smallest useful end-to-end outcome,
+  its observable acceptance check, and external dependencies. Check early
+  whether the original client, credentials, environment or operator evidence
+  needed for acceptance is available. Request missing input then; continue
+  independent work without pretending a synthetic substitute closes that gate.
+- For debugging, state the observed failure and a discriminating next check.
+  For features, implement one usable path through the intended integration
+  boundary before broad polish. In both cases, distinguish product defects,
+  fixture defects, environmental failures and unavailable inputs before editing.
+- Use the existing control record, not another planning document. In addition
+  to the overall ceiling, assess delivery economics at least once per 60 minutes
+  of sustained work: what became usable, what remains on the critical path,
+  cumulative elapsed time, and expensive builds/publications consumed. Report
+  measured model cost when available; otherwise label token/time proxies.
+  This assessment does not renew the allowance or override the earlier
+  30-minute/two-checkpoint no-outcome threshold.
+- Check the numeric overall ceiling at every material checkpoint. An absent
+  ceiling is a planning defect to correct before sustained execution, not an
+  unlimited allowance. If it has been exceeded, preserve the result and report
+  the overrun; do not start a fresh investigation or build under a renamed unit.
+  A user-specified time limit takes precedence over local defaults.
+- At the no-outcome threshold, stop the failing tactic. Do not substitute
+  more tests, a new fixture name, extra policy work, a smaller unrelated fix,
+  or another model for the blocked deliverable. Continue only an independently
+  useful in-scope outcome with evidence that it can advance within the remaining
+  allowance; otherwise surface the exact missing input and incomplete result.
+  Finishing a side task does not reset accounting for the original milestone.
+- Consolidate known defects and feature changes into one qualified candidate.
+  Default to one full release build and one production replacement per completed
+  implementation batch. A further build or replacement needs a demonstrated
+  source defect or required acceptance gap, an explicit reason cheaper checks
+  cannot resolve it, and remaining cumulative allowance. Record that decision
+  in the current checkpoint; do not manufacture a new approval gate.
+- Record only material execution changes in the runbook. Preserve detailed
+  receipts by reference. A status refresh is not a new implementation milestone,
+  and repeatedly refreshing a monitor paused for acceptance is not progress
+  toward unattended operation. Follow policy 0043's 200-line compaction rule.
+- Close out with separate statements of what is committed, what is installed
+  or integrated, what a real user can now do, and what remains unverified.
+  Report the time spent and whether the leading objective advanced. Neither
+  a long run nor a long fix list earns a completion claim.
+
 ## Adoption Notes
 
 Use this module for repos that run `/goal`, unattended campaigns, multi-session
