@@ -4,38 +4,40 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 247 | 2026-09-07
+## Turn 248 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker reduction: isolated finalization followed by stale health reconciliation
-reproduced a completed acquisition with pending display and route records.
-Source now compares each display/route against the probe baseline before merging,
-preserving newer custody. A fresh probe still publishes genuine health changes.
-Regression failed before repair; all 70 service-health tests pass after it.
-Fmt and workspace clippy pass. Two optimized test builds took 241 and 251 seconds;
-the passing tests took 3.93 seconds. Repair is not installed; no viewer retry ran.
-Private `publication-a18d235b/reconciliation-merge-repair.json` indexes proof.
-Next: qualify the repaired candidate, then original-link recovery and input.
-The test proves a matching source defect, not the historical production writer.
-Prior `bd668544` preserves three viewer failures and the inconsistent live state.
-Actual consumer remains disconnected; its recovery and A1–A4/AX remain OPEN.
-Five production browsers remain preserved; maintenance timer stays disabled.
-Earlier native effort: five optimized builds/replays, one release build (607s),
-one further CI remote-headed fixture and two exact-release lifecycle fixtures.
+Blocker reduction: stale display/route reconciliation repair `7b00d6a0` is installed.
+Regression failed before repair; 70 service-health tests, fmt and clippy pass.
+Exact release headless and private remote-headed lifecycle checks both pass with
+zero residue. Release build took 603 seconds; two preceding test builds took 492s.
+First activation omitted a template and rolled back safely. Corrective activation
+validated files before host stop and preserved all five browsers, storage and tabs.
+Original synthetic handle still has complete attestation and successful control.
+One post-repair viewer attempt failed before input: recovery selected display :12
+instead of retained :14; `route_display_owner_unproven` now includes request ID,
+HTTP status and detailed ownership evidence. Compensation preserved the browser.
+Doctor exits 1: operator journey unproven and monitor stale; lease warnings advisory.
+Next: isolated retained-route selection replay. Both route-selector helpers reject
+orphaned retained routes, allowing fallback. No more live retries in this window.
+Private `publication-7b00d6a0/acceptance-checkpoint.json` indexes current evidence;
+activation is under `publication-7b00d6a0-correction`. Prior failures remain intact.
+Actual consumer recovery and A1–A4/AX remain OPEN; maintenance timer disabled.
+Earlier native and viewer effort remains recorded at checkpoint `bd668544`.
 
 ### Current installed identity
 
-- Source: `6140e35bb34bd4a2163248f9afa672f36f451770`; code repair `a18d235b`.
-- Generation: `0.28.0-8194a64b02ef-c65cd6d981c3`.
-- Binary SHA256: `8194a64b02ef329eb3a8b52e232a3695225884f8ac01f345b7977ece25160cec`.
-- Support SHA256: `c65cd6d981c3b400f8ec4a4bb39f287cf95cb4e7d1640c41f6053404a9e674f8`.
-- Host PID28700; activation and maintenance preserved five exact browser identities
+- Source: `7b00d6a07b98f4ebd8ac1c1c35b25cfd2c17626c`.
+- Generation: `0.28.0-b5c3fb971ec8-016a21729553`.
+- Binary SHA256: `b5c3fb971ec88747fd026b3a171e575becccfe4076aa8d8f026e3cff56495343`.
+- Support SHA256: `016a217295535207df181119e8b19bbde2a64e4cb89af8184b875bb0340ed134`.
+- Host PID61036; activation and rollback preserved five exact browser identities
   and 30 open-tab custody records. The selector uses the supported relative path.
 - Original synthetic handle retains complete attestation and successful control.
 - General shared skill synced to source6140e35b with verified prior-version backup.
-- Immediate rollback `0.28.0-363187a5b467-a528aab8e554` is held with 32 verified backup files.
-- Earlier holds `0.28.0-2dea3ce66568-fef69948b43b` and
-  `0.28.0-367c10063188-27306db23f45` remain. Maintenance timer stays disabled.
+- Immediate rollback `0.28.0-8194a64b02ef-c65cd6d981c3` has 32 verified backup files.
+- Four rollback holds remain, including the three preceding generations already
+  retained at `bd668544`. Maintenance timer stays disabled.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -98,15 +100,14 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2–A4 and AX remain open
 
-- A2: `local-viewers-PVUWLr` passed two authenticated viewers, anonymous denial,
-  pixels and same-link reconnect, then stopped before input on moving geometry.
-  The initial 24-by-24 marker sample failed at rendered scale; the verified
-  8-by-8 crop passed. Third attempt failed resolution before reaching geometry.
-  Acquisition completed with pending display/orphaned route; cause not yet proven.
-  Earlier ac277ea0 full local input proof remains historical, not current acceptance.
-- A3: doctor exited 0 at the preceding checkpoint; maintenance preserved five
-  browsers and 30 open-tab records. Current presentation regression invalidates
-  any claim of full readiness. Seven lease warnings were advisory at that check.
+- A2: prior `local-viewers-PVUWLr` passed viewers and same-link refresh, then stopped
+  on moving input geometry. The next attempt exposed completed acquisition with
+  pending display and orphaned route. Stale reconciliation is now repaired.
+  Current `local-viewers-osNeRt` returned `route_display_owner_unproven` for :12;
+  the retained browser is on :14. Request correlation and compensation are recorded.
+  Current operator journey and input remain unaccepted. Do not reuse earlier passes.
+- A3: current doctor exits 1 for operator journey and stale monitoring. Original
+  handle control is proven separately. Seven lease warnings remain advisory.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
@@ -137,7 +138,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all three holds and original recovery storage. The installed GC repair now
+Keep all four holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
