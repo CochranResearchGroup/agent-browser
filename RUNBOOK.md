@@ -4,13 +4,13 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 276 | 2026-09-08
+## Turn 277 | 2026-09-08
 
 Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
-Plan0160 remains OPEN; original consumer r3 evidence now identifies the refusal.
-Priority remains identity/reconnect, ownership dispositions, then unattended use.
+Plan0160 remains OPEN; original consumer reconnect/readiness is now verified.
+Next: remaining A1/AX and ownership dispositions, then A3/A4 readiness.
 Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
-Prior continuation ceiling: 20 minutes from Turn273; this r3 triage is read-only;
+Prior continuation ceiling: 20 minutes from Turn273; this r4 verification is read-only;
 no full release builds or production replacements. Prior ten-hour overruns remain
 reported cost, not a reset allowance; exact cumulative wall/model cost is unknown.
 Previous batch: one 623-second release build and one preserving installation.
@@ -23,12 +23,12 @@ attestation and matching installed response/job/event failure passed.
 Two-viewer pixels, trusted input and same-link reconnect passed in oXuJ7E.
 Doctor exited 0 after manual monitor refresh; timer remains inactive.
 Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
-Consumer r3 checksums and MCP/job match: profile_child_subject_mismatch.
-The original self-declared service/agent/task subject differs from credentialed
-codex-p0137; hashes confirm both. Default remains active shared-local with read
-permission. Original client should check access-plan without optional profileCapability,
-then diagnostics with its original labels/handle if permitted; stop on any refusal.
-No identity/lease/browser changes. Evidence: publication-028597ea/consumer-r3-diagnosis.json.
+Consumer r4 checksums, response/job and original r2 handle identity verified.
+Capability-free original self-declared client passed diagnostics with complete
+attestation and no missing proofs; target and installed host binary match.
+Access plan r129188 permitted reuse. This closes original-client reconnect/readiness.
+Disconnected after the request reflects request-scoped MCP, not failed recovery.
+Evidence: publication-028597ea/consumer-r4-acceptance.json and incident0156 r4 section.
 Installed Service release and raw HTTP tab_close each passed a three-target census:
 only the intended middle target closed; neighbors and final baseline survived.
 Conflicting selectors refused before effects with matching response/job/event.
@@ -74,7 +74,7 @@ host-death proof and unchanged subjects/permissions. Legacy repair subsequently
 used exact pre-publication custody plus a fresh producer census to disconnect
 one proven dead transport. Consumer permissions, owner/lease authority and all
 five browsers were preserved. See `legacy-connection-repair/` and Git `4c3d9156`
-for the detailed history. Actual consumer reconnect remains unverified.
+for the detailed history. Original consumer reconnect now passes in r4.
 
 Earlier download, tab-scope and fixture-oracle evidence is retained at Git
 `bf4de8aa:RUNBOOK.md` and its private fixture links. Historical wrong-tab cause
@@ -140,8 +140,8 @@ retains the latest transaction rollback dependency. Current generation GC previe
 has zero candidates; unrelated older history stays reclaimable.
 
 Pending acquisition and orphaned route capacity retention now pass in source,
-isolated release and installed durable-link checkout. Actual consumer reconnect
-and artifact transport remain pending; preserve ordinary self-identification.
+isolated release and installed durable-link checkout. Original consumer reconnect
+passes in r4; consumer artifact acceptance remains pending.
 For Guacamole input, check refresh/reconnect, effective settings, and scoped
 browser/provider recovery in a disposable session before code diagnosis.
 Do not rebuild without a new demonstrated source defect. After A1–A3 pass,

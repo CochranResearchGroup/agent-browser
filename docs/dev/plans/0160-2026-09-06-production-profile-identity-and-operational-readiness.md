@@ -69,10 +69,17 @@ Work in this order; the runbook holds current results and receipt pointers:
 
 | Priority | Remaining outcome | Decisive evidence and next action |
 | --- | --- | --- |
-| 1: A1/AX | Original consumer can reuse its existing identity and handle | Obtain its own diagnostics/reconnect result and request ID. Trace any refusal through response, job and event to the first failed proof. The consumer retry request is already pending. Another client's success or a synthetic rejoin cannot close this gate. |
+| 1: A1/AX | Original consumer can reuse its existing identity and handle | Obtain its own diagnostics/reconnect result and request ID. Trace any refusal through response, job and event to the first failed proof. Use the original-client evidence recorded in RUNBOOK.md. Another client's success or a synthetic rejoin cannot close this gate. |
 | 2: A1/AX | Exact-target release cannot silently close a different tab | Preserve incident 0156's unresolved historical attribution. Recover the serialized selector/build from existing evidence; separately qualify three disposable targets with an independent before/after target census. Never replay historical consumer identifiers. |
 | 3: A1/A3 | Remaining identity warnings and custody gaps have supported dispositions | Reuse the existing ownership-dispositions and acceptance matrices. Separate ordinary shared-local access from privileged reconciliation authority. A stale warning alone does not justify changing grants or leases. Identify any missing supported recovery surface as a concrete acceptance gap before coding. |
 | 4: A3, then A4 | Operational readiness survives unattended maintenance | Complete remaining A1/A3/AX evidence before enabling the timer. Then observe three actual scheduled cycles, a controlled restart and the next cycle with original handles and the same durable link. Manual monitor refreshes do not satisfy this. |
+
+Advance to the next unfinished row when its predecessor has accepted evidence
+in RUNBOOK.md. A request-scoped MCP connection may be disconnected after a
+successful original-handle read; judge recovery by the correlated response and
+complete attestation, not that state alone. Keep self-declared child continuity
+separate from registered-principal lease reconciliation: a credential naming a
+different subject cannot prove ownership of the original child.
 
 Keep accepted local A2 viewer/input/reconnect evidence. Repeat only the affected
 portion when a relevant change invalidates it. Keep the original consumer CSV
