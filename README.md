@@ -4816,6 +4816,13 @@ instructions without adding provider-specific logic to agent-browser. Run
 example contract plus the example dry-run modes, and run
 `pnpm test:service-composed-workflow-live` to prove the composed workflow
 against an isolated daemon and generic local HTML fixture.
+
+Download capture failures retain their specific code and require inspection before retry.
+Missing or canceled download events use `failure.axis=unknown`; they do not prove a
+profile lease or owner failure. Only explicit target or source-identity proof
+failures use `lifecycle_owner`. Preserve the original browser and inspect the
+browser download decision, event trace and artifact identity before changing policy.
+
 Browser-mode downloads (`captureMode: "browser"`) preserve existing context
 settings. Capture enables its own event subscription through a temporary empty
 context, which is disposed before the click. It matches the authorized frame and

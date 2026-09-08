@@ -166,7 +166,14 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.into(),
             code: code.into(),
-            axis: ServiceFailureAxis::LifecycleOwner,
+            // Missing/canceled download events do not establish an owner failure.
+            // Retain the specific download code without inventing a lease cause.
+            axis: match code {
+                "download_target_unproven" | "download_source_identity_unproven" => {
+                    ServiceFailureAxis::LifecycleOwner
+                }
+                _ => ServiceFailureAxis::Unknown,
+            },
             phase: ServiceFailurePhase::Finalize,
             // A combined transfer may already have uploaded or clicked. Never
             // advertise a safe blind replay after missing completion evidence.
@@ -870,6 +877,42 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn download_observation_failure_does_not_invent_an_ownership_denial() {
+        for code in [
+            "download_events_unavailable",
+            "download_event_unproven",
+            "download_event_ambiguous",
+            "download_canceled",
+            "download_completion_path_missing",
+            "download_artifact_path_unsafe",
+            "download_destination_exists",
+            "download_artifact_delivery_failed",
+            "download_click_uncertain",
+            "download_subscription_failed",
+            "download_subscription_cleanup_failed",
+        ] {
+            let failure = classify_service_failure(&format!("{code}: bounded diagnostic"));
+            assert_eq!(failure.axis, ServiceFailureAxis::Unknown);
+            assert_eq!(serde_json::to_value(&failure).unwrap()["axis"], "unknown");
+            assert_eq!(failure.code, code);
+            assert_eq!(failure.effect_state, ServiceEffectState::EffectUncertain);
+            assert_eq!(
+                failure.retry_disposition,
+                ServiceRetryDisposition::InspectBeforeRetry
+            );
+            assert_eq!(failure.recommended_action, "inspect_download_capture");
+            assert!(failure.hard_stops.iter().any(|stop| stop == "blind_retry"));
+        }
+        for code in [
+            "download_target_unproven",
+            "download_source_identity_unproven",
+        ] {
+            let failure = classify_service_failure(&format!("{code}: exact proof missing"));
+            assert_eq!(failure.axis, ServiceFailureAxis::LifecycleOwner);
+        }
+    }
 
     #[test]
     fn display_grant_cause_survives_browser_reservation_rollback_metadata() {

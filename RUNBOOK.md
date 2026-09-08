@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 264 | 2026-09-08
+## Turn 265 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed bf4de8aa after one 605-second release build and five exact-release
@@ -24,11 +24,18 @@ export button removed. A no-download probe proved the DOM click was untrusted
 and lacked activation. Isolated headed repeat uSUEFQ nevertheless completed both
 native downloads with the same click behavior and zero residue. Untrusted click
 alone does not explain the installed failure; no click-code change was made.
-The next diagnostic must distinguish the retained target's download decision from
-missing event delivery without resetting unknown policy. The response labels its
-axis lifecycle_owner despite complete attestation; this is not proof of a failed
-lease. No blind retry or new release build is justified yet. A1/A3/AX dispositions, original consumer CSV and
-reconnect, and A4 scheduled cycles remain open. Plan0160 is not complete.
+Instrumented capture now records Chrome receiving the attempt and dropping it
+before creating a DownloadItem: Download.Counts buckets 28 and 31 each rose by
+one, with no download events or handler exception. Chromium defines bucket 31
+as a content-setting/request-limiter drop. This narrows the cause; it does not
+identify the exact effective setting. Trace button cleanup passed.
+The source classifier now preserves download codes without falsely labeling
+missing/canceled events as ownership failures; explicit identity failures retain
+lifecycle_owner. All 16 focused tests, fmt and clippy pass. This fix is not installed.
+Next: establish the retained synthetic page's effective download restriction and
+supported recovery, preserving browser identity and unknown context settings.
+No blind retry or release build is justified by the missing event alone. A1/A3/AX,
+original consumer CSV/reconnect and A4 cycles remain open; Plan0160 is not complete.
 
 ### Current installed identity
 

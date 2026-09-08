@@ -1455,6 +1455,12 @@ the caller-owned recipe; agent-browser owns path allowlist checks, caps, trace
 linkage, selected file-name verification, compact download metadata, and
 optional diagnostics on failure.
 
+Download capture failures retain their specific code and require inspection before retry.
+Missing or canceled download events use `failure.axis=unknown`; they do not prove a
+profile lease or owner failure. Only explicit target or source-identity proof
+failures use `lifecycle_owner`. Preserve the original browser and inspect the
+browser download decision, event trace and artifact identity before changing policy.
+
 Browser-mode downloads (`captureMode: "browser"`) preserve existing context
 settings. Capture enables its own event subscription through a temporary empty
 context, which is disposed before the click. It matches the authorized frame and
