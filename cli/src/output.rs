@@ -6134,6 +6134,9 @@ Dashboard Retry connection can replace the exact terminated attempt after fresh
 ownership verification. It preserves live primaries, browsers and durable URLs;
 changed ownership and stale terminal retries are refused.
 Primary guards distinguish state/authority read failures from identity changes.
+A lock timeout pauses provider writes for at most three fresh proof attempts,
+100 ms apart. Changed ownership fails immediately; exhausted contention remains
+terminal. No cached proof authorizes writes during the pause.
 Primary termination records retain the typed cause, elapsed lifetime and
 route/session/display references in the private failure journal.
 Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it. The client rounds the wire value to nonnegative whole milliseconds so the integer-only receiver accepts high-resolution browser timings.

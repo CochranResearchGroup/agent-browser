@@ -3127,8 +3127,11 @@ pending state; provider availability alone does not make it ready.
 The same browser keeps its existing capacity slot through revalidation, including
 its scene generation and recovery lease. Missing capacity is not created.
 A primary guard failure retains a specific safe code: state or authority read
-timeout/unavailability is distinct from owner or binding change. Every guard
-rejection still ends the primary and requires reconciliation before another attempt.
+timeout/unavailability is distinct from owner or binding change. A lock timeout
+pauses provider writes while the guard tries fresh ownership proof at most three
+times, separated by 100 ms. No successful proof is cached. Changed ownership or
+other read failures end the primary immediately; exhausted contention ends it
+with the original typed cause. Explicit Retry remains available after repair.
 
 A rejected key is discarded and reported through the existing bounded recovery
 flow. Automatic recovery may request a fresh key from the same healthy primary;

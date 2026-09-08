@@ -4,32 +4,29 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 263 | 2026-09-08
+## Turn 264 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-A1–A4/AX remain OPEN. Explicit terminal-primary recovery is implemented;
-production is unchanged. Source e46d64af's directory-alias repair remains qualified
-but unpublished. Four focused tests, fmt/clippy, one optimized build and real
-Windows default/private-relative transfers passed; zero residue. Evidence:
-download-directory-alias/ and fixtures 9Rot2W/iTgbzq.
-The scoped Retry L4sk1e failed to restore an iframe without restarting browser
-or provider. The causal journal records guacamole_primary_state_lock_timeout
-at 08:13:28 UTC, occurrence 3131034f-05db-4743-b71f-6bce7fe3386e.
-The backend retains that closed primary; old Retry only reset frontend state.
-Explicit Retry now names the terminal occurrence and revalidates ownership before
-one replacement. Starting/live primaries coalesce; changed bindings and stale
-terminal IDs fail. The viewer obtains a fresh restricted key after recovery.
-Automatic resolution remains non-restarting. Recovery errors expose a journal
-occurrence ID. Browsers, profiles and durable URLs are preserved.
-Validation: 19 focused Rust primary tests, dashboard sharing/recovery and inspector
-action tests, dashboard production build, workspace clippy and fmt passed.
-The initial compile caught a missing repository type argument; corrected before
-passing. Provider-backed recovery remains unverified; custody is next.
-Then qualify the combined alias/recovery candidate before controlled publication.
-Recurring state-lock contention still needs disposition; usable Retry alone does
-not establish A1/A2 readiness. Installed source remains 12f55652; doctor last 0,
-five browsers/storage/33 tabs preserved, ten holds and inactive timer unchanged.
-Original SoyLei reconnect and CSV remain unverified.
+A1–A4/AX remain OPEN. Explicit Retry recovery 4c6864ef is pushed; production unchanged.
+Directory-alias repair e46d64af remains qualified but unpublished: focused tests,
+optimized build and real Windows default/private-relative transfers passed,
+zero residue. Evidence: download-directory-alias/ and fixtures 9Rot2W/iTgbzq.
+Read-only status reports six file-lock timeouts, zero process-mutex timeouts,
+recent exclusive holds 170–220 ms and snapshot holds 73–127 ms. Historical
+holder identity is missing; controller/handoff timings are correlation only.
+Evidence: primary-lock-diagnosis/status-locks.json and disposition.json.
+The guard now pauses provider writes on contention and tries fresh proof at most
+three times, 100 ms apart. No cached proof authorizes effects during the pause.
+Changed ownership and other errors terminate immediately; exhausted contention
+retains its typed terminal cause. Explicit Retry handles later recovery.
+All 21 focused primary tests, fmt and clippy passed. Native websocket coverage
+proves zero writes during pending proof and readiness after fresh proof; focused
+cases prove bounded exhaustion and immediate changed-owner rejection.
+Next: qualify the combined candidate and perform one controlled publication.
+Historical writer cause and production acceptance remain unproven. Installed
+source 12f55652, last doctor 0, five browsers/storage/33 tabs preserved, ten
+rollback holds and inactive timer unchanged. Original SoyLei reconnect/CSV and
+current installed input remain unverified.
 
 ### Current installed identity
 

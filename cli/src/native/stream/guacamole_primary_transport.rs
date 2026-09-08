@@ -270,6 +270,54 @@ mod tests {
     use tokio_tungstenite::tungstenite::protocol::Role;
 
     #[tokio::test]
+    async fn transient_lock_contention_cannot_write_until_fresh_proof_succeeds() {
+        let (client, server) = tokio::io::duplex(4096);
+        let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;
+        let mut server = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let proof = std::sync::Mutex::new(Some((entered_tx, release_rx)));
+        let mut owner = PrimaryTask::spawn(
+            client,
+            Arc::new(move || {
+                if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err("guacamole_primary_state_lock_timeout");
+                }
+                if let Some((entered, release)) = proof.lock().unwrap().take() {
+                    let _ = entered.send(());
+                    release
+                        .recv_timeout(Duration::from_secs(2))
+                        .map_err(|_| "fixture_proof_not_released")?;
+                }
+                Ok(())
+            }),
+        );
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000001;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        {
+            let message = server.next();
+            tokio::pin!(message);
+            assert!(
+                matches!(futures_util::poll!(&mut message), std::task::Poll::Pending),
+                "provider received an effect while ownership proof was pending"
+            );
+        }
+        release_tx.send(()).unwrap();
+        owner.ready().await.unwrap();
+        assert!(matches!(owner.status(), PrimaryStatus::Ready(_)));
+        owner.close().await;
+    }
+
+    #[tokio::test]
     async fn slow_authority_read_does_not_block_other_dashboard_work() {
         let (client, server) = tokio::io::duplex(4096);
         let client = WebSocketStream::from_raw_socket(client, Role::Client, None).await;

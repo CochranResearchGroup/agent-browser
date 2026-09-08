@@ -15,10 +15,24 @@ pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static st
 /// Cancellation can leave only a read running; the caller must await admission
 /// before issuing any provider effect. No successful result is cached.
 pub(super) async fn check_primary_authority(guard: &PrimaryGuard) -> Result<(), &'static str> {
-    let guard = guard.clone();
-    tokio::task::spawn_blocking(move || guard())
-        .await
-        .map_err(|_| "guacamole_primary_authority_task_failed")?
+    // Contention is absence of a read, not evidence of a changed owner. Keep
+    // provider effects paused while attempting fresh proof at most three times.
+    // Other failures remain terminal on their first observation.
+    for attempt in 0..3 {
+        let guard = guard.clone();
+        let result = tokio::task::spawn_blocking(move || guard())
+            .await
+            .map_err(|_| "guacamole_primary_authority_task_failed")?;
+        match result {
+            Err(
+                "guacamole_primary_state_lock_timeout" | "guacamole_primary_authority_lock_timeout",
+            ) if attempt < 2 => {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            _ => return result,
+        }
+    }
+    unreachable!("the final authority attempt always returns")
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -593,6 +607,46 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn contention_pauses_effects_until_fresh_proof_and_never_retries_changed_ownership() {
+        use std::sync::{Arc, Mutex};
+        for (results, expected, reads) in [
+            (
+                vec![Err("guacamole_primary_state_lock_timeout"), Ok(())],
+                Ok(()),
+                2,
+            ),
+            (
+                vec![Err("guacamole_primary_authority_lock_timeout"); 3],
+                Err("guacamole_primary_authority_lock_timeout"),
+                3,
+            ),
+            (
+                vec![
+                    Err("guacamole_primary_state_lock_timeout"),
+                    Err("guacamole_primary_owner_stale"),
+                    Ok(()),
+                ],
+                Err("guacamole_primary_owner_stale"),
+                2,
+            ),
+            (
+                vec![Err("guacamole_primary_state_unavailable"), Ok(())],
+                Err("guacamole_primary_state_unavailable"),
+                1,
+            ),
+        ] {
+            let remaining = Arc::new(Mutex::new(std::collections::VecDeque::from(results)));
+            let total = remaining.lock().unwrap().len();
+            let observed = remaining.clone();
+            let guard: PrimaryGuard =
+                Arc::new(move || observed.lock().unwrap().pop_front().unwrap());
+            let result = check_primary_authority(&guard).await;
+            assert_eq!(result, expected);
+            assert_eq!(total - remaining.lock().unwrap().len(), reads);
+        }
     }
 
     #[test]
