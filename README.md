@@ -673,6 +673,9 @@ the current tab whose URL still matches the recorded intent. It does not
 navigate, open a replacement target, relaunch the browser, or change providers.
 The dashboard stays on the durable URL and waits for a matching authenticated
 presentation generation before rendering.
+Recovery retains the known route and display when current-boot browser ownership
+matches, even if presentation records are pending or orphaned. Physical display
+ownership and visibility are verified before the view becomes ready.
 The durable handoff sidecar keeps the highest recorded presentation generation
 when an older service writer saves stale state, so concurrent runtime updates
 cannot erase newer ready presentation evidence.

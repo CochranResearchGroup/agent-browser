@@ -219,6 +219,10 @@ matches the recorded intent. Normal resolution does not navigate, open a
 replacement target, relaunch the browser, change providers, or redirect to a
 raw provider URL.
 
+Recovery retains the known route and display when current-boot browser ownership
+matches, even if presentation records are pending or orphaned. Physical display
+ownership and visibility are verified before the view becomes ready.
+
 The dashboard waits for a ready presentation receipt whose generation,
 dashboard deployment, logical browser, daemon owner generation, process
 identity, target, and requested provider match the current resolution. A

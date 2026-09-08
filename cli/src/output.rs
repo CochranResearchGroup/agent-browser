@@ -5686,6 +5686,9 @@ receipt. Durable-handoff resolution prepares the exact retained owner lane
 before using its saved HTTP port after a runtime-host restart. Failed preparation
 returns durable_handoff_owner_prepare_failed before forwarding the request.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
+Recovery preserves its known route and display across pending or orphaned
+presentation when current-boot custody matches; physical ownership and visibility
+must still pass before the view is ready.
 Explicit ownership refusals remain failed requests requiring inspection.
 Workstation gc remains available as a
 reviewed operator operation. It retains the selected generation, exact live-process

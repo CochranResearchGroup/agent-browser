@@ -581,6 +581,9 @@ presentation. If the recorded CDP target ID expired, it may bind the current
 tab whose URL still matches the recorded intent. It does not navigate, open a
 replacement target, relaunch the browser, change providers, or redirect to a
 raw provider URL. A ready result
+requires physical display ownership and visibility proof. Recovery retains the
+known route and display when current-boot browser ownership matches, including
+pending or orphaned presentation records. The ready result
 includes `presentationGeneration` and a matching `presentationReceipt`; keep
 provider route, embed, and health URLs out of external clients. The authenticated
 dashboard removes those infrastructure-only values from durable-handoff resolve

@@ -4,26 +4,25 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 248 | 2026-09-07
+## Turn 249 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker reduction: stale display/route reconciliation repair `7b00d6a0` is installed.
-Regression failed before repair; 70 service-health tests, fmt and clippy pass.
-Exact release headless and private remote-headed lifecycle checks both pass with
-zero residue. Release build took 603 seconds; two preceding test builds took 492s.
-First activation omitted a template and rolled back safely. Corrective activation
-validated files before host stop and preserved all five browsers, storage and tabs.
-Original synthetic handle still has complete attestation and successful control.
-One post-repair viewer attempt failed before input: recovery selected display :12
-instead of retained :14; `route_display_owner_unproven` now includes request ID,
-HTTP status and detailed ownership evidence. Compensation preserved the browser.
-Doctor exits 1: operator journey unproven and monitor stale; lease warnings advisory.
-Next: isolated retained-route selection replay. Both route-selector helpers reject
-orphaned retained routes, allowing fallback. No more live retries in this window.
-Private `publication-7b00d6a0/acceptance-checkpoint.json` indexes current evidence;
-activation is under `publication-7b00d6a0-correction`. Prior failures remain intact.
-Actual consumer recovery and A1–A4/AX remain OPEN; maintenance timer disabled.
-Earlier native and viewer effort remains recorded at checkpoint `bd668544`.
+Blocker reduction: isolated replay reproduced the retained-route selector dropping
+an orphaned route with a pending display. The existing acquisition planner already
+supports same-owner recovery; the earlier selector prevented it from seeing :14.
+Source now retains that route, including an available pool entry naming its display,
+only when current-boot browser/display/route custody matches. Five foreign or stale
+cases refuse unchanged. The real planner selects the retained display and still
+requires physical visibility proof; selection never marks pending state ready.
+Regression failed before repair; 169 remote-view tests, fmt, clippy and docs pass.
+Two optimized test builds took 253/255s; the passing group took 0.11s.
+Repair is not installed. Private `retained-route-selection-repair.json` indexes proof.
+Next: qualified candidate build/publication, then original durable-link recovery.
+Production remains `7b00d6a0`: original handle control and attestation pass, but
+remote-view recovery refuses wrong display :12. Current doctor is not accepted.
+No live retry occurred during this source repair. Actual consumer recovery and
+A1–A4/AX remain OPEN; preserve five browsers and keep the maintenance timer disabled.
+Prior installation, rollback and cumulative effort remain at `92be586c`.
 
 ### Current installed identity
 
