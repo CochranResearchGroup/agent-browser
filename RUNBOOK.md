@@ -4,49 +4,40 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 270 | 2026-09-08
+## Turn 271 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Installed bf4de8aa after one 605-second release build and five exact-release
-qualification cases. The alias, explicit Retry and bounded ownership-read repairs
-passed 21 focused Rust tests, dashboard gates, fmt and clippy. Qualification
-covered independent headless/headed clients, causal refusals, Windows Downloads
-and private relative aliases; cleanup zero. Evidence: publication-bf4de8aa/.
-Production replacement preserved five original browsers, recovered storage and
-33 tab records. Only the synthetic handle's connectionInstanceId changed.
-Original-handle attestation remains complete. Maintenance removed nothing;
-doctor exits 0. Eleven rollback holds remain and the timer is inactive.
-Two authenticated viewers, synthetic pixels, same-link reconnect and trusted
-mouse/keyboard input passed in local-viewers-txWCsl. Counters advanced 14 to 15;
-no explicit Retry was needed and no new primary terminal event was observed.
-Original data-origin CSV failed. HTTP-origin CSV now passes in a temporary owned
-tab of the same retained production browser: 24 verified bytes, original handle
-attestation preserved, temporary tab closed, five production identities intact.
-Evidence: publication-bf4de8aa/normal-origin-check/acceptance.json. Context policy
-unchanged; tab/origin restriction and original consumer export remain unproven.
-Instrumented capture now records Chrome receiving the attempt and dropping it
-before creating a DownloadItem: Download.Counts buckets 28 and 31 each rose by
-one, with no download events or handler exception. Chromium defines bucket 31
-as a content-setting/request-limiter drop. This narrows the cause; it does not
-identify the exact effective setting. Trace button cleanup passed.
-The source classifier now preserves download codes without falsely labeling
-missing/canceled events as ownership failures; explicit identity failures retain
-lifecycle_owner. All 16 focused tests, fmt and clippy pass. This fix is not installed.
-Source fix pushed at 028597ea. Cold CLI reopen passes headless (Bk7rtr) and
-headed with fill/click (KTEIFz); same profile and exact process exit verified.
-Fresh doctor exits 0 after one manual reconciliation refreshed stale monitoring;
-no generations removed, five browsers preserved, timer inactive. Evidence:
-current-readiness-20260908/. Original consumer handle remains disconnected;
-its own retry was requested. Consumer recovery and A1/A3/AX before A4 stay open.
+Installed f8161fd1, including 028597ea's download failure classification repair,
+after one 623-second release build. Exact headless/headed qualification preserved
+two independently authenticated clients across host interruption, with ownership
+denials and matching response/job/event failure evidence. No fixture residue.
+Production replacement preserved five browsers, recovered storage and 33 tab
+custody rows. Subsequent connection IDs refreshed for two tabs; subjects,
+permissions and all other compared custody fields remained unchanged.
+The original synthetic handle passes complete attestation. A real installed
+missing-download response now reports axis unknown and matches its job/event;
+explicit identity failures retain lifecycle_owner. Shared skill matches install.
+Two authenticated viewers, pixels, same-link reconnect and trusted mouse/keyboard
+pass in local-viewers-oXuJ7E. Doctor exits 0 after refreshing stale monitoring.
+The previous generation is retained for rollback; maintenance timer is inactive.
+Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
+An existing SoyLei p0143 client successfully snapshotted its same retained tab
+through new host PID27737. This is observed client activity, not impersonation.
+The separate original Plan0137 handle remains disconnected; its own retry is pending.
+Earlier normal-origin CSV transport passed in the same retained browser on bf4de8aa;
+its original data-origin fixture failure remains narrowed to tab/origin state.
+Headless and headed cold CLI reopen evidence remains in Bk7rtr and KTEIFz.
+Plan0160 remains OPEN: original consumer recovery and remaining A1/A3/AX
+acceptance must precede A4's scheduled cycles and controlled restart.
 
 ### Current installed identity
 
-- Source: `bf4de8aa14b91bfb1596da89f545fb79516a8961`; host PID32075.
-- Generation: `0.28.0-b69c4e5a4a60-31faac73c7ec`.
-- Binary SHA256: `b69c4e5a4a600ebc75be8869d662fc8fc7fd5633169380e804c52754d4bf7b18`.
-- Support SHA256: `31faac73c7ecd0d6f0b2f0b79485446a23f5b78f879edcb383093148124ae5a7`.
+- Source: `f8161fd12584fb3f58222aa002c08fbfdcc5dabe`; host PID27737.
+- Generation: `0.28.0-0df77d7f2693-f452c93718a3`.
+- Binary SHA256: `0df77d7f26937d5ff1876b3acd78edd5ddd341e704a5787f8fbda51d6d1f4d4f`.
+- Support SHA256: `f452c93718a399a4ab0e109ae8adad7f4719c508f66ff37d68c56a47b13b24dc`.
 - Shared skill matches installed source; separate Service skill unchanged.
-- Immediate rollback `0.28.0-18b4c398fabd-051204a349a5` is held. Eleven holds remain.
+- Immediate rollback `0.28.0-b69c4e5a4a60-31faac73c7ec` is held; prior holds remain.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -99,8 +90,8 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: current txWCsl passes two viewers, pixels, same-link reconnect and trusted
-  input on bf4de8aa. Earlier 0LgorK/L4sk1e failures remain historical evidence.
+- A2: current oXuJ7E passes two viewers, pixels, same-link reconnect and trusted
+  input on f8161fd1. Earlier viewer failures remain historical evidence.
   Original target/attestation survive. Plan0158 external vantage remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
   Seven advisory lease findings remain; consumer recovery is not established by
@@ -135,7 +126,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all eleven holds and original recovery storage. The installed GC repair now
+Keep rollback holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
