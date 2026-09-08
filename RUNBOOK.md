@@ -4,40 +4,38 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 253 | 2026-09-08
+## Turn 254 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: two independently authenticated clients now pass original-handle
-recovery after disposable host interruption, in headless and private headed modes.
-The installed 700ffa8a failed Bob diagnostics after Alice recovered (DjLg8e).
-Diagnostics searched Alice's single-target retained connection without invoking
-existing exact-target recovery. The repair reuses its child authorization and
-physical identity fences, preserving state-only diagnostics without a connection.
-Candidate fixtures retained-unit-sim-3rORZJ and retained-unit-sim-L7C5Zt pass both
-clients' diagnostics, complete attestation, control, foreign denial without effects,
-unchanged physical target census and writable retained temporary storage. Cleanup
-left zero residue; five production browser identities are unchanged. The plan now
-explicitly requires distinct authenticated principals, not two handles for one.
-Optimized candidate build took 148s; format, workspace clippy (24s), and diff checks
-pass. Private independent-clients-700ffa8a/repair-control.json binds candidate hash,
-source patch, driver, first failure and both acceptance receipts. This repair and
-39fa614f's route classification are not installed. FDjLnM passes the combined
-candidate's MCP/HTTP causal correlation, typed no-effect route refusal, ordinary
-self-identified reconnect and exact-target release; zero residue. Production
-remains 700ffa8a with its accepted local durable-link/input journey and doctor.
-Original SoyLei reconnect remains unverified; its own retry/request ID is pending.
-Next: qualify and publish the combined repair batch, then original-consumer and
-remaining A1/A3/A4/AX acceptance. Keep the maintenance timer inactive pending A1–A3.
+Outcome progress: the combined diagnostics recovery and route-conflict tracing
+repair is installed. Exact release fixtures eVWPUj and B3UHsO passed independent
+original-client recovery through host interruption in headless and private headed
+modes; soNeb7 passed MCP/HTTP causal correlation, typed no-effect route refusal,
+self-identified reconnect and exact-target release. All left zero owned residue.
+The 588s release build followed passing format, clippy and optimized-candidate proof.
+One activation preserved five production browsers, their retained temporary storage
+and all 33 tab custody records. Only the original synthetic handle's connection ID
+rebound during acceptance; its subject and permissions are preserved.
+Local viewer hyfdJq passed two authenticated viewers, anonymous denial, original
+same-link reconnect and trusted mouse/keyboard input (12/12 to 13/13). Its client
+browser closed. Original-handle diagnostics remain complete. Doctor exits 0 after
+one supported maintenance pass: zero generations removed, zero processes terminated.
+Private publication-605c7f37/acceptance-checkpoint.json binds installed identity,
+exact-release and viewer evidence, custody readback and explicit remaining gaps.
+Seven lease advisories remain; the original SoyLei client is still disconnected.
+Its own retry/request ID and actual artifact transport remain unverified.
+Next: remaining A1 ownership dispositions and AX coverage, then A3/A4 acceptance.
+Keep the maintenance timer inactive pending A1–A3; full-plan acceptance remains OPEN.
 
 ### Current installed identity
 
-- Source: `700ffa8a0cbacea2498209824c1c6692af63a1e6`.
-- Generation: `0.28.0-71fb25483e8e-8ec84d66e29f`.
-- Binary SHA256: `71fb25483e8e6e7a956f73f3d64567bdfa9dd0a5def2285cffdea6fde6068184`.
-- Support SHA256: `8ec84d66e29f107a159f08aeffcfb67c373467df5b57874cab8602212ddc7fd0`.
-- Host PID22976. General shared skill matches 700ffa8a without another overwrite.
-- Immediate rollback `0.28.0-05b91a5ac531-7adec5040f93` has 32 verified backup files.
-- Six rollback holds remain. Maintenance timer stays inactive, linked, not enabled.
+- Source: `959ba7be49ab1b7e91516a664b8302c96585e583` (repair `605c7f37`).
+- Generation: `0.28.0-876be9773a40-302e30ec3287`.
+- Binary SHA256: `876be9773a40b0d190deb636876fd2b6e7e080b2c92c64db9d907690c321d4bb`.
+- Support SHA256: `302e30ec32877f650b5b1b2cb645cc974806898f61ed169434096ac444b1bc35`.
+- Host PID87735. General shared skill matches source; separate Service skill unchanged.
+- Immediate rollback `0.28.0-71fb25483e8e-8ec84d66e29f` is held; 10 backup files hashed.
+- Seven rollback holds remain. Maintenance timer stays inactive and linked.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -100,7 +98,7 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: local-viewers-ZP6oBA passes both viewers, anonymous denial, verified pixels,
+- A2: local-viewers-hyfdJq passes both viewers, anonymous denial, verified pixels,
   same-link reconnect and trusted mouse/keyboard input on the installed candidate.
   Exact display :14 and route guacamole:3 remain ready. This is local operator
   evidence; Plan0158 external-vantage acceptance is separate.
