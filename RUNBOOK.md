@@ -4,22 +4,22 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 243 | 2026-09-07
+## Turn 244 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker reduction only: `f3953d80` resolves terminal native session identity
-before generic defaults. Eight focused checks, fmt, clippy and docs pass;
-ambiguous directories and unsettled cleanup refuse. Shared-host fix: `7f9017a9`.
-Live reopen still fails: preliminary CLI `launch` selects `default` with unknown
-caller identity before navigation. Job `r948284` proves scheduler refusal;
-CLI error-only output drops its join. Reproduce this full preliminary launch and
-named-lane configuration locally before another replay. No more replay in this batch.
-Raw ready owner history was not failed close retirement: terminal cleanup is proven.
-Private receipt `native-cold-admission-repair-28d195b4.json` retains four optimized
+Outcome progress, scoped A1: `a18d235b` passes isolated native headless open,
+fill, click, readback, close, reopen, repeated interaction and second close.
+Preliminary launch preserves the exact profile, self-declared caller and first-tab
+custody. Rejected launch output now uses the structured response with its job ID.
+Final state: zero browsers/tabs; generation 2 terminal with satisfied cleanup.
+Six focused checks, fmt, clippy, docs and optimized build pass. Native repairs
+remain uninstalled; next qualify installed and remote-headed behavior.
+Private receipt `native-cold-admission-repair-28d195b4.json` retains five optimized
 builds/replays, three original setup failures and one debug startup timeout.
-Latest root `session-cold-lifecycle-qRUG55`: zero residue, five production identities preserved.
+Latest root `session-cold-lifecycle-8T08RJ`: zero residue, five production identities preserved.
 A1–A4/AX remain OPEN; consumer rejoin pending. Production remains `15cd8e5b`,
-both rollback holds retained, timer disabled, native repairs uninstalled.
+both rollback holds retained and timer disabled. Earlier raw ready owner history
+was not failed close retirement: the authoritative lifecycle proved terminal cleanup.
 
 ### Current installed identity
 
