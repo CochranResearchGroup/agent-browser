@@ -12,8 +12,7 @@ passive capture across a retained host restart. Chrome completed primary and pee
 files in the intended peer directory, but the reconnected Service received no
 completion events. Chromium BrowserHandler owns per-connection event subscription;
 SetDownloadBehavior enables it only while also replacing shared context policy.
-The earlier cXYVmA/SZ4bm8 prototypes used the subscribing connection and therefore
-did not prove Service recovery. Do not retry this design or publish the candidate.
+The earlier prototypes did not prove Service recovery. Do not publish that candidate.
 One optimized build and one namespace attempt were used; shared attempt skipped.
 Fixture cleanup reports zero owned residue; production was not changed.
 Private download-policy-c31a13ed/ retains the failed fixture, source/binary hashes,
@@ -25,10 +24,11 @@ The same fixture exposed a separate false-success defect: data.ok=false yielded 
 succeeded job and verified_effect. The focused repair preserves diagnostic data
 and makes response, job and event outcomes agree. Focused Rust regression, fmt,
 clippy and Service Client checks passed; installed qualification remains pending.
-Next: qualify the observation
-lifetime design before another capture build. Keep c31a13ed recovery uninstalled.
-Original SoyLei reconnect and CSV remain unverified. A1/A3/A4/AX remain OPEN;
-keep the timer inactive pending A1–A3. Production remains the candidate below.
+Independent prototype ddmnF7 received exact Page completion without policy mutation.
+Its read-only GUID/History lookup failed with database is locked; cleanup was zero.
+Next: qualify/install c31a13ed handle recovery plus 3052004d reporting independently.
+CSV capture, original SoyLei reconnect and A1/A3/A4/AX remain OPEN. Do not retry
+the withdrawn capture design. Keep the timer inactive pending A1–A3.
 
 ### Current installed identity
 
