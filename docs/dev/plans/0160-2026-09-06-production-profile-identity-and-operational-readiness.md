@@ -71,32 +71,32 @@ on 2026-09-08. All prior effort and publication counts remain consumed.
 
 ### Consolidated batch
 
-Deliver one accepted production configuration with usable retained ownership,
-remote-view continuity and diagnosable failures. Group the known remaining work
-around that outcome before another build or deployment:
+The next round has one acceptance target: an authorized caller can capture its
+own download in a shared browser while a peer downloads concurrently, without
+misattribution, changed peer policy, lost handle authority or unsafe recovery.
+This directly advances the remaining A1 file-transfer ownership boundary. It
+does not establish the cause of the consumer CSV cancellation or complete A1.
 
-- Reconcile the ownership/control matrix and all seven selected AX failure cases
-  against existing receipts. Preserve accepted original-client self-declared
-  recovery and local viewer/input evidence. Produce missing-proof lists rather
-  than replaying already accepted tests. Historical wrong-tab request/build
-  attribution remains a distinct unresolved investigation, not a current repro.
-- Resolve delivery of the committed process-only supervisor default: installed
-  override, binary template and future supported unit rewrite must have an
-  explicit consistent disposition. Freeze the binary, support and unit settings
-  accepted by the batch; an override alone does not mean source was published.
-- Qualify scheduled cadence, preservation of browser roots and descendants,
-  and original-handle/durable-link continuity through the guarded host restart.
-  Include the completed fixture cleanup in readiness evidence; do not repeat it.
-- Intake new consumer reports once against the frozen contract, including
-  note0160's native-confirm timeout. Determine whether they contradict accepted
-  A1/AX behavior before reopening that row or adding repairs to the batch.
-  Do not run consumer actions merely to investigate a report.
+Start from the existing retained-download fixture and source reconciliation,
+not a fresh inventory of every A1–A4/AX receipt. Establish one decisive failing
+case before editing product code. The legacy native path is the current suspect;
+the installed Service path is the comparison, not an assumed second defect.
+Use the same oracle for reproduction and acceptance. Combine repairs only when
+the reproduced failure demonstrates that they share this dependency.
 
-Keep actual consumer CSV acceptance explicit and separate from synthetic file
-transfer. Private payment/business operations, formal release, Plan0158 external
-vantage, provider polish and unrelated application cleanup remain outside this
-batch. Product recovery-surface gaps are evaluated against A1/A3, not silently
-removed from scope. The full goal stays open when a dependency cannot be resolved.
+A2 viewer proof, A3 installed supervisor/readiness proof and accepted lifecycle
+rows remain valid within their recorded candidate/configuration scope. Reopen
+only evidence invalidated by the actual change. All other A1 operations, seven
+AX reconstructions, A4 ordered restart continuity and final integration remain
+required in the full plan. They are deferred from this focused round, not waived.
+Historical wrong-tab attribution remains an existing-evidence investigation.
+
+Do not start another A4 observation window until its required A1 joins,
+configuration freeze and restart preconditions are ready and enough time remains
+for the entire ordered sequence. Preserve the existing three-cycle evidence;
+it is not completion of that sequence. Consumer payment/business operations,
+formal release, Plan0158 external vantage and provider polish remain outside
+this round. Keep actual consumer CSV acceptance separate from synthetic proof.
 
 ### Next ownership boundary after the installed modal repair
 
@@ -125,58 +125,63 @@ preserve legitimate exclusive/local CLI behavior and qualify both paths together
 Do not repair Service capture again without contradictory evidence. Keep actual
 consumer CSV, raw Playwright settings and artifact visibility as separate checks;
 no consumer export or shared production setting change is needed for this fixture.
-The current75-minute allowance and all prior attempt counts remain unchanged.
+The previous 75-minute allowance is exhausted; all prior attempt counts remain
+consumed. This planning amendment does not restart runtime execution.
 
 ### Delivery sequence and budget
 
-1. Reconcile existing evidence and new report scope in parallel with primary
-   candidate/configuration review. No browser launches are needed for receipt
-   extraction. Exit with one missing-proof list and a consolidated repair set.
-2. Decide once whether source changes are necessary. If so, qualify the combined
-   repair batch in isolation, rehearse fixtures and cleanup, and identify all
-   changed-surface gates before proposing a final build/publication. If not,
-   preserve the installed candidate and record why its evidence remains valid.
-3. Freeze the accepted configuration and checks. Require current doctor readiness,
-   available original-client inputs, no active-work conflict, correct stop mode,
-   and exact retained process/display census before the restart.
-4. Observe three consecutive normal five-minute cycles, perform one guarded host
-   restart, then observe the next cycle and verify original handles and durable
-   link. Check monotonic interval and timer provenance; manual refreshes do not
-   count. A failed precondition stops the dependent action, not unrelated work.
-5. Join full A1–A4/AX evidence, integrate through the existing branch strategy,
-   and report committed, installed, user-verified and incomplete outcomes.
+The operator requested this planning correction after reviewing the completed
+75-minute window. This turn changes the plan only. A proposed 45-minute runtime
+extension remains pending; it is not approved by this documentation amendment.
+The earlier window ran 15:14:25–16:29:25 UTC on 2026-09-08 and remains consumed.
 
-The completed documentation slice was bounded to 15 minutes and included one
-narrow worker, focused audit updates and commit/push. The subsequently approved
-75-minute execution window budgets the entire remaining sequence:
-15 minutes for parallel evidence reconciliation, 10 for configuration/preflight,
-30 reserved for A4 and 10 for integration/closeout, plus 10 contingency (75 total).
-This is the approved execution allowance, not a whole-plan finish guarantee.
-Compilation, publication, new source defects or
-missing consumer evidence may exceed it; disclose that at the first join before
-spending the reserved observation time. The pending-confirm reproduction is
-included in this batch because it contradicts reliable authorized interaction.
-Its isolated repair and selective gates precede any replacement. Normal graceful
-shutdown closes current-owned browsers; the process-only unit override proves
-OS signal scope only. Resolve preserving shutdown semantics or use an explicitly
-qualified preserving interruption path before the controlled production restart.
-The earlier requested 30 minutes covers
-A4 only. No successor, worker or model change resets cumulative bounds.
+If a 45-minute round is authorized, budget it as follows from the actual start:
+
+1. Minutes 0–8: primary adapts the existing retained-download fixture, confirms
+   its setup and cleanup, and runs one discriminating peer-interleaving case.
+   Freeze expected artifact identity, peer behavior and request-trace evidence
+   before observing the result. No broad evidence audit or new fixture framework.
+2. Minutes 8–23: if the product counterexample reproduces, assign its bounded
+   repair to Sol/Terra while the primary prepares the acceptance inputs and
+   publication preconditions. Use only the affected source and required gates.
+   If it does not reproduce, preserve that result and the unresolved hypothesis;
+   do not manufacture a repair or substitute an unrelated passing test.
+3. Minutes 23–40 are reserved for the same end-to-end acceptance case, required
+   build/install steps when justified and feasible, and exact cleanup. By minute
+   8 estimate these costs from existing build timings. By minute 23 stop adding
+   changes. If the complete delivery cannot fit, preserve the patch and decisive
+   evidence and report the unmet acceptance boundary; do not spend the reserve
+   on additional implementation or imply that an isolated pass is installed proof.
+4. Minutes 40–45: commit/push the coherent result and update the existing runbook
+   row once. State what the authorized caller can now do, what remains unproven,
+   elapsed time and rework. Do not start cadence observations or another defect.
+
+Allow at most one bounded fixture correction, within the first eight minutes,
+for a demonstrated setup problem. If the fixture still cannot reach the failing
+operation, report that exact obstacle and end the tactic. Do not expand the round
+into fixture infrastructure, policy writing or repeated evidence inventories.
+No worker, retry, successor or replacement fixture resets the total allowance.
+
+Normal graceful shutdown still closes current-owned browsers. Any required
+production replacement must use the already qualified preserving interruption
+path with current custody checks and existing authority; a process-only unit
+setting alone is not proof of preserving shutdown. If installation cannot fit,
+keep installed acceptance explicitly incomplete.
 
 ### Worker assignments
 
 | Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |
 | --- | --- | --- | --- |
-| Evidence reconciliation | Luna low/medium worker; deterministic extraction first | Existing Plan0160 receipts and notes; private evidence table draft only | One row per A1/AX case with identity, applicability and missing proof; no live calls or source edits; one pass, 15 minutes. Primary adjudicates before repairs. |
-| Fixture readiness | Independent Luna medium worker when a specific missing check is identified | Named existing fixture and its test only; explicit filenames assigned before launch | Rehearse setup/oracle/cleanup at cheapest layer; one bounded attempt, at most 10 minutes inside the evidence stage. No production effects or duplicate discovery. |
-| Bounded implementation, conditional | Sol/Terra medium worker after primary freezes a concrete defect and files | Exact disjoint source/test paths in the accepted repair set | Patch and decisive regression under remaining allowance; return after one failed attempt for diagnosis, no self-expanded investigation. |
-| Integration and operations | Primary, current strongest available model | Candidate disposition, ownership evidence, guarded runtime actions, runbook and final integration | Own critical path, conflicting-evidence decisions and completion; join worker evidence without repeating its investigation. |
+| Reproducer and acceptance | Primary | Existing retained-download fixture, transfer-boundary readback and exact operation receipts | One peer-interleaving oracle; setup, failing predicate and cleanup established within eight minutes. No full-matrix re-audit. |
+| Bounded repair, conditional | Sol/Terra medium worker | Primary supplies counterexample and exact paths in `browser_download.rs`, existing `service_download_artifact.rs` helper and necessary regression fixture; ownership assigned before edits | Minimal patch plus same-case regression; stop at minute 23 or first failed attempt needing a new diagnosis. No production effects. |
+| Mechanical support, optional | Luna low/medium worker only for an independent useful task | Exact receipt extraction or documentation synchronization named by primary; no source or acceptance decisions | Compact result within remaining stage budget. Do not spawn a standing evidence-inventory or fixture-redesign lane. |
+| Integration and operations | Primary | Worker patch, decisive evidence, required gates, current custody and runbook row | Prepare acceptance while worker implements; review actual diff/results without repeating investigation; own installation and final verdict. |
 
-Do not spawn all lanes by default. Start useful independent work when it can run
-alongside primary work; keep dependent steps and trivial extraction local. Use
-compact briefs, record actual handles, requested/effective model when available,
-accepted outputs, wall time and rework. Model mapping is provisional; no measured
-cost saving or automated budget enforcement is claimed.
+Use deterministic tools for trivial extraction. Delegate only when independent
+useful primary work can proceed alongside the worker. Record requested/effective
+model when available, accepted output and rework in the existing checkpoint;
+cheaper requested routing alone does not establish savings. This tightly coupled
+planning amendment needs no worker or new policy document.
 
 ### Evidence and exit
 
@@ -185,6 +190,21 @@ must identify missing evidence and next action; artifacts retain exact source,
 binary/support/configuration identity and applicable scope. New defects reopen
 only affected rows and required changed-surface gates. Neither doctor success,
 worker completion nor an accepted local viewer test closes the full plan.
+
+Round acceptance requires all of the following in the same case: the returned
+artifact belongs to the requested target/frame and download GUID; concurrent
+peer output and download policy remain intact; original caller/handle authority
+and owner/process/namespace checks hold; a denied or interrupted operation can
+be reconstructed from its returned request/job ID with the applicable cause and
+safe next action. Exercise the failure branch relevant to the reproduced defect,
+without claiming that this closes all seven AX cases. Record exact candidate and
+whether proof is isolated or installed. Preserve failed attempts.
+
+The success measure is that the blocked authorized operation becomes usable at
+its declared delivery boundary. Test count, document volume, worker completion
+and time spent are supporting accounting only. A disproved hypothesis changes
+the next action but is not a repaired workflow. Missing consumer inputs remain
+explicit; synthetic proof must not be relabeled consumer acceptance.
 
 Policy adoption feedback: local overrides of the pinned selector v0.1.24
 (source 9caf5708e5aa48cc0cf6264baa7065fc335d193e), retaining this repo's custom

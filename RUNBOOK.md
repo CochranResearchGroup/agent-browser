@@ -9,8 +9,11 @@ Keep at or below 200 lines under policy0043.
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 User approved 75 minutes, 15:14:25 to 16:29:25 UTC. No automatic extension.
 Execution and observation reached this checkpoint at16:17 UTC, within the allowance.
-Final closeout includes source reconciliation of the next download-ownership
-boundary; the full plan remains OPEN.
+The execution window has ended; the full plan remains OPEN. The subsequent
+planning-only amendment targets one shared-download ownership case using the
+existing fixture, conditional Sol/Terra repair and reserved acceptance time.
+A proposed 45-minute execution extension remains pending. Do not restart A4
+observation before its prerequisites and complete sequence budget are ready.
 Prior overruns and spent allowances remain consumed. Production replacement used
 one qualified combined candidate before the 15:49:25 activation cutoff. No formal
 release, consumer payment/CSV action, credential borrowing or unrelated cleanup.
