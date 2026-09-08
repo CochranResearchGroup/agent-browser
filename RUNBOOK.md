@@ -4,41 +4,38 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 257 | 2026-09-08
+## Turn 258 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Acceptance-changing evidence: product fixture retained-unit-sim-cGNiHA disproves
-passive capture across a retained host restart. Chrome completed primary and peer
-files in the intended peer directory, but the reconnected Service received no
-completion events. Chromium BrowserHandler owns per-connection event subscription;
-SetDownloadBehavior enables it only while also replacing shared context policy.
-The earlier prototypes did not prove Service recovery. Do not publish that candidate.
-One optimized build and one namespace attempt were used; shared attempt skipped.
-Fixture cleanup reports zero owned residue; production was not changed.
-Private download-policy-c31a13ed/ retains the failed fixture, source/binary hashes,
-withdrawn-integration.patch and service_download_artifact.rs. The failed capture
-integration and its user-facing claims were removed from the product worktree.
-Plan strategy now requires browser-lifetime observation with explicit policy
-custody, or an independent observation interface, before capture implementation.
-The same fixture exposed a separate false-success defect: data.ok=false yielded a
-succeeded job and verified_effect. The focused repair preserves diagnostic data
-and makes response, job and event outcomes agree. Focused Rust regression, fmt,
-clippy and Service Client checks passed; installed qualification remains pending.
-Independent prototype ddmnF7 received exact Page completion without policy mutation.
-Its read-only GUID/History lookup failed with database is locked; cleanup was zero.
-Next: qualify/install c31a13ed handle recovery plus 3052004d reporting independently.
-CSV capture, original SoyLei reconnect and A1/A3/A4/AX remain OPEN. Do not retry
-the withdrawn capture design. Keep the timer inactive pending A1–A3.
+Installed c31a13ed retained file-transfer handle recovery and 3052004d failure
+reporting from committed source c538f783. Exact-release headless/headed clients
+passed original-handle reuse, foreign denial and response/job/event failure joins;
+MCP/HTTP classification passed. One fixture expectation was corrected; first
+failure is retained. One release build (577 seconds), one activation, one viewer
+attempt. Five browsers, retained storage and 33 tab-custody records survived.
+Doctor exits 0 after one maintenance pass; no generations were removed.
+Remote-view acceptance FAILED: local-viewers-Jtt9lM showed both viewers initially,
+but same-link reload lost its iframe and substituted a different selected tab.
+The original target and handle remain live with complete attestation. No dashboard
+source changed in the installed batch; keep the ownership repair and held rollback.
+A focused source regression proves missing inventory was treated as stale-target
+replacement. The guard now waits for the same target; focused case and dashboard
+build pass. Full projection script has an independently reproduced HEAD frame-URL
+baseline failure. This dashboard repair is uninstalled and not fully qualified.
+Next: dispose that baseline failure and qualify the dashboard repair before a new
+candidate. A1/A2/A3/A4/AX remain OPEN; original consumer reconnect/CSV are unverified.
+Download investigation remains paused: Page events work independently, but the
+read-only History lookup locked. Do not reinstate withdrawn passive capture.
+Evidence: publication-3052004d/ and download-policy-c31a13ed/. Timer stays inactive.
 
 ### Current installed identity
 
-- Source: `959ba7be49ab1b7e91516a664b8302c96585e583` (repair `605c7f37`).
-- Generation: `0.28.0-876be9773a40-302e30ec3287`.
-- Binary SHA256: `876be9773a40b0d190deb636876fd2b6e7e080b2c92c64db9d907690c321d4bb`.
-- Support SHA256: `302e30ec32877f650b5b1b2cb645cc974806898f61ed169434096ac444b1bc35`.
-- Host PID87735. General shared skill matches source; separate Service skill unchanged.
-- Immediate rollback `0.28.0-71fb25483e8e-8ec84d66e29f` is held; 10 backup files hashed.
-- Seven rollback holds remain. Maintenance timer stays inactive and linked.
+- Source: `c538f783615c9c6068fe0697558b9c321098f5fd`.
+- Generation: `0.28.0-d0ffdb17d8e8-2ecb04e85f7d`; host PID48358.
+- Binary SHA256: `d0ffdb17d8e8573b3a313487bd099162ffc07a2582fac97381d6d94dada6116d`.
+- Support SHA256: `2ecb04e85f7d77435ae067384eb32a4de1b2355d574966d5963f4822e4035fa7`.
+- Shared skill matches installed source; pending dashboard guidance is not synced.
+- Immediate rollback `0.28.0-876be9773a40-302e30ec3287` is held. Eight holds remain.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -101,10 +98,10 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: local-viewers-hyfdJq passes both viewers, anonymous denial, verified pixels,
-  same-link reconnect and trusted mouse/keyboard input on the installed candidate.
-  Exact display :14 and route guacamole:3 remain ready. This is local operator
-  evidence; Plan0158 external-vantage acceptance is separate.
+- A2: local-viewers-hyfdJq passed on the previous generation. Current Jtt9lM
+  failed same-link reload despite initial pixels and correct resolver identity.
+  The synthetic target remains live; dashboard selection recovery is unresolved.
+  Plan0158 external-vantage acceptance remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
   Seven advisory lease findings remain; consumer recovery is not established by
   a green doctor. Keep their existing evidence-backed dispositions visible.
@@ -138,7 +135,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all seven holds and original recovery storage. The installed GC repair now
+Keep all eight holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 

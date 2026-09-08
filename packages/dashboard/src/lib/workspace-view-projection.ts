@@ -367,26 +367,29 @@ function projectBrowser({
   const frameUrl = stream ? viewStreamDashboardFrameUrl(stream, intent.dashboardHref) : null;
   const externalUrl = stream ? viewStreamExternalUrl(stream) : null;
   const authorityReady = authority.authoritySource !== "daemon-detection" || authority.lifecycle.live;
-  const canView = authorityReady && authority.presentationActionCeilings.view.allowed && canOpenViewStream(stream);
-  const canControl = authorityReady && authority.presentationActionCeilings.control.allowed && canOpenControlViewStream(stream);
   const tabSelection = selectTab(tabs, browser.id, intent.selection);
-  const readiness = projectReadiness({ authority, stream, canView });
+  const awaitingSelectedTarget = selected && tabSelection.selectionEvidence === "selected-missing";
+  const canView = !awaitingSelectedTarget && authorityReady && authority.presentationActionCeilings.view.allowed && canOpenViewStream(stream);
+  const canControl = !awaitingSelectedTarget && authorityReady && authority.presentationActionCeilings.control.allowed && canOpenControlViewStream(stream);
+  const readiness: ProjectedWorkspaceView["readiness"] = awaitingSelectedTarget
+    ? { state: "checking", reason: "Waiting for the selected tab to appear in refreshed inventory.", source: "authority", recoveryAction: null }
+    : projectReadiness({ authority, stream, canView });
   const projection: InternalProjectedWorkspaceView = {
     authoritySubjectKey: subjectKey,
     authorityPreservation: authorityLedger[subjectKey] ? "preserved" : "missing",
     authority,
     browser,
-    streamChoices: choices,
-    streamChoiceKeys: choices.map((choice, index) => streamKeys(choice, index)[0]),
-    stream,
+    streamChoices: awaitingSelectedTarget ? [] : choices,
+    streamChoiceKeys: awaitingSelectedTarget ? [] : choices.map((choice, index) => streamKeys(choice, index)[0]),
+    stream: awaitingSelectedTarget ? null : stream,
     selectionReason,
     tabSelection,
-    frameUrl,
-    externalUrl,
+    frameUrl: awaitingSelectedTarget ? null : frameUrl,
+    externalUrl: awaitingSelectedTarget ? null : externalUrl,
     routeKey: stream ? routeKey(stream) : null,
     routeSummary: viewStreamRouteSummary(stream),
     sharedRoute: false,
-    canEmbed: Boolean(stream && canEmbedViewStream(stream)),
+    canEmbed: !awaitingSelectedTarget && Boolean(stream && canEmbedViewStream(stream)),
     canView,
     canControl,
     readiness,
@@ -542,6 +545,17 @@ function selectTab(
   const selected = selection?.tabId
     ? rows.find((tab) => tab.id === selection.tabId || tab.targetId === selection.tabId || `target:${tab.targetId}` === selection.tabId)
     : null;
+  // Missing from one inventory snapshot does not prove a target is closed.
+  // Keep the explicit selection so a later poll can restore the same target.
+  if (selection?.tabId && !selected) {
+    return {
+      tab: null,
+      tabIndex: null,
+      recoveredFromStaleSelection: false,
+      staleSelectionId: selection.tabId,
+      selectionEvidence: "selected-missing",
+    };
+  }
   const liveRows = rows.filter(isLiveTab);
   const best = [...liveRows].sort((left, right) => tabScore(right) - tabScore(left))[0] ?? rows[0];
   const selectedLive = Boolean(selected && isLiveTab(selected));

@@ -390,6 +390,11 @@ For ordinary agent work on this workstation, prefer the service-owned hidden hea
 
 ### RDP handoff rules
 
+When a selected tab is temporarily absent from a dashboard inventory refresh,
+the dashboard preserves that tab's identity and waits for it to reappear before
+enabling its view or controls. It does not rewrite the selection to another tab
+based only on an incomplete inventory.
+
 Follow these rules whenever another person or agent must open the remote
 browser:
 

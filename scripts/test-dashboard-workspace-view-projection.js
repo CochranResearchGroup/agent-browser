@@ -90,6 +90,36 @@ assert.equal(canonical.selected.tabSelection.tab.id, 'live');
 assert.equal(canonical.selected.tabSelection.recoveredFromStaleSelection, true);
 assert.equal(canonical.selected.authority.inventoryClass, 'service-owned-controllable-browser');
 
+// A partial poll is not evidence that the selected target closed. Preserve the
+// explicit identity until it reappears instead of rewriting the URL to a peer.
+const retainedSelection = {
+  ...canonicalInput,
+  intent: { ...canonicalInput.intent, selection: selection({ browserId: 'browser-a', tabId: 'retained' }) },
+};
+const partialSelection = projectWorkspaceViews(retainedSelection);
+assert.equal(partialSelection.selected.tabSelection.tab, null);
+assert.equal(partialSelection.selected.canView, false);
+assert.equal(partialSelection.selected.canEmbed, false);
+assert.equal(partialSelection.selected.stream, null);
+assert.deepEqual(partialSelection.selected.streamChoices, []);
+assert.equal(partialSelection.selected.frameUrl, null);
+assert.equal(partialSelection.selected.canControl, false);
+assert.equal(partialSelection.selected.readiness.state, 'checking');
+assert.equal(partialSelection.selected.tabSelection.recoveredFromStaleSelection, false);
+assert.equal(partialSelection.selected.tabSelection.staleSelectionId, 'retained');
+assert.equal(partialSelection.selected.tabSelection.selectionEvidence, 'selected-missing');
+const refreshedSelection = projectWorkspaceViews({
+  ...retainedSelection,
+  sources: { ...retainedSelection.sources, serviceTabs: [
+    ...retainedSelection.sources.serviceTabs,
+    { id: 'retained', browserId: 'browser-a', targetId: 'retained-target', lifecycle: 'ready', url: 'https://example.test/retained' },
+  ] },
+});
+assert.equal(refreshedSelection.selected.tabSelection.tab.id, 'retained');
+assert.equal(refreshedSelection.selected.canView, true);
+assert.equal(refreshedSelection.selected.canControl, true);
+assert.equal(refreshedSelection.selected.tabSelection.recoveredFromStaleSelection, false);
+
 const unrouted = projectWorkspaceViews({
   ...canonicalInput,
   sources: {

@@ -654,6 +654,11 @@ agent-browser find role button click --name "Submit"
 
 ## RDP Remote-View Quick Start
 
+When a selected tab is temporarily absent from a dashboard inventory refresh,
+the dashboard preserves that tab's identity and waits for it to reappear before
+enabling its view or controls. It does not rewrite the selection to another tab
+based only on an incomplete inventory.
+
 Use `remote-view open` when an operator must see or control a browser through
 RDP or Guacamole:
 

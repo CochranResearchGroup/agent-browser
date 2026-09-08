@@ -25,6 +25,11 @@ Browser does not rewrite a provider or Guacamole origin into the dashboard-only
 
 ## Before you begin
 
+When a selected tab is temporarily absent from a dashboard inventory refresh,
+the dashboard preserves that tab's identity and waits for it to reappear before
+enabling its view or controls. It does not rewrite the selection to another tab
+based only on an incomplete inventory.
+
 When opening through `requestServiceRemoteViewOpen()`, pass the access plan's
 `browserId` and `sessionName` at the top level. The helper preserves daemon
 routing alongside matching handoff metadata. Nested action parameters alone
