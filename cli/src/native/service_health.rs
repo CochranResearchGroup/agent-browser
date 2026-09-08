@@ -2116,54 +2116,24 @@ pub fn merge_reconciled_service_state(
         }
     }
 
+    // Probes run outside the repository lock. A newer reservation, checkout,
+    // finalization or release owns the whole display/route record. Mixing stale
+    // health with newer custody can orphan a successfully completed acquisition.
+    // Defer that record to the next fresh probe instead of overwriting it.
     for (id, reconciled_allocation) in &reconciled.display_allocations {
-        let target_released_after_reconcile_started = target
-            .display_allocations
-            .get(id)
-            .is_some_and(|allocation| {
-                allocation.state == "released"
-                    && before
-                        .display_allocations
-                        .get(id)
-                        .is_some_and(|before_allocation| before_allocation != allocation)
-            });
-        if target_released_after_reconcile_started {
-            continue;
+        if target.display_allocations.get(id) == before.display_allocations.get(id) {
+            target
+                .display_allocations
+                .insert(id.clone(), reconciled_allocation.clone());
         }
-        target
-            .display_allocations
-            .insert(id.clone(), reconciled_allocation.clone());
     }
 
     for (id, reconciled_route) in &reconciled.remote_view_routes {
-        let target_route = target.remote_view_routes.get(id).cloned();
-        let target_released_after_reconcile_started = target_route.as_ref().is_some_and(|route| {
-            route.state == "released"
-                && before
-                    .remote_view_routes
-                    .get(id)
-                    .is_some_and(|before_route| before_route != route)
-        });
-        if target_released_after_reconcile_started {
-            continue;
+        if target.remote_view_routes.get(id) == before.remote_view_routes.get(id) {
+            target
+                .remote_view_routes
+                .insert(id.clone(), reconciled_route.clone());
         }
-        let target_authority_changed_after_reconcile_started = before
-            .remote_view_routes
-            .get(id)
-            .zip(target_route.as_ref())
-            .is_some_and(|(before_route, target_route)| {
-                target_route.controller_lease_id != before_route.controller_lease_id
-                    || target_route.controller_epoch != before_route.controller_epoch
-                    || target_route.viewer_lease_ids != before_route.viewer_lease_ids
-            });
-        let mut merged_route = reconciled_route.clone();
-        if target_authority_changed_after_reconcile_started {
-            let target_route = target_route.expect("changed route authority requires target route");
-            merged_route.controller_lease_id = target_route.controller_lease_id;
-            merged_route.controller_epoch = target_route.controller_epoch;
-            merged_route.viewer_lease_ids = target_route.viewer_lease_ids;
-        }
-        target.remote_view_routes.insert(id.clone(), merged_route);
     }
 
     for (id, reconciled_lease) in &reconciled.viewer_leases {
@@ -4360,6 +4330,69 @@ mod tests {
             renewed_target.browsers["browser-1"].active_session_ids,
             vec!["session-1".to_string()]
         );
+    }
+
+    #[test]
+    fn merge_reconciled_service_state_preserves_completed_acquisition() {
+        let before: ServiceState = serde_json::from_value(serde_json::json!({
+            "displayAllocations": {"display": {
+                "id": "display", "state": "pending", "routeIds": ["route"]
+            }},
+            "remoteViewRoutes": {"route": {
+                "id": "route", "state": "pending", "displayAllocationId": "display"
+            }},
+            "routePool": {"pool": {
+                "id": "pool", "routeId": "route", "state": "pending"
+            }},
+            "remoteViewAcquisitionLeases": {"acquisition": {
+                "id": "acquisition", "browserId": "browser", "sessionId": "session",
+                "routeId": "route", "displayAllocationId": "display",
+                "routePoolEntryId": "pool", "state": "pending", "phase": "reserved"
+            }}
+        }))
+        .unwrap();
+        // A health probe starts while acquisition is pending. Checkout completes
+        // before that probe writes its unchanged pending snapshot back.
+        let reconciled = before.clone();
+        let mut target = before.clone();
+        super::super::remote_view_finalization::finalize_route_bound_acquisition(
+            &mut target,
+            "acquisition",
+            &serde_json::json!({"routeBinding": {"launchDisplayName": ":14"}}),
+            "2026-09-08T03:34:52Z",
+        )
+        .unwrap();
+        let completed_display = target.display_allocations["display"].clone();
+        let completed_route = target.remote_view_routes["route"].clone();
+        let completed_pool = target.route_pool["pool"].clone();
+
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        assert_eq!(
+            target.remote_view_acquisition_leases["acquisition"].state,
+            "completed"
+        );
+        assert_eq!(target.display_allocations["display"], completed_display);
+        assert_eq!(target.remote_view_routes["route"], completed_route);
+        assert_eq!(target.route_pool["pool"], completed_pool);
+
+        // A later probe based on the completed state must still publish real
+        // health changes; preserving checkout is not permanent immunity.
+        let fresh_before = target.clone();
+        let mut fresh_reconciled = fresh_before.clone();
+        fresh_reconciled
+            .display_allocations
+            .get_mut("display")
+            .unwrap()
+            .state = "orphaned".into();
+        fresh_reconciled
+            .remote_view_routes
+            .get_mut("route")
+            .unwrap()
+            .state = "orphaned".into();
+        merge_reconciled_service_state(&mut target, &fresh_before, &fresh_reconciled);
+        assert_eq!(target.display_allocations["display"].state, "orphaned");
+        assert_eq!(target.remote_view_routes["route"].state, "orphaned");
     }
 
     #[test]

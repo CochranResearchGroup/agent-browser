@@ -4,24 +4,23 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 246 | 2026-09-07
+## Turn 247 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Regression in A2: third viewer attempt `local-viewers-nOkKzJ` failed durable-link
-resolution before input. Its acquisition is completed/checked_out, but the same
-display is pending and route orphaned. Journal records primary route unavailable
-and handoff unusable. The time-matched job says succeeded; the driver captured a
-failed response without body/status/correlation, so exact wire cause is unproven.
-Guacamole is running and guacd healthy; no restart occurred. Five browsers are preserved. Actual consumer is still disconnected
-with its original self-declared identity and permissions; recovery is unaccepted.
-Stop viewer retries (three attempts). Next: isolated reservation, finalization and
-reconciliation replay against `failed-resolution-state-private.json`; establish
-which writer restores pending state before source repair or another build.
-Private `publication-a18d235b/failed-resolution-disposition.json` records the join.
-Prior checkpoint `7ce5eb3c` preserves exact-release native lifecycle acceptance,
-installation, successful two-viewer refresh and doctor exit 0 after maintenance.
-That doctor result predates this failure. A1–A4/AX remain OPEN; timer disabled.
-Cumulative native effort: five optimized builds/replays, one release build (607s),
+Blocker reduction: isolated finalization followed by stale health reconciliation
+reproduced a completed acquisition with pending display and route records.
+Source now compares each display/route against the probe baseline before merging,
+preserving newer custody. A fresh probe still publishes genuine health changes.
+Regression failed before repair; all 70 service-health tests pass after it.
+Fmt and workspace clippy pass. Two optimized test builds took 241 and 251 seconds;
+the passing tests took 3.93 seconds. Repair is not installed; no viewer retry ran.
+Private `publication-a18d235b/reconciliation-merge-repair.json` indexes proof.
+Next: qualify the repaired candidate, then original-link recovery and input.
+The test proves a matching source defect, not the historical production writer.
+Prior `bd668544` preserves three viewer failures and the inconsistent live state.
+Actual consumer remains disconnected; its recovery and A1–A4/AX remain OPEN.
+Five production browsers remain preserved; maintenance timer stays disabled.
+Earlier native effort: five optimized builds/replays, one release build (607s),
 one further CI remote-headed fixture and two exact-release lifecycle fixtures.
 
 ### Current installed identity
