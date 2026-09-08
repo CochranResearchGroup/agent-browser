@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 233 | 2026-09-07
+## Turn 234 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed `ac277ea0` preserves exact pending acquisition custody through inventory,
@@ -21,8 +21,8 @@ but viewport shrink hid the marker. Moving only the synthetic marker into the
 No mouse-delivery code changed. The failed `076f69ee` release remains retained.
 Cumulative inventory builds: five; one source rework; two viewer attempts in this
 publication, including the recorded fixture correction. No additional build.
-Progress: outcome_progress for isolated A1 native artifacts; A2/A3 gains retained.
-Next: consumer reconnect/export, Playwright artifact boundary, monitor and pressure.
+Progress: proven disposable residue removed; production identities preserved.
+Next: supported rollback retention before maintenance; consumer recovery stays open.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
@@ -85,8 +85,8 @@ intended target. Its next assertion wrongly assumed top-level targetId was
 unsupported; the current schema supports it and the response named the requested
 target. `retained-unit-sim-3dOUr1/disposition.json` records that limit. Historical
 wrong-tab cause and independent post-close census remain unproven. Two earlier
-fixture setup errors are preserved. All five disposable runs cleaned to zero
-owned processes; no production browser action or new build occurred.
+fixture setup errors are preserved. MeOiTT cleanup falsely reported zero because
+Chrome flattened argv and erased HOME. Corrected cleanup now proves no residue.
 
 ### Storage recovery and prevention
 
@@ -132,11 +132,17 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### Retention and next work
 
-The earlier GC preview listed 22 candidates and `previousHealthyGenerationId=null`.
-That preview is historical after two additional publications. No GC or workstation
-reconcile was applied. Original generations and verified private rollback copies
-remain. Each publication backed up its immediate predecessor with 32 matching
-file hashes. The immediate predecessor is `0.28.0-d46cf77f8f36-3351d8c23c95`.
+Fresh inventory exposed disposable residue. Saved PID/start tokens and exact
+private profile evidence authorized cleanup of MeOiTT and four older browser
+roots in 5DXmwX, IvUQPa and jS7KZ0. No matching profile processes remain; all five
+production browser identities survived. Prior cleanup receipts are invalidated,
+not deleted. The corrected private helper matches normal and flattened argv.
+Observed RSS fell from 7,979,728,896 to 6,175,678,464 bytes, below 6 GiB; doctor
+still reads the stale September 6 monitor receipt. The fresh GC preview has 27
+candidates and previousHealthyGenerationId=null, including immediate rollback
+`0.28.0-d46cf77f8f36-3351d8c23c95`. No GC or maintenance was applied.
+Evidence: `older-fixture-residue-cleanup.json`, `fixture-residue-preview.json`,
+MeOiTT `cleanup-corrected.json`, and `resources-after-fixture-cleanup.json`.
 
 Controlled publication receipts remain outside the supported upgrade ledger.
 Repair the supported publication/retention path before enabling maintenance;
@@ -173,9 +179,6 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 - `retained-unit-sim-gSifp9/`: optimized a9830cfa real MCP error correlation,
   exact persisted outcomes, ordinary reconnect/control, and zero-residue cleanup;
   private `consumer-stale-connection-readback.json` anchors historical comparison.
-- `publication-d6d99e43/`: frozen source, exact release, qualification, sealed
-  generation, activation/custody/storage receipts, installed original-handle
-  readback, doctor, rollback backup, skill sync and the next AX finding.
 - `publication-dd94dfe7/`: first publication, storage/handle proof, identity
   dispositions, current-at-that-point doctor and verified dc570e5b backup.
 - `retained-unit-sim-7QAzvP`: exact dd94dfe7 capability/rejoin/storage proof.
@@ -188,7 +191,6 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
   `local-viewers-1I12nr/events.json`, the failed mouse journey.
 - `reconcile-rejoin/`, `missing-binding-sim-UOeTwk`,
   `primary-endpoint-sim-Xrh9tr`: lease and diagnostic-wire source/receiver proof.
-- `publication-c36ce2b0/`: historical successful operator journey and backup.
 
 ## History index
 
