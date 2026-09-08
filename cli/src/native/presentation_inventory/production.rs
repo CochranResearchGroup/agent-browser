@@ -360,6 +360,18 @@ mod tests {
             JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
         };
         let (mut inventory, mut state, config) = fixture();
+        state.browsers.get_mut("browser").unwrap().health =
+            crate::native::service_model::BrowserHealth::Ready;
+        state.viewer_leases.insert(
+            "viewer".into(),
+            crate::native::service_model::ViewerLease {
+                id: "viewer".into(),
+                browser_id: Some("browser".into()),
+                route_id: Some("route".into()),
+                state: "active".into(),
+                ..Default::default()
+            },
+        );
         let boot = crate::process_identity::current_boot_epoch().unwrap();
         inventory.boot_epoch = boot.clone();
         state.browsers.get_mut("browser").unwrap().boot_epoch = Some(boot.clone());
@@ -408,7 +420,14 @@ mod tests {
             },
         )
         .unwrap();
-        let pending = repository.load_snapshot().unwrap();
+        let mut pending = repository.load_snapshot().unwrap();
+        crate::native::service_health::reconcile_remote_view_state_with_display_probe(
+            &mut pending,
+            |_| true,
+            false,
+        );
+        assert_eq!(pending.remote_view_routes["route"].state, "pending");
+        assert_eq!(pending.viewer_leases["viewer"].state, "active");
         let mut capacity = inventory
             .qualify(&pending, config, "production", &boot, |_, _| true)
             .expect("the native acquisition reservation must survive inventory reload");
@@ -419,6 +438,20 @@ mod tests {
             .unwrap();
         assert_eq!(pending.remote_view_routes["route"].state, "pending");
         assert_eq!(pending.display_allocations["display"].state, "pending");
+        let mut missing_display = pending.clone();
+        crate::native::service_health::reconcile_remote_view_state_with_display_probe(
+            &mut missing_display,
+            |_| false,
+            false,
+        );
+        assert_eq!(
+            missing_display.remote_view_routes["route"].state,
+            "orphaned"
+        );
+        assert_eq!(
+            missing_display.viewer_leases["viewer"].state,
+            "disconnected"
+        );
         for drift in ["browser", "boot", "completed", "pool"] {
             let mut conflicting = pending.clone();
             let record = conflicting

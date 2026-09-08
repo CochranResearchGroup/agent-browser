@@ -2453,7 +2453,7 @@ fn reconcile_remote_view_state(
 }
 
 /// Reconciles retained remote-view state against a current route-display probe.
-fn reconcile_remote_view_state_with_display_probe(
+pub(crate) fn reconcile_remote_view_state_with_display_probe(
     state: &mut ServiceState,
     display_socket_available: impl Fn(&str) -> bool,
     controller_fence_held: bool,
@@ -2465,6 +2465,16 @@ fn reconcile_remote_view_state_with_display_probe(
         .map(|(id, browser)| (id.clone(), browser.health))
         .collect::<BTreeMap<_, _>>();
     let mut repair = RemoteViewReconcileRepair::default();
+    // A positively bound acquisition is temporarily pending, not an orphan.
+    // Socket and browser-health failures below still invalidate that route.
+    let pending_acquisition_routes = state
+        .remote_view_routes
+        .iter()
+        .filter(|(_, route)| {
+            super::presentation_inventory::has_current_acquisition_binding(state, route)
+        })
+        .map(|(id, _)| id.clone())
+        .collect::<BTreeSet<_>>();
 
     let mut unavailable_route_displays = BTreeMap::new();
     for entry in state.route_pool.values_mut() {
@@ -2593,7 +2603,9 @@ fn reconcile_remote_view_state_with_display_probe(
                         .map(|state| (id.clone(), state.clone()))
                 })
                 .and_then(|(id, state)| {
-                    if matches!(state.as_str(), "ready" | "allocating") {
+                    if matches!(state.as_str(), "ready" | "allocating")
+                        || (state == "pending" && pending_acquisition_routes.contains(&route.id))
+                    {
                         None
                     } else {
                         Some(("display_allocation_unavailable", id, state))
@@ -2701,10 +2713,14 @@ fn reconcile_remote_view_state_with_display_probe(
             let route_browser_id = route_browser_owners
                 .get(id)
                 .and_then(|browser_id| browser_id.as_deref());
-            !matches!(
+            let route_available = matches!(
                 route_states.get(id).map(String::as_str),
                 Some("ready" | "reconnecting" | "allocating")
-            ) || route_browser_id.is_none()
+            ) || (route_states.get(id).map(String::as_str)
+                == Some("pending")
+                && pending_acquisition_routes.contains(id));
+            !route_available
+                || route_browser_id.is_none()
                 || route_browser_id.is_some_and(|browser_id| {
                     browser_health.get(browser_id) != Some(&BrowserHealth::Ready)
                         || lease
