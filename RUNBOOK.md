@@ -4,26 +4,23 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 234 | 2026-09-07
+## Turn 235 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Installed `ac277ea0` preserves exact pending acquisition custody through inventory,
-health reconciliation and capacity activation. Its release readback passed in
-`production-inventory/isolated-readback-i7xtebtw`. Activation preserved all five
-browser processes, storage and tab ownership; original handle attestation passes.
-The original durable URL passed two authenticated viewers, anonymous denial,
-synthetic pixels, same-link reconnect and trusted Guacamole mouse/keyboard input
-in `local-viewers-sJv4NQ`. The supported ready receipt was created automatically;
-fresh doctor cleared dashboard and upgrade readiness. A1–A4/AX remain OPEN.
-The preceding viewer attempt `local-viewers-hmUhkI` resolved both exact targets
-but viewport shrink hid the marker. Moving only the synthetic marker into the
-142px viewport enabled the test; multi-viewer sizing remains a separate finding.
-No mouse-delivery code changed. The failed `076f69ee` release remains retained.
-Cumulative inventory builds: five; one source rework; two viewer attempts in this
-publication, including the recorded fixture correction. No additional build.
-Progress: proven disposable residue removed; production identities preserved.
-Next: supported rollback retention before maintenance; consumer recovery stays open.
-Unrelated modified note0156 and untracked note0159 remain preserved.
+Installed `ac277ea0` retains the verified local two-viewer handoff, reconnect and
+Guacamole mouse/keyboard acceptance; five production browser identities survive.
+Doctor presentation and upgrade readiness passed after that journey. Monitoring
+is stale. Targeted disposable cleanup corrected false zero-residue receipts and
+reduced fresh observed RSS below the 6 GiB threshold; consumer recovery stays open.
+Source `15cd8e5b` adds explicit sealed-generation retention without claiming
+healthy upgrade acceptance. Two GC integration tests, eight existing retention
+tests, formatting, Clippy and the docs build passed. One release build is running.
+`retention-hold-control.json` bounds this repair to one build and activation;
+`publication-15cd8e5b/` has private CLI qualification and preservation helpers.
+Next: qualify the built CLI, install with five-browser custody checks, retain
+reviewed rollback, and inspect GC before any maintenance effects. No GC yet.
+The activation helper will use the installer's supported relative selector.
+A1–A4/AX remain OPEN; unrelated note0156 and note0159 remain untouched.
 
 ### Current installed identity
 
