@@ -535,6 +535,10 @@ true after reviewed GC removes that obsolete rollback generation.
 cleanup. A later explicit `--apply` retains the selected generation, the
 immediately previous healthy rollback generation, and exact live-process,
 named-supervisor, active-transaction, and open-rollback references.
+GC also retains the latest transaction's old payload while rollback readiness
+requires it, including failed terminal history. Older terminal history alone
+does not pin payloads; finalization still relinquishes rollback authority.
+
 For a reviewed rollback generation outside an accepted upgrade transaction, use
 `agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json`, then repeat with `--apply`.
 The explicit hold hashes the sealed payload and prevents generation cleanup until

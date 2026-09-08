@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 236 | 2026-09-07
+## Turn 237 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Outcome progress: installed `15cd8e5b` passed one manual maintenance cycle;
@@ -14,10 +14,12 @@ removed. GC removed 27 generations; one was restored from its verified backup
 because doctor still requires the historical failed transaction's old payload.
 Supported retention holds now protect that payload and the immediate rollback;
 final GC preview has zero candidates and three retained generations.
-The one-build/one-activation retention batch is finished, with no second replay.
-A1–A4/AX remain OPEN. Next priority: actual consumer ownership/reconnect acceptance;
-keep the timer disabled until A1–A3 acceptance. Preserve the documented GC/readiness
-mismatch for a focused contract repair, without another production rebuild now.
+Production is unchanged. The consumer lease now matches the live Default owner
+and permits `rejoin_owned_browser`; its own credentialed acceptance is pending.
+Source shares the rollback dependency between doctor and GC. Three focused tests,
+formatting and Clippy pass. Repair not installed; A1–A4/AX remain OPEN.
+Next: consumer rejoin/control evidence and consolidated final-candidate acceptance.
+Keep both holds and the timer disabled; no new production build is underway.
 
 ### Current installed identity
 
@@ -140,8 +142,9 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor now exits 0; GC preview retains three generations and has
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep both holds and original recovery storage. A source repair must align GC
-retention with readiness dependencies before removing the historical hold.
+Keep both holds and original recovery storage. Source now aligns GC
+with the latest transaction rollback dependency. Keep the historical hold until
+that repair is installed and qualified; unrelated older history stays reclaimable.
 
 Pending acquisition and orphaned route capacity retention now pass in source,
 isolated release and installed durable-link checkout. Actual consumer reconnect

@@ -2065,12 +2065,8 @@ fn workstation_upgrade_readiness(
             // Finalization explicitly relinquishes rollback authority, so
             // reviewed GC may remove the old payload without degrading the
             // selected runtime's readiness.
-            let rollback_ready = transaction.state
-                == UpgradeTransactionState::OldGenerationRetirable
-                || transaction
-                    .old_generation_id
-                    .as_deref()
-                    .is_none_or(generation_ready);
+            let rollback_ready =
+                rollback_readiness_generation(transaction).is_none_or(generation_ready);
             (
                 serde_json::to_value(transaction.state)
                     .unwrap_or_else(|_| Value::String("unknown".to_string())),
@@ -2118,6 +2114,20 @@ fn workstation_upgrade_readiness(
         "ready": ready,
     })
 }
+
+/// The latest transaction remains a readiness dependency until finalization
+/// relinquishes rollback. GC and doctor must use the same dependency.
+fn rollback_readiness_generation(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Option<&str> {
+    (transaction.state != crate::runtime_adoption::UpgradeTransactionState::OldGenerationRetirable)
+        .then_some(transaction.old_generation_id.as_deref())
+        .flatten()
+}
+
+#[cfg(all(test, unix))]
+#[path = "workstation_install/retention_readiness_tests.rs"]
+mod retention_readiness_tests;
 
 fn latest_upgrade_transaction(
     transaction_dir: &Path,
@@ -2363,6 +2373,9 @@ fn generation_retention_plan(
         &transactions,
         chrono::Utc::now(),
     );
+    // Read before any finalization effects. Older terminal history is not a
+    // dependency, but doctor still checks the latest transaction's old payload.
+    let latest = latest_upgrade_transaction(&transaction_dir)?;
     if finalize_eligible {
         for transaction_id in &plan.finalizable_transaction_ids {
             let transaction = transactions
@@ -2384,6 +2397,17 @@ fn generation_retention_plan(
         }
     }
     let mut references = plan.references.clone();
+    if let Some(transaction) = latest.as_ref().filter(|transaction| {
+        !plan
+            .finalizable_transaction_ids
+            .contains(&transaction.transaction_id)
+    }) {
+        if let Some(generation) = rollback_readiness_generation(transaction) {
+            references
+                .entry(generation.to_string())
+                .or_insert_with(|| vec!["latest_transaction_rollback_readiness".to_string()]);
+        }
+    }
     for (generation, reasons) in holds {
         references.entry(generation).or_default().extend(reasons);
     }

@@ -5688,9 +5688,11 @@ returns durable_handoff_owner_prepare_failed before forwarding the request.
 A Ready retained owner reconnects to the exact handoff target after identity checks.
 Explicit ownership refusals remain failed requests requiring inspection.
 Workstation gc remains available as a
-reviewed operator operation. It retains the selected generation and every
-generation referenced by a live process, supervisor, rollback-capable, failed,
-or unclosed transaction. Dry run reports candidates without deleting them.
+reviewed operator operation. It retains the selected generation, exact live-process
+and supervisor references, and active rollback dependencies. The latest transaction's
+old payload remains retained while rollback readiness requires it, including failed
+terminal history. Older terminal history alone does not pin payloads.
+Dry run reports candidates without deleting them.
 After finalization marks the old generation retirable, readiness no longer
 requires that reviewed GC retain the obsolete rollback payload.
 The installed runtime interlock and the operator-facing workstation reconcile
