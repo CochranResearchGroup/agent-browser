@@ -4,11 +4,11 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 274 | 2026-09-08
+## Turn 275 | 2026-09-08
 
 Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
-Plan0160 remains OPEN. Priority: original consumer identity/reconnect, exact-target
-close evidence, remaining ownership dispositions, then unattended operation.
+Plan0160 remains OPEN; autonomous execution is blocked on original consumer input.
+Priority remains identity/reconnect, ownership dispositions, then unattended use.
 Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
 Continuation ceiling: 20 minutes from Turn273's first action, including amendment;
 no full release builds or production replacements. Prior ten-hour overruns remain
@@ -23,11 +23,12 @@ attestation and matching installed response/job/event failure passed.
 Two-viewer pixels, trusted input and same-link reconnect passed in oXuJ7E.
 Doctor exited 0 after manual monitor refresh; timer remains inactive.
 Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
-Read-only metadata at 10:53UTC shows original Plan0137 tab present/disconnected,
+Read-only metadata at 11:01UTC shows original Plan0137 tab present/disconnected,
 with no p0137 job in the retained window; absence does not prove no retry elsewhere.
 p0143 has 30 retained jobs, including successful reload at 10:34 and snapshot at 10:35
 on its same tab. The original client's own retry input is already pending.
-Evidence: publication-028597ea/consumer-metadata-followup.json.
+Evidence: publication-028597ea/consumer-gate-final-readback.json.
+This same missing input has persisted across three goal turns; no substitute pass.
 Installed Service release and raw HTTP tab_close each passed a three-target census:
 only the intended middle target closed; neighbors and final baseline survived.
 Conflicting selectors refused before effects with matching response/job/event.
@@ -35,7 +36,7 @@ Original attestation stayed complete. Evidence: publication-028597ea/{exact-targ
 raw-target-close}/acceptance.json. Historical selector/build attribution remains open.
 Earlier normal-origin CSV passed on bf4de8aa; consumer CSV remains unverified.
 A4 remains gated on A1–A3 and remaining AX evidence. Reuse valid accepted checks.
-Primary retains custody and acceptance; automated stopping/savings remain unverified.
+Primary retains custody and acceptance; no new builds, publication or timer effects.
 
 ### Current installed identity
 
@@ -102,8 +103,7 @@ still needs a reusable product diagnosis/recovery surface.
   input on f8161fd1. Earlier viewer failures remain historical evidence.
   Original target/attestation survive. Plan0158 external vantage remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
-  Seven advisory lease findings remain; consumer recovery is not established by
-  a green doctor. Keep their existing evidence-backed dispositions visible.
+  Seven advisory lease findings retain their dispositions; doctor is not consumer proof.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
@@ -118,7 +118,8 @@ still needs a reusable product diagnosis/recovery surface.
   In `retained-unit-sim-gSifp9`, both actual MCP denials returned request/job
   correlation and the exact persisted terminal outcome. Original-handle
   reconnect, foreign denial without effects and exact release also passed.
-  This repair is now installed; full installed AX acceptance remains open.
+  Supported CLI service trace now retrieves the exact raw-close refusal job/event.
+  Evidence: raw-target-close/supported-trace-acceptance.json; full AX remains open.
 
 ### Retention and next work
 
