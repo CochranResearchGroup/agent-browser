@@ -4,23 +4,24 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 239 | 2026-09-07
+## Turn 240 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress, scoped AX: a returned missing-target request ID resolves to one
-unchanged first-cause/build record across two fresh authenticated dashboard
-processes. The persisted job matches the returned terminal outcome. No browser
-action was replayed. The lane-listener lookup failure is preserved separately;
-that listener does not expose the dashboard-only failure-journal endpoint.
-A1 cold-session lifecycle remains unaccepted after three setup attempts: cold
-navigate lacked an acquisition grant; the broker request carried incomplete route
-hints; the standalone private home lacked an admitted single-host installation.
-All stopped before browser launch. Do not repeat these fixture setups unchanged.
-Resolve the documented CLI startup contract and proper isolated installation first.
-Earlier eight current-binary cases remain valid, with zero owned residue and all
-five production browsers preserved. Original-consumer credentialed rejoin is pending.
+Blocker diagnosis: README's Sessions contract promises cold `--session name open`;
+its disposable `AGENT_BROWSER_RUNTIME_HOST=1` mode was present in the first failed
+fixture. Do not classify that failure as missing installation or waive it with
+`tab new`. `commands.rs:2472` maps open to navigate; daemon.rs:987 submits the native
+command directly. control_plane.rs:432 adds connection identity, but
+service_access.rs:1187 only applies acquisition to tab_new and remote_view_open.
+actions.rs:643 then invokes the target binder, which requires a current tab or a
+cold-navigation acquisition grant. The first fixture had neither and failed at
+that exact binder before launch. This is a native cold-start admission gap.
+Next: repair native cold-open admission with profile permission/ownership checks,
+preserve the requested session, and cover retained/ambiguous owners before replay.
+No runtime changes or retry; three prior failures remain. Eight earlier cases and
+the scoped AX lookup remain valid; consumer rejoin and cold lifecycle are pending.
 A1–A4/AX remain OPEN. Production stays on `15cd8e5b`; both rollback holds and the
-disabled timer remain. Source `d6f01b00` is tested but uninstalled. No new build.
+disabled timer remain. Source `d6f01b00` is tested but uninstalled.
 
 ### Current installed identity
 
