@@ -1335,6 +1335,38 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
         );
     }
 
+    // Reproduce retained recovery after host replacement: the route is orphaned,
+    // the display is pending, and the available pool names that same display.
+    // Exercise durable resolution through the coordinator, without reparsing its
+    // command in the fixture after retained selection.
+    let mut recovery = store.load().unwrap();
+    let boot = crate::process_identity::current_boot_epoch();
+    recovery
+        .remote_view_routes
+        .get_mut("route-a")
+        .unwrap()
+        .state = "orphaned".into();
+    let display = recovery.display_allocations.get_mut("display-a").unwrap();
+    display.state = "pending".into();
+    display.boot_epoch = boot.clone();
+    let pool = recovery.route_pool.get_mut("pool-a").unwrap();
+    pool.state = "available".into();
+    pool.current_route_allocation_id = None;
+    recovery.browsers.insert(
+        "session:im-receipts".into(),
+        BrowserProcess {
+            id: "session:im-receipts".into(),
+            pid: Some(4242),
+            profile_id: Some("im-receipts-main".into()),
+            active_session_ids: vec!["im-receipts".into()],
+            health: ServiceBrowserHealth::Ready,
+            boot_epoch: boot,
+            display_allocation_id: Some("display-a".into()),
+            display_name: Some(":31".into()),
+            ..BrowserProcess::default()
+        },
+    );
+    store.save(&recovery).unwrap();
     runtime.adoption_issue = None;
     runtime.adoption_observation = Some(RouteBoundBrowserObservation {
         browser_present: true,

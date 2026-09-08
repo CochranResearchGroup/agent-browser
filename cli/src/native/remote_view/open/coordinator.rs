@@ -710,7 +710,15 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         );
     if reuse_durable_browser {
         if let Some(retained_handoff) = retained_handoff.as_ref() {
-            apply_available_retained_remote_view_route(&service_state, retained_handoff, &mut cmd);
+            if apply_available_retained_remote_view_route(
+                &service_state,
+                retained_handoff,
+                &mut cmd,
+            ) {
+                // Acquisition consumes the parsed intent, not the command. Keep
+                // both aligned after selecting the proven retained display.
+                intent = normalize_remote_view_open_intent(&cmd)?;
+            }
         }
     }
     let dry_run = request.dry_run;

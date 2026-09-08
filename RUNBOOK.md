@@ -4,39 +4,39 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 249 | 2026-09-07
+## Turn 250 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker reduction: isolated replay reproduced the retained-route selector dropping
-an orphaned route with a pending display. The existing acquisition planner already
-supports same-owner recovery; the earlier selector prevented it from seeing :14.
-Source now retains that route, including an available pool entry naming its display,
-only when current-boot browser/display/route custody matches. Five foreign or stale
-cases refuse unchanged. The real planner selects the retained display and still
-requires physical visibility proof; selection never marks pending state ready.
-Regression failed before repair; 169 remote-view tests, fmt, clippy and docs pass.
-Two optimized test builds took 253/255s; the passing group took 0.11s.
-Repair is not installed. Private `retained-route-selection-repair.json` indexes proof.
-Next: qualified candidate build/publication, then original durable-link recovery.
-Production remains `7b00d6a0`: original handle control and attestation pass, but
-remote-view recovery refuses wrong display :12. Current doctor is not accepted.
-No live retry occurred during this source repair. Actual consumer recovery and
-A1–A4/AX remain OPEN; preserve five browsers and keep the maintenance timer disabled.
-Prior installation, rollback and cumulative effort remain at `92be586c`.
+Acceptance remains incomplete. Source c2592b7d is installed, but the single
+post-repair viewer attempt local-viewers-eO0O1k again selected :12 instead of :14
+and failed with route_display_owner_unproven before launch or input.
+Release build took 595s; exact headless and remote-headed lifecycle fixtures passed.
+Those successes did not establish durable-link recovery. That live window is closed.
+Fresh readback proves all five incumbent processes unchanged and the original
+synthetic handle's complete attestation and control, with input counters still 11/11.
+The next diagnosis found that retained selection updates the command while the
+planner consumes the earlier parsed intent. The previous test reparsed that intent
+outside the coordinator, missing the production flow. An existing coordinator
+regression reproduced the wrong generated display ID after 243s compilation.
+The coordinator now refreshes intent after selection. All 169 focused tests pass
+(build 265s, tests 0.17s), as do fmt, workspace clippy and handoff docs checks.
+Repair is not installed. Next: qualify its exact candidate before a new live window.
+Actual consumer recovery and A1–A4/AX remain OPEN. Preserve the maintenance hold.
+Private publication-c2592b7d indexes installation, failed acceptance and preservation.
+retained-route-coordinator-repair.json records the regression and source qualification.
+Previous source qualification and cumulative effort remain at Git c2592b7d.
 
 ### Current installed identity
 
-- Source: `7b00d6a07b98f4ebd8ac1c1c35b25cfd2c17626c`.
-- Generation: `0.28.0-b5c3fb971ec8-016a21729553`.
-- Binary SHA256: `b5c3fb971ec88747fd026b3a171e575becccfe4076aa8d8f026e3cff56495343`.
-- Support SHA256: `016a217295535207df181119e8b19bbde2a64e4cb89af8184b875bb0340ed134`.
-- Host PID61036; activation and rollback preserved five exact browser identities
-  and 30 open-tab custody records. The selector uses the supported relative path.
+- Source: `c2592b7d0e614e7993ddf428efad723c4abc5d11`.
+- Generation: `0.28.0-05b91a5ac531-7adec5040f93`.
+- Binary SHA256: `05b91a5ac531b152e717ec125e19b2122a98579b6bdb144d6c5ef37afbdfd182`.
+- Support SHA256: `7adec5040f93a8c1fedacdc4bce391fa952dd009a25b9ccb032577fecee4798c`.
+- Host PID43996; activation preserved five browser identities and 30 tab records.
 - Original synthetic handle retains complete attestation and successful control.
-- General shared skill synced to source6140e35b with verified prior-version backup.
-- Immediate rollback `0.28.0-8194a64b02ef-c65cd6d981c3` has 32 verified backup files.
-- Four rollback holds remain, including the three preceding generations already
-  retained at `bd668544`. Maintenance timer stays disabled.
+- General shared skill synced to c2592b7d with verified prior-version backup.
+- Immediate rollback `0.28.0-b5c3fb971ec8-016a21729553` has 32 verified backup files.
+- Five rollback holds remain. Maintenance timer stays disabled.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -102,10 +102,10 @@ still needs a reusable product diagnosis/recovery surface.
 - A2: prior `local-viewers-PVUWLr` passed viewers and same-link refresh, then stopped
   on moving input geometry. The next attempt exposed completed acquisition with
   pending display and orphaned route. Stale reconciliation is now repaired.
-  Current `local-viewers-osNeRt` returned `route_display_owner_unproven` for :12;
+  Current `local-viewers-eO0O1k` returned `route_display_owner_unproven` for :12;
   the retained browser is on :14. Request correlation and compensation are recorded.
   Current operator journey and input remain unaccepted. Do not reuse earlier passes.
-- A3: current doctor exits 1 for operator journey and stale monitoring. Original
+- A3: prior doctor exited 1 for operator journey and stale monitoring. Original
   handle control is proven separately. Seven lease warnings remain advisory.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
@@ -137,7 +137,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all four holds and original recovery storage. The installed GC repair now
+Keep all five holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
