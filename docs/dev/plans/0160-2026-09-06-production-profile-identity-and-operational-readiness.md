@@ -154,7 +154,7 @@ Browser-mode capture must preserve an existing browser context's download
 policy and deliver only the authorized target's artifact. Passive observation on
 a newly attached CDP connection does not satisfy this requirement: Chromium binds
 download-event subscription to each BrowserHandler, while SetDownloadBehavior
-both enables those events and mutates the shared context policy. An observer that
+both enables those events and mutates the addressed context policy. An observer that
 set the policy cannot stand in for a reconnected Service consumer in acceptance.
 Independent Page events may supply completion without policy mutation, but a
 read-only join to Chrome's live History database is not yet a usable artifact
@@ -164,13 +164,22 @@ Qualified retained-handle ownership repairs and accurate failure reporting may
 advance through installed acceptance independently; keep consumer CSV acceptance
 explicitly open instead of withholding those repairs behind the separate capture
 design. This does not relax A1–A4/AX completion requirements.
-Before further capture implementation, establish an event source that survives
-runtime-host replacement without replacing unknown peer policy. Evaluate a
-browser-lifetime download owner with explicit policy custody and reconnectable
-event delivery, or a supported independent observation interface. Do not infer
-policy from directory contents or silently replay a launch-time setting over a
-peer's newer setting. A stock-Chrome limitation is a design constraint, not
-permission to weaken retained-browser or shared-client acceptance.
+Use the independently qualified subscription strategy: create a new, empty,
+operation-owned browser context on the observation connection, enable Browser
+download events with behavior deny addressed only to that context, and dispose
+that exact context before clicking the authorized target. The prototype proves
+that Browser events remain available on that connection after disposal and report
+the completed path without changing the shared/default context's peer policy.
+Never create tabs or copy authentication into the temporary context. Require
+positive context ownership, disposal confirmation and unchanged pre-existing
+context identities; creation, subscription or cleanup uncertainty must return
+traceable failure before the download click. Connection detach must reclaim any
+operation-owned context left by a failed setup. Qualify the real Service request
+across retained host restart, with concurrent peer download, namespace-separated
+source, exact primary bytes and zero owned residue. The existing prototype is
+not product acceptance. Do not infer policy from directory contents, reset the
+shared context, or bypass Chrome History locking. New owned-launch defaults may
+be established before exposing a browser; retained peer settings remain intact.
 Preserve process-bound namespace delivery, frame/GUID attribution and destination
 checks as reusable components; qualify them through the real Service request.
 Failed recipes must report failed response, job and event outcomes with the same
