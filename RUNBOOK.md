@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 269 | 2026-09-08
+## Turn 270 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed bf4de8aa after one 605-second release build and five exact-release
@@ -32,12 +32,12 @@ identify the exact effective setting. Trace button cleanup passed.
 The source classifier now preserves download codes without falsely labeling
 missing/canceled events as ownership failures; explicit identity failures retain
 lifecycle_owner. All 16 focused tests, fmt and clippy pass. This fix is not installed.
-Source fix pushed at 028597ea. Headless CLI cold open/reopen passes in Bk7rtr.
-Headed session-only fill/click and reopen now pass in KTEIFz: same physical
-profile, verified headed processes, both exited after close, zero owned residue,
-five production identities preserved. Earlier oracle failures parsed Chrome's
-single-string argv incorrectly; product discovery already handles that format.
-Next: original consumer reconnect and remaining A1/A3/AX gates before A4.
+Source fix pushed at 028597ea. Cold CLI reopen passes headless (Bk7rtr) and
+headed with fill/click (KTEIFz); same profile and exact process exit verified.
+Fresh doctor exits 0 after one manual reconciliation refreshed stale monitoring;
+no generations removed, five browsers preserved, timer inactive. Evidence:
+current-readiness-20260908/. Original consumer handle remains disconnected;
+its own retry was requested. Consumer recovery and A1/A3/AX before A4 stay open.
 
 ### Current installed identity
 
@@ -93,8 +93,8 @@ checkpoint `dd94dfe7` and in the private ownership-bound recovery receipts.
 Keep `runtime-tmp/recovered` backing directories while retained namespaces
 reference them. The template does not repair already-deleted mounts.
 The historical Playwright Node process no longer exists; its artifact directory
-was not recreated. Actual consumer CSV, new-client artifact transport and shared
-browser-context download policy remain unaccepted. The private recovery helper
+was not recreated. Synthetic retained-browser native transport now passes while
+preserving context policy; actual consumer CSV is unverified. The private recovery helper
 still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
