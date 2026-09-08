@@ -624,6 +624,61 @@ fn runtime_profile_name_for_launch(flags: &Flags) -> Option<String> {
     )
 }
 
+/// Keep a native lane's proven profile ahead of generic CLI startup defaults.
+fn apply_existing_lane_profile_to_flags(
+    flags: &mut Flags,
+    command: &serde_json::Value,
+    state: &native::service_model::ServiceState,
+) -> Result<(), String> {
+    let mut request = command.clone();
+    native::service_request_provenance::attribute_native_session(&mut request, &flags.session);
+    for (field, value) in [
+        ("runtimeProfile", flags.runtime_profile.as_ref()),
+        ("profile", flags.profile.as_ref()),
+    ] {
+        if let Some(value) = value {
+            request[field] = json!(value);
+        }
+    }
+    let mut options = LaunchOptions {
+        runtime_profile: flags.runtime_profile.clone(),
+        profile: flags.profile.clone(),
+        ..LaunchOptions::default()
+    };
+    native::action_runtime::runtime::apply_existing_session_profile_selection(
+        &mut options,
+        &request,
+        Some(&flags.session),
+        state,
+    )?;
+    flags.runtime_profile = options.runtime_profile;
+    flags.profile = options.profile;
+    Ok(())
+}
+
+fn attribute_prestart_launch(
+    launch: &mut serde_json::Value,
+    command: &serde_json::Value,
+    session: &str,
+) {
+    for field in [
+        "serviceName",
+        "agentName",
+        "taskName",
+        "clientSubjectId",
+        "identityAssurance",
+        "traceId",
+    ] {
+        if let Some(value) = command.get(field) {
+            launch[field] = value.clone();
+        }
+    }
+    native::service_request_provenance::attribute_native_session(launch, session);
+    if let Some(id) = command.get("id") {
+        launch["causedByRequestId"] = id.clone();
+    }
+}
+
 fn runtime_profile_name_for_launch_parts(
     runtime_profile: Option<&str>,
     profile: Option<&str>,
@@ -2291,7 +2346,9 @@ fn main() {
         return;
     }
 
-    if !command_skips_browser_launch_for_prestart(&cmd) {
+    if !command_skips_browser_launch_for_prestart(&cmd)
+        && !connection::daemon_startup_ready(&flags.session)
+    {
         cmd["serviceState"] = json!(flags.service_state.clone());
     }
 
@@ -2477,6 +2534,20 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
+    if !command_skips_browser_launch_for_prestart(&cmd) {
+        use native::service_store::ServiceStateRepository;
+        let continuity = native::service_store::LockedServiceStateRepository::default_json()
+            .and_then(|repository| repository.load_snapshot())
+            .and_then(|state| apply_existing_lane_profile_to_flags(&mut flags, &cmd, &state));
+        if let Err(error) = continuity {
+            if flags.json {
+                print_json_error(error);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error);
+            }
+            exit(1);
+        }
+    }
     let selected_runtime_profile = runtime_profile_name_for_launch(&flags);
     let live_runtime_status = if flags.cdp.is_none() && flags.provider.is_none() {
         live_runtime_status_for_flags(&flags)
@@ -3057,18 +3128,11 @@ fn main() {
         }
 
         apply_remote_headed_launch_env_hints(&mut launch_cmd);
+        attribute_prestart_launch(&mut launch_cmd, &cmd, &flags.session);
 
         match send_command(launch_cmd, &flags.session) {
             Ok(resp) if !resp.success => {
-                // Launch command failed (e.g., invalid state file, profile error)
-                let error_msg = resp
-                    .error
-                    .unwrap_or_else(|| "Browser launch failed".to_string());
-                if flags.json {
-                    print_json_error(error_msg);
-                } else {
-                    eprintln!("{} {}", color::error_indicator(), error_msg);
-                }
+                print_response_with_opts(&resp, Some("launch"), &OutputOptions::from_flags(&flags));
                 exit(1);
             }
             Err(e) => {

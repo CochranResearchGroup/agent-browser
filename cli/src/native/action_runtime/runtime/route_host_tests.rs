@@ -4437,6 +4437,32 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         .expect("session-only reopen must recover the exact terminal profile identity");
     assert_eq!(reopened["runtimeProfile"], "cold-native");
     assert_eq!(reopened["profile"], json!(home.join("profile")));
+    // Exercise the CLI's preliminary launch, not just the later navigate path.
+    let mut flags = crate::flags::parse_flags(&[
+        "agent-browser".into(),
+        "--session".into(),
+        "cold-native".into(),
+    ]);
+    assert_eq!(
+        crate::runtime_profile_name_for_launch(&flags).as_deref(),
+        Some("default")
+    );
+    crate::apply_existing_lane_profile_to_flags(&mut flags, &session_only, &snapshot).unwrap();
+    let mut prestart = json!({"action":"launch", "runtimeProfile": flags.runtime_profile, "profile": flags.profile});
+    crate::attribute_prestart_launch(&mut prestart, &session_only, &flags.session);
+    let metadata = service_profile_lease_metadata_for_command(&prestart, Some(&flags.session))
+        .unwrap()
+        .expect("prestart attribution must retain profile lease metadata");
+    assert_eq!(metadata.profile_id.as_deref(), Some("cold-native"));
+    prestart["connectionInstanceId"] = json!("prestart-connection");
+    let admitted_launch =
+        super::native_acquisition::admit_cold_navigation(&prestart, &daemon, &snapshot)
+            .unwrap()
+            .expect("native preliminary launch must acquire first-tab custody");
+    assert_eq!(
+        admitted_launch["profileChildAccess"]["subjectId"],
+        session_only["clientSubjectId"]
+    );
     let mut duplicate = snapshot.profiles["cold-native"].clone();
     duplicate.id = "same-directory".into();
     snapshot.profiles.insert(duplicate.id.clone(), duplicate);

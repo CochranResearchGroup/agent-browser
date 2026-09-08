@@ -3138,7 +3138,10 @@ ownership still fail before browser effects. Closing the last native session lea
 the shared runtime host available for a later open. Completed owner history does
 not block reopening; unresolved cleanup still does. A session-only reopen
 recovers the unique profile matching its completed owner identity. Ambiguous
-profile records or missing cleanup proof refuse before launch.
+profile records or missing cleanup proof refuse before launch. Preliminary CLI
+launches preserve that profile and caller attribution, and record ownership of
+the first tab for the following command. Rejected preliminary launches retain
+their request ID and structured failure in CLI output.
 
 ## Retained process identity diagnostics
 

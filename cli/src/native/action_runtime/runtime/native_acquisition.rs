@@ -16,8 +16,12 @@ pub(super) fn admit_cold_navigation(
     daemon: &DaemonState,
     snapshot: &ServiceState,
 ) -> Result<Option<Value>, String> {
-    if command["action"] != "navigate"
+    if !matches!(command["action"].as_str(), Some("navigate" | "launch"))
         || daemon.browser.is_some()
+        || ["cdpUrl", "cdpPort", "provider"]
+            .iter()
+            .any(|field| command.get(field).is_some())
+        || command.get("autoConnect").and_then(Value::as_bool) == Some(true)
         || command.get("targetId").is_some()
         || command.get("tabId").is_some()
         || snapshot
