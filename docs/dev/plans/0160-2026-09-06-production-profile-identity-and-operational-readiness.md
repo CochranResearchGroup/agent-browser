@@ -187,6 +187,10 @@ process-root link, translation must prove an equivalent filesystem location from
 both kernel mount tables, preserving device and filesystem-relative path.
 Never assume the same absolute path identifies the same file across namespaces;
 unknown or shadowed mappings must fail with causal identity evidence.
+Include ordinary user download-directory aliases in qualification, including a
+home Downloads symlink into a Windows mount. Prove the browser-visible alias and
+resolved source identity; blanket rejection of directory aliases does not satisfy
+usable artifact delivery. Preserve leaf-file substitution and overwrite defenses.
 Failed recipes must report failed response, job and event outcomes with the same
 causal error, correlation and accurate effect state, even when transport succeeded.
 Validate shared directories and retained PrivateTmp separately, including foreign

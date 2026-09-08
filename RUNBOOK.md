@@ -4,40 +4,40 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 260 | 2026-09-08
+## Turn 261 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Native Service download capture now uses the proven independent subscription,
-matching authorized frame/GUID without changing peer context policy. The empty
-owned context is disposed before clicking and reclaimed on connection detach.
-First native fixture aCb55u failed: a restarted systemd user namespace could read
-mountinfo but could not open the retained browser's process-root link. The
-response retained download_source_identity_unproven and causal recourse; cleanup 0.
-Amended delivery proves the equivalent device and filesystem-relative path from
-both kernel mount tables when direct process-root access is denied. It rejects
-unknown/shadowed mappings, unsafe paths, changed identity and destination overwrite.
-Exact amended optimized candidate 9c01e4f3879b passed real Service transfers after
-retained host restart in namespace fixture 9QNwaS and shared-directory 7PH857.
-Both preserved peer policy/files, original targets/handles and context inventory,
-delivered exact primary CSV bytes, and left zero owned residue. These are source
-qualification, not original-consumer or production acceptance. Two 147-second
-candidate builds; first failure preserved. Three focused artifact tests, client
-contracts, fmt and clippy passed. Evidence: download-subscription-integration/.
-Production remains source 6735aeee; its prior two-viewer same-link reconnect and
-input recovery acceptance remain in publication-f7df903d/. Doctor last exited 0;
-five browsers and 33 tab-custody records were preserved. Timer remains inactive.
-Next: qualify headed/ownership and causal failure paths on the consolidated
-candidate, then qualify its release build before production replacement.
-A1/A3/A4/AX remain OPEN; original SoyLei reconnect and CSV remain unverified.
+Installed source 12f55652: independent download subscription preserves peer policy;
+process-bound mount translation handles systemd denial of retained process-root
+access. First fixture aCb55u exposed that denial; its failure remains recorded.
+Two 147-second optimized builds, three focused tests, client contracts, fmt/clippy,
+and native shared/private download plus two-principal headless/headed checks passed.
+One 625-second release build passed five exact-binary fixtures: ownership in both
+modes, HTTP/MCP classification, shared download and private-namespace download.
+One activation preserved five browsers, storage and 33 tab-custody records. Only
+the synthetic connection ID changed afterward. Maintenance removed nothing;
+doctor exits 0. Ten rollback holds remain and the timer remains inactive.
+Installed CSV acceptance FAILED: Chrome completed the exact synthetic CSV, but
+Downloads is a directory symlink to Windows Downloads and delivery rejected it
+with download_artifact_path_unsafe. Bytes match; the temporary export button was
+removed. Do not call consumer transport resolved. Support verified directory
+aliases before another download publication; preserve file and identity checks.
+Viewer 0LgorK passed two viewers, pixels, anonymous denial and same-link reconnect,
+then lost one iframe during controller refresh. Trusted input was not attempted;
+original handle attestation remains complete and counters remain 14/14. Preserve
+this failure and use scoped connection recovery before diagnosing mouse code.
+Next batch: directory-alias delivery qualification, installed viewer recovery,
+then remaining original-consumer ownership/CSV and A1/A3/A4/AX acceptance.
+Evidence: download-subscription-integration/ and publication-12f55652/.
 
 ### Current installed identity
 
-- Source: `6735aeee32b7193de48cebfae9e33095d678f54d`; host PID35187.
-- Generation: `0.28.0-917ec05d3dd6-5d83c8ca51bb`.
-- Binary SHA256: `917ec05d3dd6c1319eef1a28de05ee40ede852793280010a528d534e5465981f`.
-- Support SHA256: `5d83c8ca51bb141e93caa52f015e983f10b120607124f95561b2a7549b2a7bd3`.
+- Source: `12f556527a15793184055b4cdee6eada5bb020fc`; host PID26009.
+- Generation: `0.28.0-18b4c398fabd-051204a349a5`.
+- Binary SHA256: `18b4c398fabd0a3437fae52227c9a56d95282824c190b7d56fbe071a0fa9223e`.
+- Support SHA256: `051204a349a5e67f3074df60fbfc3b8d1748886902f5f82d245a82a7f571319b`.
 - Shared skill matches installed source; separate Service skill unchanged.
-- Immediate rollback `0.28.0-d0ffdb17d8e8-2ecb04e85f7d` is held. Nine holds remain.
+- Immediate rollback `0.28.0-917ec05d3dd6-5d83c8ca51bb` is held. Ten holds remain.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -100,9 +100,9 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: current local-viewers-34mn0F passes two viewers, pixels, same-link reconnect
-  and trusted input after one scoped refresh. Initial e3CDKN mouse failure is
-  retained. Original target and complete handle attestation are preserved.
+- A2: current 0LgorK passes two viewers, pixels and same-link reconnect, but
+  controller refresh lost one iframe before input. Earlier 34mn0F input recovery
+  remains historical evidence. Original target and complete attestation survive.
   Plan0158 external-vantage acceptance remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
   Seven advisory lease findings remain; consumer recovery is not established by
@@ -137,7 +137,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all nine holds and original recovery storage. The installed GC repair now
+Keep all ten holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
