@@ -4,24 +4,26 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 245 | 2026-09-07
+## Turn 246 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: native profile, caller, first-tab custody and structured error
-repairs are installed. The exact release binary passed isolated headless and
-private remote-headed open, interaction, close, reopen and repeated close.
-One activation preserved five browser identities, storage and tab custody.
-Doctor now exits 0 after authenticated viewers and one guarded maintenance pass.
-Two authenticated viewers, anonymous denial and original-link refresh pass.
-Input acceptance remains open: controller takeover moved the viewport after the
-baseline, so the verifier stopped before clicking. Original counters stay 11/11.
-A1–A4/AX remain OPEN; actual consumer rejoin and unattended operation are unproven.
-Next: prove stable controller geometry and input, then actual consumer recovery.
-Private `publication-a18d235b/acceptance-checkpoint.json` indexes this checkpoint.
-Cumulative native repair history remains in `native-cold-admission-repair-28d195b4.json`:
-five optimized builds/replays plus one release build (607 seconds), one additional
-CI remote-headed fixture and two exact-release lifecycle fixtures. No rebuild
-without a demonstrated source defect. Both viewer failures remain evidence.
+Regression in A2: third viewer attempt `local-viewers-nOkKzJ` failed durable-link
+resolution before input. Its acquisition is completed/checked_out, but the same
+display is pending and route orphaned. Journal records primary route unavailable
+and handoff unusable. The time-matched job says succeeded; the driver captured a
+failed response without body/status/correlation, so exact wire cause is unproven.
+Guacamole is running and guacd healthy. No provider or browser was restarted.
+All five browser identities remain preserved. Actual consumer is still disconnected
+with its original self-declared identity and permissions; recovery is unaccepted.
+Stop viewer retries (three attempts). Next: isolated reservation, finalization and
+reconciliation replay against `failed-resolution-state-private.json`; establish
+which writer restores pending state before source repair or another build.
+Private `publication-a18d235b/failed-resolution-disposition.json` records the join.
+Prior checkpoint `7ce5eb3c` preserves exact-release native lifecycle acceptance,
+installation, successful two-viewer refresh and doctor exit 0 after maintenance.
+That doctor result predates this failure. A1–A4/AX remain OPEN; timer disabled.
+Cumulative native effort: five optimized builds/replays, one release build (607s),
+one further CI remote-headed fixture and two exact-release lifecycle fixtures.
 
 ### Current installed identity
 
@@ -32,7 +34,7 @@ without a demonstrated source defect. Both viewer failures remain evidence.
 - Host PID28700; activation and maintenance preserved five exact browser identities
   and 30 open-tab custody records. The selector uses the supported relative path.
 - Original synthetic handle retains complete attestation and successful control.
-- General shared skill still reflects the prior publication; current sync pending.
+- General shared skill synced to source6140e35b with verified prior-version backup.
 - Immediate rollback `0.28.0-363187a5b467-a528aab8e554` is held with 32 verified backup files.
 - Earlier holds `0.28.0-2dea3ce66568-fef69948b43b` and
   `0.28.0-367c10063188-27306db23f45` remain. Maintenance timer stays disabled.
@@ -98,16 +100,15 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2–A4 and AX remain open
 
-- A2: current two-viewer authentication, anonymous denial, pixels and same-link
-  reconnect passed in `local-viewers-PVUWLr`. Input stopped before click because
-  geometry moved after controller takeover. Initial `local-viewers-k5wLHQ` failure
-  was a sampling mismatch: the visible scaled marker lacked a 24-by-24 solid patch.
-  An 8-by-8 crop within a verified 12-by-12 blue region passed both viewers.
-  Neither run proves current input acceptance or correct multi-viewer sizing.
-  Earlier ac277ea0 full local input proof remains historical.
-- A3: current doctor exits 0; guarded maintenance preserved all five browsers and
-  30 open-tab ownership records. Seven lease warnings remain advisory.
-  Scheduled operation and actual consumer recovery are still unproven.
+- A2: `local-viewers-PVUWLr` passed two authenticated viewers, anonymous denial,
+  pixels and same-link reconnect, then stopped before input on moving geometry.
+  The initial 24-by-24 marker sample failed at rendered scale; the verified
+  8-by-8 crop passed. Third attempt failed resolution before reaching geometry.
+  Acquisition completed with pending display/orphaned route; cause not yet proven.
+  Earlier ac277ea0 full local input proof remains historical, not current acceptance.
+- A3: doctor exited 0 at the preceding checkpoint; maintenance preserved five
+  browsers and 30 open-tab records. Current presentation regression invalidates
+  any claim of full readiness. Seven lease warnings were advisory at that check.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
