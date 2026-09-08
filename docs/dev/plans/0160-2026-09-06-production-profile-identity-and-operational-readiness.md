@@ -156,6 +156,14 @@ a newly attached CDP connection does not satisfy this requirement: Chromium bind
 download-event subscription to each BrowserHandler, while SetDownloadBehavior
 both enables those events and mutates the shared context policy. An observer that
 set the policy cannot stand in for a reconnected Service consumer in acceptance.
+Independent Page events may supply completion without policy mutation, but a
+read-only join to Chrome's live History database is not yet a usable artifact
+resolver. Do not bypass its locking or treat an inconsistent copied database as
+proof of the completed file. Bound further artifact-path investigation separately.
+Qualified retained-handle ownership repairs and accurate failure reporting may
+advance through installed acceptance independently; keep consumer CSV acceptance
+explicitly open instead of withholding those repairs behind the separate capture
+design. This does not relax A1–A4/AX completion requirements.
 Before further capture implementation, establish an event source that survives
 runtime-host replacement without replacing unknown peer policy. Evaluate a
 browser-lifetime download owner with explicit policy custody and reconnectable
