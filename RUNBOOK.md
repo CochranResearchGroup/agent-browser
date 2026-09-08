@@ -4,28 +4,29 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 254 | 2026-09-08
+## Turn 255 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: the combined diagnostics recovery and route-conflict tracing
-repair is installed. Exact release fixtures eVWPUj and B3UHsO passed independent
-original-client recovery through host interruption in headless and private headed
-modes; soNeb7 passed MCP/HTTP causal correlation, typed no-effect route refusal,
-self-identified reconnect and exact-target release. All left zero owned residue.
-The 588s release build followed passing format, clippy and optimized-candidate proof.
-One activation preserved five production browsers, their retained temporary storage
-and all 33 tab custody records. Only the original synthetic handle's connection ID
-rebound during acceptance; its subject and permissions are preserved.
-Local viewer hyfdJq passed two authenticated viewers, anonymous denial, original
-same-link reconnect and trusted mouse/keyboard input (12/12 to 13/13). Its client
-browser closed. Original-handle diagnostics remain complete. Doctor exits 0 after
-one supported maintenance pass: zero generations removed, zero processes terminated.
-Private publication-605c7f37/acceptance-checkpoint.json binds installed identity,
-exact-release and viewer evidence, custody readback and explicit remaining gaps.
-Seven lease advisories remain; the original SoyLei client is still disconnected.
-Its own retry/request ID and actual artifact transport remain unverified.
-Next: remaining A1 ownership dispositions and AX coverage, then A3/A4 acceptance.
-Keep the maintenance timer inactive pending A1–A3; full-plan acceptance remains OPEN.
+Outcome progress: current lease explanations and access plans classify all seven
+maintenance findings across six records. All four affected profiles allow
+self-declared shared-local acquisition and offer one existing browser with zero
+blocking identity axes. This does not prove original-consumer control or authorize
+maintenance rejoin/cleanup. Private ownership-disposition-959ba7be/ binds each row.
+Exact installed session-only close/reopen passed headless PUSPkf and headed 8IUNVX.
+A retained action-family test found a remaining file_transfer target-selection
+failure (Br3VC9). UI actions and network capture passed via their outer routing
+gate; file transfer bypassed that gate. Source now invokes the existing exact
+retained-target recovery after recipe validation, before file input/download work.
+Optimized candidate si6ydg and 5vZ9uh pass both modes: original credentials and
+handles, own-tab UI/upload effects, unchanged peer, foreign denials before effects,
+retained process/targets/storage and zero owned residue. Build took 152s; format,
+clippy (26s) and diff checks pass. Five production browser identities are unchanged.
+The repair is not installed. Batch shared download-policy ownership and namespace
+artifact transport disposition before another publication. Plan W1 now explicitly
+exercises these action families immediately after another retained target.
+Production remains the accepted candidate below, with durable-link/input proof and
+zero-exit doctor at publication. Original SoyLei reconnect remains unverified.
+A1/A3/A4/AX remain OPEN; keep the maintenance timer inactive pending A1–A3.
 
 ### Current installed identity
 
@@ -135,7 +136,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all six holds and original recovery storage. The installed GC repair now
+Keep all seven holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 

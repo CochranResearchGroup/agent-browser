@@ -51,6 +51,9 @@ pub(crate) async fn handle_service_file_transfer(
         .get("targetId")
         .and_then(Value::as_str)
         .ok_or_else(|| "file_transfer requires serviceTabHandle.targetId".to_string())?;
+    // File transfer bypasses native auto-launch routing. Recover only this
+    // authorized retained target before reading or changing its file inputs.
+    crate::native::service_probe::ensure_retained_service_tab_browser(cmd, state).await?;
     {
         let mgr = state
             .browser

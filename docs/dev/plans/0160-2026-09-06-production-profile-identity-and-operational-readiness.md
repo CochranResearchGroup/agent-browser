@@ -262,9 +262,13 @@ is insufficient. Verify real authorization; do not weaken checks to reduce
 error counts or create replacement profiles as recovery.
 
 Cover positive named and custom profiles, session-only reuse, two authorized
-clients, clean terminal close/reopen and retained host recovery. Negative cases
-must cover conflicting explicit profile, foreign principal, missing binding,
-ambiguous owner, changed generation, PID reuse and stale endpoint/target.
+clients, clean terminal close/reopen and retained host recovery. Exercise
+diagnostics, UI actions, network capture and file transfer directly
+after another authorized client's retained target was selected. Verify each
+operation reaches its own target and foreign requests leave both tabs unchanged.
+Identity counterexamples must cover conflicting explicit profile, foreign
+principal, missing binding, ambiguous owner, changed generation, PID reuse and
+stale endpoint/target.
 Use focused deterministic tests for identity counterexamples and disposable
 installed fixtures for process/transport claims. Each negative case must prove
 no browser effects and identify the safe next action.
