@@ -4,22 +4,23 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 237 | 2026-09-07
+## Turn 238 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: installed `15cd8e5b` passed one manual maintenance cycle;
-final install doctor exits 0. Five production browser identities and 31 open-tab
-custody records survived. No processes, profiles, sessions or displays were
-removed. GC removed 27 generations; one was restored from its verified backup
-because doctor still requires the historical failed transaction's old payload.
-Supported retention holds now protect that payload and the immediate rollback;
-final GC preview has zero candidates and three retained generations.
-Production is unchanged. The consumer lease now matches the live Default owner
-and permits `rejoin_owned_browser`; its own credentialed acceptance is pending.
-Source shares the rollback dependency between doctor and GC. Three focused tests,
-formatting and Clippy pass. Repair not installed; A1–A4/AX remain OPEN.
-Next: consumer rejoin/control evidence and consolidated final-candidate acceptance.
-Keep both holds and the timer disabled; no new production build is underway.
+Outcome progress: eight disposable real-browser cases passed against installed
+`15cd8e5b`, without another build or production replacement. Named and custom
+profiles passed interaction, original two-client handles across host interruption,
+foreign-input denial and terminal close/reopen in headless and remote-headed
+postures. Session-only routing, exact tab close, detach/release after restart,
+five negative no-effect cases and peer preservation passed in both postures.
+Each fixture has a zero-residue census; all five production browsers survived.
+Fresh session-only cold launch and whole-browser close/reopen remain unproven.
+The consumer lease offers rejoin, but its own credentialed recovery is pending.
+A1–A4/AX remain OPEN; full causal reconstruction and scheduled cycles remain due.
+Prior maintenance doctor passed. Three generations remain protected, including
+both rollback holds. Source repair `d6f01b00` passed focused gates but is uninstalled.
+Next: fill the session-only lifecycle gap and obtain consumer recovery evidence.
+Keep both holds and the timer disabled; no production rebuild is underway.
 
 ### Current installed identity
 
@@ -37,25 +38,19 @@ Keep both holds and the timer disabled; no new production build is underway.
 
 ### A1: installed identity repairs and remaining boundary
 
-The earlier installed `dc570e5b` repair fixed `no_safe_reconciliation_transition`
-when the exact lease already authorized rejoin. The planner seals one
-`rejoin_owned_browser` transition and apply reuses unique, uncontested owner,
-session and tab guards. Earlier exact-release proof retained both original
-handles across host interruption, restored active lease and complete attestation,
-and correlated the returned receipt with the persisted plan and lease.
-
-Earlier storage/rejoin and handle-only MCP routing qualification is preserved at
-`c40e583a`. The installed `d6d99e43` routes original handles correctly and its
-isolated reconnect, foreign denial, exact release and peer-preservation checks
-passed. This does not establish current consumer acceptance.
+Earlier rejoin, missing-binding and MCP routing repairs remain in the installed
+candidate. Git `d6f01b00` preserves the detailed history and scoped older proofs.
+Current proof is indexed in `installed-15cd8e5b-a1/acceptance-matrix.json`: exact
+binary, fixture driver and ledger hashes, distinct cases, cleanup and explicit
+gaps. These are disposable test-owned clients, not consumer impersonation.
 
 Seven current lease findings span six rows: two legacy-principal warnings,
 three missing owner bindings on Default, and an owner-generation/session-authority
 pair on stealthcdp-default. All four affected profiles have active shared-local
 policies. These maintenance warnings alone do not establish an ordinary request
 refusal. The original synthetic profile has complete attestation and successful
-control despite its legacy warning. Exact installed binary `retained-unit-sim-NdcCp4`
-passes ordinary control before rejoin, sealed rejoin with its original credential,
+control despite its legacy warning. Earlier exact-release fixture `retained-unit-sim-NdcCp4`
+passed ordinary control before rejoin, sealed rejoin with its original credential,
 active lease, complete attestation, two original handles and retained storage.
 Cleanup left zero owned processes. Private `ownership-dispositions.json` assigns
 all six records; combined identity recovery now has isolated exact-binary proof. Consumer capabilities were not borrowed to
@@ -159,6 +154,8 @@ boundaries remain unchanged.
 ### Evidence index
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
+- `installed-15cd8e5b-a1/acceptance-matrix.json`: eight current-binary identity
+  cases with hashed evidence, cleanup and explicit acceptance gaps.
 - `publication-15cd8e5b/`: release/activation, supported holds, verified backups,
   maintenance result/preservation, historical rollback restoration, final doctor,
   zero-candidate GC preview and `viewer-failure-disposition.json`.
