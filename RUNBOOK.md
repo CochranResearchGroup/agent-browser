@@ -4,39 +4,38 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 250 | 2026-09-07
+## Turn 251 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Acceptance remains incomplete. Source c2592b7d is installed, but the single
-post-repair viewer attempt local-viewers-eO0O1k again selected :12 instead of :14
-and failed with route_display_owner_unproven before launch or input.
-Release build took 595s; exact headless and remote-headed lifecycle fixtures passed.
-Those successes did not establish durable-link recovery. That live window is closed.
-Fresh readback proves all five incumbent processes unchanged and the original
-synthetic handle's complete attestation and control, with input counters still 11/11.
-The next diagnosis found that retained selection updates the command while the
-planner consumes the earlier parsed intent. The previous test reparsed that intent
-outside the coordinator, missing the production flow. An existing coordinator
-regression reproduced the wrong generated display ID after 243s compilation.
-The coordinator now refreshes intent after selection. All 169 focused tests pass
-(build 265s, tests 0.17s), as do fmt, workspace clippy and handoff docs checks.
-Repair is not installed. Next: qualify its exact candidate before a new live window.
-Actual consumer recovery and A1–A4/AX remain OPEN. Preserve the maintenance hold.
-Private publication-c2592b7d indexes installation, failed acceptance and preservation.
-retained-route-coordinator-repair.json records the regression and source qualification.
-Previous source qualification and cumulative effort remain at Git c2592b7d.
+Outcome progress: installed 700ffa8a passes the original durable-link journey.
+Two authenticated viewers, anonymous denial, synthetic pixels, same-URL reconnect,
+and trusted mouse/keyboard input passed in local-viewers-ZP6oBA. Display :14 and
+route guacamole:3 are ready. Original-handle attestation and control pass; trusted
+input counters advanced exactly once from 11/11 to 12/12. Remote identity is retained.
+The coordinator now passes retained route selection into its parsed acquisition
+intent. Its regression failed before repair; 169 focused tests and required gates
+passed. Exact release built in 586s; both disposable lifecycle modes passed with
+zero residue. One activation and one viewer attempt succeeded in this window.
+All five incumbent processes and storage survived. Activation preserved 30 tab
+records exactly; subsequent recovery rebound only the synthetic connection ID,
+preserving every other custody and permission field. Shared skill matches source.
+Supported maintenance removed nothing and refreshed monitoring. Doctor now exits 0.
+Seven lease advisories remain, and original-consumer reconnect is unverified.
+A2 local acceptance passes; remaining A1/A3/A4/AX obligations remain OPEN.
+Next: consumer recovery and installed trace acceptance; no further viewer retry.
+Keep the maintenance timer inactive until A1–A3 permit scheduled-cycle acceptance.
+Private publication-700ffa8a/acceptance-checkpoint.json indexes the current proof.
+Git 700ffa8a preserves prior failure, repair, qualification and cumulative effort.
 
 ### Current installed identity
 
-- Source: `c2592b7d0e614e7993ddf428efad723c4abc5d11`.
-- Generation: `0.28.0-05b91a5ac531-7adec5040f93`.
-- Binary SHA256: `05b91a5ac531b152e717ec125e19b2122a98579b6bdb144d6c5ef37afbdfd182`.
-- Support SHA256: `7adec5040f93a8c1fedacdc4bce391fa952dd009a25b9ccb032577fecee4798c`.
-- Host PID43996; activation preserved five browser identities and 30 tab records.
-- Original synthetic handle retains complete attestation and successful control.
-- General shared skill synced to c2592b7d with verified prior-version backup.
-- Immediate rollback `0.28.0-b5c3fb971ec8-016a21729553` has 32 verified backup files.
-- Five rollback holds remain. Maintenance timer stays disabled.
+- Source: `700ffa8a0cbacea2498209824c1c6692af63a1e6`.
+- Generation: `0.28.0-71fb25483e8e-8ec84d66e29f`.
+- Binary SHA256: `71fb25483e8e6e7a956f73f3d64567bdfa9dd0a5def2285cffdea6fde6068184`.
+- Support SHA256: `8ec84d66e29f107a159f08aeffcfb67c373467df5b57874cab8602212ddc7fd0`.
+- Host PID22976. General shared skill matches 700ffa8a without another overwrite.
+- Immediate rollback `0.28.0-05b91a5ac531-7adec5040f93` has 32 verified backup files.
+- Six rollback holds remain. Maintenance timer stays inactive, linked, not enabled.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -97,16 +96,15 @@ was not recreated. Actual consumer CSV, new-client artifact transport and shared
 browser-context download policy remain unaccepted. The private recovery helper
 still needs a reusable product diagnosis/recovery surface.
 
-### A2–A4 and AX remain open
+### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: prior `local-viewers-PVUWLr` passed viewers and same-link refresh, then stopped
-  on moving input geometry. The next attempt exposed completed acquisition with
-  pending display and orphaned route. Stale reconciliation is now repaired.
-  Current `local-viewers-eO0O1k` returned `route_display_owner_unproven` for :12;
-  the retained browser is on :14. Request correlation and compensation are recorded.
-  Current operator journey and input remain unaccepted. Do not reuse earlier passes.
-- A3: prior doctor exited 1 for operator journey and stale monitoring. Original
-  handle control is proven separately. Seven lease warnings remain advisory.
+- A2: local-viewers-ZP6oBA passes both viewers, anonymous denial, verified pixels,
+  same-link reconnect and trusted mouse/keyboard input on the installed candidate.
+  Exact display :14 and route guacamole:3 remain ready. This is local operator
+  evidence; Plan0158 external-vantage acceptance is separate.
+- A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
+  Seven advisory lease findings remain; consumer recovery is not established by
+  a green doctor. Keep their existing evidence-backed dispositions visible.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
@@ -137,7 +135,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all five holds and original recovery storage. The installed GC repair now
+Keep all six holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
@@ -161,8 +159,8 @@ Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
 - `publication-15cd8e5b/`: release/activation, supported holds, verified backups,
   maintenance result/preservation, historical rollback restoration, final doctor,
   zero-candidate GC preview and `viewer-failure-disposition.json`.
-- `a2-operator-journey-r2/access-grant-attempt/local-viewers-YpB5BS/`:
-  current view/reconnect proof and preserved keyboard crop failure.
+- `publication-700ffa8a/`: installed acceptance, preservation, maintenance and doctor.
+- `a2-operator-journey-r2/access-grant-attempt/local-viewers-ZP6oBA/`: full local journey.
 - `publication-ac277ea0/` and `local-viewers-sJv4NQ/`: previous release and full
   local two-viewer, reconnect and trusted Guacamole input evidence.
 
