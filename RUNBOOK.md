@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 267 | 2026-09-08
+## Turn 268 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed bf4de8aa after one 605-second release build and five exact-release
@@ -33,11 +33,11 @@ The source classifier now preserves download codes without falsely labeling
 missing/canceled events as ownership failures; explicit identity failures retain
 lifecycle_owner. All 16 focused tests, fmt and clippy pass. This fix is not installed.
 Source fix pushed at 028597ea. Headless CLI cold open/reopen passes in Bk7rtr.
-Headed fixture WEXgIR opened the page but its process-identity oracle found zero
-matching processes, so input/reopen were not reached. This is inconclusive,
-not an owner diagnosis. Shared X11 socket startup needed a private namespace;
-all three headed setup/verification attempts ended with no owned process residue.
-Next: repair the fixture identity oracle before replay. A1/A3/AX and A4 stay open.
+Headed session-only fill/click and reopen now pass in KTEIFz: same physical
+profile, verified headed processes, both exited after close, zero owned residue,
+five production identities preserved. Earlier oracle failures parsed Chrome's
+single-string argv incorrectly; product discovery already handles that format.
+Next: original consumer reconnect and remaining A1/A3/AX gates before A4.
 
 ### Current installed identity
 
