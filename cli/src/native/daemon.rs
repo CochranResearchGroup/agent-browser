@@ -1012,8 +1012,8 @@ async fn handle_connection<S>(
                         }
                     }
                     router.close_lane(&lane_session).await;
-                    if !crate::runtime_host::admission_enabled() || router.lanes.is_empty() {
-                        // Signal the daemon or now-empty runtime host to exit gracefully.
+                    if !crate::runtime_host::admission_enabled() {
+                        // Legacy daemons exit with their lane; shared hosts accept future lanes.
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                         close_notify.notify_one();
                     }
@@ -1134,6 +1134,73 @@ fn get_port_for_session(session: &str) -> u16 {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
+
+    #[tokio::test]
+    async fn closing_last_runtime_lane_does_not_stop_shared_host() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home = std::env::temp_dir().join(format!("ab-last-lane-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let notify = Arc::new(Notify::new());
+        let (client, server) = tokio::io::duplex(8192);
+        let task = tokio::spawn(handle_connection(
+            server,
+            router.clone(),
+            "cold",
+            None,
+            None,
+            notify.clone(),
+            Arc::new("fixture-auth".into()),
+        ));
+        let (reader, mut writer) = tokio::io::split(client);
+        writer.write_all(b"{\"id\":\"close-last\",\"action\":\"close\",\"_agentBrowserAuthToken\":\"fixture-auth\"}\n").await.unwrap();
+        let mut response = String::new();
+        BufReader::new(reader)
+            .read_line(&mut response)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&response).unwrap()["success"],
+            true
+        );
+        task.await.unwrap();
+        assert!(router.lanes.is_empty());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), notify.notified())
+                .await
+                .is_err(),
+            "closing the last lane must not stop the shared host"
+        );
+        router.shutdown().await;
+        fs::remove_dir_all(home).unwrap();
+    }
 
     #[test]
     fn executable_hashing_streams_file_contents() {

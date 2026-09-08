@@ -275,6 +275,7 @@ impl<T: Clone> RuntimeLaneRegistry<T> {
         self.lanes.write().ok()?.remove(lane)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.lanes
             .read()

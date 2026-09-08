@@ -2054,7 +2054,9 @@ Repeated commands with the same `--session` and `--profile <path>` reuse that
 custom directory. A planned default must not replace an explicit profile path.
 After an exact close proves process exit and lock release, reopening the same
 path resolves its retained profile identity. Conflicting profiles and unresolved
-ownership still fail before browser effects.
+ownership still fail before browser effects. Closing the last native session leaves
+the shared runtime host available for a later open. Completed owner history does
+not block reopening; unresolved cleanup still does.
 
 The profile directory stores:
 

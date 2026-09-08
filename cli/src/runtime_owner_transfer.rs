@@ -964,7 +964,14 @@ pub(crate) fn owner_binding_for_session(
     session_id: &str,
 ) -> Result<Option<RuntimeOwnerBinding>, String> {
     let snapshot = repository.load_snapshot()?;
-    let registry = &snapshot.runtime_owner_registry;
+    owner_binding_in_registry(&snapshot.runtime_owner_registry, session_id)
+}
+
+/// Resolve current authority without treating completed lifecycle history as a live owner.
+pub(crate) fn owner_binding_in_registry(
+    registry: &RuntimeOwnerRegistry,
+    session_id: &str,
+) -> Result<Option<RuntimeOwnerBinding>, String> {
     let binding = registry.binding_for_session(session_id)?;
     let Some(binding) = binding else {
         return Ok(None);

@@ -23,10 +23,11 @@ pub(super) fn admit_cold_navigation(
         || snapshot
             .browsers
             .contains_key(&format!("session:{}", daemon.session_id))
-        || snapshot
-            .runtime_owner_registry
-            .binding_for_session(&daemon.session_id)?
-            .is_some()
+        || crate::runtime_owner_transfer::owner_binding_in_registry(
+            &snapshot.runtime_owner_registry,
+            &daemon.session_id,
+        )?
+        .is_some()
     {
         return Ok(None);
     }

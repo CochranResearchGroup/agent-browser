@@ -4386,6 +4386,58 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         .unwrap_err()
         .contains("service_tab_target_unproven"));
     assert_eq!(store.load().unwrap().browsers.len(), 1);
+    snapshot.browsers.clear();
+    use crate::runtime_owner_transfer::{
+        CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+        RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    };
+    let digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&home.join("profile")).unwrap();
+    snapshot.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
+        owner_id: "closed-owner".into(),
+        profile_identity_digest: digest.clone(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: "session:cold-native".into(),
+        daemon_session_route: "cold-native".into(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    });
+    snapshot.runtime_owner_registry.lifecycle_records.insert(
+        "session:cold-native".into(),
+        RuntimeLifecycleRecord {
+            logical_browser_id: "session:cold-native".into(),
+            profile_identity_digest: digest,
+            owner_generation: 1,
+            lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state: CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".into(),
+                "profile_lock_released".into(),
+            ],
+            ..RuntimeLifecycleRecord::default()
+        },
+    );
+    store.save(&snapshot).unwrap();
+    assert!(
+        bind_native_service_tab_command(&command, &daemon).is_ok(),
+        "terminal history must allow permission-checked reopen"
+    );
+    snapshot
+        .runtime_owner_registry
+        .lifecycle_records
+        .get_mut("session:cold-native")
+        .unwrap()
+        .cleanup_obligation_state = CleanupObligationState::Owned;
+    store.save(&snapshot).unwrap();
+    assert!(
+        bind_native_service_tab_command(&command, &daemon).is_err(),
+        "unsettled cleanup still blocks reopen"
+    );
     let _ = fs::remove_dir_all(home);
 }
 
