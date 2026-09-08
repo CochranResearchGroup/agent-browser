@@ -12,8 +12,7 @@ resolution before input. Its acquisition is completed/checked_out, but the same
 display is pending and route orphaned. Journal records primary route unavailable
 and handoff unusable. The time-matched job says succeeded; the driver captured a
 failed response without body/status/correlation, so exact wire cause is unproven.
-Guacamole is running and guacd healthy. No provider or browser was restarted.
-All five browser identities remain preserved. Actual consumer is still disconnected
+Guacamole is running and guacd healthy; no restart occurred. Five browsers are preserved. Actual consumer is still disconnected
 with its original self-declared identity and permissions; recovery is unaccepted.
 Stop viewer retries (three attempts). Next: isolated reservation, finalization and
 reconciliation replay against `failed-resolution-state-private.json`; establish
@@ -92,7 +91,7 @@ Publications preserved those mounts and tab custody; new-host backing is verifie
 checkpoint `dd94dfe7` and in the private ownership-bound recovery receipts.
 
 Keep `runtime-tmp/recovered` backing directories while retained namespaces
-reference them. The new template does not itself repair already-deleted mounts.
+reference them. The template does not repair already-deleted mounts.
 The historical Playwright Node process no longer exists; its artifact directory
 was not recreated. Actual consumer CSV, new-client artifact transport and shared
 browser-context download policy remain unaccepted. The private recovery helper
