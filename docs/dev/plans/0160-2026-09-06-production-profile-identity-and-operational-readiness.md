@@ -147,7 +147,14 @@ a new unit template cannot repair their mounted inode. Browser-native download
 and artifact retrieval must pass before calling the consumer download resolved.
 
 After the identity batch, repair supported rollback retention before maintenance
-can resume. Complete A1/A3 dispositions and doctor acceptance before A4's actual
+can resume. For a reviewed generation installed outside an accepted upgrade
+transaction, add explicit hash-bound operator retention under the workstation
+lock. It must protect the sealed payload from GC without synthesizing an accepted
+transaction or healthy-generation claim. Require explicit release, retained audit
+evidence, no-effect preview and refusal on changed payloads. Validate the real
+GC join in isolation before using it for the production rollback generation.
+Bound this repair to one source batch, one candidate build and one installation
+attempt within 45 minutes; preserve prior milestone effort and acceptance gaps. Complete A1/A3 dispositions and doctor acceptance before A4's actual
 scheduled cycles. A2 and AX retain their existing scope; the full A1–A4/AX
 contract remains open until each requirement has current evidence.
 

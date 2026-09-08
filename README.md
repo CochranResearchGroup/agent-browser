@@ -535,6 +535,15 @@ true after reviewed GC removes that obsolete rollback generation.
 cleanup. A later explicit `--apply` retains the selected generation, the
 immediately previous healthy rollback generation, and exact live-process,
 named-supervisor, active-transaction, and open-rollback references.
+For a reviewed rollback generation outside an accepted upgrade transaction, use
+`agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json`, then repeat with `--apply`.
+The explicit hold hashes the sealed payload and prevents generation cleanup until
+an explicit `--release --apply` for that same ID. Preview release with
+`--release --dry-run`. Both operations require a reason; neither changes the
+selected generation, runs cleanup, or attests health or upgrade acceptance.
+GC rechecks held payloads under the workstation lock before effects and refuses
+changed or malformed retention evidence. Released receipts remain available.
+
 `agent-browser install workstation reconcile --json` runs the same lightweight
 maintenance authority as the installed interlock timer. It reconciles route
 users through the non-PAM helper, applies only identity-proven unattended

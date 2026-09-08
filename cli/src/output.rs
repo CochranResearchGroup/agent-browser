@@ -5532,6 +5532,7 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install workstation recover --transaction-id <id> [--json]
        agent-browser install workstation finalize [--json]
        agent-browser install workstation gc <--dry-run|--apply> [--json]
+       agent-browser install workstation retain-generation <id> --reason <text> <--dry-run|--apply> [--release] [--json]
        agent-browser install workstation reconcile [--json]
        agent-browser install workstation backup [--json]
        agent-browser install transactions list [--json]
@@ -5812,6 +5813,7 @@ Examples:
   agent-browser install workstation recover --transaction-id upgrade-... --json
   agent-browser install workstation finalize --json
   agent-browser install workstation gc --dry-run --json
+  agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json
   agent-browser install workstation reconcile --json
   agent-browser install workstation backup --json
   agent-browser install transactions list --json

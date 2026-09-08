@@ -43,6 +43,7 @@ use crate::runtime_replacement::{
 };
 
 mod current_selection;
+mod retention_hold;
 
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
 const DEFAULT_DASHBOARD_PORT: u16 = 4848;
@@ -263,6 +264,7 @@ pub fn run_workstation_command(args: &[String]) {
         Some("recover") => run_workstation_upgrade_recover(args, json),
         Some("finalize") => run_workstation_upgrade_finalize(json),
         Some("gc") => run_workstation_generation_gc(args, json),
+        Some("retain-generation") => retention_hold::run(args, json),
         _ => run_workstation_install(args),
     }
 }
@@ -2336,6 +2338,7 @@ fn generation_retention_plan(
     paths: &InstallPaths,
     finalize_eligible: bool,
 ) -> Result<crate::runtime_retention::GenerationRetentionPlan, String> {
+    let holds = retention_hold::references(root, paths)?;
     let selected = selected_generation_id(paths);
     let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
     let mut transactions = Vec::new();
@@ -2381,6 +2384,9 @@ fn generation_retention_plan(
         }
     }
     let mut references = plan.references.clone();
+    for (generation, reasons) in holds {
+        references.entry(generation).or_default().extend(reasons);
+    }
     collect_process_generation_references(paths, &mut references);
     collect_supervisor_generation_references(root, paths, &mut references)?;
     for reasons in references.values_mut() {

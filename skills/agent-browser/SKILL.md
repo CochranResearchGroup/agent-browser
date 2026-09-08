@@ -230,7 +230,18 @@ metadata. It keeps the selected and immediately previous healthy generations
 plus exact live-process, supervisor, active-transaction, and open-rollback
 references. Run the dry-run first. Once the transaction is
 `old_generation_retirable`, `rollbackReady` remains true after reviewed GC
-removes that obsolete rollback generation. This branch remains a release no-go
+removes that obsolete rollback generation.
+
+For a reviewed rollback generation outside an accepted upgrade transaction, use
+`agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json`, then repeat with `--apply`.
+The explicit hold hashes the sealed payload and prevents generation cleanup until
+an explicit `--release --apply` for that same ID. Preview release with
+`--release --dry-run`. Both operations require a reason; neither changes the
+selected generation, runs cleanup, or attests health or upgrade acceptance.
+GC rechecks held payloads under the workstation lock before effects and refuses
+changed or malformed retention evidence. Released receipts remain available.
+
+This branch remains a release no-go
 until the disposable Ubuntu and release gates
 pass.
 

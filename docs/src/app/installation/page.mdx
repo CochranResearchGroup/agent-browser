@@ -369,6 +369,15 @@ exact live-process, supervisor, active-transaction, and open-rollback
 references. Eligible accepted transactions are finalized automatically while
 their durable metadata remains available for audit.
 
+For a reviewed rollback generation outside an accepted upgrade transaction, use
+`agent-browser install workstation retain-generation <id> --reason "reviewed rollback" --dry-run --json`, then repeat with `--apply`.
+The explicit hold hashes the sealed payload and prevents generation cleanup until
+an explicit `--release --apply` for that same ID. Preview release with
+`--release --dry-run`. Both operations require a reason; neither changes the
+selected generation, runs cleanup, or attests health or upgrade acceptance.
+GC rechecks held payloads under the workstation lock before effects and refuses
+changed or malformed retention evidence. Released receipts remain available.
+
 <code>agent-browser install doctor --json</code> verifies the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
 SHA-256 provenance recorded during workstation installation.
