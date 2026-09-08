@@ -4812,7 +4812,9 @@ settings. Capture enables its own event subscription through a temporary empty
 context, which is disposed before the click. It matches the authorized frame and
 download GUID, then copies the reported completed file into the allowlisted
 output directory. On Linux, the source is resolved through the verified browser
-process's mount namespace. Source files remain intact and existing destinations
+process's mount namespace. Directory aliases are resolved in that browser
+namespace, including links into Windows mounts; a symlink as the completed file
+itself is refused. Source files remain intact and existing destinations
 are never overwritten. Newly owned Chrome launches use the configured download
 path or a stable `agent-browser-downloads` directory inside the profile.
 Subscription, identity and artifact failures retain specific error codes and

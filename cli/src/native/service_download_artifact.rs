@@ -272,6 +272,16 @@ fn open_beneath(
     path: &Path,
     directory: bool,
 ) -> Result<std::fs::File, String> {
+    open_beneath_flags(root, path, directory, libc::O_RDONLY)
+}
+
+#[cfg(unix)]
+fn open_beneath_flags(
+    root: &std::fs::File,
+    path: &Path,
+    directory: bool,
+    leaf_flags: i32,
+) -> Result<std::fs::File, String> {
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::ffi::OsStrExt;
     let parts = path_components(path)?;
@@ -281,15 +291,15 @@ fn open_beneath(
     for (index, part) in parts.iter().enumerate() {
         let name = std::ffi::CString::new(part.as_bytes())
             .map_err(|_| "download_artifact_path_unsafe: embedded NUL")?;
-        let flags = libc::O_RDONLY
-            | libc::O_CLOEXEC
+        let is_directory = directory || index + 1 < parts.len();
+        let flags = if is_directory {
+            libc::O_RDONLY
+        } else {
+            leaf_flags
+        } | libc::O_CLOEXEC
             | libc::O_NOFOLLOW
             | libc::O_NONBLOCK
-            | if directory || index + 1 < parts.len() {
-                libc::O_DIRECTORY
-            } else {
-                0
-            };
+            | if is_directory { libc::O_DIRECTORY } else { 0 };
         let fd = unsafe { libc::openat(current.as_raw_fd(), name.as_ptr(), flags) };
         if fd < 0 {
             return Err(format!(
@@ -300,6 +310,105 @@ fn open_beneath(
         current = unsafe { std::fs::File::from_raw_fd(fd) };
     }
     Ok(current)
+}
+
+/// Resolve directory aliases in the browser's namespace, not the caller's.
+/// Each link is read through its own O_PATH descriptor; absolute link targets
+/// are mapped again from the browser root. The final file is never a symlink.
+#[cfg(target_os = "linux")]
+fn open_browser_source(
+    root: &std::fs::File,
+    path: &Path,
+    map: impl Fn(&Path) -> Result<std::path::PathBuf, String>,
+) -> Result<std::fs::File, String> {
+    use std::collections::VecDeque;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
+    use std::os::unix::fs::MetadataExt;
+    let mut pending: VecDeque<_> = path_components(path)?
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect();
+    let mut resolved = std::path::PathBuf::from("/");
+    let mut links = 0;
+    while let Some(part) = pending.pop_front() {
+        if part == ".." {
+            if !resolved.pop() {
+                return Err("download_artifact_path_unsafe: directory alias escapes root".into());
+            }
+            continue;
+        }
+        let next = resolved.join(part);
+        let mapped = map(&next)?;
+        let entry = open_beneath_flags(root, &mapped, false, libc::O_PATH)?;
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("download_artifact_path_unsafe: {e}"))?;
+        if metadata.file_type().is_symlink() {
+            if pending.is_empty() {
+                return Err("download_artifact_path_unsafe: completed file is a symlink".into());
+            }
+            if metadata.uid() != unsafe { libc::geteuid() } && metadata.uid() != 0 {
+                return Err(
+                    "download_artifact_path_unsafe: directory alias owner is unproven".into(),
+                );
+            }
+            links += 1;
+            if links > 40 {
+                return Err("download_artifact_path_unsafe: directory alias loop".into());
+            }
+            let mut bytes = vec![0u8; 4096];
+            let count = unsafe {
+                libc::readlinkat(
+                    entry.as_raw_fd(),
+                    c"".as_ptr(),
+                    bytes.as_mut_ptr().cast(),
+                    bytes.len(),
+                )
+            };
+            if count <= 0 || count as usize == bytes.len() {
+                return Err(
+                    "download_artifact_path_unsafe: directory alias target unavailable".into(),
+                );
+            }
+            bytes.truncate(count as usize);
+            let target = std::path::PathBuf::from(std::ffi::OsString::from_vec(bytes));
+            let mut expanded = VecDeque::new();
+            for component in target.components() {
+                match component {
+                    Component::RootDir => resolved = "/".into(),
+                    Component::Normal(name) => expanded.push_back(name.to_owned()),
+                    Component::CurDir => {}
+                    Component::ParentDir => expanded.push_back("..".into()),
+                    _ => {
+                        return Err(
+                            "download_artifact_path_unsafe: directory alias escapes root".into(),
+                        )
+                    }
+                }
+            }
+            expanded.append(&mut pending);
+            pending = expanded;
+            continue;
+        }
+        if pending.is_empty() {
+            let file = open_beneath(root, &mapped, false)?;
+            let actual = file
+                .metadata()
+                .map_err(|e| format!("download_artifact_path_unsafe: {e}"))?;
+            if (actual.dev(), actual.ino()) != (metadata.dev(), metadata.ino()) {
+                return Err(
+                    "download_artifact_path_unsafe: completed file changed while opening".into(),
+                );
+            }
+            return Ok(file);
+        }
+        if !metadata.is_dir() {
+            return Err("download_artifact_path_unsafe: source ancestor is not a directory".into());
+        }
+        resolved = next;
+    }
+    Err("download_artifact_path_unsafe: completed file path is empty".into())
 }
 
 /// Copy the completed file without consuming its source or overwriting a peer.
@@ -322,9 +431,7 @@ pub(crate) fn deliver(
     #[cfg(not(target_os = "linux"))]
     let root_path = "/".to_string();
     #[cfg(target_os = "linux")]
-    let mut resolved_source = source_path.to_path_buf();
-    #[cfg(not(target_os = "linux"))]
-    let resolved_source = source_path.to_path_buf();
+    let mut namespace_maps = None;
     let browser_root = match File::open(root_path) {
         Ok(root) => root,
         #[cfg(target_os = "linux")]
@@ -335,13 +442,19 @@ pub(crate) fn deliver(
             };
             let browser = mounts(&read(format!("/proc/{}/mountinfo", owner.pid))?)?;
             let local = mounts(&read("/proc/self/mountinfo".into())?)?;
-            resolved_source = mapped_source(source_path, &browser, &local)?;
+            namespace_maps = Some((browser, local));
             File::open("/").map_err(|e| format!("download_source_identity_unproven: {e}"))?
         }
         Err(error) => return Err(format!("download_source_identity_unproven: {error}")),
     };
     verify_process(owner)?;
-    let source = open_beneath(&browser_root, &resolved_source, false)?;
+    #[cfg(target_os = "linux")]
+    let source = open_browser_source(&browser_root, source_path, |path| match &namespace_maps {
+        Some((browser, local)) => mapped_source(path, browser, local),
+        None => Ok(path.to_path_buf()),
+    })?;
+    #[cfg(not(target_os = "linux"))]
+    let source = open_beneath(&browser_root, source_path, false)?;
     let metadata = source
         .metadata()
         .map_err(|e| format!("download_artifact_path_unsafe: {e}"))?;
@@ -560,6 +673,34 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn directory_aliases_resolve_in_browser_root_before_parent_components() {
+        use std::io::Read;
+        use std::os::unix::fs::symlink;
+        let root = std::env::temp_dir().join(format!("p160-alias-{}", uuid::Uuid::new_v4()));
+        for directory in ["home", "storage/nested", "storage/exports"] {
+            std::fs::create_dir_all(root.join(directory)).unwrap();
+        }
+        std::fs::write(root.join("storage/exports/file.csv"), b"browser namespace").unwrap();
+        symlink("/storage/nested", root.join("home/shortcut")).unwrap();
+        symlink("shortcut/../exports", root.join("home/Downloads")).unwrap();
+        let root_fd = std::fs::File::open(&root).unwrap();
+        let mut file =
+            open_browser_source(&root_fd, Path::new("/home/Downloads/file.csv"), |path| {
+                Ok(path.into())
+            })
+            .unwrap();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"browser namespace");
+        symlink("/storage/exports/file.csv", root.join("home/leaf")).unwrap();
+        assert!(
+            open_browser_source(&root_fd, Path::new("/home/leaf"), |path| Ok(path.into())).is_err()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn mount_translation_preserves_backing_path_and_rejects_shadowed_mounts() {
         let browser = mounts(
             "1 0 8:1 / / rw - ext4 /dev/x rw\n2 1 8:1 /owned\\040storage /tmp rw - ext4 /dev/x rw",
@@ -635,7 +776,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn delivery_preserves_source_and_refuses_wrong_owner_symlinks_overwrite_and_limits() {
+    fn delivery_preserves_source_and_refuses_wrong_owner_leaf_symlinks_overwrite_and_limits() {
         use std::os::unix::fs::symlink;
         let root = std::env::temp_dir().join(format!("p160-download-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
@@ -654,10 +795,42 @@ mod tests {
         symlink(&source, root.join("link")).unwrap();
         assert!(deliver(&identity, &root.join("link"), &destination, None).is_err());
         symlink(&root, root.join("directory-link")).unwrap();
+        let alias_destination = root.join("alias-destination");
+        assert_eq!(
+            deliver(
+                &identity,
+                &root.join("directory-link/source"),
+                &alias_destination,
+                None
+            )
+            .unwrap(),
+            14
+        );
+        assert_eq!(
+            std::fs::read(&alias_destination).unwrap(),
+            b"exact artifact"
+        );
+        symlink("directory-link", root.join("relative-link")).unwrap();
+        assert_eq!(
+            deliver(
+                &identity,
+                &root.join("relative-link/source"),
+                &root.join("relative-destination"),
+                None
+            )
+            .unwrap(),
+            14
+        );
+        symlink("loop", root.join("loop")).unwrap();
+        assert!(
+            deliver(&identity, &root.join("loop/source"), &destination, None)
+                .unwrap_err()
+                .contains("alias loop")
+        );
         assert!(deliver(
             &identity,
-            &root.join("directory-link/source"),
-            &destination,
+            &source,
+            &root.join("directory-link/destination"),
             None
         )
         .is_err());

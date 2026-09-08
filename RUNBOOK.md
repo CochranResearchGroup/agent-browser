@@ -4,31 +4,30 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 261 | 2026-09-08
+## Turn 262 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Installed source 12f55652: independent download subscription preserves peer policy;
-process-bound mount translation handles systemd denial of retained process-root
-access. First fixture aCb55u exposed that denial; its failure remains recorded.
-Two 147-second optimized builds, three focused tests, client contracts, fmt/clippy,
-and native shared/private download plus two-principal headless/headed checks passed.
-One 625-second release build passed five exact-binary fixtures: ownership in both
-modes, HTTP/MCP classification, shared download and private-namespace download.
-One activation preserved five browsers, storage and 33 tab-custody records. Only
-the synthetic connection ID changed afterward. Maintenance removed nothing;
-doctor exits 0. Ten rollback holds remain and the timer remains inactive.
-Installed CSV acceptance FAILED: Chrome completed the exact synthetic CSV, but
-Downloads is a directory symlink to Windows Downloads and delivery rejected it
-with download_artifact_path_unsafe. Bytes match; the temporary export button was
-removed. Do not call consumer transport resolved. Support verified directory
-aliases before another download publication; preserve file and identity checks.
-Viewer 0LgorK passed two viewers, pixels, anonymous denial and same-link reconnect,
-then lost one iframe during controller refresh. Trusted input was not attempted;
-original handle attestation remains complete and counters remain 14/14. Preserve
-this failure and use scoped connection recovery before diagnosing mouse code.
-Next batch: directory-alias delivery qualification, installed viewer recovery,
-then remaining original-consumer ownership/CSV and A1/A3/A4/AX acceptance.
-Evidence: download-subscription-integration/ and publication-12f55652/.
+Directory-alias delivery is now qualified in source. The resolver reads each
+owned/root-owned directory link through its descriptor in the browser namespace,
+remaps absolute targets, preserves relative-link ordering, and refuses leaf-file
+symlinks, substitution, loops and destination overwrites. Four focused tests,
+fmt/clippy and one 142-second optimized candidate passed. Real native transfers
+passed with retained host interruption and peer-first downloads for Windows
+Downloads/default policy (9Rot2W) and a private relative alias (iTgbzq). Both
+returned exact primary CSV bytes and preserved peer files/handles; cleanup zero.
+Evidence: download-directory-alias/. Production publication remains pending.
+Installed source remains 12f55652. Its initial source qualification and five-case
+release qualification passed, but installed Downloads delivery failed on the
+ordinary Windows alias. Chrome completed the synthetic CSV; its export button
+was removed. That failure remains in publication-12f55652/.
+Five browsers, storage and 33 tab records survive; doctor last exited 0 after
+maintenance removed nothing. Ten rollback holds remain; the timer is inactive.
+Viewer 0LgorK passed two viewers and same-link reconnect, then lost an iframe on
+controller refresh before input. One scoped Retry connection attempt is running
+against the same synthetic handoff; no browser/provider restart is authorized by
+that retry. Next: exact release qualification and publication of the alias repair,
+then installed CSV/input acceptance and remaining A1/A3/A4/AX requirements.
+Original SoyLei reconnect and CSV remain unverified.
 
 ### Current installed identity
 
