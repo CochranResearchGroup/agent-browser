@@ -23,6 +23,23 @@ pub(crate) fn stable_self_declared_subject(
     (!parts.is_empty()).then(|| parts.join("/"))
 }
 
+/// Native CLI calls without attribution still need stable tab custody across
+/// short-lived socket connections. Session labels are self-declaration only.
+pub(crate) fn attribute_native_session(command: &mut Value, session: &str) {
+    if ["serviceName", "agentName", "taskName"]
+        .iter()
+        .all(|field| {
+            command
+                .get(*field)
+                .and_then(Value::as_str)
+                .is_none_or(|value| value.trim().is_empty())
+        })
+    {
+        command["serviceName"] = Value::String("agent-browser-cli".into());
+        command["agentName"] = Value::String(session.to_string());
+    }
+}
+
 /// Immutable, redacted causal identity captured when a request enters a
 /// runtime lane. Only contract-approved scalar identifiers are retained.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -244,5 +261,29 @@ mod tests {
             .as_deref(),
             Some("service:research-fieldwork/agent:codex/task:collect-evidence")
         );
+    }
+
+    #[test]
+    fn native_session_attribution_is_stable_and_preserves_explicit_labels() {
+        let mut command = serde_json::json!({"action": "navigate"});
+        attribute_native_session(&mut command, "worker-one");
+        let first = command.clone();
+        attribute_native_session(&mut command, "worker-two");
+        assert_eq!(command, first);
+        assert_eq!(
+            stable_self_declared_subject(
+                command["serviceName"].as_str(),
+                command["agentName"].as_str(),
+                None
+            )
+            .as_deref(),
+            Some("service:agent-browser-cli/agent:worker-one")
+        );
+        assert!(command.get("identityAssurance").is_none());
+        let mut explicit =
+            serde_json::json!({"serviceName": "consumer", "clientSubjectId": "client:original"});
+        let before = explicit.clone();
+        attribute_native_session(&mut explicit, "worker-one");
+        assert_eq!(explicit, before);
     }
 }

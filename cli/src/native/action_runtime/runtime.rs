@@ -23,6 +23,7 @@ pub(crate) use recovery::*;
 mod launch;
 pub(crate) use launch::*;
 mod cdp_free_execute;
+mod native_acquisition;
 pub(crate) use cdp_free_execute::*;
 mod navigation;
 pub(crate) use navigation::*;

@@ -1460,7 +1460,13 @@ For full details on login flows, OAuth, 2FA, cookie-based auth, and the auth vau
 
 ## Sessions
 
-Run multiple isolated browser instances:
+Run multiple isolated browser instances.
+
+Native browser commands without attribution use `serviceName=agent-browser-cli`
+and the session name as `agentName`. This gives successive CLI connections a
+stable self-declared identity. A first `open` checks `profile_use` and `tab_create`
+before creating its tab; retained browsers continue to require current tab
+custody. Session labels do not grant access to restricted profiles.
 
 ```bash
 # Different sessions

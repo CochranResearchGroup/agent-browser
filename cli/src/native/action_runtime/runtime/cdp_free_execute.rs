@@ -397,6 +397,11 @@ pub(crate) fn bind_native_service_tab_command(
         return Ok(command.clone());
     }
     let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+    if let Some(admitted) =
+        super::native_acquisition::admit_cold_navigation(command, state, &snapshot)?
+    {
+        return Ok(admitted);
+    }
     let browser_id = service_tab_handle_browser_id(state);
     let mut targets = Vec::new();
     for (field, prefix) in [("targetId", ""), ("tabId", "target:")] {

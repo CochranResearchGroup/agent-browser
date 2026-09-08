@@ -7271,6 +7271,8 @@ Confirmation:
   deny <id>                  Deny a pending action
 
 Sessions:
+  Unlabeled native browser commands use agent-browser-cli/session attribution.
+  First open requires profile_use and tab_create; retained tabs require custody.
   session                    Show current session name
   session list               List active sessions
   session supervisor install Install one named lane under the Linux runtime host

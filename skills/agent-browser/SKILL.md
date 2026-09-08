@@ -2773,6 +2773,12 @@ When a dialog is pending, all command responses include a `warning` field indica
 
 ## Session Management and Cleanup
 
+Native browser commands without attribution use `serviceName=agent-browser-cli`
+and the session name as `agentName`. Their stable self-declared identity permits
+ordinary shared-local use when the profile policy allows it. First `open`
+requires `profile_use` and `tab_create`; retained browsers still require current
+tab custody. A session label does not grant restricted-profile access.
+
 When running multiple agents or automations concurrently, always use named sessions to avoid command namespace conflicts. Do not add a new runtime profile merely to avoid another active job. For service-mode work, include `serviceName`, `agentName`, `taskName`, and a target identity so agent-browser can queue work against the right managed browser:
 
 ```bash

@@ -1,6 +1,12 @@
 # Sessions
 
-Run multiple isolated browser instances:
+Run multiple isolated browser instances.
+
+Native browser commands without attribution use `serviceName=agent-browser-cli`
+and the session name as `agentName`, giving successive CLI connections a stable
+self-declared identity. A first `open` checks `profile_use` and `tab_create`
+before creating its tab. Retained browsers require current tab custody, and
+session labels do not grant access to restricted profiles.
 
 ```bash
 # Different sessions
@@ -26,9 +32,9 @@ agent-browser session
 Set <code>AGENT_BROWSER_RUNTIME_HOST=1</code> for disposable validation of the
 single-host architecture. Named sessions then share one authenticated daemon
 endpoint while retaining independent serialized lanes, stream metadata, and
-lane-scoped close behavior. The migration switch is not yet the default for
-ordinary CLI sessions; the Linux supervisor always uses the shared host.
-Neither path authorizes cleanup of legacy daemons.
+lane-scoped close behavior. Workstation installation selects this shared host
+for ordinary CLI sessions. Without a selected host, install the workstation
+before launching a lane. New legacy per-session daemons are no longer created.
 
 ## Runtime lane supervision
 

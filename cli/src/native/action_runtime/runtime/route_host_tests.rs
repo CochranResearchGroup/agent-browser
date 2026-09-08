@@ -4287,6 +4287,109 @@ fn implicit_native_target_requires_current_unambiguous_child_custody() {
 }
 
 #[test]
+fn cold_native_navigation_acquires_child_permission_before_target_binding() {
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+    let home = unique_socket_dir("cold-native-admission");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    guard.remove("AGENT_BROWSER_HOME");
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store.save(&ServiceState::default()).unwrap();
+    let mut daemon = DaemonState::new();
+    daemon.session_id = "cold-native".into();
+    let command = json!({
+        "action": "navigate", "url": "about:blank",
+        "runtimeProfile": "cold-native", "profile": home.join("profile"),
+        "clientSubjectId": "cli-session:cold-native", "identityAssurance": "self-declared",
+        "connectionInstanceId": "connection:cold-native"
+    });
+    let admitted = bind_native_service_tab_command(&command, &daemon).unwrap();
+    assert_eq!(
+        admitted["profileChildAccess"]["subjectId"],
+        command["clientSubjectId"]
+    );
+    assert_eq!(
+        admitted["profileChildAccess"]["connectionInstanceId"],
+        command["connectionInstanceId"]
+    );
+    assert_eq!(admitted["runtimeProfile"], "cold-native");
+    assert!(admitted.get("serviceTabHandle").is_none());
+    assert!(admitted.get("sessionName").is_none());
+    assert!(store.load().unwrap().browsers.is_empty());
+    for (field, value) in [
+        ("targetId", "missing"),
+        ("browserId", "session:peer"),
+        ("sessionName", "peer"),
+    ] {
+        let mut conflicting = command.clone();
+        conflicting[field] = json!(value);
+        assert!(
+            bind_native_service_tab_command(&conflicting, &daemon).is_err(),
+            "{field}"
+        );
+    }
+    let mut snapshot = ServiceState::default();
+    let policy = ServiceProfileAccessPolicy::shared_local_default("cold-native");
+    snapshot.profiles.insert(
+        "cold-native".into(),
+        BrowserProfile {
+            id: "cold-native".into(),
+            user_data_dir: Some(home.join("profile").display().to_string()),
+            access_policy: Some(policy.clone()),
+            ..BrowserProfile::default()
+        },
+    );
+    use crate::native::service_profile_access_policy::{
+        ProfileAccessMode, ProfileAccessPolicyState, ProfilePermission,
+    };
+    let mut restricted = policy.clone();
+    restricted.mode = ProfileAccessMode::Restricted;
+    let mut draining = policy.clone();
+    draining.state = ProfileAccessPolicyState::Draining;
+    let mut no_create = policy.clone();
+    no_create
+        .default_permissions
+        .retain(|permission| *permission != ProfilePermission::TabCreate);
+    let mut no_use = policy.clone();
+    no_use
+        .default_permissions
+        .retain(|permission| *permission != ProfilePermission::ProfileUse);
+    for denied_policy in [restricted, draining, no_create, no_use] {
+        snapshot
+            .profiles
+            .get_mut("cold-native")
+            .unwrap()
+            .access_policy = Some(denied_policy);
+        store.save(&snapshot).unwrap();
+        let mut forged = command.clone();
+        forged["identityAssurance"] = json!("operator");
+        let error = bind_native_service_tab_command(&forged, &daemon).unwrap_err();
+        assert!(error.contains("profile_access_denied"), "{error}");
+        assert!(store.load().unwrap().browsers.is_empty());
+    }
+    snapshot
+        .profiles
+        .get_mut("cold-native")
+        .unwrap()
+        .access_policy = Some(policy);
+    snapshot.browsers.insert(
+        "session:peer".into(),
+        BrowserProcess {
+            id: "session:peer".into(),
+            profile_id: Some("cold-native".into()),
+            health: ServiceBrowserHealth::Ready,
+            ..BrowserProcess::default()
+        },
+    );
+    store.save(&snapshot).unwrap();
+    assert!(bind_native_service_tab_command(&command, &daemon)
+        .unwrap_err()
+        .contains("service_tab_target_unproven"));
+    assert_eq!(store.load().unwrap().browsers.len(), 1);
+    let _ = fs::remove_dir_all(home);
+}
+
+#[test]
 fn configured_runtime_alias_preserves_exact_owner_selection() {
     use sha2::Digest;
     let endpoint = "ws://127.0.0.1:39111/devtools/browser/current";

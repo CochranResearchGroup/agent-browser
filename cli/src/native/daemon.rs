@@ -936,6 +936,17 @@ async fn handle_connection<S>(
                 };
                 let control_plane = lane.control_plane.clone();
                 crate::runtime_host::reconcile_lane_profile_defaults(&mut cmd, &lane.config);
+                if !super::actions::action_skips_browser_launch(
+                    cmd["action"].as_str().unwrap_or(""),
+                ) || matches!(
+                    cmd["action"].as_str(),
+                    Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
+                ) {
+                    super::service_request_provenance::attribute_native_session(
+                        &mut cmd,
+                        &lane_session,
+                    );
+                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());
