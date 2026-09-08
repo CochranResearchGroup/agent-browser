@@ -20,10 +20,9 @@ The original target and handle remain live with complete attestation. No dashboa
 source changed in the installed batch; keep the ownership repair and held rollback.
 A focused source regression proves missing inventory was treated as stale-target
 replacement. The guard now waits for the same target; focused case and dashboard
-build pass. Full projection script has an independently reproduced HEAD frame-URL
-baseline failure. This dashboard repair is uninstalled and not fully qualified.
-Next: dispose that baseline failure and qualify the dashboard repair before a new
-candidate. A1/A2/A3/A4/AX remain OPEN; original consumer reconnect/CSV are unverified.
+build pass. The full projection suite now passes after correcting two outdated
+fixture URLs to recognized Guacamole paths. The original baseline failures remain
+recorded. This dashboard repair is uninstalled. Next: qualify one new candidate. A1/A2/A3/A4/AX remain OPEN; original consumer reconnect/CSV are unverified.
 Download investigation remains paused: Page events work independently, but the
 read-only History lookup locked. Do not reinstate withdrawn passive capture.
 Evidence: publication-3052004d/ and download-policy-c31a13ed/. Timer stays inactive.

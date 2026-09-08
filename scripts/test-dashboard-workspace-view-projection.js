@@ -280,19 +280,20 @@ assert.equal(missingAuthority.selected.authorityPreservation, 'missing');
 assert.equal(missingAuthority.selected.canView, false);
 assert.equal(missingAuthority.selected.canControl, false);
 
+// Manual route fixtures must use the Guacamole path accepted by public ingress.
 const manualSubject = 'manual-runtime:browser-b';
 const manual = projectWorkspaceViews({
   sources: {
     selectedContext: {
       node: { id: manualSubject, label: 'Manual browser' },
-      stream: { provider: 'rdp_gateway', routeId: 'route-b', url: 'http://127.0.0.1:8092/route-b', embeddable: true },
+      stream: { provider: 'rdp_gateway', routeId: 'route-b', url: 'http://127.0.0.1:8092/guacamole/#/client/b', embeddable: true },
     },
     remoteViewRoutes: {
       'route-b': {
         id: 'route-b',
         provider: 'rdp_gateway',
-        localEmbedUrl: 'http://127.0.0.1:8092/route-b',
-        publicOperatorUrl: 'https://operator.example.test/route-b',
+        localEmbedUrl: 'http://127.0.0.1:8092/guacamole/#/client/b',
+        publicOperatorUrl: 'https://operator.example.test/guacamole/#/client/b',
         controlInput: 'manual_attached_desktop',
         readiness: { state: 'ready' },
       },
@@ -310,7 +311,7 @@ const manual = projectWorkspaceViews({
     dashboardHref: 'https://dashboard.example.test/',
   },
 });
-assert.equal(manual.selected.frameUrl, 'https://operator.example.test/route-b');
+assert.equal(manual.selected.frameUrl, 'https://operator.example.test/guacamole/#/client/b');
 assert.equal(manual.selected.authority.inventoryClass, 'manual-runtime-browser');
 const manualNode = deriveWorkspaceNodes({
   manualBrowsers: [{
@@ -321,7 +322,7 @@ const manualNode = deriveWorkspaceNodes({
     launchMode: 'manual',
     targetUrl: 'https://example.test/manual',
     remoteViewRouteId: 'route-b',
-    remoteViewUrl: 'https://operator.example.test/route-b',
+    remoteViewUrl: 'https://operator.example.test/guacamole/#/client/b',
     remoteControlAvailable: true,
   }],
 }).find((node) => node.id === manualSubject);
@@ -434,8 +435,8 @@ const contextSnapshot = {
       id: 'context-route',
       provider: 'rdp_gateway',
       routeId: 'context-route',
-      localEmbedUrl: 'http://127.0.0.1:8092/context-route',
-      publicOperatorUrl: 'https://operator.example.test/context-route',
+      localEmbedUrl: 'http://127.0.0.1:8092/guacamole/#/client/context',
+      publicOperatorUrl: 'https://operator.example.test/guacamole/#/client/context',
       controlInput: 'manual_attached_desktop',
       readiness: { state: 'ready' },
     },
@@ -468,7 +469,7 @@ const contextPreferred = projectWorkspaceViews({
 });
 assert.equal(contextAutomatic.selected.stream.provider, 'cdp_screencast');
 assert.equal(contextPreferred.selected.stream.provider, 'rdp_gateway');
-assert.equal(contextPreferred.selected.frameUrl, 'https://operator.example.test/context-route');
+assert.equal(contextPreferred.selected.frameUrl, 'https://operator.example.test/guacamole/#/client/context');
 assert.equal(contextPreferred.selected.authority, contextAutomatic.selected.authority);
 const viewportReady = deriveWorkspaceViewportReadiness({
   hasBrowser: true,
@@ -490,7 +491,7 @@ const genericReadinessFailure = deriveWorkspaceViewportReadiness({
   browserHealth: 'ready',
   hasStream: true,
   streamProvider: 'rdp_gateway',
-  streamUrl: 'https://operator.example.test/context-route',
+  streamUrl: 'https://operator.example.test/guacamole/#/client/context',
   streamReadiness: { component: 'readiness', state: 'failed' },
   canEmbed: true,
   canControl: true,
