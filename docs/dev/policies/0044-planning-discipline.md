@@ -8,8 +8,8 @@
 - Use bounded plan artifacts under `docs/dev/plans/` or an equivalent plans directory, not ad hoc note files scattered through the repo.
 - Plan filenames should use a deterministic serial-plus-date prefix such as `0001-YYYY-MM-DD-plan-slug.md`.
 - If the repo uses a canonical long-range plan such as `ROADMAP.md`, treat it as the source of truth for priority.
-- If the repo uses a canonical live execution log such as `RUNBOOK.md`, treat it as the source of truth for what happened turn by turn.
-- When `RUNBOOK.md` is present, maintain it as a dated turn log with deterministic headings such as `Turn N | YYYY-MM-DD`.
+- When `RUNBOOK.md` is present, maintain sole current execution status with
+  dated checkpoint headings and linked history under policy 0043.
 - Treat planning migration for active repos as two phases:
   - structural migration to establish canonical files, naming, and wiring
   - semantic reconciliation to align plan text and lane status with the actual shipped state
@@ -72,6 +72,35 @@
   forced audits, and do not let one accepted finding suppress a new one.
 - Absence of a plans directory is not itself an active-scope defect. Continue
   to require the configured directory during full or forced structural audits.
+## Consolidation Planning
+
+- Before sustained implementation, group known blockers and feature changes by
+  shared dependency and intended user outcome. Define one coherent delivery
+  batch in the existing plan: included work, unresolved questions, acceptance
+  evidence, delivery boundary and explicitly deferred work. Preserve the full
+  objective when an independently useful batch covers only part of it.
+- Reconcile the batch when a second related defect appears or another expensive
+  build, deployment or acceptance cycle is proposed. Decide whether to combine
+  related fixes, split an independently useful outcome or defer unrelated work.
+  Do not turn each newly discovered symptom into a standalone project.
+- Make this a brief primary decision in the existing plan/checkpoint, not a new
+  document, broad review or approval gate. Bound unknowns with a discriminating
+  check; consolidation does not require discovering every possible defect.
+- Record the critical path, independent worker assignments and least expensive
+  capable routes under policies 0021/0045. Include inputs, exact write scope,
+  evidence and stop conditions. A role name alone is not executed delegation.
+- Use policy 0010's single evidence table, policy 0042's candidate freeze and
+  selective revalidation, and policy 0028's complete delivery budget.
+- Urgent operational mitigation may precede consolidation when delay would
+  worsen the incident. Record bounded scope and deferred work afterward;
+  mitigation does not establish full acceptance or renew cumulative bounds.
+- New or materially revised substantive plans declare `Consolidation: required`
+  and include nonempty `Consolidated batch`, `Delivery sequence and budget`,
+  `Worker assignments`, and `Evidence and exit` sections. The planning auditor
+  checks this structure; semantic completeness remains the primary's duty.
+  Unmarked legacy plans are reported as excluded from this added check and
+  need no bulk migration before ordinary work.
+
 ## Adoption Notes
 
 Use this module as a baseline in every starter profile. A lightweight repo may

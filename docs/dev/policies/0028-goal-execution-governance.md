@@ -176,6 +176,8 @@
   allowance; otherwise surface the exact missing input and incomplete result.
   Finishing a side task does not reset accounting for the original milestone.
 - Consolidate known defects and feature changes into one qualified candidate.
+  Apply policy 0044 before another expensive cycle or after a second related
+  defect. Reconcile the known batch before selecting the next repair.
   Default to one full release build and one production replacement per completed
   implementation batch. A further build or replacement needs a demonstrated
   source defect or required acceptance gap, an explicit reason cheaper checks
@@ -189,6 +191,16 @@
   or integrated, what a real user can now do, and what remains unverified.
   Report the time spent and whether the leading objective advanced. Neither
   a long run nor a long fix list earns a completion claim.
+
+- Budget the complete delivery sequence before sustained execution: diagnosis,
+  implementation, fixture qualification, integration, publication when needed,
+  observation and closeout. Reserve time for remaining required stages before
+  starting more implementation. Use ranges and name uncertainty. If the
+  sequence cannot fit, disclose the shortfall or propose an independently useful
+  split before spending it; retain the original goal and cumulative accounting.
+- An additional-window proposal must say whether it can finish the user outcome
+  or only an intermediate gate, and list what remains afterward. Parallelism
+  may reduce elapsed time but does not erase cumulative worker effort.
 
 ## Adoption Notes
 

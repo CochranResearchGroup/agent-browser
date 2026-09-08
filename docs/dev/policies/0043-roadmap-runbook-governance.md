@@ -26,6 +26,14 @@
 - Existing historical clutter does not require a migration before ordinary
   work. Preserve history and scope archival separately from implementation.
 
+## Semantic Compaction
+
+- Reconcile meaning as well as length. Keep one authoritative current statement
+  per requirement and remove contradictory stale states from the active runbook.
+  Preserve superseded detail in linked history rather than squeezing outdated
+  instructions into the line limit. Check evidence links, applicable stop
+  conditions and the next action after compaction.
+
 ## Adoption Notes
 
 Adapted from LitScout policy 0006 at `03f6f4026bef63bdbc4a5ba472ce140fb5c5d442`.

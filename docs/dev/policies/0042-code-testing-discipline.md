@@ -63,6 +63,21 @@
   required artifact is missing; documentation checkpoints alone do not justify
   recompilation. Reserve the full release build for production qualification.
 
+## Candidate Freeze
+
+- Before final qualification, confirm that known blocking fixes for the batch
+  are included, the fixture distinguishes success from failure, cleanup is
+  independently observable, and required consumer/environment inputs are
+  available. Keep unavailable gates explicit; synthetic substitutes do not
+  satisfy original-consumer acceptance.
+- Freeze the candidate identity and acceptance checks for that cycle. A newly
+  demonstrated defect reopens the affected implementation and checks; record
+  the dependency-based impact rationale for retained evidence. Run all gates
+  required by changed surfaces without restarting unrelated passed checks.
+- Treat cleanup receipts as claims until exact resource readback establishes
+  residue state. Scheduling receipts must prove the configured interval and
+  invocation identity, not merely a successful command result.
+
 ## Adoption Notes
 
 Each adopting repo should define a local test-suite contract with concrete values for:

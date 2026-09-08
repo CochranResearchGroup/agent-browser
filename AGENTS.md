@@ -403,7 +403,9 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
   `0045-model-selection-and-calibration.md` for delivery bounds, batch validation,
   and economical task routing; read `0021-subagent-workflow-optimization.md`
   when considering delegation. These apply to ongoing continuations too.
-- re-read planning-related policy before opening, revising, or closing a substantive plan
+- Read policy `0044-planning-discipline.md` before substantive planning, a
+  second related defect, or another expensive build/deployment/acceptance cycle.
+  It routes consolidation, evidence, delivery budgeting and worker assignments.
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data

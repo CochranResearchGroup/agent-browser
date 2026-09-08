@@ -167,6 +167,26 @@ def active_baseline_findings(path: Path) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(accepted)), []
 
 
+def audit_consolidation_contract(text: str) -> dict:
+    """Check declared structure only; content and execution need evidence review."""
+    marker = re.search(r"(?im)^Consolidation:\s*(.*?)\s*$", text)
+    if not marker:
+        return {"applicable": False, "ok": True, "problems": [],
+                "excluded_reason": "unmarked legacy plan; not evaluated"}
+    problems = []
+    if marker.group(1) != "required":
+        problems.append("Consolidation must be declared required")
+    headings = ("Consolidated batch", "Delivery sequence and budget",
+                "Worker assignments", "Evidence and exit")
+    for heading in headings:
+        match = re.search(r"(?m)^#{2,3} " + re.escape(heading) + r"\s*\n(.*?)(?=^#{1,3} |\Z)",
+                          text, re.DOTALL)
+        body = re.sub(r"<!--.*?-->", "", match.group(1), flags=re.DOTALL).strip() if match else ""
+        if not body or body.lower() in {"tbd", "todo", "pending"}:
+            problems.append("missing substantive consolidation section: " + heading)
+    return {"applicable": True, "ok": not problems, "problems": problems}
+
+
 def audit_repo(
     root: Path,
     *,
@@ -277,6 +297,9 @@ def audit_repo(
             if lane_match:
                 entry["lane_id"] = lane_match.group(1)
                 entry["lane_ok"] = True
+            consolidation = audit_consolidation_contract(text)
+            entry["consolidation_contract"] = consolidation
+            problems.extend(f"{problem}: {plan_path.name}" for problem in consolidation["problems"])
             entry["current_state_ok"] = bool(CURRENT_STATE_RE.search(text))
             entry["wired_in_roadmap"] = plan_path.name in roadmap_text
             entry["wired_in_runbook"] = plan_path.name in runbook_text

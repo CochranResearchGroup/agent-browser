@@ -10,6 +10,11 @@
 - Model upgrades, reasoning changes, prompt edits, tool substitutions, successor plans, and worker replacement inherit cumulative milestone accounting. Reassessment intervals are not renewable budgets. Exhaustion cannot be bypassed by renaming an approach or opening another worker.
 - Delegate when expected gains in expertise, independence, context isolation, or elapsed time justify setup and reconciliation cost. Do deterministic mechanical work with existing tools before purchasing model work for it. A compact specialist brief is preferred when full-history inheritance adds no value. The primary integrates returned evidence without repeating the worker's investigation.
 - Calibrate complete workflows, not isolated responses. Before starting, freeze representative inputs, acceptance checks, baseline and candidate configurations, quality floor, sample size, retry allowance, resource ceiling, evaluator, and promotion/stop rules. Include failed and timed-out attempts, retain difficult regressions, and use held-out examples when tuning on earlier samples.
+- After one bounded failed attempt, diagnose missing inputs, fixture, authority,
+  tools, or environment before attributing the failure to reasoning. Escalate
+  only for a named reasoning obstacle that a stronger model is likely to
+  resolve; keep the attempt bound and do not retry solely to improve the
+  apparent result.
 - Record the sample/date, workload identity, model and effort, context and tools, topology, accepted count and denominator, defects, interventions, elapsed time, cumulative agent effort, and measured allocation or labeled proxy. Keep elapsed wall time separate from summed worker effort. Do not attribute shared-account consumption to one configuration when concurrent use prevents attribution.
 - Stop calibration at its predeclared sample or resource ceiling, or at a defined critical-quality failure. Small samples yield provisional routing only. Do not enlarge the experiment, weaken acceptance, or retry away failures to obtain a favorable result.
 - Promote the least costly configuration that meets frozen quality and delivery requirements. An expensive configuration must show a task-relevant benefit that justifies its added consumption. Revert a regressed default promptly and retain specialist use only where justified. Recalibrate after material configuration changes or repeated observed failures with a bounded scheduled sample, not before every task.
@@ -31,11 +36,9 @@ than claiming a cheaper model was used.
 | Bounded normal implementation | `gpt-5.6-sol` or `gpt-5.6-terra`, medium | Implement a clearly specified slice with a stable acceptance check and bounded context. |
 | Ambiguous or consequential | Current strongest available primary, currently `gpt-6-astra` when available | Diagnose ambiguous failures, make architecture or material policy decisions, handle production custody, or decide acceptance. |
 
-After one failed bounded attempt, the primary must first distinguish missing
-inputs, authority, tools, or environment from a model deficiency. Escalate only
-for a named obstacle that stronger reasoning could resolve; do not run
-unlimited cheap retries. Cheap workers receive a compact brief rather than a
-full-history fork, and return evidence for primary integration.
+Cheap workers receive a compact brief rather than a full-history fork, and
+return evidence for primary integration. A failed worker attempt does not
+transfer production or acceptance authority to that worker.
 
 Delegate only when useful independent primary work can proceed alongside it,
 or when a permitted bounded consultation supplies expertise the primary needs.

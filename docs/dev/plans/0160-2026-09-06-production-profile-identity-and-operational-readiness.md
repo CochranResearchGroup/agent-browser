@@ -4,6 +4,8 @@ Date: 2026-09-06
 
 State: OPEN
 
+Consolidation: required
+
 Current execution status: [RUNBOOK.md](../../../RUNBOOK.md). Historical
 execution checkpoints below are retained evidence, not current status.
 
@@ -54,80 +56,110 @@ perform cleanup in its shared browser.
 
 ## Current state and reconciliation
 
-### Active strategy amendment, 2026-09-08
+Current state: OPEN; the runbook acceptance table distinguishes completed proof
+from the remaining consolidated batch and blocked runtime execution.
 
-This amendment supersedes earlier next-hour allocations and repair ordering.
-A1–A4 and AX below remain the frozen acceptance requirements. Historical
-publication packets, attempts and elapsed effort remain consumed. Policy changes
-at `55dd1623` are mandatory execution rules, not optional closeout advice:
-[0028](../policies/0028-goal-execution-governance.md),
-[0042](../policies/0042-code-testing-discipline.md),
-[0045](../policies/0045-model-selection-and-calibration.md), and
-[0043](../policies/0043-roadmap-runbook-governance.md).
+### Consolidation amendment, 2026-09-08
 
-Work in this order; the runbook holds current results and receipt pointers:
+This amendment replaces the previous active repair ordering and implements the
+operator-approved consolidation and task-based delegation policies. The frozen
+A1–A4/AX contract below is unchanged. RUNBOOK.md owns current results and the
+single requirement-to-evidence table; historical checkpoints are not next steps.
+This request authorizes policy/plan changes, not a restart or renewal of the
+expired runtime observation window. All prior effort and publication counts remain.
 
-| Priority | Remaining outcome | Decisive evidence and next action |
-| --- | --- | --- |
-| 1: A1/AX | Original consumer can reuse its existing identity and handle | Obtain its own diagnostics/reconnect result and request ID. Trace any refusal through response, job and event to the first failed proof. Use the original-client evidence recorded in RUNBOOK.md. Another client's success or a synthetic rejoin cannot close this gate. |
-| 2: A1/AX | Exact-target release cannot silently close a different tab | Preserve incident 0156's unresolved historical attribution. Recover the serialized selector/build from existing evidence; separately qualify three disposable targets with an independent before/after target census. Never replay historical consumer identifiers. |
-| 3: A1/A3 | Remaining identity warnings and custody gaps have supported dispositions | Reuse the existing ownership-dispositions and acceptance matrices. Separate ordinary shared-local access from privileged reconciliation authority. A stale warning alone does not justify changing grants or leases. Identify any missing supported recovery surface as a concrete acceptance gap before coding. |
-| 4: A3, then A4 | Operational readiness survives unattended maintenance | Complete remaining A1/A3/AX evidence before enabling the timer. Then observe three actual scheduled cycles, a controlled restart and the next cycle with original handles and the same durable link. Manual monitor refreshes do not satisfy this. |
+### Consolidated batch
 
-Advance to the next unfinished row when its predecessor has accepted evidence
-in RUNBOOK.md. A request-scoped MCP connection may be disconnected after a
-successful original-handle read; judge recovery by the correlated response and
-complete attestation, not that state alone. Keep self-declared child continuity
-separate from registered-principal lease reconciliation: a credential naming a
-different subject cannot prove ownership of the original child.
+Deliver one accepted production configuration with usable retained ownership,
+remote-view continuity and diagnosable failures. Group the known remaining work
+around that outcome before another build or deployment:
 
-Keep accepted local A2 viewer/input/reconnect evidence. Repeat only the affected
-portion when a relevant change invalidates it. Keep the original consumer CSV
-workflow distinct from the successful synthetic normal-origin transfer; record
-older-binary coverage and impact rationale explicitly. Plan0158 external-vantage
-work and formal release remain outside this continuation.
+- Reconcile the ownership/control matrix and all seven selected AX failure cases
+  against existing receipts. Preserve accepted original-client self-declared
+  recovery and local viewer/input evidence. Produce missing-proof lists rather
+  than replaying already accepted tests. Historical wrong-tab request/build
+  attribution remains a distinct unresolved investigation, not a current repro.
+- Resolve delivery of the committed process-only supervisor default: installed
+  override, binary template and future supported unit rewrite must have an
+  explicit consistent disposition. Freeze the binary, support and unit settings
+  accepted by the batch; an override alone does not mean source was published.
+- Qualify scheduled cadence, preservation of browser roots and descendants,
+  and original-handle/durable-link continuity through the guarded host restart.
+  Include the completed fixture cleanup in readiness evidence; do not repeat it.
+- Intake new consumer reports once against the frozen contract, including
+  note0160's native-confirm timeout. Determine whether they contradict accepted
+  A1/AX behavior before reopening that row or adding repairs to the batch.
+  Do not run consumer actions merely to investigate a report.
 
-Execution controls:
+Keep actual consumer CSV acceptance explicit and separate from synthetic file
+transfer. Private payment/business operations, formal release, Plan0158 external
+vantage, provider polish and unrelated application cleanup remain outside this
+batch. Product recovery-surface gaps are evaluated against A1/A3, not silently
+removed from scope. The full goal stays open when a dependency cannot be resolved.
 
-- A4 cycle acceptance must bind to the timer invocation and verify the full
-  configured interval after previous completion using monotonic timestamps.
-  Timer provenance alone is insufficient after a unit reload. Before restart,
-  require effective process-only host shutdown and census retained browser
-  subprocesses/displays as well as browser roots. Fresh doctor blockers reopen
-  A3; preserve failed observations without extending the observation deadline
-  or silently counting an interrupted cadence.
+### Delivery sequence and budget
 
-- Before each material action, read the current runbook allowance and classify
-  the obstacle as product, fixture, environment or missing consumer input. State
-  the specific acceptance gap the action can close. Do not reopen installed
-  fixes from obsolete incident notes without new contradictory evidence.
-- Bound this requested continuation to 20 minutes total for strategy amendment,
-  existing-evidence reconciliation and a decisive available A1 check. This is an
-  explicit limit on additional work, not a reset or retrospective justification
-  of the prior repeated ten-hour runs. Record cumulative effort as unknown where
-  unmeasured; retain the reported overrun. No renewed publication allowance.
-- Stop an unsuccessful tactic at the earlier of its existing attempt bound,
-  two checkpoints without outcome progress, 30 minutes without outcome progress,
-  or the continuation deadline. Do not spend the unused allowance merely because
-  it exists. Missing original-client input permits independent acceptance work,
-  not another synthetic substitute for that client's acceptance.
-- Start no full release build or production replacement in this continuation.
-  The previous batch spent one of each. Further executable work must first name
-  a demonstrated defect or required acceptance gap, the cheapest discriminating
-  check, and a finite allowance in the same runbook control record. Standing
-  authorization persists; routine replanning requires no new permission request.
-- Use deterministic extraction for known receipts. Route genuinely independent
-  mechanical work to the provisional economical model in 0045 with a narrow
-  brief, exact write scope and one bounded attempt. Keep ambiguous identity
-  diagnosis, production custody and acceptance decisions with the primary.
-  Record requested/effective configuration and unknown cost honestly. Model or
-  worker changes do not reset milestone accounting.
-- At each checkpoint record acceptance delta, remaining dependency, elapsed
-  effort, builds/publications consumed and next action or stop reason. At least
-  every 60 minutes of longer authorized work, assess delivery economics without
-  overriding earlier stop rules. Keep RUNBOOK.md at or below 200 lines by replacing
-  superseded status. Policy compliance is checked by the primary plus existing
-  audits; automatic runtime budget enforcement is not claimed.
+1. Reconcile existing evidence and new report scope in parallel with primary
+   candidate/configuration review. No browser launches are needed for receipt
+   extraction. Exit with one missing-proof list and a consolidated repair set.
+2. Decide once whether source changes are necessary. If so, qualify the combined
+   repair batch in isolation, rehearse fixtures and cleanup, and identify all
+   changed-surface gates before proposing a final build/publication. If not,
+   preserve the installed candidate and record why its evidence remains valid.
+3. Freeze the accepted configuration and checks. Require current doctor readiness,
+   available original-client inputs, no active-work conflict, correct stop mode,
+   and exact retained process/display census before the restart.
+4. Observe three consecutive normal five-minute cycles, perform one guarded host
+   restart, then observe the next cycle and verify original handles and durable
+   link. Check monotonic interval and timer provenance; manual refreshes do not
+   count. A failed precondition stops the dependent action, not unrelated work.
+5. Join full A1–A4/AX evidence, integrate through the existing branch strategy,
+   and report committed, installed, user-verified and incomplete outcomes.
+
+This documentation slice is bounded to 15 minutes and includes one narrow worker,
+focused audit updates and commit/push. It does not consume a new runtime allowance.
+A future execution window must budget the entire remaining sequence: provisionally
+15 minutes for parallel evidence reconciliation, 10 for configuration/preflight,
+30 reserved for A4 and 10 for integration/closeout, plus 10 contingency (75 total).
+This is an estimate awaiting an execution allowance, not a claim of approval or a
+whole-plan finish guarantee. Compilation, publication, new source defects or
+missing consumer evidence may exceed it; disclose that at the first join before
+spending the reserved observation time. The earlier requested 30 minutes covers
+A4 only. No successor, worker or model change resets cumulative bounds.
+
+### Worker assignments
+
+| Lane | Route and owner | Inputs / exact write scope | Output, dependency and stop |
+| --- | --- | --- | --- |
+| Evidence reconciliation | Luna low/medium worker; deterministic extraction first | Existing Plan0160 receipts and notes; private evidence table draft only | One row per A1/AX case with identity, applicability and missing proof; no live calls or source edits; one pass, 15 minutes. Primary adjudicates before repairs. |
+| Fixture readiness | Independent Luna medium worker when a specific missing check is identified | Named existing fixture and its test only; explicit filenames assigned before launch | Rehearse setup/oracle/cleanup at cheapest layer; one bounded attempt, at most 10 minutes inside the evidence stage. No production effects or duplicate discovery. |
+| Bounded implementation, conditional | Sol/Terra medium worker after primary freezes a concrete defect and files | Exact disjoint source/test paths in the accepted repair set | Patch and decisive regression under remaining allowance; return after one failed attempt for diagnosis, no self-expanded investigation. |
+| Integration and operations | Primary, current strongest available model | Candidate disposition, ownership evidence, guarded runtime actions, runbook and final integration | Own critical path, conflicting-evidence decisions and completion; join worker evidence without repeating its investigation. |
+
+Do not spawn all lanes by default. Start useful independent work when it can run
+alongside primary work; keep dependent steps and trivial extraction local. Use
+compact briefs, record actual handles, requested/effective model when available,
+accepted outputs, wall time and rework. Model mapping is provisional; no measured
+cost saving or automated budget enforcement is claimed.
+
+### Evidence and exit
+
+The RUNBOOK.md table is the sole current acceptance ledger. Each incomplete row
+must identify missing evidence and next action; artifacts retain exact source,
+binary/support/configuration identity and applicable scope. New defects reopen
+only affected rows and required changed-surface gates. Neither doctor success,
+worker completion nor an accepted local viewer test closes the full plan.
+
+Policy adoption feedback: local overrides of the pinned selector v0.1.24
+(source 9caf5708e5aa48cc0cf6264baa7065fc335d193e), retaining this repo's custom
+composition. Modules 0010/0021/0028/0042/0043/0044/0045 are merged locally; no
+profile replacement or bundled-library update. The installed audit helper has
+a scoped local extension for consolidation declarations. Prior rules named consolidation
+but did not require the batch decision; stale status and fixture cleanup caused
+rework. The new audit checks declared plan structure, not truthful acceptance,
+model quality or runtime stopping. This slice exercises bounded delegation and
+policy wiring; operational effectiveness remains unverified. These changes are
+reusable upstream feedback; no cross-repo publication is performed here.
 
 ### Historical strategy amendment, 2026-09-07
 

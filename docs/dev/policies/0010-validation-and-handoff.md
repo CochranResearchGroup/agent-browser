@@ -62,6 +62,19 @@
 - A safe refusal preserves a safety boundary; it is not outcome progress or
   justification for another costly experiment.
 
+## Consolidated Evidence
+
+- Maintain one requirement-to-evidence table for a delivery batch in its
+  designated current-status surface. Track implemented, qualified, installed or
+  integrated, and user-verified states separately; use incomplete or not
+  applicable explicitly. Each incomplete requirement names the missing proof,
+  dependency and next action. Link artifacts and exact identities without
+  duplicating the same status in multiple documents.
+- Reconcile the table against the complete objective before final qualification
+  and closeout. A passing subset, worker completion, clean doctor or time spent
+  cannot support a whole-plan completion claim. Reuse old evidence only within
+  its stated scope and impact rationale under policy 0042.
+
 ## Adoption Notes
 
 Use this module when the repo:
