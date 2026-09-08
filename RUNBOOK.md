@@ -4,41 +4,40 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 230 | 2026-09-07
+## Turn 232 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Progress: installed exact release `d22ed31d` after isolated inventory qualification.
-Activation preserved all five Chrome processes, storage identities and tab custody.
-Original synthetic-handle diagnostics and evaluation pass with complete attestation.
-Direct same-route reattach passed and released its recovery reservation. Its first
-request was misrouted by params-only session hints; documented top-level hints
-corrected that invocation, with the refused request and no-custody-change proof kept.
-The original durable URL still fails checkout: production inventory rejects the
-pending acquisition route/display/pool state. The correlated job identifies the
-cause and confirms compensation. The original handle and all five process identities
-still pass after that failure. No new mouse/keyboard or two-viewer proof was obtained.
-Evidence: `publication-d22ed31d/handoff-checkout-failure.json`; viewer attempt
-`a2-operator-journey-r2/access-grant-attempt/local-viewers-siZk1T`.
-Next: test actual `begin_route_bound_handoff_acquisition`, inventory reload and
-checkout together; admit only exact current acquisition custody, with foreign and
-expired negatives, before another live handoff attempt. No further build is running.
-Doctor exits 1. Full A1–A4/AX remains OPEN; consumer workflows are unaccepted.
+Installed `ac277ea0` preserves exact pending acquisition custody through inventory,
+health reconciliation and capacity activation. Its release readback passed in
+`production-inventory/isolated-readback-i7xtebtw`. Activation preserved all five
+browser processes, storage and tab ownership; original handle attestation passes.
+The original durable URL passed two authenticated viewers, anonymous denial,
+synthetic pixels, same-link reconnect and trusted Guacamole mouse/keyboard input
+in `local-viewers-sJv4NQ`. This is local operator acceptance, not external-vantage
+or complete installed doctor acceptance. Doctor remains nonzero; A1–A4/AX stay OPEN.
+The preceding viewer attempt `local-viewers-hmUhkI` resolved both exact targets
+but viewport shrink hid the marker. Moving only the synthetic marker into the
+142px viewport enabled the test; multi-viewer sizing remains a separate finding.
+No mouse-delivery code changed. The failed `076f69ee` release remains retained.
+Cumulative inventory builds: five; one source rework; two viewer attempts in this
+publication, including the recorded fixture correction. No additional build.
+Progress: outcome_progress for A2. Next: record supported operator-journey evidence,
+then remaining A1 consumer identity/artifact dispositions and A3 readiness.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
 
-- Source: `d22ed31d649001a7dfd6046b760043ff8ac0b011`.
-- Generation: `0.28.0-d46cf77f8f36-3351d8c23c95`.
-- Binary SHA256: `d46cf77f8f366faabfd6c21a8b1b970172b5b66400ef3874a3752dca2f8fc9cb`.
-- Support SHA256: `3351d8c23c95c7bffcdee0778ca4a92de81064e40ad4b791bdf66f574a0372c3`.
-- Host PID80040; activation preserved five exact browser identities, retained
-  private storage and all tab custody. Admission found no active jobs.
+- Source: `ac277ea07bc31b9109b0cada5f6fa47309bdf3ee`.
+- Generation: `0.28.0-2dea3ce66568-fef69948b43b`.
+- Binary SHA256: `2dea3ce66568336407555ef2a29330aba8c8a2e722d03702076523dbdb53368b`.
+- Support SHA256: `fef69948b43b3c36dfa566d832aac8020475e167caeab93ea0f29f12463e13d2`.
+- Host PID4480; activation preserved five exact browser identities, retained
+  private storage and all tab custody; no active jobs at admission.
 - Installed manifest and original synthetic handle pass; attestation complete,
-  page marker intact, input counters 9/9. This was readback, not new input proof.
+  page marker intact, input counters advanced from 9/9 to 10/10 after Guacamole input.
 - Doctor exits 1; full operational readiness remains unaccepted.
 - Main shared skill synced with backup; separate Service skill unchanged.
 - Immediate rollback generation and 32 verified backup files remain available.
-  No formal release, GC or external notification occurred.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -110,11 +109,10 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2–A4 and AX remain open
 
-- A2: the prior dc570e5b journey connected two authenticated viewers, denied an
-  anonymous viewer, matched synthetic pixels and obtained operator focus. Mouse
-  acknowledgement then failed and page counters stayed 9/9. Keyboard and reconnect
-  were not attempted. Cause remains unproven. No unchanged viewer retry was run;
-  neither publication has a matching complete operator-journey acceptance receipt.
+- A2: current installed local journey passed two authenticated viewers, anonymous
+  denial, pixels, same-link reconnect and Guacamole click/Enter acknowledgement.
+  The supported doctor receipt remains absent. Preserve the first failed layout
+  attempt; effective settings were recorded in the successful corrected attempt.
 - A3: current installed doctor exits 1. Findings cover presentation and upgrade
   readiness, retained terminal history, the seven lease findings above, stale
   monitoring and unknown pressure ownership. Exact report is retained privately.
@@ -140,21 +138,19 @@ The earlier GC preview listed 22 candidates and `previousHealthyGenerationId=nul
 That preview is historical after two additional publications. No GC or workstation
 reconcile was applied. Original generations and verified private rollback copies
 remain. Each publication backed up its immediate predecessor with 32 matching
-file hashes. The immediate predecessor is `0.28.0-7991b404eafe-8362848f8b0b`.
+file hashes. The immediate predecessor is `0.28.0-d46cf77f8f36-3351d8c23c95`.
 
 Controlled publication receipts remain outside the supported upgrade ledger.
 Repair the supported publication/retention path before enabling maintenance;
 never fabricate accepted transactions or green monitor receipts to protect a
 rollback target. Preserve original recovery storage through any future change.
 
-Next trace why capacity clears its browser binding while the route retains it;
-then qualify with an originally owned disposable browser/display fixture;
-actual consumer reconnect after the legacy repair remains pending. Complete
-consumer artifact transport
-and remaining A1 dispositions, preserving ordinary self-identification.
+Pending acquisition and orphaned route capacity retention now pass in source,
+isolated release and installed durable-link checkout. Actual consumer reconnect
+and artifact transport remain pending; preserve ordinary self-identification.
 For Guacamole input, check refresh/reconnect, effective settings, and scoped
 browser/provider recovery in a disposable session before code diagnosis.
-Consolidate repairs before another production candidate. After A1–A3 pass,
+Do not rebuild without a new demonstrated source defect. After A1–A3 pass,
 observe three scheduled cycles, a controlled restart and its next cycle using
 original handles and the durable handoff URL. Plan0158 external-vantage dispatch
 boundaries remain unchanged.
@@ -162,6 +158,10 @@ boundaries remain unchanged.
 ### Evidence index
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
+- `publication-ac277ea0/`: exact release, pending readback, 32-file rollback,
+  activation and post-viewer original handle proof; doctor still exits 1.
+- `a2-operator-journey-r2/access-grant-attempt/local-viewers-sJv4NQ/`:
+  two viewers, same durable URL reconnect, settings and trusted Guacamole input.
 
 - `legacy-connection-repair/`: exact release qualification, production native
   transaction, backup and readback preserving permissions and five browsers.

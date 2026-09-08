@@ -57,10 +57,10 @@ perform cleanup in its shared browser.
 ### Execution strategy amendment, 2026-09-07
 
 Production presentation recovery requires a supported production inventory
-adapter before another provider-backed acceptance attempt. The current inventory
-schema explicitly accepts development only. Do not relabel production as
-development or remove that environment guard. Add an explicit production
-contract bound to the actual runtime environment and provider ownership evidence.
+adapter qualified before provider-backed acceptance. Keep production and
+development contracts explicit; do not relabel production as development or
+remove the environment guard. Bind the production contract to the actual runtime
+environment and provider ownership evidence.
 Preserve incumbent route, display, browser, viewer and controller custody across
 projection, including orphaned records. Available recovery capacity must not
 assert that an operator presentation is already ready. Qualify the transition
@@ -76,6 +76,17 @@ Service State reads or ordinary browser diagnostics. Preserve incumbent custody
 and reservations, expose the validation cause, and require successful inventory
 requalification before admitting new presentation work. Include provider-outage
 and restored-inventory cases before enabling this adapter in production.
+
+Qualification must also exercise a real pending handoff acquisition through
+inventory admission, health reconciliation, capacity reload and activation.
+Preserve exact in-flight custody without declaring the pending route ready;
+missing displays and foreign, prior-boot, completed or mismatched acquisitions
+must still refuse. Test this sequence against the built candidate in isolated
+state before installation, then exercise the original durable URL.
+Keep synthetic input markers visible within the actual remote viewport. If a
+second viewer changes its dimensions, record that behavior separately from
+pixel-marker and input delivery results; fixture adjustments do not establish
+correct multi-viewer sizing or waive reconnect and input acceptance.
 
 For stranded legacy connections, use preserved host-replacement custody and a
 fresh census of connection-producing processes, scoped to the same Service State
