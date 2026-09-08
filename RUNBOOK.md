@@ -4,42 +4,44 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 244 | 2026-09-07
+## Turn 245 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress, scoped A1: `a18d235b` passes isolated native headless open,
-fill, click, readback, close, reopen, repeated interaction and second close.
-Preliminary launch preserves the exact profile, self-declared caller and first-tab
-custody. Rejected launch output now uses the structured response with its job ID.
-Final state: zero browsers/tabs; generation 2 terminal with satisfied cleanup.
-Six focused checks, fmt, clippy, docs and optimized build pass. Native repairs
-remain uninstalled; next qualify installed and remote-headed behavior.
-Private receipt `native-cold-admission-repair-28d195b4.json` retains five optimized
-builds/replays, three original setup failures and one debug startup timeout.
-Latest root `session-cold-lifecycle-8T08RJ`: zero residue, five production identities preserved.
-A1–A4/AX remain OPEN; consumer rejoin pending. Production remains `15cd8e5b`,
-both rollback holds retained and timer disabled. Earlier raw ready owner history
-was not failed close retirement: the authoritative lifecycle proved terminal cleanup.
+Outcome progress: native profile, caller, first-tab custody and structured error
+repairs are installed. The exact release binary passed isolated headless and
+private remote-headed open, interaction, close, reopen and repeated close.
+One activation preserved five browser identities, storage and tab custody.
+Doctor now exits 0 after authenticated viewers and one guarded maintenance pass.
+Two authenticated viewers, anonymous denial and original-link refresh pass.
+Input acceptance remains open: controller takeover moved the viewport after the
+baseline, so the verifier stopped before clicking. Original counters stay 11/11.
+A1–A4/AX remain OPEN; actual consumer rejoin and unattended operation are unproven.
+Next: prove stable controller geometry and input, then actual consumer recovery.
+Private `publication-a18d235b/acceptance-checkpoint.json` indexes this checkpoint.
+Cumulative native repair history remains in `native-cold-admission-repair-28d195b4.json`:
+five optimized builds/replays plus one release build (607 seconds), one additional
+CI remote-headed fixture and two exact-release lifecycle fixtures. No rebuild
+without a demonstrated source defect. Both viewer failures remain evidence.
 
 ### Current installed identity
 
-- Source: `15cd8e5b3043d7274f1d957f6007ac58274808e2`.
-- Generation: `0.28.0-363187a5b467-a528aab8e554`.
-- Binary SHA256: `363187a5b467e7089cb130efbe452348951fb4ca9ada453f218829772032fe83`.
-- Support SHA256: `a528aab8e55479a7c67c263c5497777031420f40732b5f2dafb0cba0b3335173`.
-- Host PID23213; activation preserved five exact browser identities, retained
-  private storage and tab custody. The selector uses the supported relative path.
-- Original synthetic handle retains complete attestation and successful control
-  after maintenance. Guacamole input counters advanced from 10/10 to 11/11.
-- Main shared skill synced with backup; separate Service skill unchanged.
-- Immediate rollback `0.28.0-2dea3ce66568-fef69948b43b` is held and backed up.
-- Historical rollback `0.28.0-367c10063188-27306db23f45` is restored and held.
+- Source: `6140e35bb34bd4a2163248f9afa672f36f451770`; code repair `a18d235b`.
+- Generation: `0.28.0-8194a64b02ef-c65cd6d981c3`.
+- Binary SHA256: `8194a64b02ef329eb3a8b52e232a3695225884f8ac01f345b7977ece25160cec`.
+- Support SHA256: `c65cd6d981c3b400f8ec4a4bb39f287cf95cb4e7d1640c41f6053404a9e674f8`.
+- Host PID28700; activation and maintenance preserved five exact browser identities
+  and 30 open-tab custody records. The selector uses the supported relative path.
+- Original synthetic handle retains complete attestation and successful control.
+- General shared skill still reflects the prior publication; current sync pending.
+- Immediate rollback `0.28.0-363187a5b467-a528aab8e554` is held with 32 verified backup files.
+- Earlier holds `0.28.0-2dea3ce66568-fef69948b43b` and
+  `0.28.0-367c10063188-27306db23f45` remain. Maintenance timer stays disabled.
 
 ### A1: installed identity repairs and remaining boundary
 
 Earlier rejoin, missing-binding and MCP routing repairs remain in the installed
 candidate. Git `d6f01b00` preserves the detailed history and scoped older proofs.
-Current proof is indexed in `installed-15cd8e5b-a1/acceptance-matrix.json`: exact
+Prior installed proof is indexed in `installed-15cd8e5b-a1/acceptance-matrix.json`: exact
 binary, fixture driver and ledger hashes, distinct cases, cleanup and explicit
 gaps. These are disposable test-owned clients, not consumer impersonation.
 
@@ -84,8 +86,7 @@ Source `bee768ed` supplies the installed private, mode-0700 state-backed `/tmp`
 and `/var/tmp` mounts. Thirteen supervisor tests and a real Chrome synthetic CSV
 passed after parent retirement. Recovery repaired six deleted temporary mounts
 across three exact namespaces while preserving five original browser processes.
-Both publications preserved those mounts and tab custody. New-host mount readback
-confirms private state backing. Detailed recovery history remains at Git
+Publications preserved those mounts and tab custody; new-host backing is verified. Detailed recovery history remains at Git
 checkpoint `dd94dfe7` and in the private ownership-bound recovery receipts.
 
 Keep `runtime-tmp/recovered` backing directories while retained namespaces
@@ -97,15 +98,16 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2–A4 and AX remain open
 
-- A2: installed two-viewer authentication, anonymous denial, pixels and same-link
-  reconnect passed. Guacamole mouse acknowledgment passed; keyboard exact-crop
-  hash failed. Saved screenshot shows restored blue marker and original-handle
-  readback proves the keyboard event arrived. The crop contains glyph pixels,
-  unlike the solid baseline. Preserve this visual-verifier failure; do not call
-  the automated input run passed. Earlier ac277ea0 full local input proof remains.
-- A3: final doctor exits 0 after one manual maintenance pass and restoration of
-  the historical rollback payload. Seven lease warnings and terminal history
-  remain advisory. Scheduled operation and actual consumer recovery are unproven.
+- A2: current two-viewer authentication, anonymous denial, pixels and same-link
+  reconnect passed in `local-viewers-PVUWLr`. Input stopped before click because
+  geometry moved after controller takeover. Initial `local-viewers-k5wLHQ` failure
+  was a sampling mismatch: the visible scaled marker lacked a 24-by-24 solid patch.
+  An 8-by-8 crop within a verified 12-by-12 blue region passed both viewers.
+  Neither run proves current input acceptance or correct multi-viewer sizing.
+  Earlier ac277ea0 full local input proof remains historical.
+- A3: current doctor exits 0; guarded maintenance preserved all five browsers and
+  30 open-tab ownership records. Seven lease warnings remain advisory.
+  Scheduled operation and actual consumer recovery are still unproven.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
@@ -128,17 +130,17 @@ Earlier disposable cleanup corrected false zero-residue receipts and reduced
 observed RSS below 6 GiB while preserving all five production browsers. Detailed
 history is retained at `e17214e6` and private cleanup receipts.
 
-The manual maintenance pass removed 47 closed-tab history rows and 27 reviewed,
+The earlier maintenance pass removed 47 closed-tab history rows and 27 reviewed,
 backed-up generations. No browser processes, profiles, sessions or displays were
 removed. Fresh monitoring is healthy; unknown-pressure readiness cleared.
 Doctor then exposed a contract mismatch: GC ignores terminal failed transaction
 payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
-retention hold. Doctor now exits 0; GC preview retains three generations and has
+retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep both holds and original recovery storage. Source now aligns GC
-with the latest transaction rollback dependency. Keep the historical hold until
-that repair is installed and qualified; unrelated older history stays reclaimable.
+Keep all three holds and original recovery storage. The installed GC repair now
+retains the latest transaction rollback dependency. Current generation GC preview
+has zero candidates; unrelated older history stays reclaimable.
 
 Pending acquisition and orphaned route capacity retention now pass in source,
 isolated release and installed durable-link checkout. Actual consumer reconnect
