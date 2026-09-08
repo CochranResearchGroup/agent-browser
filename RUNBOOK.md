@@ -4,24 +4,22 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 242 | 2026-09-07
+## Turn 243 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker reduction, scoped A1: `7f9017a9` keeps the shared host alive after its last
-lane closes and applies terminal-aware owner lookup to cold open. Both regressions fail before repair and pass afterward; unresolved cleanup still
-refuses reopen. Existing terminal-history coverage, fmt, clippy and docs pass.
-Correction to Turn 241: the authoritative lifecycle registry already recorded
-terminal state, satisfied cleanup, exact process exit and profile lock release.
-The raw ready owner in state.json was history, not failed close retirement.
-Native open, fill, click, readback and close still pass; reopen now reaches profile selection but fails with
-`existing_session_profile_identity_unproven`. Extend the local regression to the
-exact session-only terminal snapshot before any further browser replay.
-Cumulative receipt: private `native-cold-admission-repair-28d195b4.json`, indexed
-in the campaign manifest. Two earlier candidate builds/replays and three setup
-failures remain; this turn adds one debug startup timeout, one optimized build
-and one replay. Both roots prove zero residue and five production identities.
-A1–A4/AX remain OPEN; consumer rejoin is pending. Production remains `15cd8e5b`,
-with both rollback holds and the timer disabled. These repairs are uninstalled.
+Blocker reduction only: `f3953d80` resolves terminal native session identity
+before generic defaults. Eight focused checks, fmt, clippy and docs pass;
+ambiguous directories and unsettled cleanup refuse. Shared-host fix: `7f9017a9`.
+Live reopen still fails: preliminary CLI `launch` selects `default` with unknown
+caller identity before navigation. Job `r948284` proves scheduler refusal;
+CLI error-only output drops its join. Reproduce this full preliminary launch and
+named-lane configuration locally before another replay. No more replay in this batch.
+Raw ready owner history was not failed close retirement: terminal cleanup is proven.
+Private receipt `native-cold-admission-repair-28d195b4.json` retains four optimized
+builds/replays, three original setup failures and one debug startup timeout.
+Latest root `session-cold-lifecycle-qRUG55`: zero residue, five production identities preserved.
+A1–A4/AX remain OPEN; consumer rejoin pending. Production remains `15cd8e5b`,
+both rollback holds retained, timer disabled, native repairs uninstalled.
 
 ### Current installed identity
 
