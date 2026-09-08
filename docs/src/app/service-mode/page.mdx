@@ -65,6 +65,10 @@ Authenticated service requests record the validated principal and its assurance
 in job and terminal provenance, including profile policy mutations. Service,
 agent, and task labels remain attribution and cannot replace that actor.
 
+The runtime-host unit uses <code>KillMode=process</code> so host retirement does
+not signal retained browser or display descendants. Browser and route cleanup
+remain separate operations requiring their ownership checks.
+
 The bounded Service event collection is for current operations, not complete
 postmortem retention. Failed browser launches and non-success service jobs are
 also appended to

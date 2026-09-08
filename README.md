@@ -1548,6 +1548,9 @@ During a hot upgrade, exact old-generation supervisor drift is transitional
 only while one candidate runtime host owns convergence. Acceptance stops the
 old supervisor unit, rewrites its lane manifests to the selected generation,
 and leaves the unit enabled without launching a second host.
+The runtime-host unit uses `KillMode=process` so retiring the host does not
+signal retained browser or display descendants. Browser and route cleanup remain
+separate operations requiring their ownership checks.
 
 ```bash
 # Install one named lane and start or reuse the shared runtime host

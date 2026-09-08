@@ -4,38 +4,39 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 278 | 2026-09-08
+## Turn 279 | 2026-09-08
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-A1 current-control, A2 operator journey and A3 readiness now accepted on f8161fd1.
-Original consumer r4, four named/custom lifecycle cases and two session-only
-interaction/reopen modes passed on the exact installed binary. Primary reviewed
-worker receipts; five original browser identities survived every fixture/cleanup.
-Economical worker a1_evidence_audit requested Luna/medium; effective model/cost
-unreported. Its credentialed-rejoin requirement and pre/post-install conflict
-interpretations were rejected against the frozen contract and staged receipts.
+A1/A2 accepted on f8161fd1; A3/A4 and full AX remain open. Original consumer r4
+and six final-binary lifecycle/interaction cases pass. No host restart or binary
+publication this slice. Prior allowances and reported ten-hour overruns remain consumed.
 
-Post-r4 audit bounded to 15 minutes, deadline 13:24 UTC; no build/replacement.
-Prior repeated ten-hour overruns and all publication allowances remain consumed.
-With A1–A3 accepted, A4 gets a separate 30-minute observation window from timer start,
-not another repair allowance. Three actual 5-minute cycles precede a controlled
-restart and next cycle; defer restart if active work or changed custody prevents it.
-Do not shorten the timer cadence or count manual refreshes as scheduled cycles.
-Timer is enabled/active; first cycle due 13:27:36 UTC. Observer exec session 57459
-records a4-control.json; hard end 13:52:28 UTC. No restart has occurred.
+Supervisor source now specifies KillMode=process. A persistent installed drop-in
+has that effective value; host PID27737 and five browser start tokens unchanged.
+Disposable systemd proof: control-group killed a retained child, process preserved
+it. Source fix is not in the installed binary; the drop-in protects this unit.
+Worker reports one focused Rust test, fmt and strict workspace clippy passing;
+primary reviewed diff/OS proof and passed handoff-doc checks. Initial worker exact
+selector matched zero tests; corrected selector passed. No repeat compilation.
 
-Fresh doctor now passes after one supported maintenance pass; convergence ready.
-Seven advisory ownership axes are unchanged with explicit dispositions; original
-self-declared recovery passes without credentialed-principal maintenance changes.
-Supported failure journal exposes the original refusal's causal function, subject
-hashes, exact build and matching outcome; delivery/pending/malformed counters zero.
-Detailed evidence: publication-028597ea/post-r4-acceptance-review.json,
-post-r4-matrix-results.json, post-r4-ax-acceptance.json and post-r4-doctor-final.json.
-Headless/headed session interaction: session-cold-EETK6b and session-cold-qrVjuU.
-Fixture issues retained: Python pidfd support and PrivateTmp script visibility;
-neither justified a product edit or repeated browser failure.
-Historical wrong-tab attribution, consumer CSV and remaining full AX scope stay
-open. Preserve recovered storage/rollback holds. No formal release or external vantage.
+A4 observer is terminal. Primary rejected its third claimed normal cycle:
+132 seconds after prior completion does not meet five-minute cadence. Original
+receipts preserved; a4-cadence-review.json records correction and observer guard.
+No timer restart/cadence change this turn. Timer remains enabled. Three consecutive
+normal cycles and post-restart original-handle/durable-link proof remain required.
+Existing observation deadline stays 13:52:28 UTC; no automatic renewal.
+
+Fresh doctor exits1: runtime_pressure_ownership_unknown reports 133 processes and
+6,831,558,656 RSS bytes. One host/one dashboard, current selection, monitor and
+convergence ready. Seven advisory lease axes unchanged. Next: attribute pressure
+to exact live ownership before restart, then complete A4 within a bounded window.
+Do not kill unknown processes or clear the blocker from a browser-parent census.
+
+Evidence: publication-028597ea/killmode-reproduction.json, killmode-installed-setting.json,
+post-killmode-doctor.json, a4-cadence-review.json, post-r4-acceptance-review.json,
+post-r4-matrix-results.json and post-r4-ax-acceptance.json under campaign root below.
+Historical wrong-tab attribution, consumer CSV and full AX scope remain open.
+Preserve recovered storage/rollback holds. No formal release or external vantage.
 
 ### Current installed identity
 
@@ -101,7 +102,7 @@ still needs a reusable product diagnosis/recovery surface.
 - A2: current oXuJ7E passes two viewers, pixels, same-link reconnect and trusted
   input on f8161fd1. Earlier viewer failures remain historical evidence.
   Original target/attestation survive. Plan0158 external vantage remains separate.
-- A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
+- A3: latest doctor exits1 for unknown-owner process pressure; see current status.
   Seven advisory lease findings retain their dispositions; doctor is not consumer proof.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after

@@ -89,6 +89,14 @@ work and formal release remain outside this continuation.
 
 Execution controls:
 
+- A4 cycle acceptance must bind to the timer invocation and verify the full
+  configured interval after previous completion using monotonic timestamps.
+  Timer provenance alone is insufficient after a unit reload. Before restart,
+  require effective process-only host shutdown and census retained browser
+  subprocesses/displays as well as browser roots. Fresh doctor blockers reopen
+  A3; preserve failed observations without extending the observation deadline
+  or silently counting an interrupted cadence.
+
 - Before each material action, read the current runbook allowance and classify
   the obstacle as product, fixture, environment or missing consumer input. State
   the specific acceptance gap the action can close. Do not reopen installed

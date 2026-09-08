@@ -2565,6 +2565,9 @@ During a hot upgrade, the old supervisor manifest is transitional only while
 one candidate host owns convergence. Acceptance stops the old supervisor unit,
 rebinds its manifests to the selected generation, and leaves it enabled without
 launching a second host.
+The runtime-host unit uses `KillMode=process` so retiring the host does not
+signal retained browser or display descendants. Browser and route cleanup remain
+separate operations requiring their ownership checks.
 Legacy `agent-browser-session@<name>.service` starts are oneshot forwarders into
 the shared host and cannot launch a per-session daemon.
 
