@@ -4,16 +4,14 @@ Sole current execution status. Plan0160 owns scope, strategy and frozen acceptan
 This table owns current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 283 | 2026-09-08
+## Turn 284 | 2026-09-08
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Operator approved the focused 45-minute round, 17:51:33–18:36:33 UTC.
-All prior effort and the 75-minute window remain consumed; no automatic extension.
-Current round: native download peer-policy repair052848aa is committed/pushed,
-qualified on the exact release binary and staged. Activation refused at its
-600-second reserve before mutation; production remains on b2207d5c.
-Full A1–A4/AX remains OPEN. Next: install this staged generation with a fresh
-installation/acceptance allowance; do not rebuild or repeat diagnosis absent drift.
+Operator authorized candidate installation and deferred standalone CLI compatibility
+to the next round. Installation began19:51:02 UTC with a local15-minute bound.
+Source052848aa is now installed; no new build or broad diagnosis was needed.
+Full A1–A4/AX remains OPEN. Next round retains ownership/identity as highest
+priority, with standalone CLI compatibility explicitly deferred to that round.
 Do not restart A4 observation before its prerequisites and complete sequence
 budget are ready. No consumer payment/CSV action or unrelated cleanup.
 
@@ -24,64 +22,66 @@ Private receipt prefixes:
 
 ### Installed outcome
 
-Source b2207d5c6f62a02cdb2a4ded88b412495be27c1a is committed and pushed on
+Source052848aa2855be5bae7bedfc6b77448ec4fe9c53 is committed and pushed on
 plan/profile-permissions-and-request-provenance. Installed generation:
-0.28.0-ca2134dd8592-7de46dd5e014; host PID2578.
-Binary SHA256: ca2134dd85924e6af8a491b6ad9dd1eb648dbfee7ac6d319f3f52d57fc89ba6f.
-Support SHA256: 7de46dd5e014f0732732225857c8ea499a6b93c8f29865d9ca904d05c7305a87.
+0.28.0-71834ecdb3d3-5a938052448d; host PID21220.
+Binary SHA256: 71834ecdb3d3fe527a968303e31fb4c6c7f8cbf4ac4387d348b801581fd8bd93.
+Support SHA256: 5a938052448d039141e190660250589f1c78e70c55cf6f297832ed01155b0bfd.
 
-Exact authorized active-target dialog requests now skip the metadata refresh
-that blocked behind a pending confirm. Other actions and inactive-target dialog
-requests retain existing dispatch. No authority check was removed. The process-only
-supervisor default is now in the installed binary and base unit; persistent
-operator overrides remain intact. Normal graceful shutdown still closes browsers
-when it holds current ownership. The preserving replacement interrupted only the
-exact runtime-host process; do not describe it as graceful shutdown acceptance.
+Native download now preserves peer browser download policy and correlates the
+owned frame/GUID with process-bound artifact delivery. waitfordownload is unchanged.
+The previous pending-confirm repair and process-only supervisor default remain
+included. This replacement interrupted only the exact runtime-host process;
+it does not establish graceful shutdown preservation.
 
-R/activation-receipt.json verifies five browser roots, 111 host-unit descendants,
-36 tab-custody records and recovered temporary storage preserved. Original
-synthetic-handle diagnostics returned complete attestation with no missing proofs.
-R/postjourney-doctor.json exited0 after the authenticated operator journey.
-R/installed-modal-acceptance.json also proves confirm status/dismiss on the
-installed original synthetic handle, with direct title/marker readback before
-and after. Attestation and cached diagnostic metadata alone were not used as
-proof of the actual page.
-Immediate rollback is generation 0.28.0-0df77d7f2693-f452c93718a3; preserve the
-older 0.28.0-b69c4e5a4a60-31faac73c7ec rollback and all existing holds as well.
+N/activation-receipt.json verifies five browser roots, host-unit descendants,
+39 tab-custody records and recovered temporary storage preserved. Pre-install
+synthetic diagnostics returned missing profile_lease; after installation the
+same retained handle returned complete attestation with no missing proofs.
+This does not establish the cause or permanent resolution of the earlier gap.
+The same durable-link local journey passed with two authenticated viewers,
+anonymous denial, reconnect and trusted mouse/keyboard input:
+local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt.
+Controller refresh used the driver's existing same-link recovery; no browser or
+provider restart occurred. N/installation-postjourney-doctor.json exited0; eight advisory warnings remain.
+The interlock timer is restored active. Shared skill sync added only the two
+download comments, with backup and delta hashes under N.
+Immediate rollback is generation0.28.0-ca2134dd8592-7de46dd5e014. Preserve
+0.28.0-0df77d7f2693-f452c93718a3 and0.28.0-b69c4e5a4a60-31faac73c7ec and all holds.
 
 ### Requirement-to-evidence table
 
 I = implemented, Q = qualified, D = installed/integrated, U = user-workflow proof.
 These stages are independent; partial or unknown is not completion.
+R receipts below qualify the prior b2207d5c binary; they are retained evidence,
+not fresh executions on052848aa. N receipts identify the current installation.
 
 | Requirement | I / Q / D / U | Decisive evidence | Missing proof and next action |
 | --- | --- | --- | --- |
 | A1 original identity recovery | yes / pass on f816 / retained source / r4 pass | P/consumer-r4-acceptance.json; incident0156 r4 | Preserve original self-declared recovery; no invented consumer credentialed-rejoin gate. Fresh consumer proof after this replacement remains distinct. |
-| A1 named/custom lifecycle | yes / current binary pass / yes / synthetic | R/post-r4-matrix-results.json | Four headless/headed close-reopen rows include two clients, original handles through isolated host interruption, foreign denial and exact cleanup. Other operation/negative-case joins remain due. |
-| A1 session-only lifecycle | yes / current headless and headed pass / yes / synthetic | R/final-session-matrix-results.json; R/final-session-headed-results.json | Five production identities preserved and no fixture residue. Session-only, named and custom lifecycle cases all have current-binary proof; broader cross-operation/negative joins remain separate. |
-| A1 pending confirm | yes / current binary pass / yes / original synthetic tab pass | R/installed-modal-acceptance.json; R/final-dialog-bmPf4N | Installed original handle passed labeled confirm status/dismiss and preserved actual page title/marker. Isolated snapshot and wrong-target denial pass. Original consumer retry and cross-target pending-modal routing remain unproven. |
+| A1 named/custom lifecycle | yes / prior binary pass / yes / synthetic | R/post-r4-matrix-results.json | Four headless/headed close-reopen rows include two clients, original handles through isolated host interruption, foreign denial and exact cleanup. Other operation/negative-case joins remain due. |
+| A1 session-only lifecycle | yes / prior headless and headed pass / yes / synthetic | R/final-session-matrix-results.json; R/final-session-headed-results.json | Five production identities preserved and no fixture residue. Session-only, named and custom lifecycle cases all have prior-binary proof; broader cross-operation/negative joins remain separate. |
+| A1 pending confirm | yes / prior binary pass / yes / original synthetic tab pass | R/installed-modal-acceptance.json; R/final-dialog-bmPf4N | Installed original handle passed labeled confirm status/dismiss and preserved actual page title/marker. Isolated snapshot and wrong-target denial pass. Original consumer retry and cross-target pending-modal routing remain unproven. |
 | A1 lease findings | dispositions / scoped / yes / partial | P/post-r4-ownership-dispositions.json; R/primary-evidence-disposition.json | Keep seven advisory axes separate from ordinary control failures. Complete UI/network/file-transfer after peer-target selection and remaining negative joins with isolated fixtures. |
-| A2 local remote-view journey | yes / current binary pass after startup failure / yes / synthetic | local-viewers-ezIWgZ under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
-| A3 current readiness | yes / current doctor pass / yes / n/a | R/postjourney-doctor.json; R/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
+| A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
+| A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
 | A3 preserving shutdown delivery | scoped / replacement preservation pass / yes / synthetic handle pass | R/activation-receipt.json; R/retained-storage-after.json | Normal graceful restart is not a preserving path. Existing explicit browser-close semantics remain unchanged. |
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
-| Consumer CSV and transfer scope | native repair052848aa / final binary shared-case pass / staged, not installed / synthetic only | N/red-policy-reproduction.json; N/qualification-status.json; retained-unit-sim-4lmrgW | Peer policy/bytes and original handle preserved; owned cancel joins response, job and trace. Standalone compatibility incomplete; misattribution and consumer cancellation cause unproven. waitfordownload unchanged. |
+| Consumer CSV and transfer scope | native repair052848aa / final binary shared-case pass / installed052848aa / synthetic only | N/red-policy-reproduction.json; N/qualification-status.json; retained-unit-sim-4lmrgW | Peer policy/bytes and original handle preserved; owned cancel joins response, job and trace. Standalone compatibility deferred by operator; misattribution and consumer cancellation cause unproven. waitfordownload unchanged. |
 | Final integration and completion | partial / incomplete / plan branch / incomplete | Plan0160 W5 | Full A1–A4/AX and required final integration remain open. |
 
-### Current staged repair and next action
+### Installation disposition and next action
 
-N/staged-generation.json identifies source052848aa2855be5bae7bedfc6b77448ec4fe9c53,
-generation0.28.0-71834ecdb3d3-5a938052448d, binary
-71834ecdb3d3fe527a968303e31fb4c6c7f8cbf4ac4387d348b801581fd8bd93 and support
-5a938052448d039141e190660250589f1c78e70c55cf6f297832ed01155b0bfd.
-The selected generation above is unchanged. N/closeout.json verifies host2578,
-five original browser PID/start identities and the active interlock timer.
-Use N/activate-generation.py only after updating its expired execution bounds
-from actual operator authority and rechecking current preconditions. Then use
-N/original-diagnostics.mjs, same durable-link continuity and doctor; preserve
-all rollback generations. No production effects occurred in this round.
+N/staged-generation.json identifies the exact qualified artifact used by
+N/activation-receipt.json. The missing staging directory was reconstructed from
+the retained release binary. A second disappearance occurred before activation
+mutation; cause remains unproven. Pausing the interlock timer and performing
+restage/activation sequentially succeeded. The timer was restored afterward.
+N/installation-closeout.json records the final installed state and check results.
+No additional reproduction, build, standalone CLI experiment or consumer operation
+was performed for installation. Prior45/75-minute allowances remain consumed.
 
 Sol implemented the bounded source repair; primary reviewed owner proof/deadline
 and ran candidate/final qualification. A Luna docs spawn hit the thread limit,

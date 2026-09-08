@@ -111,8 +111,8 @@ this repair from incident0159's older7e329476 source description.
 At the installed b2207d5c baseline, legacy native `download` and
 `waitfordownload` in `cli/src/native/browser_download.rs` accept broader
 browser-level events; `download` also sets default-context policy through
-`set_download_behavior`. Repair052848aa changes `download` in the staged
-candidate; installed production and `waitfordownload` are unchanged.
+`set_download_behavior`. Repair052848aa changes `download` and is now installed by the subsequent
+operator-authorized installation. `waitfordownload` remains unchanged.
 This source distinction is verified; peer misattribution and the cause of the
 consumer CSV cancellation are not newly demonstrated by it.
 
@@ -138,17 +138,20 @@ cancellation case; RUNBOOK.md and its private N receipts own the results.
 Production installation did not occur: the activation helper's ten-minute
 acceptance/closeout reserve refused before mutation. The candidate is staged.
 
-The next execution starts with the staged installation preflight, not another
-eight-minute reproduction or full release build. Reuse the qualified binary,
-verify hashes, current custody, inactive work and the preserving interruption
-path, then install and check original-handle identity, durable-link continuity
-and doctor within an explicitly approved installation window. Existing authority
-for the operation remains; the consumed time allowance does not renew itself.
-Rebuild only if source or candidate drift invalidates the qualified result.
+The operator subsequently said “Ok defer that for the next round. Please install
+the candidate.” This explicitly defers standalone CLI compatibility and authorizes
+installation of the qualified binary without another reproduction or build.
+The installation starts at 19:51:02 UTC with a local fifteen-minute delivery
+bound. RUNBOOK.md and N/installation-closeout.json own the installed result and
+checks. Earlier consumed allowances remain historical; this is a separate
+installation task, not renewed permission for broad diagnosis.
 Standalone CLI compatibility remains incomplete: the extra data-URL fixture
 failed on baseline and candidate, and the extra about:blank candidate check also
 failed. Preserve that limitation separately from the passing shared case and
-actual consumer CSV acceptance. Full A1–A4/AX and final integration remain open.
+actual consumer CSV acceptance. Next-round ownership priorities include any
+recurrence of missing profile-lease attestation, maintained native-download
+regression coverage, and the remaining A1/AX joins. Full A1–A4/AX and final
+integration remain open.
 
 ### Delivery sequence and budget
 
