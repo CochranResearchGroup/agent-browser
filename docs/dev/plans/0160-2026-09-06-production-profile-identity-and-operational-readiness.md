@@ -191,6 +191,14 @@ Include ordinary user download-directory aliases in qualification, including a
 home Downloads symlink into a Windows mount. Prove the browser-visible alias and
 resolved source identity; blanket rejection of directory aliases does not satisfy
 usable artifact delivery. Preserve leaf-file substitution and overwrite defenses.
+When an installed retained target produces no matching download completion,
+distinguish an untriggered or policy-blocked download from missing event delivery
+before changing code or repeating the request. Compare the exact retained target
+with an isolated headed browser without changing its default-context policy.
+Record actual click activation and first/repeated native download outcomes;
+untrusted DOM activation alone is not sufficient evidence of the cause.
+Do not replace the retained browser, borrow another client's capability, or reset
+unknown context policy to obtain a passing artifact check.
 Failed recipes must report failed response, job and event outcomes with the same
 causal error, correlation and accurate effect state, even when transport succeeded.
 Validate shared directories and retained PrivateTmp separately, including foreign

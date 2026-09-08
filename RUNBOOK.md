@@ -7,35 +7,37 @@ Git checkpoints and linked archives preserve history. Keep this file at or below
 ## Turn 264 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-A1–A4/AX remain OPEN. Explicit Retry recovery 4c6864ef is pushed; production unchanged.
-Directory-alias repair e46d64af remains qualified but unpublished: focused tests,
-optimized build and real Windows default/private-relative transfers passed,
-zero residue. Evidence: download-directory-alias/ and fixtures 9Rot2W/iTgbzq.
-Read-only status reports six file-lock timeouts, zero process-mutex timeouts,
-recent exclusive holds 170–220 ms and snapshot holds 73–127 ms. Historical
-holder identity is missing; controller/handoff timings are correlation only.
-Evidence: primary-lock-diagnosis/status-locks.json and disposition.json.
-The guard now pauses provider writes on contention and tries fresh proof at most
-three times, 100 ms apart. No cached proof authorizes effects during the pause.
-Changed ownership and other errors terminate immediately; exhausted contention
-retains its typed terminal cause. Explicit Retry handles later recovery.
-All 21 focused primary tests, fmt and clippy passed. Native websocket coverage
-proves zero writes during pending proof and readiness after fresh proof; focused
-cases prove bounded exhaustion and immediate changed-owner rejection.
-Next: qualify the combined candidate and perform one controlled publication.
-Historical writer cause and production acceptance remain unproven. Installed
-source 12f55652, last doctor 0, five browsers/storage/33 tabs preserved, ten
-rollback holds and inactive timer unchanged. Original SoyLei reconnect/CSV and
-current installed input remain unverified.
+Installed bf4de8aa after one 605-second release build and five exact-release
+qualification cases. The alias, explicit Retry and bounded ownership-read repairs
+passed 21 focused Rust tests, dashboard gates, fmt and clippy. Qualification
+covered independent headless/headed clients, causal refusals, Windows Downloads
+and private relative aliases; cleanup zero. Evidence: publication-bf4de8aa/.
+Production replacement preserved five original browsers, recovered storage and
+33 tab records. Only the synthetic handle's connectionInstanceId changed.
+Original-handle attestation remains complete. Maintenance removed nothing;
+doctor exits 0. Eleven rollback holds remain and the timer is inactive.
+Two authenticated viewers, synthetic pixels, same-link reconnect and trusted
+mouse/keyboard input passed in local-viewers-txWCsl. Counters advanced 14 to 15;
+no explicit Retry was needed and no new primary terminal event was observed.
+Installed CSV remains failed: download_events_unavailable, no source file found,
+export button removed. A no-download probe proved the DOM click was untrusted
+and lacked activation. Isolated headed repeat uSUEFQ nevertheless completed both
+native downloads with the same click behavior and zero residue. Untrusted click
+alone does not explain the installed failure; no click-code change was made.
+The next diagnostic must distinguish the retained target's download decision from
+missing event delivery without resetting unknown policy. The response labels its
+axis lifecycle_owner despite complete attestation; this is not proof of a failed
+lease. No blind retry or new release build is justified yet. A1/A3/AX dispositions, original consumer CSV and
+reconnect, and A4 scheduled cycles remain open. Plan0160 is not complete.
 
 ### Current installed identity
 
-- Source: `12f556527a15793184055b4cdee6eada5bb020fc`; host PID26009.
-- Generation: `0.28.0-18b4c398fabd-051204a349a5`.
-- Binary SHA256: `18b4c398fabd0a3437fae52227c9a56d95282824c190b7d56fbe071a0fa9223e`.
-- Support SHA256: `051204a349a5e67f3074df60fbfc3b8d1748886902f5f82d245a82a7f571319b`.
+- Source: `bf4de8aa14b91bfb1596da89f545fb79516a8961`; host PID32075.
+- Generation: `0.28.0-b69c4e5a4a60-31faac73c7ec`.
+- Binary SHA256: `b69c4e5a4a600ebc75be8869d662fc8fc7fd5633169380e804c52754d4bf7b18`.
+- Support SHA256: `31faac73c7ecd0d6f0b2f0b79485446a23f5b78f879edcb383093148124ae5a7`.
 - Shared skill matches installed source; separate Service skill unchanged.
-- Immediate rollback `0.28.0-917ec05d3dd6-5d83c8ca51bb` is held. Ten holds remain.
+- Immediate rollback `0.28.0-18b4c398fabd-051204a349a5` is held. Eleven holds remain.
 
 ### A1: installed identity repairs and remaining boundary
 
@@ -66,19 +68,9 @@ one proven dead transport. Consumer permissions, owner/lease authority and all
 five browsers were preserved. See `legacy-connection-repair/` and Git `4c3d9156`
 for the detailed history. Actual consumer reconnect remains unverified.
 
-Current source `ac277ea0` also passed native synthetic CSV capture and client
-artifact retrieval after disposable host retirement (`retained-unit-sim-xNVafa`).
-An immediate Blob revocation did not prevent the download. A second fixture
-(`retained-unit-sim-vfstsf`) emitted a peer download first; both artifacts existed
-separately and the primary request returned its own bytes. This does not prove
-shared default-context policy ownership or ordinary Playwright namespace transfer.
-The three-tab fixture proved attach/detach and physical release of only the
-intended target. Its next assertion wrongly assumed top-level targetId was
-unsupported; the current schema supports it and the response named the requested
-target. `retained-unit-sim-3dOUr1/disposition.json` records that limit. Historical
-wrong-tab cause and independent post-close census remain unproven. Two earlier
-fixture setup errors are preserved. MeOiTT cleanup falsely reported zero because
-Chrome flattened argv and erased HOME. Corrected cleanup now proves no residue.
+Earlier download, tab-scope and fixture-oracle evidence is retained at Git
+`bf4de8aa:RUNBOOK.md` and its private fixture links. Historical wrong-tab cause
+and independent post-close census remain unproven; do not erase these obligations.
 
 ### Storage recovery and prevention
 
@@ -98,10 +90,9 @@ still needs a reusable product diagnosis/recovery surface.
 
 ### A2 local acceptance and remaining A3/A4/AX work
 
-- A2: current 0LgorK passes two viewers, pixels and same-link reconnect, but
-  controller refresh lost one iframe; Retry L4sk1e also failed. Earlier 34mn0F input recovery
-  remains historical evidence. Original target and complete attestation survive.
-  Plan0158 external-vantage acceptance remains separate.
+- A2: current txWCsl passes two viewers, pixels, same-link reconnect and trusted
+  input on bf4de8aa. Earlier 0LgorK/L4sk1e failures remain historical evidence.
+  Original target/attestation survive. Plan0158 external vantage remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.
   Seven advisory lease findings remain; consumer recovery is not established by
   a green doctor. Keep their existing evidence-backed dispositions visible.
@@ -135,7 +126,7 @@ payload references, while rollback readiness still requires its old generation.
 Restored that exact 32-file payload from verified backup and applied a supported
 retention hold. Doctor then exited 0; its GC preview retained three generations and had
 zero candidates. Net removed generations: 26. No accepted transaction was forged.
-Keep all ten holds and original recovery storage. The installed GC repair now
+Keep all eleven holds and original recovery storage. The installed GC repair now
 retains the latest transaction rollback dependency. Current generation GC preview
 has zero candidates; unrelated older history stays reclaimable.
 
@@ -152,6 +143,9 @@ boundaries remain unchanged.
 ### Evidence index
 
 Private evidence root: `~/.local/state/agent-browser/campaigns/p160/`.
+- `publication-bf4de8aa/`: build, five-case qualification, activation, doctor0,
+  input acceptance, failed installed CSV, click probe and headed comparison.
+- `primary-lock-diagnosis/`: bounded read-only lock telemetry and causal limits.
 - `installed-15cd8e5b-a1/`: acceptance matrix plus cold-lifecycle disposition;
   three failed setup attempts, their zero-residue proof and the scoped AX join.
 - `session-cold-lifecycle-wOiz0e/dashboard-readback-receipt.json`: authenticated
