@@ -4,29 +4,29 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 255 | 2026-09-08
+## Turn 256 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: current lease explanations and access plans classify all seven
-maintenance findings across six records. All four affected profiles allow
-self-declared shared-local acquisition and offer one existing browser with zero
-blocking identity axes. This does not prove original-consumer control or authorize
-maintenance rejoin/cleanup. Private ownership-disposition-959ba7be/ binds each row.
-Exact installed session-only close/reopen passed headless PUSPkf and headed 8IUNVX.
-A retained action-family test found a remaining file_transfer target-selection
-failure (Br3VC9). UI actions and network capture passed via their outer routing
-gate; file transfer bypassed that gate. Source now invokes the existing exact
-retained-target recovery after recipe validation, before file input/download work.
-Optimized candidate si6ydg and 5vZ9uh pass both modes: original credentials and
-handles, own-tab UI/upload effects, unchanged peer, foreign denials before effects,
-retained process/targets/storage and zero owned residue. Build took 152s; format,
-clippy (26s) and diff checks pass. Five production browser identities are unchanged.
-The repair is not installed. Batch shared download-policy ownership and namespace
-artifact transport disposition before another publication. Plan W1 now explicitly
-exercises these action families immediately after another retained target.
-Production remains the accepted candidate below, with durable-link/input proof and
-zero-exit doctor at publication. Original SoyLei reconnect remains unverified.
-A1/A3/A4/AX remain OPEN; keep the maintenance timer inactive pending A1–A3.
+Outcome progress: installed fixture if1QfI proves shared download-policy interference.
+A peer first completed its download in its chosen directory. Native browser-mode
+capture then redirected that peer's next file into the primary request's directory.
+Primary bytes remained correct; event attribution alone cannot protect peer policy.
+Passive prototypes cXYVmA and SZ4bm8 then delivered only the original target's CSV,
+using its frame, GUID and completion path, without changing the peer's policy.
+SZ4bm8 uses retained Chrome-private /tmp: the event path is absent to the client,
+but exact process-bound namespace readback delivers the expected bytes. Both peer
+files remain at their intended source; only primary bytes reach the destination.
+These are prototypes, not the product file_transfer implementation. The inherited
+sharedAbsoluteDirectory receipt field is excluded from namespace conclusions.
+All three fixtures left zero owned residue; five production browsers are unchanged.
+Private download-policy-c31a13ed/control.json binds first failure, both prototypes,
+source/driver hashes, limits and remaining product work. Plan strategy is amended.
+Next: integrate service-owned launch defaults, passive existing-policy capture and
+safe process-bound delivery; qualify missing/foreign/changed/unsafe evidence before
+combining with c31a13ed's tested retained file-transfer recovery for publication.
+Current lease/access-plan dispositions remain in ownership-disposition-959ba7be/.
+Production remains the accepted candidate below. Original SoyLei reconnect and CSV
+are unverified. A1/A3/A4/AX remain OPEN; keep the timer inactive pending A1–A3.
 
 ### Current installed identity
 

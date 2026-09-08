@@ -150,6 +150,19 @@ Existing deleted namespaces require a separate ownership-preserving recovery;
 a new unit template cannot repair their mounted inode. Browser-native download
 and artifact retrieval must pass before calling the consumer download resolved.
 
+Browser-mode capture must preserve an existing browser context's download
+policy. Establish service-owned download defaults during positively owned new
+browser launch, before exposing that browser to clients. For retained contexts,
+qualify passive capture using the exact authorized frame, download GUID and
+completion path. Deliver only that artifact through process-identity-bound
+namespace resolution into the caller's allowed destination, preserving peer
+files and destinations. Missing event, path or ownership evidence requires a
+typed outcome with accurate effect state; it does not authorize replacing an
+unknown context policy. Validate shared directories and retained PrivateTmp
+separately, including foreign events, changed process identity and unsafe paths.
+The [CDP download contract](https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setDownloadBehavior)
+scopes download settings to a browser context, not an individual target.
+
 After the identity batch, repair supported rollback retention before maintenance
 can resume. For a reviewed generation installed outside an accepted upgrade
 transaction, add explicit hash-bound operator retention under the workstation
