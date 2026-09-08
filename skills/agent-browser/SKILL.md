@@ -1450,6 +1450,11 @@ the caller-owned recipe; agent-browser owns path allowlist checks, caps, trace
 linkage, selected file-name verification, compact download metadata, and
 optional diagnostics on failure.
 
+A failed file-transfer recipe reports `success: false` even when transport
+succeeded. Its response preserves `data.failedPhase`, `data.error` and trace
+context; the job and terminal event carry the same failure outcome. Inspect the
+returned effect state and retry guidance before repeating a click or upload.
+
 For composed service-owned workflows, prefer
 `examples/service-client/composed-workflow.mjs` as the copyable pattern before
 writing direct CDP glue. It reads an access plan, requests a service-owned tab,

@@ -4,29 +4,31 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 256 | 2026-09-08
+## Turn 257 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: installed fixture if1QfI proves shared download-policy interference.
-A peer first completed its download in its chosen directory. Native browser-mode
-capture then redirected that peer's next file into the primary request's directory.
-Primary bytes remained correct; event attribution alone cannot protect peer policy.
-Passive prototypes cXYVmA and SZ4bm8 then delivered only the original target's CSV,
-using its frame, GUID and completion path, without changing the peer's policy.
-SZ4bm8 uses retained Chrome-private /tmp: the event path is absent to the client,
-but exact process-bound namespace readback delivers the expected bytes. Both peer
-files remain at their intended source; only primary bytes reach the destination.
-These are prototypes, not the product file_transfer implementation. The inherited
-sharedAbsoluteDirectory receipt field is excluded from namespace conclusions.
-All three fixtures left zero owned residue; five production browsers are unchanged.
-Private download-policy-c31a13ed/control.json binds first failure, both prototypes,
-source/driver hashes, limits and remaining product work. Plan strategy is amended.
-Next: integrate service-owned launch defaults, passive existing-policy capture and
-safe process-bound delivery; qualify missing/foreign/changed/unsafe evidence before
-combining with c31a13ed's tested retained file-transfer recovery for publication.
-Current lease/access-plan dispositions remain in ownership-disposition-959ba7be/.
-Production remains the accepted candidate below. Original SoyLei reconnect and CSV
-are unverified. A1/A3/A4/AX remain OPEN; keep the timer inactive pending A1–A3.
+Acceptance-changing evidence: product fixture retained-unit-sim-cGNiHA disproves
+passive capture across a retained host restart. Chrome completed primary and peer
+files in the intended peer directory, but the reconnected Service received no
+completion events. Chromium BrowserHandler owns per-connection event subscription;
+SetDownloadBehavior enables it only while also replacing shared context policy.
+The earlier cXYVmA/SZ4bm8 prototypes used the subscribing connection and therefore
+did not prove Service recovery. Do not retry this design or publish the candidate.
+One optimized build and one namespace attempt were used; shared attempt skipped.
+Fixture cleanup reports zero owned residue; production was not changed.
+Private download-policy-c31a13ed/ retains the failed fixture, source/binary hashes,
+withdrawn-integration.patch and service_download_artifact.rs. The failed capture
+integration and its user-facing claims were removed from the product worktree.
+Plan strategy now requires browser-lifetime observation with explicit policy
+custody, or an independent observation interface, before capture implementation.
+The same fixture exposed a separate false-success defect: data.ok=false yielded a
+succeeded job and verified_effect. The focused repair preserves diagnostic data
+and makes response, job and event outcomes agree. Focused Rust regression, fmt,
+clippy and Service Client checks passed; installed qualification remains pending.
+Next: qualify the observation
+lifetime design before another capture build. Keep c31a13ed recovery uninstalled.
+Original SoyLei reconnect and CSV remain unverified. A1/A3/A4/AX remain OPEN;
+keep the timer inactive pending A1–A3. Production remains the candidate below.
 
 ### Current installed identity
 

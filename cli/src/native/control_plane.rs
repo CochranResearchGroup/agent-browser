@@ -1267,6 +1267,21 @@ fn finalize_service_request(
     state: ServiceTerminalState,
     phase: ServiceTerminalPhase,
 ) -> Value {
+    // Recipe execution can fail inside a successfully transported response.
+    // Preserve its diagnostic payload while making job/event/trace outcomes
+    // reflect the operation, rather than the outer transport envelope.
+    let recipe_failed = request.action == "file_transfer"
+        && response.pointer("/data/ok").and_then(Value::as_bool) == Some(false);
+    let state = if recipe_failed && state == ServiceTerminalState::Succeeded {
+        response["success"] = json!(false);
+        response["error"] = response
+            .pointer("/data/error")
+            .cloned()
+            .unwrap_or_else(|| json!("file_transfer_failed: recipe did not complete"));
+        ServiceTerminalState::Failed
+    } else {
+        state
+    };
     attach_service_failure_recourse(&mut response);
     if let Some(existing) = load_service_job(&service_job_id(request))
         .and_then(|job| job.terminal_outcome)
@@ -4767,6 +4782,57 @@ mod tests {
 
         drop(_permit);
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn failed_download_recipe_preserves_causal_failure_in_response_job_and_event() {
+        let home = temp_home("control-plane-download-recourse");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let mut request = control_request_for_mode_test(json!({"action":"file_transfer"}));
+        request.job_id = "download-recourse".into();
+        let response = finalize_service_request(
+            &request,
+            json!({"success":true,"data":{"ok":false,"failedPhase":"download",
+                "error":"Download was canceled",
+                "traceFilter":{"taskName":"download-proof"}}}),
+            ServiceTerminalState::Succeeded,
+            ServiceTerminalPhase::Execution,
+        );
+        assert_eq!(response["success"], false);
+        assert_eq!(response["data"]["failedPhase"], "download");
+        assert_eq!(response["terminalOutcome"]["state"], "failed");
+        assert_eq!(
+            response["terminalOutcome"]["effectState"],
+            "effect_uncertain"
+        );
+        assert_eq!(response["failure"]["code"], "download_canceled");
+        assert_eq!(
+            response["failure"]["retryDisposition"],
+            "inspect_before_retry"
+        );
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["download-recourse"];
+        assert_eq!(job.state, JobState::Failed);
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        assert_eq!(
+            event.provenance.as_ref().unwrap().request_id,
+            request.provenance.request_id
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 

@@ -4802,6 +4802,11 @@ instructions without adding provider-specific logic to agent-browser. Run
 example contract plus the example dry-run modes, and run
 `pnpm test:service-composed-workflow-live` to prove the composed workflow
 against an isolated daemon and generic local HTML fixture.
+A failed file-transfer recipe reports `success: false` even when transport
+succeeded. Its response preserves `data.failedPhase`, `data.error` and trace
+context; the job and terminal event carry the same failure outcome. Inspect the
+returned effect state and retry guidance before repeating a click or upload.
+
 The main `service-request-trace.mjs` example is the generic integration path
 for non-Canva software clients: pass `--register-profile-id` and
 `--register-readiness-monitor` when the service needs a recurring managed

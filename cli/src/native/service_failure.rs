@@ -137,6 +137,34 @@ pub(crate) fn operator_focus_failure_code(error: &str) -> Option<&str> {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    let download_code = match error {
+        "Download was canceled" => Some("download_canceled"),
+        "Downloaded file not found at captured path" => Some("download_completion_path_missing"),
+        "file_transfer download click timed out" => Some("download_click_uncertain"),
+        _ => None,
+    };
+    if let Some(code) = download_code {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.into(),
+            code: code.into(),
+            axis: ServiceFailureAxis::LifecycleOwner,
+            phase: ServiceFailurePhase::Finalize,
+            // A combined transfer may already have uploaded or clicked. Never
+            // advertise a safe blind replay after missing completion evidence.
+            effect_state: ServiceEffectState::EffectUncertain,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_download_capture".into(),
+            safe_next_actions: vec![
+                "inspect_service_trace".into(),
+                "verify_browser_download_policy_and_artifact_identity".into(),
+            ],
+            hard_stops: vec![
+                "blind_retry".into(),
+                "overwrite_unknown_context_download_policy".into(),
+            ],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if let Some(code) = operator_focus_failure_code(error) {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),

@@ -151,16 +151,25 @@ a new unit template cannot repair their mounted inode. Browser-native download
 and artifact retrieval must pass before calling the consumer download resolved.
 
 Browser-mode capture must preserve an existing browser context's download
-policy. Establish service-owned download defaults during positively owned new
-browser launch, before exposing that browser to clients. For retained contexts,
-qualify passive capture using the exact authorized frame, download GUID and
-completion path. Deliver only that artifact through process-identity-bound
-namespace resolution into the caller's allowed destination, preserving peer
-files and destinations. Missing event, path or ownership evidence requires a
-typed outcome with accurate effect state; it does not authorize replacing an
-unknown context policy. Validate shared directories and retained PrivateTmp
-separately, including foreign events, changed process identity and unsafe paths.
-The [CDP download contract](https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setDownloadBehavior)
+policy and deliver only the authorized target's artifact. Passive observation on
+a newly attached CDP connection does not satisfy this requirement: Chromium binds
+download-event subscription to each BrowserHandler, while SetDownloadBehavior
+both enables those events and mutates the shared context policy. An observer that
+set the policy cannot stand in for a reconnected Service consumer in acceptance.
+Before further capture implementation, establish an event source that survives
+runtime-host replacement without replacing unknown peer policy. Evaluate a
+browser-lifetime download owner with explicit policy custody and reconnectable
+event delivery, or a supported independent observation interface. Do not infer
+policy from directory contents or silently replay a launch-time setting over a
+peer's newer setting. A stock-Chrome limitation is a design constraint, not
+permission to weaken retained-browser or shared-client acceptance.
+Preserve process-bound namespace delivery, frame/GUID attribution and destination
+checks as reusable components; qualify them through the real Service request.
+Failed recipes must report failed response, job and event outcomes with the same
+causal error, correlation and accurate effect state, even when transport succeeded.
+Validate shared directories and retained PrivateTmp separately, including foreign
+events, changed process identity and unsafe paths. The
+[CDP download contract](https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setDownloadBehavior)
 scopes download settings to a browser context, not an individual target.
 
 After the identity batch, repair supported rollback retention before maintenance
