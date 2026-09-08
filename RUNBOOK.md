@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 268 | 2026-09-08
+## Turn 269 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed bf4de8aa after one 605-second release build and five exact-release
@@ -19,11 +19,11 @@ doctor exits 0. Eleven rollback holds remain and the timer is inactive.
 Two authenticated viewers, synthetic pixels, same-link reconnect and trusted
 mouse/keyboard input passed in local-viewers-txWCsl. Counters advanced 14 to 15;
 no explicit Retry was needed and no new primary terminal event was observed.
-Installed CSV remains failed: download_events_unavailable, no source file found,
-export button removed. A no-download probe proved the DOM click was untrusted
-and lacked activation. Isolated headed repeat uSUEFQ nevertheless completed both
-native downloads with the same click behavior and zero residue. Untrusted click
-alone does not explain the installed failure; no click-code change was made.
+Original data-origin CSV failed. HTTP-origin CSV now passes in a temporary owned
+tab of the same retained production browser: 24 verified bytes, original handle
+attestation preserved, temporary tab closed, five production identities intact.
+Evidence: publication-bf4de8aa/normal-origin-check/acceptance.json. Context policy
+unchanged; tab/origin restriction and original consumer export remain unproven.
 Instrumented capture now records Chrome receiving the attempt and dropping it
 before creating a DownloadItem: Download.Counts buckets 28 and 31 each rose by
 one, with no download events or handler exception. Chromium defines bucket 31
