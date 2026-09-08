@@ -324,8 +324,10 @@ errors in ordinary authorized use do not satisfy A1 or A3.
 
 ## Work units and dependencies
 
-The primary agent owns all units and integration. Active-agent concurrency is
-one; no delegated discovery or parallel runtime mutation is planned.
+The primary owns integration, production mutation and acceptance. One economical
+worker may run a bounded independent evidence or disposable-fixture lane under
+policies 0021/0045 while the primary advances separate work. Shared production
+mutation remains serial; primary reviews decisive evidence before accepting it.
 
 | Unit | Work and expected write surface | Exit evidence | Dependency |
 | --- | --- | --- | --- |

@@ -4,39 +4,38 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 277 | 2026-09-08
+## Turn 278 | 2026-09-08
 
-Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
-Plan0160 remains OPEN; original consumer reconnect/readiness is now verified.
-Next: remaining A1/AX and ownership dispositions, then A3/A4 readiness.
-Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
-Prior continuation ceiling: 20 minutes from Turn273; this r4 verification is read-only;
-no full release builds or production replacements. Prior ten-hour overruns remain
-reported cost, not a reset allowance; exact cumulative wall/model cost is unknown.
-Previous batch: one 623-second release build and one preserving installation.
-Stop at the earlier existing attempt/no-progress bound or this ceiling.
+Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
+A1 current-control, A2 operator journey and A3 readiness now accepted on f8161fd1.
+Original consumer r4, four named/custom lifecycle cases and two session-only
+interaction/reopen modes passed on the exact installed binary. Primary reviewed
+worker receipts; five original browser identities survived every fixture/cleanup.
+Economical worker a1_evidence_audit requested Luna/medium; effective model/cost
+unreported. Its credentialed-rejoin requirement and pre/post-install conflict
+interpretations were rejected against the frozen contract and staged receipts.
 
-Installed f8161fd1 includes 028597ea's accurate download failure classification.
-Exact headless/headed two-client interruption qualification passed; installation
-preserved five browsers, storage and 33 tab custody rows. Original synthetic
-attestation and matching installed response/job/event failure passed.
-Two-viewer pixels, trusted input and same-link reconnect passed in oXuJ7E.
-Doctor exited 0 after manual monitor refresh; timer remains inactive.
-Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
-Consumer r4 checksums, response/job and original r2 handle identity verified.
-Capability-free original self-declared client passed diagnostics with complete
-attestation and no missing proofs; target and installed host binary match.
-Access plan r129188 permitted reuse. This closes original-client reconnect/readiness.
-Disconnected after the request reflects request-scoped MCP, not failed recovery.
-Evidence: publication-028597ea/consumer-r4-acceptance.json and incident0156 r4 section.
-Installed Service release and raw HTTP tab_close each passed a three-target census:
-only the intended middle target closed; neighbors and final baseline survived.
-Conflicting selectors refused before effects with matching response/job/event.
-Original attestation stayed complete. Evidence: publication-028597ea/{exact-target-close,
-raw-target-close}/acceptance.json. Historical selector/build attribution remains open.
-Earlier normal-origin CSV passed on bf4de8aa; consumer CSV remains unverified.
-A4 remains gated on A1–A3 and remaining AX evidence. Reuse valid accepted checks.
-Primary retains custody and acceptance; no new builds, publication or timer effects.
+Post-r4 audit bounded to 15 minutes, deadline 13:24 UTC; no build/replacement.
+Prior repeated ten-hour overruns and all publication allowances remain consumed.
+With A1–A3 accepted, A4 gets a separate 30-minute observation window from timer start,
+not another repair allowance. Three actual 5-minute cycles precede a controlled
+restart and next cycle; defer restart if active work or changed custody prevents it.
+Do not shorten the timer cadence or count manual refreshes as scheduled cycles.
+Timer is enabled/active; first cycle due 13:27:36 UTC. Observer exec session 57459
+records a4-control.json; hard end 13:52:28 UTC. No restart has occurred.
+
+Fresh doctor now passes after one supported maintenance pass; convergence ready.
+Seven advisory ownership axes are unchanged with explicit dispositions; original
+self-declared recovery passes without credentialed-principal maintenance changes.
+Supported failure journal exposes the original refusal's causal function, subject
+hashes, exact build and matching outcome; delivery/pending/malformed counters zero.
+Detailed evidence: publication-028597ea/post-r4-acceptance-review.json,
+post-r4-matrix-results.json, post-r4-ax-acceptance.json and post-r4-doctor-final.json.
+Headless/headed session interaction: session-cold-EETK6b and session-cold-qrVjuU.
+Fixture issues retained: Python pidfd support and PrivateTmp script visibility;
+neither justified a product edit or repeated browser failure.
+Historical wrong-tab attribution, consumer CSV and remaining full AX scope stay
+open. Preserve recovered storage/rollback holds. No formal release or external vantage.
 
 ### Current installed identity
 
