@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 265 | 2026-09-08
+## Turn 266 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed bf4de8aa after one 605-second release build and five exact-release
@@ -32,10 +32,12 @@ identify the exact effective setting. Trace button cleanup passed.
 The source classifier now preserves download codes without falsely labeling
 missing/canceled events as ownership failures; explicit identity failures retain
 lifecycle_owner. All 16 focused tests, fmt and clippy pass. This fix is not installed.
-Next: establish the retained synthetic page's effective download restriction and
-supported recovery, preserving browser identity and unknown context settings.
-No blind retry or release build is justified by the missing event alone. A1/A3/AX,
-original consumer CSV/reconnect and A4 cycles remain open; Plan0160 is not complete.
+Source fix pushed at 028597ea. Isolated headless CLI cold open, title, close,
+reopen and title pass without profile selection: session-cold-Bk7rtr. Cleanup
+finds no residue and preserves five production identities. An invented cold
+HTTP session was refused; its plan supplies a managed-profile request instead.
+Next: remaining A1 headed interaction and consumer rejoin. Download restrictions
+remain separate; A1/A3/AX and A4 are open.
 
 ### Current installed identity
 
