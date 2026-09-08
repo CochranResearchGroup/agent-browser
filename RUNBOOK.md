@@ -4,39 +4,38 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 272 | 2026-09-08
+## Turn 273 | 2026-09-08
 
-Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Installed f8161fd1, including 028597ea's download failure classification repair,
-after one 623-second release build. Exact headless/headed qualification preserved
-two independently authenticated clients across host interruption, with ownership
-denials and matching response/job/event failure evidence. No fixture residue.
-Production replacement preserved five browsers, recovered storage and 33 tab
-custody rows. Subsequent connection IDs refreshed for two tabs; subjects,
-permissions and all other compared custody fields remained unchanged.
-The original synthetic handle passes complete attestation. A real installed
-missing-download response now reports axis unknown and matches its job/event;
-explicit identity failures retain lifecycle_owner. Shared skill matches install.
-Two authenticated viewers, pixels, same-link reconnect and trusted mouse/keyboard
-pass in local-viewers-oXuJ7E. Doctor exits 0 after refreshing stale monitoring.
-The previous generation is retained for rollback; maintenance timer is inactive.
+Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
+Plan0160 remains OPEN. Priority: original consumer identity/reconnect, exact-target
+close evidence, remaining ownership dispositions, then unattended operation.
+Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
+Continuation ceiling: 20 minutes from this turn's first action, including amendment;
+no full release builds or production replacements. Prior ten-hour overruns remain
+reported cost, not a reset allowance; exact cumulative wall/model cost is unknown.
+Previous batch: one 623-second release build and one preserving installation.
+Stop at the earlier existing attempt/no-progress bound or this ceiling.
+
+Installed f8161fd1 includes 028597ea's accurate download failure classification.
+Exact headless/headed two-client interruption qualification passed; installation
+preserved five browsers, storage and 33 tab custody rows. Original synthetic
+attestation and matching installed response/job/event failure passed.
+Two-viewer pixels, trusted input and same-link reconnect passed in oXuJ7E.
+Doctor exited 0 after manual monitor refresh; timer remains inactive.
 Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
-An existing SoyLei p0143 client successfully snapshotted its same retained tab
-through new host PID27737. This is observed client activity, not impersonation.
-The separate original Plan0137 handle remains disconnected; its own retry is pending.
-Earlier normal-origin CSV transport passed in the same retained browser on bf4de8aa;
-its original data-origin fixture failure remains narrowed to tab/origin state.
-Headless and headed cold CLI reopen evidence remains in Bk7rtr and KTEIFz.
-Plan0160 remains OPEN: original consumer recovery and remaining A1/A3/AX
-acceptance must precede A4's scheduled cycles and controlled restart.
-
-Policy follow-up requested after the repeated ten-hour runs: policies 0028,
-0042 and 0045 now require delivery-cost assessment, early external-gate checks,
-batched validation and provisional economical routing for bugs and features.
-AGENTS routes future work to them. Bounded worker economical_routing supplied
-0045's draft (requested gpt-5.6-luna/medium; effective model and cost unreported);
-primary reviewed the diff. Goal-policy audit and link/whitespace checks pass.
-This is policy-only; automated stopping and model savings remain unverified.
+Read-only metadata at 10:53UTC shows original Plan0137 tab present/disconnected,
+with no p0137 job in the retained window; absence does not prove no retry elsewhere.
+p0143 has 30 retained jobs, including successful reload at 10:34 and snapshot at 10:35
+on its same tab. The original client's own retry input is already pending.
+Evidence: publication-028597ea/consumer-metadata-followup.json.
+Installed Service release passed with three disposable targets: only the middle
+target closed; independent Chrome census preserved neighbors and final baseline.
+Original handle attestation stayed complete. Evidence: publication-028597ea/
+exact-target-close/acceptance.json. Historical selector/build attribution is open.
+Earlier normal-origin CSV passed on bf4de8aa; consumer CSV remains unverified.
+A4 remains gated on A1–A3 and remaining AX evidence. Reuse valid accepted checks.
+Use economical workers only for independent bounded work; primary retains custody
+and acceptance decisions. Automated stopping and measured savings are unverified.
 
 ### Current installed identity
 
@@ -78,7 +77,8 @@ for the detailed history. Actual consumer reconnect remains unverified.
 
 Earlier download, tab-scope and fixture-oracle evidence is retained at Git
 `bf4de8aa:RUNBOOK.md` and its private fixture links. Historical wrong-tab cause
-and independent post-close census remain unproven; do not erase these obligations.
+remains unproven. Current installed Service release has independent census proof;
+generic CLI tab-close and the historical selector remain outside that proof.
 
 ### Storage recovery and prevention
 
