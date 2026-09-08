@@ -4,10 +4,10 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 279 | 2026-09-08
+## Turn 280 | 2026-09-08
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-A1/A2 accepted on f8161fd1; A3/A4 and full AX remain open. Original consumer r4
+A1/A2 and current A3 doctor acceptance pass; A4/full AX open. Original consumer r4
 and six final-binary lifecycle/interaction cases pass. No host restart or binary
 publication this slice. Prior allowances and reported ten-hour overruns remain consumed.
 
@@ -25,11 +25,11 @@ No timer restart/cadence change this turn. Timer remains enabled. Three consecut
 normal cycles and post-restart original-handle/durable-link proof remain required.
 Existing observation deadline stays 13:52:28 UTC; no automatic renewal.
 
-Fresh doctor exits1: runtime_pressure_ownership_unknown reports 133 processes and
-6,831,558,656 RSS bytes. One host/one dashboard, current selection, monitor and
-convergence ready. Seven advisory lease axes unchanged. Next: attribute pressure
-to exact live ownership before restart. pressure-attribution-leads.json groups
-30 old P159 fixture processes, 24 development, 15 other-app and 64 unresolved rows.
+Six exact completed P159 fixture roots stopped by pidfd TERM after original-ledger,
+live PID/start/executable/profile proof. All 30 fixture processes gone; five
+production identities preserved. Manual maintenance/doctor exit0; no GC removals.
+Observed RSS now 4,960,960,512 bytes/103 processes, without ownership exemptions.
+Evidence: old-fixture-cleanup-{preflight,result,acceptance}.json and descendant readback.
 
 Evidence: publication-028597ea/killmode-reproduction.json, killmode-installed-setting.json,
 post-killmode-doctor.json, a4-cadence-review.json, post-r4-acceptance-review.json,
@@ -102,7 +102,7 @@ still needs a reusable product diagnosis/recovery surface.
 - A2: current oXuJ7E passes two viewers, pixels, same-link reconnect and trusted
   input on f8161fd1. Earlier viewer failures remain historical evidence.
   Original target/attestation survive. Plan0158 external vantage remains separate.
-- A3: latest doctor exits1 for unknown-owner process pressure; see current status.
+- A3: doctor exits0 after exact old-fixture cleanup; see current status.
   Seven advisory lease findings retain their dispositions; doctor is not consumer proof.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
