@@ -13,16 +13,16 @@ health reconciliation and capacity activation. Its release readback passed in
 browser processes, storage and tab ownership; original handle attestation passes.
 The original durable URL passed two authenticated viewers, anonymous denial,
 synthetic pixels, same-link reconnect and trusted Guacamole mouse/keyboard input
-in `local-viewers-sJv4NQ`. This is local operator acceptance, not external-vantage
-or complete installed doctor acceptance. Doctor remains nonzero; A1–A4/AX stay OPEN.
+in `local-viewers-sJv4NQ`. The supported ready receipt was created automatically;
+fresh doctor cleared dashboard and upgrade readiness. A1–A4/AX remain OPEN.
 The preceding viewer attempt `local-viewers-hmUhkI` resolved both exact targets
 but viewport shrink hid the marker. Moving only the synthetic marker into the
 142px viewport enabled the test; multi-viewer sizing remains a separate finding.
 No mouse-delivery code changed. The failed `076f69ee` release remains retained.
 Cumulative inventory builds: five; one source rework; two viewer attempts in this
 publication, including the recorded fixture correction. No additional build.
-Progress: outcome_progress for A2. Next: record supported operator-journey evidence,
-then remaining A1 consumer identity/artifact dispositions and A3 readiness.
+Progress: outcome_progress for A2 and A3. Next: remaining A1 consumer identity
+and artifact dispositions, then monitoring and pressure ownership readiness.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
@@ -111,11 +111,11 @@ still needs a reusable product diagnosis/recovery surface.
 
 - A2: current installed local journey passed two authenticated viewers, anonymous
   denial, pixels, same-link reconnect and Guacamole click/Enter acknowledgement.
-  The supported doctor receipt remains absent. Preserve the first failed layout
+  The supported ready receipt is present. Preserve the first failed layout
   attempt; effective settings were recorded in the successful corrected attempt.
-- A3: current installed doctor exits 1. Findings cover presentation and upgrade
-  readiness, retained terminal history, the seven lease findings above, stale
-  monitoring and unknown pressure ownership. Exact report is retained privately.
+- A3: post-viewer doctor exits 1. Presentation and upgrade readiness now pass.
+  Remaining: retained terminal history, seven lease warnings, monitoring and
+  unknown pressure ownership. Exact report is retained privately.
 - A4: maintenance timer remains linked, inactive and disabled for automatic
   startup. No scheduled-cycle acceptance is claimed. Restore it only after
   supported rollback retention and A1–A3 readiness are established.
