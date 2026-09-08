@@ -71,7 +71,7 @@ on 2026-09-08. All prior effort and publication counts remain consumed.
 
 ### Consolidated batch
 
-The next round has one acceptance target: an authorized caller can capture its
+The focused repair round has one acceptance target: an authorized caller can capture its
 own download in a shared browser while a peer downloads concurrently, without
 misattribution, changed peer policy, lost handle authority or unsafe recovery.
 This directly advances the remaining A1 file-transfer ownership boundary. It
@@ -98,7 +98,7 @@ it is not completion of that sequence. Consumer payment/business operations,
 formal release, Plan0158 external vantage and provider polish remain outside
 this round. Keep actual consumer CSV acceptance separate from synthetic proof.
 
-### Next ownership boundary after the installed modal repair
+### Ownership boundary selected for the focused round
 
 Current-source review separates three concerns previously grouped as download
 scope. Commit12f55652 already repaired Service `file_transfer` browser capture:
@@ -108,13 +108,15 @@ subscription briefly owns a new disposable browser context and verifies disposal
 before clicking; it does not redirect the shared default context. Do not rebuild
 this repair from incident0159's older7e329476 source description.
 
-The legacy native `download` and `waitfordownload` paths in
-`cli/src/native/browser_download.rs` still accept broader browser-level events;
-`download` also sets default-context policy through `set_download_behavior`.
+At the installed b2207d5c baseline, legacy native `download` and
+`waitfordownload` in `cli/src/native/browser_download.rs` accept broader
+browser-level events; `download` also sets default-context policy through
+`set_download_behavior`. Repair052848aa changes `download` in the staged
+candidate; installed production and `waitfordownload` are unchanged.
 This source distinction is verified; peer misattribution and the cause of the
 consumer CSV cancellation are not newly demonstrated by it.
 
-The next bounded A1/AX check uses two authorized peer tabs in one disposable
+The selected bounded A1/AX check uses two authorized peer tabs in one disposable
 browser. Interleave an unrelated peer download with the owned operation, prove
 frame/GUID attribution, original handle and peer-policy preservation, and join
 its returned ID to owner/process/namespace evidence and safe recourse. Exercise
@@ -125,17 +127,34 @@ preserve legitimate exclusive/local CLI behavior and qualify both paths together
 Do not repair Service capture again without contradictory evidence. Keep actual
 consumer CSV, raw Playwright settings and artifact visibility as separate checks;
 no consumer export or shared production setting change is needed for this fixture.
-The previous 75-minute allowance is exhausted; all prior attempt counts remain
-consumed. This planning amendment does not restart runtime execution.
+The previous 75-minute allowance is exhausted and all prior attempt counts
+remain consumed. The operator subsequently approved the focused round below.
+
+### Focused-round disposition and installation handoff
+
+The approved round reproduced peer-directory interference and produced source
+052848aa. Exact release-binary qualification passed the shared ownership and
+cancellation case; RUNBOOK.md and its private N receipts own the results.
+Production installation did not occur: the activation helper's ten-minute
+acceptance/closeout reserve refused before mutation. The candidate is staged.
+
+The next execution starts with the staged installation preflight, not another
+eight-minute reproduction or full release build. Reuse the qualified binary,
+verify hashes, current custody, inactive work and the preserving interruption
+path, then install and check original-handle identity, durable-link continuity
+and doctor within an explicitly approved installation window. Existing authority
+for the operation remains; the consumed time allowance does not renew itself.
+Rebuild only if source or candidate drift invalidates the qualified result.
+Standalone CLI compatibility remains incomplete: the extra data-URL fixture
+failed on baseline and candidate, and the extra about:blank candidate check also
+failed. Preserve that limitation separately from the passing shared case and
+actual consumer CSV acceptance. Full A1–A4/AX and final integration remain open.
 
 ### Delivery sequence and budget
 
-The operator requested this planning correction after reviewing the completed
-75-minute window. This turn changes the plan only. A proposed 45-minute runtime
-extension remains pending; it is not approved by this documentation amendment.
-The earlier window ran 15:14:25–16:29:25 UTC on 2026-09-08 and remains consumed.
-
-If a 45-minute round is authorized, budget it as follows from the actual start:
+The operator approved the proposed 45-minute round with “resume with approvaln”.
+It runs 17:51:33–18:36:33 UTC on 2026-09-08. The earlier 75-minute window and all
+previous effort remain consumed. Apply the following bounds from this start:
 
 1. Minutes 0–8: primary adapts the existing retained-download fixture, confirms
    its setup and cleanup, and runs one discriminating peer-interleaving case.
@@ -180,8 +199,7 @@ keep installed acceptance explicitly incomplete.
 Use deterministic tools for trivial extraction. Delegate only when independent
 useful primary work can proceed alongside the worker. Record requested/effective
 model when available, accepted output and rework in the existing checkpoint;
-cheaper requested routing alone does not establish savings. This tightly coupled
-planning amendment needs no worker or new policy document.
+cheaper requested routing alone does not establish savings. No additional worker or policy document is needed merely to restate status.
 
 ### Evidence and exit
 

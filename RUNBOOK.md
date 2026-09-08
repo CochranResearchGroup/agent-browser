@@ -4,23 +4,23 @@ Sole current execution status. Plan0160 owns scope, strategy and frozen acceptan
 This table owns current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 282 | 2026-09-08
+## Turn 283 | 2026-09-08
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-User approved 75 minutes, 15:14:25 to 16:29:25 UTC. No automatic extension.
-Execution and observation reached this checkpoint at16:17 UTC, within the allowance.
-The execution window has ended; the full plan remains OPEN. The subsequent
-planning-only amendment targets one shared-download ownership case using the
-existing fixture, conditional Sol/Terra repair and reserved acceptance time.
-A proposed 45-minute execution extension remains pending. Do not restart A4
-observation before its prerequisites and complete sequence budget are ready.
-Prior overruns and spent allowances remain consumed. Production replacement used
-one qualified combined candidate before the 15:49:25 activation cutoff. No formal
-release, consumer payment/CSV action, credential borrowing or unrelated cleanup.
+Operator approved the focused 45-minute round, 17:51:33–18:36:33 UTC.
+All prior effort and the 75-minute window remain consumed; no automatic extension.
+Current round: native download peer-policy repair052848aa is committed/pushed,
+qualified on the exact release binary and staged. Activation refused at its
+600-second reserve before mutation; production remains on b2207d5c.
+Full A1–A4/AX remains OPEN. Next: install this staged generation with a fresh
+installation/acceptance allowance; do not rebuild or repeat diagnosis absent drift.
+Do not restart A4 observation before its prerequisites and complete sequence
+budget are ready. No consumer payment/CSV action or unrelated cleanup.
 
 Private receipt prefixes:
 - R = ~/.local/state/agent-browser/campaigns/p160/consolidated-20260908/
 - P = ~/.local/state/agent-browser/campaigns/p160/publication-028597ea/
+- N = ~/.local/state/agent-browser/campaigns/p160/ownership-round-20260908T175133Z/
 
 ### Installed outcome
 
@@ -67,8 +67,35 @@ These stages are independent; partial or unknown is not completion.
 | A4 scheduled/restart continuity | partial / three current steady cycles pass / timer active / incomplete | R/steady-cadence/scheduled-control.json | Normal gaps300.875s,300.398s,300.526s; current configuration and five roots preserved. Startup gap298.8s excluded. Full A1 prerequisites and ordered controlled-restart/next-cycle sequence remain incomplete; no second production restart performed. |
 | AX selected seven cases | surfaces implemented / partial / yes / partial | R/primary-evidence-disposition.json; P/post-r4-ax-acceptance.json | Seven exact returned-ID failure reconstructions remain unjoined. Profile selection, missing binding, changed generation, stale target/transport, Xvfb, journal interruption and failed transition are distinct predicates. |
 | Historical wrong-tab attribution | current repair / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
-| Consumer CSV and transfer scope | Service repair present, legacy differs / synthetic only / Service repair installed / incomplete | R/transfer-boundary-readback.json; incident0159; retained-download-6xfjyhb6 | Current Service capture has frame/GUID and namespace ownership handling; legacy native download/waitfordownload remain broader. Reuse Service repair, prove both paths with peer interleaving, and keep consumer cancellation cause separate. |
+| Consumer CSV and transfer scope | native repair052848aa / final binary shared-case pass / staged, not installed / synthetic only | N/red-policy-reproduction.json; N/qualification-status.json; retained-unit-sim-4lmrgW | Peer policy/bytes and original handle preserved; owned cancel joins response, job and trace. Standalone compatibility incomplete; misattribution and consumer cancellation cause unproven. waitfordownload unchanged. |
 | Final integration and completion | partial / incomplete / plan branch / incomplete | Plan0160 W5 | Full A1–A4/AX and required final integration remain open. |
+
+### Current staged repair and next action
+
+N/staged-generation.json identifies source052848aa2855be5bae7bedfc6b77448ec4fe9c53,
+generation0.28.0-71834ecdb3d3-5a938052448d, binary
+71834ecdb3d3fe527a968303e31fb4c6c7f8cbf4ac4387d348b801581fd8bd93 and support
+5a938052448d039141e190660250589f1c78e70c55cf6f297832ed01155b0bfd.
+The selected generation above is unchanged. N/closeout.json verifies host2578,
+five original browser PID/start identities and the active interlock timer.
+Use N/activate-generation.py only after updating its expired execution bounds
+from actual operator authority and rechecking current preconditions. Then use
+N/original-diagnostics.mjs, same durable-link continuity and doctor; preserve
+all rollback generations. No production effects occurred in this round.
+
+Sol implemented the bounded source repair; primary reviewed owner proof/deadline
+and ran candidate/final qualification. A Luna docs spawn hit the thread limit,
+so primary handled the small docs edits. Effective model cost remains unknown.
+CI build2m16s; release build9m45s; format, strict clippy and docs checks passed.
+Rework: original fixture transport identity mismatch, then a newline assertion
+and unsupported trace filter. These exceeded the planned single fixture
+correction; all failures are retained and no allowance was renewed. Extra
+standalone data-URL checks failed on both baseline and candidate; a candidate
+about:blank check also failed. Compatibility remains incomplete, not repaired.
+Final shared-case proof includes Service/native peer preservation, canceled own
+GUID with successful peer completion, returned-ID job/trace join and zero fixture
+process residue. The integration fixture is private; a maintained regression
+for native policy preservation remains a gap. Do not claim whole-plan completion.
 
 ### Validation, rework and bounded delegation
 
