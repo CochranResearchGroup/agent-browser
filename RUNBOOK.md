@@ -4,13 +4,13 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 273 | 2026-09-08
+## Turn 274 | 2026-09-08
 
 Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
 Plan0160 remains OPEN. Priority: original consumer identity/reconnect, exact-target
 close evidence, remaining ownership dispositions, then unattended operation.
 Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
-Continuation ceiling: 20 minutes from this turn's first action, including amendment;
+Continuation ceiling: 20 minutes from Turn273's first action, including amendment;
 no full release builds or production replacements. Prior ten-hour overruns remain
 reported cost, not a reset allowance; exact cumulative wall/model cost is unknown.
 Previous batch: one 623-second release build and one preserving installation.
@@ -28,14 +28,14 @@ with no p0137 job in the retained window; absence does not prove no retry elsewh
 p0143 has 30 retained jobs, including successful reload at 10:34 and snapshot at 10:35
 on its same tab. The original client's own retry input is already pending.
 Evidence: publication-028597ea/consumer-metadata-followup.json.
-Installed Service release passed with three disposable targets: only the middle
-target closed; independent Chrome census preserved neighbors and final baseline.
-Original handle attestation stayed complete. Evidence: publication-028597ea/
-exact-target-close/acceptance.json. Historical selector/build attribution is open.
+Installed Service release and raw HTTP tab_close each passed a three-target census:
+only the intended middle target closed; neighbors and final baseline survived.
+Conflicting selectors refused before effects with matching response/job/event.
+Original attestation stayed complete. Evidence: publication-028597ea/{exact-target-close,
+raw-target-close}/acceptance.json. Historical selector/build attribution remains open.
 Earlier normal-origin CSV passed on bf4de8aa; consumer CSV remains unverified.
 A4 remains gated on A1–A3 and remaining AX evidence. Reuse valid accepted checks.
-Use economical workers only for independent bounded work; primary retains custody
-and acceptance decisions. Automated stopping and measured savings are unverified.
+Primary retains custody and acceptance; automated stopping/savings remain unverified.
 
 ### Current installed identity
 
@@ -77,8 +77,8 @@ for the detailed history. Actual consumer reconnect remains unverified.
 
 Earlier download, tab-scope and fixture-oracle evidence is retained at Git
 `bf4de8aa:RUNBOOK.md` and its private fixture links. Historical wrong-tab cause
-remains unproven. Current installed Service release has independent census proof;
-generic CLI tab-close and the historical selector remain outside that proof.
+remains unproven. Current installed Service release and raw HTTP targetId close
+have independent census proof; the historical selector remains outside that proof.
 
 ### Storage recovery and prevention
 
