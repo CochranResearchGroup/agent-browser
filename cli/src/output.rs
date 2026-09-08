@@ -5880,6 +5880,9 @@ Service clients opening remote views pass the access plan's browserId and
 sessionName at the top level. The helper preserves daemon routing alongside
 matching handoff metadata; nested action parameters alone do not select a session.
 Reopening a durable URL preserves the original tab's client access record.
+service_tab_route_mismatch rejects a handle/browser/session conflict at child
+admission with no_effect. Compare the explicit session with the original handle,
+or omit redundant routing selectors; do not change the handle identity.
 profile_child_access_record_missing stops handle operations at child admission
 before browser effects. Inspect the Service trace; a returned handle cannot
 reconstruct a missing grant.

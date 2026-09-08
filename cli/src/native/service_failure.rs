@@ -281,6 +281,7 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             code,
             "tab_close_invalid_selector"
                 | "service_tab_profile_selector_conflict"
+                | "service_tab_route_mismatch"
                 | "service_tab_target_selector_conflict"
                 | "service_tab_target_unproven"
                 | "tab_close_selector_conflict"
@@ -313,6 +314,8 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
                     "inspect_service_trace".to_string(),
                     if code == "service_tab_profile_selector_conflict" {
                         "compare_requested_profile_to_current_owner"
+                    } else if code == "service_tab_route_mismatch" {
+                        "compare_requested_session_to_current_handle"
                     } else if matches!(
                         code,
                         "service_tab_target_selector_conflict" | "service_tab_target_unproven"

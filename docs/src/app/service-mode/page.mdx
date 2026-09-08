@@ -1156,6 +1156,11 @@ journal request ID. Correct invalid requests before resubmitting. Runtime
 provenance uses the server's deployment environment; clients cannot submit
 <code>runtimeEnvironmentId</code>.
 
+`service_tab_route_mismatch` means the supplied handle conflicts with the routed
+browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
+Compare the explicit session selector with the original handle, or use the
+handle alone so Service can route it. Keep the handle identity unchanged.
+
 Child-resource authority denials report `axis: "profile_access"`,
 `phase: "child_admission"`, and `effectState: "no_effect"` before the guarded
 operation. `profile_child_subject_mismatch` requires your own service tab

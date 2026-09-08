@@ -4,28 +4,28 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 251 | 2026-09-08
+## Turn 252 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Outcome progress: installed 700ffa8a passes the original durable-link journey.
-Two authenticated viewers, anonymous denial, synthetic pixels, same-URL reconnect,
-and trusted mouse/keyboard input passed in local-viewers-ZP6oBA. Display :14 and
-route guacamole:3 are ready. Original-handle attestation and control pass; trusted
-input counters advanced exactly once from 11/11 to 12/12. Remote identity is retained.
-The coordinator now passes retained route selection into its parsed acquisition
-intent. Its regression failed before repair; 169 focused tests and required gates
-passed. Exact release built in 586s; both disposable lifecycle modes passed with
-zero residue. One activation and one viewer attempt succeeded in this window.
-All five incumbent processes and storage survived. Activation preserved 30 tab
-records exactly; subsequent recovery rebound only the synthetic connection ID,
-preserving every other custody and permission field. Shared skill matches source.
-Supported maintenance removed nothing and refreshed monitoring. Doctor now exits 0.
-Seven lease advisories remain, and original-consumer reconnect is unverified.
-A2 local acceptance passes; remaining A1/A3/A4/AX obligations remain OPEN.
-Next: consumer recovery and installed trace acceptance; no further viewer retry.
-Keep the maintenance timer inactive until A1–A3 permit scheduled-cycle acceptance.
-Private publication-700ffa8a/acceptance-checkpoint.json indexes the current proof.
-Git 700ffa8a preserves prior failure, repair, qualification and cumulative effort.
+Outcome progress: exact installed 700ffa8a passed MCP reconnect and three denied
+requests correlated identically through returned failure, persisted job and HTTP
+trace (retained-unit-sim-EpIk3F). Exact-target release preserved its peer and browser.
+A second disposable fixture, retained-unit-sim-YIl7vK, passed host interruption,
+original-credential sealed rejoin, complete attestation, two original handles and
+retained temporary storage. Both fixtures left zero residue; five production
+browser identities are unchanged. Two handles here belong to one authenticated
+principal; independent-principal interruption acceptance remains unproven.
+The actual SoyLei consumer remains disconnected with its original permissions.
+Its retry result/request ID was requested asynchronously; capability was not borrowed.
+A route conflict in the installed fixture was mislabeled unknown/effect_uncertain.
+Source now emits service_tab_route_mismatch at child_admission with no_effect and
+specific routing recourse. Four guard, 28 failure/journal and 95 routing tests pass;
+fmt, workspace clippy and journal/dashboard checks pass. Test build took 255s.
+This classification repair is not installed. Private installed-700ffa8a-a1-ax/
+indexes the proof and gap. Next: exact-candidate classification acceptance and
+independent-principal recovery, using any original-consumer retry evidence received.
+Installed handoff/input acceptance and zero-exit doctor remain at f5553843.
+A1/A3/A4/AX remain OPEN. Keep the maintenance timer inactive pending A1–A3.
 
 ### Current installed identity
 

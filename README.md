@@ -3921,6 +3921,11 @@ agent, and task labels remain attribution and cannot replace that actor.
 An oversized decision is explicitly marked
 `profileAccessDecisionOmitted: record_size_limit` in journal details.
 
+`service_tab_route_mismatch` means the supplied handle conflicts with the routed
+browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
+Compare the explicit session selector with the original handle, or use the
+handle alone so Service can route it. Keep the handle identity unchanged.
+
 Child-resource authority denials report `axis: "profile_access"`,
 `phase: "child_admission"`, and `effectState: "no_effect"` before the guarded
 operation. `profile_child_subject_mismatch` requires your own service tab

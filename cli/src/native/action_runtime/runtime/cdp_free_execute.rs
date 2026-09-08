@@ -742,6 +742,7 @@ pub(crate) fn validate_service_tab_handle_route_for_daemon(
     let browser_id = service_tab_handle_browser_id(state);
     validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
 }
+/// Reject conflicting handle routes before admitting the requested browser effect.
 fn validate_service_tab_handle_route(
     handle: &Map<String, Value>,
     session_id: &str,
@@ -757,14 +758,14 @@ fn validate_service_tab_handle_route(
         && authorized_browser_id != Some(browser_id)
     {
         return Err(format!(
-            "service tab handle browserId {browser_id} does not match routed session {session_id}"
+            "service_tab_route_mismatch: service tab handle browserId {browser_id} does not match routed session {session_id}"
         ));
     }
     if let Some(handle_session_name) = handle.get("sessionName").and_then(Value::as_str) {
         if handle_session_name != session_id {
             return Err(
                 format!(
-                    "service tab handle sessionName {handle_session_name} does not match routed session {session_id}"
+                    "service_tab_route_mismatch: service tab handle sessionName {handle_session_name} does not match routed session {session_id}"
                 ),
             );
         }
@@ -950,7 +951,7 @@ mod tests {
     #[test]
     fn retained_owner_rejects_unrelated_service_tab_handle_identity() {
         let state = retained_owner_state();
-        let handle = json!({
+        let mut handle = json!({
             "browserId": "session:unrelated-browser",
             "sessionName": "handoff-owner-route",
             "tabId": "target:tab-1",
@@ -958,13 +959,33 @@ mod tests {
             "valid": true,
         });
 
-        let error = validate_service_tab_handle_for_daemon(
-            handle.as_object().expect("handle object"),
-            &json!({"action": "cdp_attach"}),
-            &state,
-        )
-        .expect_err("unrelated browser id must fail closed");
-        assert!(error.contains("does not match routed session"));
+        for field in ["browserId", "sessionName"] {
+            if field == "sessionName" {
+                handle["browserId"] = json!("session:durable-browser");
+                handle["sessionName"] = json!("unrelated-route");
+            }
+            let error = validate_service_tab_handle_for_daemon(
+                handle.as_object().expect("handle object"),
+                &json!({"action": "cdp_attach"}),
+                &state,
+            )
+            .expect_err("unrelated route identity must fail closed");
+            assert!(error.contains(&format!("service tab handle {field}")));
+            let failure = crate::native::service_failure::classify_service_failure(&error);
+            assert_eq!(failure.code, "service_tab_route_mismatch");
+            assert_eq!(
+                failure.effect_state,
+                crate::native::service_failure::ServiceEffectState::NoEffect
+            );
+            assert_eq!(
+                failure.phase,
+                crate::native::service_failure::ServiceFailurePhase::ChildAdmission
+            );
+            assert!(failure
+                .safe_next_actions
+                .iter()
+                .any(|action| action == "compare_requested_session_to_current_handle"));
+        }
     }
 
     #[test]
