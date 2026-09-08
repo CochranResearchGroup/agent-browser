@@ -41,6 +41,18 @@ modules:
   - id: active-lane-coordination
     path: modules/active-lane-coordination.md
     tags: [git, planning, worktrees, coordination]
+  - id: work-item-traceability
+    path: modules/work-item-traceability.md
+    tags: [issues, planning, traceability, flow, governance]
+  - id: forge-issue-reporting
+    path: modules/forge-issue-reporting.md
+    tags: [issues, github, gitlab, reporting, governance]
+  - id: github-issue-operations
+    path: modules/github-issue-operations.md
+    tags: [github, issues, labels, permissions, security]
+  - id: gitlab-issue-operations
+    path: modules/gitlab-issue-operations.md
+    tags: [gitlab, glab, issues, labels, permissions]
   - id: commit-history-discipline
     path: modules/commit-history-discipline.md
     tags: [git, commits, history, review]
@@ -80,6 +92,9 @@ modules:
   - id: subagent-workflow-optimization
     path: modules/subagent-workflow-optimization.md
     tags: [agents, delegation, subagents, optimization]
+  - id: model-selection-and-calibration
+    path: modules/model-selection-and-calibration.md
+    tags: [agents, models, calibration, allocation, evaluation]
   - id: subagent-runtime-governance
     path: modules/subagent-runtime-governance.md
     tags: [agents, subagents, runtime, governance]

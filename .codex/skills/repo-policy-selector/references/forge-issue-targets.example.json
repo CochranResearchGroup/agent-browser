@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "id": "owned-github-example",
+      "forge": "github",
+      "host": "github.com",
+      "repository": "example/owned-repository",
+      "relationship": "owned",
+      "allowed_actions": [
+        "read",
+        "create",
+        "comment",
+        "apply_labels",
+        "close"
+      ],
+      "security_route": "private_vulnerability_reporting",
+      "label_map": {
+        "intent/defect": {
+          "provider_label": "bug"
+        },
+        "priority/high": {
+          "provider_label": "priority: high"
+        }
+      }
+    },
+    {
+      "id": "permissioned-gitlab-example",
+      "forge": "gitlab",
+      "host": "gitlab.example.com",
+      "repository": "group/subgroup/permissioned-project",
+      "relationship": "permissioned",
+      "allowed_actions": [
+        "read",
+        "create",
+        "comment",
+        "apply_labels"
+      ],
+      "security_route": "confidential_issue",
+      "label_map": {
+        "intent/defect": {
+          "provider_label": "type::bug"
+        }
+      }
+    }
+  ]
+}

@@ -38,16 +38,21 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    and unused baseline entries. Use `--force` only for pre-adoption assessment;
    active baselines never apply to full or forced audits.
 10. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, execute-by-default continuation, action-specific approval gates, local replan before escalation, at-most-one risk-triggered drift-discovery pass, closed-world verification when review occurs, and minimal material-checkpoint fields.
-11. If the repo adopts `active-lane-coordination`, refresh remote-tracking refs through its normal fetch policy and run `scripts/audit_active_lanes.py` with an explicit default ref. Prefer `--catalog-only` when the catalog is the complete authorized population; use repeated exact `--branch` selectors for bounded unregistered-lane discovery and reserve `--branch-prefix` for explicit broader surveys. Treat missing, unequal, or contradictory custody as a fail-closed planning input, not as permission for the auditor to mutate Git.
-12. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
-13. Read the referenced policy modules from this policy library before drafting changes.
-14. Decide whether the repo needs:
+11. If the repo adopts `active-lane-coordination`, refresh remote-tracking refs through its normal fetch policy and run `scripts/audit_active_lanes.py` with an explicit default ref. Prefer `--catalog-only` when the catalog is the complete authorized population; use repeated exact `--branch` selectors for bounded unregistered-lane discovery and reserve `--branch-prefix` for explicit broader surveys. Treat missing, unequal, or contradictory custody as a fail-closed planning input, not as permission for the auditor to mutate Git. When `work-item-traceability` is adopted, migrate lane locators before setting catalog `work_item_tracking: required`.
+12. If the repo adopts `forge-issue-reporting`, require an explicit target
+    registry and run `scripts/preflight_forge_issue.py` before any proposed
+    provider mutation. Treat its output as read-only capability and
+    configuration evidence, not write authority. Validate normalized labels
+    against exact provider labels and keep label creation separate.
+13. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
+14. Read the referenced policy modules from this policy library before drafting changes.
+15. Decide whether the repo needs:
    - a starter profile with minimal edits
    - a profile plus module overrides
    - a missing-modules patch when the repo already partially or mostly matches the selected profile
    - a migration-first adoption because plans, notes, or memories are cluttered
    - a custom composition because no single profile fits cleanly
-15. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
+16. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
 
 ## Required references
 
@@ -81,6 +86,8 @@ python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref ref
 python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/remotes/origin/main --catalog-only --json
 python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/remotes/origin/main --branch feature/lane-a --branch fix/lane-b --json
 python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/heads/main --catalog-path docs/dev/active-lanes.yaml --plans-dir docs/dev/plans
+python scripts/preflight_forge_issue.py --registry /path/to/repo/docs/dev/forge-issue-targets.json --target <target-id> --action create --label intent/defect --idempotency-key <stable-key>
+python scripts/preflight_forge_issue.py --registry /path/to/repo/docs/dev/forge-issue-targets.json --target <target-id> --action create --idempotency-key <stable-key> --snapshot /path/to/provider-snapshot.json
 ```
 
 ## Guardrails
@@ -94,4 +101,11 @@ python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref ref
 - Downstream install should support a one-shot path that copies a pinned selector bundle into the target repo from either a reviewed git ref or a local bundle path and can draft the initial local policy set immediately.
 - Released selector bundles should carry a deterministic `release-manifest.json` next to the bundled `policy-library/`.
 - `audit_active_lanes.py` is read-only. It never fetches or performs Git, catalog, plan, worktree, branch, or remote mutations; a clean report never grants integration or cleanup authority.
+- `preflight_forge_issue.py` is read-only. It may authenticate and query an
+  explicitly registered GitHub or GitLab target, but it never creates or
+  mutates issues, labels, assignments, milestones, projects, boards, or work
+  items. A clean result never grants mutation authority.
+- Preflight JSON always reports `operator_authority_verified: false` and
+  `mutation_authorized: false`; the caller must establish those gates outside
+  the read-only tool for the exact requested action.
 - Treat the policy library as a source library, not the runtime source of truth for the target repo.

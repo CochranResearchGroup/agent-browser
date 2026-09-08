@@ -404,12 +404,6 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
 - re-read branch, commit, and integration policy before starting a multi-file or multi-step implementation slice
 
-For sustained execution and repair/retry decisions, read policy 0028. For
-validation batch boundaries, read policies 0010 and 0042. Before updating
-execution status or compacting history, read policies 0020 and 0043. The dated
-[LitScout adoption record](docs/dev/notes/2026-09-07-outcome-first-policy-adoption.md)
-records the local override of conflicting older selector guidance.
-
 ## Policy Entry
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
@@ -452,6 +446,9 @@ Read and follow:
 - `docs/dev/policies/0039-policy-harvest-loop.md`
 - `docs/dev/policies/0042-code-testing-discipline.md`
 - `docs/dev/policies/0043-roadmap-runbook-governance.md`
+- `docs/dev/policies/0044-planning-discipline.md`
+- `docs/dev/policies/0045-model-selection-and-calibration.md`
+- `docs/dev/policies/0046-work-item-traceability.md`
 
 ## Scope
 

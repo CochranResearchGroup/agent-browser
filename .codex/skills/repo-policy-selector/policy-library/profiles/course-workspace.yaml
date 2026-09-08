@@ -8,6 +8,7 @@ modules:
   - notes-and-memories
   - graph-backed-memory-usage
   - planning-discipline
+  - model-selection-and-calibration
   - course-workspace-governance
   - lms-cli-governance
   - cloud-drive-course-governance

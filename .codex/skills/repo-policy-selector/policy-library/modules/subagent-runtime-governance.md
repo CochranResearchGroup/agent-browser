@@ -22,6 +22,7 @@ tags:
   - start and finish timestamps
   - runtime status
   - token, model, and cost metadata when available
+- For model-routed work, preserve requested and runtime-reported effective model and reasoning effort, any fallback or escalation, and aggregate parent accounting when the runtime can expose it.
 - Define the expected announce or completion payload shape, including status, result, notes, and retrieval path for deeper inspection.
 - Make subagent tool access explicit.
 - Deny session-management, system, destructive, credential, and live-operation tools by default unless the subagent role requires them.
@@ -36,6 +37,7 @@ tags:
 - Require timeouts or watchdog expectations for long-running subagent work.
 - Treat transcript cleanup, archive, or deletion as a retention decision rather than incidental cleanup.
 - Make cost and model defaults explicit for spawned work so low-risk sidecar work does not silently consume high-cost reasoning.
+- Apply `model-selection-and-calibration` for task-tier selection and calibration; this module governs only runtime implementation and provenance.
 - Document known runtime limitations, such as best-effort announce delivery, process restarts, shared gateway resources, or missing context injection.
 - Keep runtime-specific command names, config syntax, and deployment assumptions repo-local unless they generalize across multiple subagent runtimes.
 

@@ -454,6 +454,107 @@ class SelectPolicyRegressionTests(unittest.TestCase):
             modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
             self.assertNotIn("active-lane-coordination", modules, profile_id)
 
+    def test_work_item_traceability_defaults_to_complex_profiles(self):
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        for profile_id in ["repo-product-engineering", "operations-platform"]:
+            modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
+            self.assertIn("work-item-traceability", modules, profile_id)
+        for profile_id in ["writing-project", "standalone-library"]:
+            modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
+            self.assertNotIn("work-item-traceability", modules, profile_id)
+
+    def test_issue_tracking_language_selects_work_item_traceability(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Grant Proposal
+
+            The issue tracker is the backlog and uses WIP limits and issue dependencies.
+            """
+        )
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        signals = self.select_policy.detect_signals(repo_root)
+        purpose, _subtype, _execution_bias, profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        self.assertEqual((purpose, profile), ("writing-project", "writing-project"))
+        self.assertTrue(signals["mentions_work_item_tracking"])
+        self.assertIn("work-item-traceability", modules, reasons)
+
+    def test_github_issue_reporting_selects_core_and_github_adapter(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Maintainer Tool
+
+            Report findings through GitHub Issues on an owned repository.
+            Use gh issue only after checking the GitHub issue form and labels.
+            """
+        )
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        signals = self.select_policy.detect_signals(repo_root)
+        _purpose, _subtype, _execution_bias, _profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        self.assertTrue(signals["mentions_github_issue_operations"])
+        self.assertIn("work-item-traceability", modules, reasons)
+        self.assertIn("forge-issue-reporting", modules, reasons)
+        self.assertIn("github-issue-operations", modules, reasons)
+        self.assertNotIn("gitlab-issue-operations", modules, reasons)
+
+    def test_gitlab_issue_reporting_selects_core_and_gitlab_adapter(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Maintainer Tool
+
+            Use glab issue creation for a permissioned repo issue on a
+            self-managed GitLab host. Respect GitLab issue templates and labels.
+            """
+        )
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        signals = self.select_policy.detect_signals(repo_root)
+        _purpose, _subtype, _execution_bias, _profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        self.assertTrue(signals["mentions_forge_issue_reporting"])
+        self.assertTrue(signals["mentions_gitlab_issue_operations"])
+        self.assertIn("work-item-traceability", modules, reasons)
+        self.assertIn("forge-issue-reporting", modules, reasons)
+        self.assertIn("gitlab-issue-operations", modules, reasons)
+        self.assertNotIn("github-issue-operations", modules, reasons)
+
+    def test_cross_forge_language_selects_both_adapters(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Cross-forge Reporter
+
+            This tool supports GitHub Issues with gh issue and GitLab Issues
+            with glab issue, using one issue target registry.
+            """
+        )
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        signals = self.select_policy.detect_signals(repo_root)
+        _purpose, _subtype, _execution_bias, _profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        for module_id in (
+            "work-item-traceability",
+            "forge-issue-reporting",
+            "github-issue-operations",
+            "gitlab-issue-operations",
+        ):
+            self.assertIn(module_id, modules, reasons)
+
+    def test_forge_issue_modules_are_conditional_not_profile_defaults(self):
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        for profile_id in installed_library["profile_ids"]:
+            modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
+            self.assertNotIn("forge-issue-reporting", modules, profile_id)
+            self.assertNotIn("github-issue-operations", modules, profile_id)
+            self.assertNotIn("gitlab-issue-operations", modules, profile_id)
+
     def test_codegraph_policy_maps_to_shared_codegraph_module(self):
         repo_root = self.make_repo(
             agents_text="""
@@ -644,6 +745,17 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertFalse(workflow_signals["mentions_subagent_runtime"])
         self.assertTrue(runtime_signals["mentions_subagents"])
         self.assertTrue(runtime_signals["mentions_subagent_runtime"])
+
+    def test_every_profile_adopts_model_selection_and_calibration(self):
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+
+        self.assertIn("model-selection-and-calibration", installed_library["module_ids"])
+        for profile_id, profile in installed_library["parsed_profiles"].items():
+            self.assertIn(
+                "model-selection-and-calibration",
+                profile.get("modules", []),
+                profile_id,
+            )
 
 
 if __name__ == "__main__":

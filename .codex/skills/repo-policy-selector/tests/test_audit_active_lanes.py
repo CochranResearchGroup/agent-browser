@@ -126,6 +126,49 @@ lanes:
         self.assertEqual(lane["checkpoint"], lane["local_tip"])
         self.assertEqual(len(lane["worktrees"]), 1)
 
+    def test_required_work_item_tracking_fails_when_lane_has_no_locator(self) -> None:
+        repo, temporary = self.make_registered_active_repo()
+        self.addCleanup(temporary.cleanup)
+        catalog = repo / "docs/dev/active-lanes.yaml"
+        catalog.write_text(
+            catalog.read_text(encoding="utf-8").replace(
+                "schema_version: 1", "schema_version: 1\nwork_item_tracking: required"
+            ),
+            encoding="utf-8",
+        )
+        self.git(repo, "add", "docs/dev/active-lanes.yaml")
+        self.git(repo, "commit", "-q", "-m", "Require work-item tracking")
+
+        result = self.run_audit(repo)
+
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["work_item_tracking"], "required")
+        self.assertIn(
+            "P42: work_items must not be empty when tracking is required",
+            report["problems"],
+        )
+
+    def test_required_work_item_tracking_accepts_compact_locator(self) -> None:
+        repo, temporary = self.make_registered_active_repo()
+        self.addCleanup(temporary.cleanup)
+        catalog = repo / "docs/dev/active-lanes.yaml"
+        catalog.write_text(
+            catalog.read_text(encoding="utf-8")
+            .replace("schema_version: 1", "schema_version: 1\nwork_item_tracking: required")
+            .replace("    dependencies: []", "    work_items: [owner/repo#42]\n    dependencies: []"),
+            encoding="utf-8",
+        )
+        self.git(repo, "add", "docs/dev/active-lanes.yaml")
+        self.git(repo, "commit", "-q", "-m", "Link lane work item")
+
+        result = self.run_audit(repo)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["work_item_tracking"], "required")
+        self.assertEqual(report["lanes"][0]["work_items"], ["owner/repo#42"])
+
     def test_duplicate_lane_ids_fail_closed(self) -> None:
         repo, temporary = self.make_registered_active_repo()
         self.addCleanup(temporary.cleanup)

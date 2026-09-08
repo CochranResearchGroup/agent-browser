@@ -676,6 +676,16 @@ def infer_repo_local_policy_findings(
         "planning-discipline": ["plan", "planning", "bounded plan", "definition of done"],
         "goal-execution-governance": ["/goal", "goal execution", "long-running goal", "goal checkpoint", "goal-compatible"],
         "roadmap-runbook-governance": ["roadmap", "runbook", "progress", "current working set"],
+        "work-item-traceability": ["issue tracking", "work item", "work-item", "backlog", "wip limit"],
+        "forge-issue-reporting": [
+            "forge issue reporting",
+            "owned repository issue",
+            "permissioned repository issue",
+            "issue target registry",
+            "idempotency marker",
+        ],
+        "github-issue-operations": ["github issues", "gh issue", "github issue forms", "viewerpermission"],
+        "gitlab-issue-operations": ["gitlab issues", "glab issue", "gitlab work items", "confidential issue"],
         "git-worktree-hygiene": ["worktree", "worktrees"],
         "commit-history-discipline": ["commit", "atomic", "history"],
         "branch-and-integration-strategy": ["branch", "rebase", "merge", "integration"],
@@ -1257,6 +1267,54 @@ def detect_signals(repo_root: Path) -> dict:
                 "off-main plan",
                 "off-main work",
                 "parallel worktree",
+            ]
+        ),
+        "mentions_work_item_tracking": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "issue tracking",
+                "issue tracker",
+                "work item",
+                "work-item",
+                "backlog governance",
+                "wip limit",
+                "work in process limit",
+                "issue dependency",
+            ]
+        ),
+        "mentions_forge_issue_reporting": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "forge issue reporting",
+                "owned repository issue",
+                "permissioned repository issue",
+                "owned repo issue",
+                "permissioned repo issue",
+                "issue target registry",
+                "cross-forge issue",
+                "cross forge issue",
+            ]
+        ),
+        "mentions_github_issue_operations": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "github issues",
+                "github issue",
+                "gh issue",
+                "github project issue",
+                "github issue form",
+                "github issue template",
+            ]
+        ),
+        "mentions_gitlab_issue_operations": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "gitlab issues",
+                "gitlab issue",
+                "glab issue",
+                "gitlab work item",
+                "gitlab confidential issue",
+                "gitlab issue template",
             ]
         ),
         "mentions_closeout": "closeout" in text or "best recommendation" in text,
@@ -2205,6 +2263,26 @@ def choose_profile(signals: dict, installed_library: dict[str, Any]) -> tuple[st
     if signals["mentions_active_lane_coordination"] and "active-lane-coordination" not in modules:
         modules.append("active-lane-coordination")
         reasons.append("repo language indicates concurrent off-main lanes need default-branch discovery")
+    if signals["mentions_work_item_tracking"] and "work-item-traceability" not in modules:
+        modules.append("work-item-traceability")
+        reasons.append("repo language indicates issue or backlog state needs traceability to plans and delivery evidence")
+    forge_reporting = (
+        signals["mentions_forge_issue_reporting"]
+        or signals["mentions_github_issue_operations"]
+        or signals["mentions_gitlab_issue_operations"]
+    )
+    if forge_reporting and "work-item-traceability" not in modules:
+        modules.append("work-item-traceability")
+        reasons.append("provider issue reporting still needs traceability to plans and delivery evidence")
+    if forge_reporting and "forge-issue-reporting" not in modules:
+        modules.append("forge-issue-reporting")
+        reasons.append("repo language indicates permission-aware reporting to an owned or permissioned forge target")
+    if signals["mentions_github_issue_operations"] and "github-issue-operations" not in modules:
+        modules.append("github-issue-operations")
+        reasons.append("repo language explicitly references GitHub issue operations")
+    if signals["mentions_gitlab_issue_operations"] and "gitlab-issue-operations" not in modules:
+        modules.append("gitlab-issue-operations")
+        reasons.append("repo language explicitly references GitLab or glab issue operations")
     if signals["mentions_upstream_fork"] and "upstream-fork-maintenance" not in modules:
         modules.append("upstream-fork-maintenance")
         reasons.append("repo signals indicate private or local work layered on a non-owned upstream")

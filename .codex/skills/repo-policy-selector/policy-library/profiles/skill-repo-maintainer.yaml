@@ -10,6 +10,7 @@ modules:
   - codegraph-usage
   - code-testing-discipline
   - planning-discipline
+  - model-selection-and-calibration
   - goal-execution-governance
   - parallel-plan-design
   - git-worktree-hygiene

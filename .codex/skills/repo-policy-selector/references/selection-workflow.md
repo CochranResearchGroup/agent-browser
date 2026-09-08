@@ -32,6 +32,11 @@ Read the target repo's:
 - roadmap / runbook / progress files if present
 - `docs/dev/plans/`, `docs/dev/notes/`, and `docs/dev/memories/` when present
 - obvious repo-shape signals such as `package.json`, `pyproject.toml`, `tests/`, `docs/dev/`
+- issue, work-item, backlog, dependency, WIP-limit, and provider-neutral
+  traceability language
+- GitHub or GitLab issue-reporting language, explicit owned or permissioned
+  targets, `gh` or `glab` usage, target registries, label mappings, and
+  provider-specific security routes
 
 Extract existing policy surfaces before recommending adoption changes.
 That extraction should inventory current policy-bearing files and classify them against the installed templates as:
@@ -78,6 +83,24 @@ Treat `AGENTS.md` as a policy-loading contract, not just a static pointer:
 - whether the repo uses an installed durable graph-memory system and needs explicit read/write/cleanup discipline in addition to notes and memories
 - whether the repo has an indexed codegraph or `../codegraph` workflow that agents should consult before source-code edits or architecture analysis
 - whether the repo produces local artifacts, reports, review packets, rendered documents, or local builds that should be surfaced through a preview or approval service for human review
+- whether the repo reports issues across GitHub, GitLab, enterprise or
+  self-managed hosts, owned forks, or permissioned upstreams
+
+For forge issue reporting, prioritize signals such as:
+
+- GitHub Issues, GitLab Issues, `gh issue`, `glab issue`, or cross-forge
+  reporting language
+- owned or permissioned repository targets and fork/upstream distinctions
+- issue forms, templates, contribution guidance, or security-reporting routes
+- label taxonomies, normalized label mappings, project or group labels, and
+  rules for label creation versus application
+- idempotency markers, duplicate searches, ambiguous-write retries, and
+  provider receipts
+
+Recommend `forge-issue-reporting` plus `work-item-traceability` whenever these
+signals are present. Add `github-issue-operations` only for GitHub signals and
+`gitlab-issue-operations` only for GitLab or `glab` signals. Do not add either
+adapter to a profile merely because a Git remote happens to use that provider.
 
 For course workspaces, prioritize operational signals over generic document-folder shape:
 - LMS config such as `canvas-cli.yml`

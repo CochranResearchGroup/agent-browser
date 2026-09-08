@@ -79,6 +79,11 @@
   in the current execution note. If no evidence-backed route remains, report
   the incomplete outcome and the specific missing information or decision;
   do not manufacture another governance task or request routine permission.
+  Bounds prevent runaway work; they are not consumable approval tokens. When a
+  local bound is reached, reassess, split the unit, change tactics, or continue
+  a different safe ready unit only within the remaining cumulative milestone
+  allowance. Escalate only when no meaningful safe action remains or an exact
+  action-specific gate is reached.
 - Keep one primary orchestrator responsible for authority, the critical path,
   work-unit selection, integration, progress classification, and the final
   completion claim.
@@ -151,6 +156,7 @@ runbook schemas repo-local.
 The following defaults apply unless an approved plan supplies a different finite bound:
 
 ```text
+
 ## Local Goal Bounds
 max_work_unit_attempts: 3
 max_review_rework_cycles: 1
@@ -178,3 +184,4 @@ Recommended companion modules:
 - `subagent-workflow-optimization`
 - `validation-and-handoff`
 - `commit-and-push-cadence`
+- `model-selection-and-calibration`
