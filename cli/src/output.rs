@@ -4350,6 +4350,9 @@ agent-browser download - Download a file by clicking an element
 Usage: agent-browser download <selector> <path>
 
 Clicks an element that triggers a download and saves the file to the specified path.
+Preserves the browser download policy and peer destinations. Only the requested
+target's completed download is delivered; existing destination files are preserved.
+Local browser process proof is required for artifact delivery.
 
 Arguments:
   selector             Element to click (CSS selector or @ref)

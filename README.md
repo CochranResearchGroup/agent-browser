@@ -2291,7 +2291,7 @@ request adopts it instead of launching another profile process. Commands carry
 workstation upgrade admission, action policy and confirmation, and
 viewer/controller authority remain enforced. Never leave this mode enabled.
 | `--color-scheme <scheme>` | Color scheme: `dark`, `light`, `no-preference` (or `AGENT_BROWSER_COLOR_SCHEME` env) |
-| `--download-path <path>` | Default download directory (or `AGENT_BROWSER_DOWNLOAD_PATH` env) |
+| `--download-path <path>` | Default browser download directory (or `AGENT_BROWSER_DOWNLOAD_PATH` env) |
 | `--content-boundaries` | Wrap page output in boundary markers for LLM safety (or `AGENT_BROWSER_CONTENT_BOUNDARIES` env) |
 | `--max-output <chars>` | Truncate page output to N characters (or `AGENT_BROWSER_MAX_OUTPUT` env) |
 | `--allowed-domains <list>` | Comma-separated allowed domain patterns (or `AGENT_BROWSER_ALLOWED_DOMAINS` env) |
@@ -2312,6 +2312,12 @@ viewer/controller authority remain enforced. Never leave this mode enabled.
 | `-q`, `--quiet` | Show only AI text responses, hide tool calls (chat) |
 | `--config <path>` | Use a custom config file (or `AGENT_BROWSER_CONFIG` env) |
 | `--debug` | Debug output |
+
+`agent-browser download <selector> <path>` preserves the browser's existing
+download policy and peer destinations, then delivers only the completed download
+correlated to the requested target. The path is a delivery destination; existing
+files are preserved. Delivery requires a proven local browser process and reports
+cancellation or missing identity explicitly.
 
 ## Observability Dashboard
 

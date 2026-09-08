@@ -1614,6 +1614,8 @@ agent-browser wait --fn "!document.body.innerText.includes('Loading...')"  # Wai
 agent-browser wait "#spinner" --state hidden  # Wait for element to disappear
 
 # Downloads
+# download preserves browser policy and peer destinations; path is the delivery destination.
+# Requires proven local browser identity; preserves existing files and reports cancellation.
 agent-browser download @e1 ./file.pdf          # Click element to trigger download
 agent-browser wait --download ./output.zip     # Wait for any download to complete
 agent-browser --download-path ./downloads open <url>  # Set default download directory
