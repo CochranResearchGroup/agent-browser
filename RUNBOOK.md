@@ -4,13 +4,13 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 275 | 2026-09-08
+## Turn 276 | 2026-09-08
 
 Authority: [Plan0160 active strategy](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md#active-strategy-amendment-2026-09-08).
-Plan0160 remains OPEN; autonomous execution is blocked on original consumer input.
+Plan0160 remains OPEN; original consumer r3 evidence now identifies the refusal.
 Priority remains identity/reconnect, ownership dispositions, then unattended use.
 Policies 0028/0042/0045 and 0043 now have explicit plan execution controls.
-Continuation ceiling: 20 minutes from Turn273's first action, including amendment;
+Prior continuation ceiling: 20 minutes from Turn273; this r3 triage is read-only;
 no full release builds or production replacements. Prior ten-hour overruns remain
 reported cost, not a reset allowance; exact cumulative wall/model cost is unknown.
 Previous batch: one 623-second release build and one preserving installation.
@@ -23,12 +23,12 @@ attestation and matching installed response/job/event failure passed.
 Two-viewer pixels, trusted input and same-link reconnect passed in oXuJ7E.
 Doctor exited 0 after manual monitor refresh; timer remains inactive.
 Evidence: publication-028597ea/acceptance-checkpoint.json and qualification-status.json.
-Read-only metadata at 11:01UTC shows original Plan0137 tab present/disconnected,
-with no p0137 job in the retained window; absence does not prove no retry elsewhere.
-p0143 has 30 retained jobs, including successful reload at 10:34 and snapshot at 10:35
-on its same tab. The original client's own retry input is already pending.
-Evidence: publication-028597ea/consumer-gate-final-readback.json.
-This same missing input has persisted across three goal turns; no substitute pass.
+Consumer r3 checksums and MCP/job match: profile_child_subject_mismatch.
+The original self-declared service/agent/task subject differs from credentialed
+codex-p0137; hashes confirm both. Default remains active shared-local with read
+permission. Original client should check access-plan without optional profileCapability,
+then diagnostics with its original labels/handle if permitted; stop on any refusal.
+No identity/lease/browser changes. Evidence: publication-028597ea/consumer-r3-diagnosis.json.
 Installed Service release and raw HTTP tab_close each passed a three-target census:
 only the intended middle target closed; neighbors and final baseline survived.
 Conflicting selectors refused before effects with matching response/job/event.
