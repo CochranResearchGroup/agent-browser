@@ -5220,6 +5220,8 @@ agent-browser dialog - Handle browser dialogs
 Usage: agent-browser dialog <accept|dismiss|status> [text]
 
 Respond to or check for browser dialogs (alert, confirm, prompt).
+Resolve a pending dialog before requesting another snapshot. Service callers
+should keep the original authorized serviceTabHandle for dialog status/response.
 
 Operations:
   accept [text]        Accept dialog, optionally with prompt text

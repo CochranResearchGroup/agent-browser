@@ -1359,6 +1359,11 @@ By default, `alert` and `beforeunload` dialogs are automatically accepted so the
 
 When a JavaScript dialog is pending, all command responses include a `warning` field with the dialog type and message.
 
+For Service requests, keep the original authorized `serviceTabHandle` when checking
+or resolving a dialog. On the already active target, `dialog` avoids page metadata
+reads that a pending modal can block. Resolve the dialog before requesting another
+snapshot; a timeout alone does not justify replacing the tab or changing identity.
+
 ### Diff
 
 ```bash

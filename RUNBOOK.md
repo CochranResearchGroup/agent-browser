@@ -4,19 +4,20 @@ Sole current execution status. Plan0160 owns scope, strategy and frozen acceptan
 This table owns current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy 0043.
 
-## Turn 281 | 2026-09-08
+## Turn 282 | 2026-09-08
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Current user request: implement consolidation/model-routing policies and amend
-this open plan. Documentation and audit work only; runtime was not changed.
-Plan remains OPEN. Runtime execution goal remains blocked at the expired
-13:52:28 UTC observation limit. This amendment does not renew that allowance.
-The proposed full sequence and conditional worker assignments are in the plan;
-the earlier 30-minute request covers A4 only, not whole-plan completion.
+User approved the proposed 75-minute sequence: 15:14:25 to 16:29:25 UTC.
+Reserve 30 minutes for A4 and 10 for closeout. Prior overruns and spent publication
+allowances remain recorded; no automatic extension. First join consolidates any
+missing proof/source defects before build or deployment. Two bounded workers:
+consolidated_evidence (Luna/medium, 15 minutes) and confirm_report_intake
+(Sol/medium, 10 minutes); primary reviews configuration/runtime prerequisites.
+Private control and new receipts: campaign p160/consolidated-20260908/.
 
 Latest verified runtime: host PID27737, effective KillMode=process, timer active.
-Last doctor after exact fixture cleanup exited0. These are retained observations,
-not fresh live acceptance performed by this documentation slice.
+Fresh initial doctor exited0; original synthetic handle diagnostics returned complete
+attestation with no missing proofs. New receipts are under consolidated-20260908/.
 Installed source f8161fd12584fb3f58222aa002c08fbfdcc5dabe, generation
 0.28.0-0df77d7f2693-f452c93718a3. Binary SHA256:
 0df77d7f26937d5ff1876b3acd78edd5ddd341e704a5787f8fbda51d6d1f4d4f.
@@ -37,13 +38,31 @@ Private receipt prefix P = ~/.local/state/agent-browser/campaigns/p160/publicati
 | A1 lease findings | dispositions / scoped / yes / partial | P/post-r4-ownership-dispositions.json | Seven advisory axes remain classified; any new ordinary refusal needs original-client evidence. |
 | A2 local remote-view journey | yes / pass / yes / synthetic | local-viewers-oXuJ7E under a2-operator-journey-r2/access-grant-attempt | Same-link continuity after the planned restart is A4; external vantage remains separate. |
 | A3 current readiness | yes / latest doctor pass / yes / n/a | P/post-fixture-cleanup-doctor.json; old-fixture-cleanup-acceptance.json | Refresh once at the next runtime gate; preserve exact ownership dispositions. |
-| A3 shutdown delivery | yes / OS reproduction and source tests / override only / incomplete | P/killmode-reproduction.json; killmode-installed-setting.json; b9d91a1a | Reconcile source template, installed override and supported future rewrite before candidate freeze. |
-| A4 scheduled/restart continuity | partial / incomplete / timer active / incomplete | P/a4-cadence-review.json | Third claimed cycle rejected; require three normal cycles, guarded restart, next cycle and original handle/link proof within a valid allowance. |
-| AX selected seven cases | implemented surfaces / partial / yes / partial | P/post-r4-ax-acceptance.json; raw-target-close/supported-trace-acceptance.json | Worker joins one ID-to-cause reconstruction per selected fixture; primary decides missing checks. |
+| A3 shutdown delivery | partial / OS signal scope pass / override only / incomplete | P/killmode-reproduction.json; consolidated-20260908/configuration-freeze.json | Supported unit rewrite preserves override. Graceful worker shutdown closes current-owned browsers; process-only stop mode alone is insufficient preservation proof. |
+| A4 scheduled/restart continuity | partial / three current cycles pass / timer active / incomplete | consolidated-20260908/scheduled-control.json | Three normal gaps exceed 300 seconds with exact invocation receipts and five roots preserved. No restart performed; reopened A1 and provisional candidate freeze prevent full A4 acceptance. |
+| AX selected seven cases | implemented surfaces / partial / yes / partial | consolidated-20260908/primary-evidence-disposition.json | Seven exact failure reconstructions remain unjoined. Worker inventory retained; incorrect predicate mappings and consumer-rejoin gates rejected. Use isolated negatives. |
 | Historical wrong-tab attribution | repair present / current close pass / yes / historical unknown | incident0156; P/exact-target-close and raw-target-close | Original serialized selector/build missing; existing-evidence lookup only, no historical target replay. |
 | Consumer CSV and transfer scope | partial / synthetic pass / yes / incomplete | incident0159; retained-download-6xfjyhb6 | Original consumer CSV and shared-target transfer scope remain explicit gaps; do not substitute payment or private workflow execution. |
-| New native-confirm report | unknown / unreviewed / unknown / reported failure | incident note0160 | One bounded intake against A1/AX; decide whether it contradicts accepted behavior before adding a repair. |
+| A1 native-confirm report | yes / isolated red-green pass / pending / reported failure | consolidated-20260908/dialog-qualification/index.json | Exact active-handle dialog bypasses blocking refresh; status, dismiss, evaluate and snapshot pass, wrong-target denied, residue zero. Production candidate qualification remains. |
 | Final integration and completion | partial / incomplete / branch only / incomplete | Plan0160 W5 | Join every frozen criterion and required branch integration; no full completion claim yet. |
+
+### Current repair validation
+
+Sol worker completed the dialog repair within its bounded lane. Primary rejected
+an added inactive-target refusal and a shallow helper test; final diff preserves
+all other dispatch paths. Two CI-profile builds (2m32s and 2m33s) were used; one
+setup identity error was corrected locally and one superseded test compile stopped.
+Final isolated candidate SHA256 is
+902405d3323f1d932e6e30e346576b5c14e86c0801cb76cf57b4b4b68c948273.
+Actual fixture browser was Chrome151 at /opt/google/chrome/chrome; pinned
+production Chrome152 remains a final qualification check. Primary reviewed
+responses and preserved hashes, verified empty fixture HOME census, and ran
+format, strict workspace clippy and remote-view documentation checks successfully.
+The retained integration fixture proves the defect; maintained regression remains
+a gap. Cross-target pending-modal handling is unproven. One unrelated selector-
+recommended provider gate was stopped before compilation after impact review.
+Planning audit still reports the same38 legacy findings; Plan0160 consolidation
+checks pass. No claim of measured worker cost savings.
 
 ### Current policy amendment and validation
 

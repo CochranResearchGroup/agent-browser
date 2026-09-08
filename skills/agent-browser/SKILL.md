@@ -1733,6 +1733,8 @@ agent-browser click @e1 --capture-clipboard-write --json
 # Dialogs (alert, confirm, prompt, beforeunload)
 # By default, alert and beforeunload dialogs are auto-accepted so they never block the agent.
 # confirm and prompt dialogs still require explicit handling.
+# Service calls must reuse the original authorized serviceTabHandle for dialog status/response.
+# Resolve a pending dialog on that active target before snapshot; do not replace the tab on timeout.
 # Use --no-auto-dialog (or AGENT_BROWSER_NO_AUTO_DIALOG=1) to disable automatic handling.
 agent-browser dialog accept              # Accept dialog
 agent-browser dialog accept "my input"   # Accept prompt dialog with text

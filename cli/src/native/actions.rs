@@ -690,8 +690,14 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                     return error_response(&id, "service_tab_target_selector_conflict: index differs from authorized handle");
                 }
             }
-            if let Err(error) = manager.tab_switch_target_id(target_id).await {
-                return error_response(&id, &error);
+            let exact_target_is_active = manager.active_target_id().ok() == Some(target_id);
+            // A pending JavaScript dialog can block the renderer-backed reads in
+            // tab_switch_target_id. The exact already-active target needs no
+            // refresh before Page.handleJavaScriptDialog is dispatched.
+            if action != "dialog" || !exact_target_is_active {
+                if let Err(error) = manager.tab_switch_target_id(target_id).await {
+                    return error_response(&id, &error);
+                }
             }
         }
     }

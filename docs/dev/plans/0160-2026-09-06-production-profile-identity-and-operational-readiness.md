@@ -65,8 +65,9 @@ This amendment replaces the previous active repair ordering and implements the
 operator-approved consolidation and task-based delegation policies. The frozen
 A1–A4/AX contract below is unchanged. RUNBOOK.md owns current results and the
 single requirement-to-evidence table; historical checkpoints are not next steps.
-This request authorizes policy/plan changes, not a restart or renewal of the
-expired runtime observation window. All prior effort and publication counts remain.
+The policy amendment alone did not renew runtime authority. The subsequent user
+“ok go” approved the proposed 75-minute execution window, 15:14:25 to 16:29:25 UTC
+on 2026-09-08. All prior effort and publication counts remain consumed.
 
 ### Consolidated batch
 
@@ -116,15 +117,21 @@ removed from scope. The full goal stays open when a dependency cannot be resolve
 5. Join full A1–A4/AX evidence, integrate through the existing branch strategy,
    and report committed, installed, user-verified and incomplete outcomes.
 
-This documentation slice is bounded to 15 minutes and includes one narrow worker,
-focused audit updates and commit/push. It does not consume a new runtime allowance.
-A future execution window must budget the entire remaining sequence: provisionally
+The completed documentation slice was bounded to 15 minutes and included one
+narrow worker, focused audit updates and commit/push. The subsequently approved
+75-minute execution window budgets the entire remaining sequence:
 15 minutes for parallel evidence reconciliation, 10 for configuration/preflight,
 30 reserved for A4 and 10 for integration/closeout, plus 10 contingency (75 total).
-This is an estimate awaiting an execution allowance, not a claim of approval or a
-whole-plan finish guarantee. Compilation, publication, new source defects or
+This is the approved execution allowance, not a whole-plan finish guarantee.
+Compilation, publication, new source defects or
 missing consumer evidence may exceed it; disclose that at the first join before
-spending the reserved observation time. The earlier requested 30 minutes covers
+spending the reserved observation time. The pending-confirm reproduction is
+included in this batch because it contradicts reliable authorized interaction.
+Its isolated repair and selective gates precede any replacement. Normal graceful
+shutdown closes current-owned browsers; the process-only unit override proves
+OS signal scope only. Resolve preserving shutdown semantics or use an explicitly
+qualified preserving interruption path before the controlled production restart.
+The earlier requested 30 minutes covers
 A4 only. No successor, worker or model change resets cumulative bounds.
 
 ### Worker assignments
