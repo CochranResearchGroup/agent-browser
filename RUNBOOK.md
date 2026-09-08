@@ -18,7 +18,6 @@ it. Source fix is not in the installed binary; the drop-in protects this unit.
 Worker reports one focused Rust test, fmt and strict workspace clippy passing;
 primary reviewed diff/OS proof and passed handoff-doc checks. Initial worker exact
 selector matched zero tests; corrected selector passed. No repeat compilation.
-
 A4 observer is terminal. Primary rejected its third claimed normal cycle:
 132 seconds after prior completion does not meet five-minute cadence. Original
 receipts preserved; a4-cadence-review.json records correction and observer guard.
@@ -29,13 +28,14 @@ Existing observation deadline stays 13:52:28 UTC; no automatic renewal.
 Fresh doctor exits1: runtime_pressure_ownership_unknown reports 133 processes and
 6,831,558,656 RSS bytes. One host/one dashboard, current selection, monitor and
 convergence ready. Seven advisory lease axes unchanged. Next: attribute pressure
-to exact live ownership before restart, then complete A4 within a bounded window.
-Do not kill unknown processes or clear the blocker from a browser-parent census.
+to exact live ownership before restart. pressure-attribution-leads.json groups
+30 old P159 fixture processes, 24 development, 15 other-app and 64 unresolved rows.
 
 Evidence: publication-028597ea/killmode-reproduction.json, killmode-installed-setting.json,
 post-killmode-doctor.json, a4-cadence-review.json, post-r4-acceptance-review.json,
 post-r4-matrix-results.json and post-r4-ax-acceptance.json under campaign root below.
-Historical wrong-tab attribution, consumer CSV and full AX scope remain open.
+Paths are attribution leads, not cleanup proof. Historical wrong-tab attribution,
+consumer CSV and full AX scope remain open.
 Preserve recovered storage/rollback holds. No formal release or external vantage.
 
 ### Current installed identity
