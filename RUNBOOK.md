@@ -4,24 +4,23 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 240 | 2026-09-07
+## Turn 241 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Blocker diagnosis: README's Sessions contract promises cold `--session name open`;
-its disposable `AGENT_BROWSER_RUNTIME_HOST=1` mode was present in the first failed
-fixture. Do not classify that failure as missing installation or waive it with
-`tab new`. `commands.rs:2472` maps open to navigate; daemon.rs:987 submits the native
-command directly. control_plane.rs:432 adds connection identity, but
-service_access.rs:1187 only applies acquisition to tab_new and remote_view_open.
-actions.rs:643 then invokes the target binder, which requires a current tab or a
-cold-navigation acquisition grant. The first fixture had neither and failed at
-that exact binder before launch. This is a native cold-start admission gap.
-Next: repair native cold-open admission with profile permission/ownership checks,
-preserve the requested session, and cover retained/ambiguous owners before replay.
-No runtime changes or retry; three prior failures remain. Eight earlier cases and
-the scoped AX lookup remain valid; consumer rejoin and cold lifecycle are pending.
-A1–A4/AX remain OPEN. Production stays on `15cd8e5b`; both rollback holds and the
-disabled timer remain. Source `d6f01b00` is tested but uninstalled.
+Outcome progress, scoped A1: candidate `be28651c` passes native cold open, fill,
+click, readback, close and exact process exit through separate CLI connections.
+`28d195b4` adds stable attribution and policy-checked first-tab admission.
+`be28651c` preserves native eval semantics and the original validation error.
+Reopen remains unaccepted: incomplete private-host endpoint metadata; final state
+retains a ready owner despite zero browsers/tabs. Last-lane close intentionally
+exits the host. Next: qualify the installed supervisor's close/reopen contract
+and terminal owner retirement before claiming production impact.
+Evidence: private `native-cold-admission-repair-28d195b4.json`, indexed in the campaign
+manifest; roots `session-cold-lifecycle-kch4Zo` and `session-cold-lifecycle-NV9EQa`.
+Two builds/two replays ended; three earlier setup failures remain. Both roots have zero owned residue and preserve all five production browser identities.
+Focused native, eval and error tests, fmt, clippy and docs build pass.
+A1–A4/AX remain OPEN; consumer rejoin is pending. Production remains `15cd8e5b`,
+with both rollback holds and the timer disabled. These repairs are uninstalled.
 
 ### Current installed identity
 
