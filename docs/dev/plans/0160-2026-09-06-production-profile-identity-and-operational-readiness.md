@@ -182,6 +182,11 @@ shared context, or bypass Chrome History locking. New owned-launch defaults may
 be established before exposing a browser; retained peer settings remain intact.
 Preserve process-bound namespace delivery, frame/GUID attribution and destination
 checks as reusable components; qualify them through the real Service request.
+When a restarted user-systemd namespace cannot open the retained browser's
+process-root link, translation must prove an equivalent filesystem location from
+both kernel mount tables, preserving device and filesystem-relative path.
+Never assume the same absolute path identifies the same file across namespaces;
+unknown or shadowed mappings must fail with causal identity evidence.
 Failed recipes must report failed response, job and event outcomes with the same
 causal error, correlation and accurate effect state, even when transport succeeded.
 Validate shared directories and retained PrivateTmp separately, including foreign

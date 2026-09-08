@@ -1342,6 +1342,17 @@ When a shared-profile client is finished with its leased tab, call <code>release
 
 When a software client has just completed a bounded auth probe, pass <code>readinessState: "fresh"</code>, <code>readinessEvidence</code>, <code>lastVerifiedAt</code>, and <code>freshnessExpiresAt</code> to <code>registerServiceLoginProfile()</code>. For an already registered profile, call <code>verifyServiceProfileSeeding()</code> or <code>updateServiceProfileFreshness()</code> so the service merges the new row under the serialized service-state mutator, preserves unrelated fields, removes stale or blocked targets from <code>authenticatedServiceIds</code>, and records the post-close seeding verification result on any matching closed handoff. The service preserves explicit <code>fresh</code>, <code>stale</code>, and <code>blocked_by_attached_devtools</code> evidence through derived readiness refreshes. The <code>examples/service-client/post-seeding-probe.mjs</code> recipe demonstrates the bounded post-close path: confirm the broker-selected profile matches the profile being verified, request one service-owned tab for the seeded identity, read URL and title through queued service requests, evaluate optional URL or title expectations, then call <code>verifyServiceProfileSeeding()</code>.
 
+Browser-mode downloads (`captureMode: "browser"`) preserve existing context
+settings. Capture enables its own event subscription through a temporary empty
+context, which is disposed before the click. It matches the authorized frame and
+download GUID, then copies the reported completed file into the allowlisted
+output directory. On Linux, the source is resolved through the verified browser
+process's mount namespace. Source files remain intact and existing destinations
+are never overwritten. Newly owned Chrome launches use the configured download
+path or a stable `agent-browser-downloads` directory inside the profile.
+Subscription, identity and artifact failures retain specific error codes and
+trace guidance; inspect the outcome before retrying a potentially completed click.
+
 A failed file-transfer recipe reports `success: false` even when transport
 succeeded. Its response preserves `data.failedPhase`, `data.error` and trace
 context; the job and terminal event carry the same failure outcome. Inspect the

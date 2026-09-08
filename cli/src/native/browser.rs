@@ -631,7 +631,7 @@ impl BrowserManager {
             }
         };
 
-        let manager = if engine == "lightpanda" {
+        let mut manager = if engine == "lightpanda" {
             initialize_lightpanda_manager(ws_url, process).await?
         } else {
             let client = Arc::new(CdpClient::connect(&ws_url).await?);
@@ -689,15 +689,34 @@ impl BrowserManager {
                 .await;
         }
 
-        if let Some(ref path) = download_path {
-            let _ = manager
+        // Establish a stable download destination before exposing a newly owned
+        // Chrome to clients. Individual captures must preserve the context policy.
+        if engine != "lightpanda" {
+            let path = download_path
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    manager
+                        .browser_user_data_dir()
+                        .map(|root| root.join("agent-browser-downloads"))
+                })
+                .ok_or("download_launch_policy_unavailable: owned profile directory missing")?;
+            std::fs::create_dir_all(&path)
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
+            let path = path
+                .canonicalize()
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
+            manager.download_path = Some(path.to_string_lossy().into_owned());
+            manager
                 .client
                 .send_command(
                     "Browser.setDownloadBehavior",
-                    Some(json!({ "behavior": "allow", "downloadPath": path })),
+                    Some(
+                        json!({ "behavior": "allow", "downloadPath": path, "eventsEnabled": true }),
+                    ),
                     None,
                 )
-                .await;
+                .await
+                .map_err(|error| format!("download_launch_policy_unavailable: {error}"))?;
         }
 
         Ok(manager)

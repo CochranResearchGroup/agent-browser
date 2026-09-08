@@ -141,7 +141,26 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
         "Download was canceled" => Some("download_canceled"),
         "Downloaded file not found at captured path" => Some("download_completion_path_missing"),
         "file_transfer download click timed out" => Some("download_click_uncertain"),
-        _ => None,
+        _ => error.split_once(':').map(|(code, _)| code).filter(|code| {
+            matches!(
+                *code,
+                "download_target_unproven"
+                    | "download_event_unproven"
+                    | "download_event_ambiguous"
+                    | "download_canceled"
+                    | "download_completion_path_missing"
+                    | "download_source_identity_unproven"
+                    | "download_artifact_path_unsafe"
+                    | "download_artifact_limit_exceeded"
+                    | "download_destination_exists"
+                    | "download_artifact_delivery_failed"
+                    | "download_events_unavailable"
+                    | "download_click_uncertain"
+                    | "download_subscription_failed"
+                    | "download_subscription_cleanup_failed"
+                    | "download_launch_policy_unavailable"
+            )
+        }),
     };
     if let Some(code) = download_code {
         return ServiceFailureRecourse {

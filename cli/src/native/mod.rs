@@ -133,6 +133,7 @@ pub mod service_contracts;
 mod service_crash_regeneration;
 #[allow(dead_code)]
 pub mod service_diagnostics;
+mod service_download_artifact;
 #[allow(dead_code)]
 pub mod service_failure;
 #[allow(dead_code)]

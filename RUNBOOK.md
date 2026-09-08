@@ -4,30 +4,31 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 259 | 2026-09-08
+## Turn 260 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Installed selected-target guard f7df903d from source 6735aeee. Full projection suite
-passes after two stale fixture URLs were corrected to valid Guacamole paths;
-previous failures remain recorded. Exact-release headless/headed ownership and
-MCP/HTTP classification passed. One 563-second release build and one activation.
-Same-link reconnect now keeps the original target with two authenticated viewers.
-Initial mouse acknowledgment failed in e3CDKN; one scoped refresh after controller
-acquisition passed both mouse and keyboard in 34mn0F. No browser/provider restart
-or mouse-code change was needed. This is recovery acceptance, not a clean first pass.
-Original handle attestation is complete; counters advanced 13/13 to 14/14 and the
-blue marker was restored. Five browsers, storage and all 33 tab-custody records
-are preserved; only the synthetic connection ID changed. Doctor exits 0 after
-maintenance; zero processes or generations removed. Timer remains inactive.
-Download prototype 1mrSRU independently enabled Browser events through an empty
-operation-owned context with deny policy, disposed it before clicking, then
-received the exact primary GUID/path across retained host restart. Namespace
-retrieval returned primary bytes; peer policy/files and original context set
-were preserved; cleanup zero. No History access or default-context reset needed.
-Next: integrate that subscription and verified delivery into the real Service
-file-transfer request. Do not reinstate the withdrawn unsubscribed capture path.
-A1/A3/A4/AX remain OPEN; original SoyLei client remains disconnected and its CSV
-workflow is unverified. Evidence: publication-f7df903d/ and download-subscription-isolation/.
+Native Service download capture now uses the proven independent subscription,
+matching authorized frame/GUID without changing peer context policy. The empty
+owned context is disposed before clicking and reclaimed on connection detach.
+First native fixture aCb55u failed: a restarted systemd user namespace could read
+mountinfo but could not open the retained browser's process-root link. The
+response retained download_source_identity_unproven and causal recourse; cleanup 0.
+Amended delivery proves the equivalent device and filesystem-relative path from
+both kernel mount tables when direct process-root access is denied. It rejects
+unknown/shadowed mappings, unsafe paths, changed identity and destination overwrite.
+Exact amended optimized candidate 9c01e4f3879b passed real Service transfers after
+retained host restart in namespace fixture 9QNwaS and shared-directory 7PH857.
+Both preserved peer policy/files, original targets/handles and context inventory,
+delivered exact primary CSV bytes, and left zero owned residue. These are source
+qualification, not original-consumer or production acceptance. Two 147-second
+candidate builds; first failure preserved. Three focused artifact tests, client
+contracts, fmt and clippy passed. Evidence: download-subscription-integration/.
+Production remains source 6735aeee; its prior two-viewer same-link reconnect and
+input recovery acceptance remain in publication-f7df903d/. Doctor last exited 0;
+five browsers and 33 tab-custody records were preserved. Timer remains inactive.
+Next: qualify headed/ownership and causal failure paths on the consolidated
+candidate, then qualify its release build before production replacement.
+A1/A3/A4/AX remain OPEN; original SoyLei reconnect and CSV remain unverified.
 
 ### Current installed identity
 

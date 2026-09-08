@@ -4807,6 +4807,17 @@ instructions without adding provider-specific logic to agent-browser. Run
 example contract plus the example dry-run modes, and run
 `pnpm test:service-composed-workflow-live` to prove the composed workflow
 against an isolated daemon and generic local HTML fixture.
+Browser-mode downloads (`captureMode: "browser"`) preserve existing context
+settings. Capture enables its own event subscription through a temporary empty
+context, which is disposed before the click. It matches the authorized frame and
+download GUID, then copies the reported completed file into the allowlisted
+output directory. On Linux, the source is resolved through the verified browser
+process's mount namespace. Source files remain intact and existing destinations
+are never overwritten. Newly owned Chrome launches use the configured download
+path or a stable `agent-browser-downloads` directory inside the profile.
+Subscription, identity and artifact failures retain specific error codes and
+trace guidance; inspect the outcome before retrying a potentially completed click.
+
 A failed file-transfer recipe reports `success: false` even when transport
 succeeded. Its response preserves `data.failedPhase`, `data.error` and trace
 context; the job and terminal event carry the same failure outcome. Inspect the
