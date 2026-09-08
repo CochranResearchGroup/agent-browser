@@ -7273,6 +7273,7 @@ Confirmation:
 Sessions:
   Unlabeled native browser commands use agent-browser-cli/session attribution.
   First open requires profile_use and tab_create; retained tabs require custody.
+  Native eval keeps its CLI arguments and per-command deadline after tab binding.
   session                    Show current session name
   session list               List active sessions
   session supervisor install Install one named lane under the Linux runtime host

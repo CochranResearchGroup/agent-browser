@@ -639,6 +639,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         }
         return response;
     }
+    let explicit_service_handle = cmd.get("serviceTabHandle").is_some();
     let bound_command = if !action_skips_browser_launch(action) {
         match super::action_runtime::runtime::bind_native_service_tab_command(cmd, state) {
             Ok(command) => command,
@@ -802,7 +803,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "inspect" => handle_inspect(state).await,
             "title" => handle_title(state).await,
             "content" => handle_content(state).await,
-            "evaluate" => handle_evaluate(cmd, state).await,
+            "evaluate" => handle_evaluate(cmd, state, explicit_service_handle).await,
             "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
             "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
             "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,

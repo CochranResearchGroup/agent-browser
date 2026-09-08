@@ -190,6 +190,11 @@ fn runtime_handoff_candidate_indices(
 /// Converts common error messages into AI-friendly, actionable descriptions.
 pub fn to_ai_friendly_error(error: &str) -> String {
     let lower = error.to_lowercase();
+    // Contract validation can name timeoutMs without timing out. Preserve the
+    // cause before applying browser-error heuristics or failure classification.
+    if lower.starts_with("evaluate requires ") {
+        return error.to_string();
+    }
     if lower.contains("strict mode violation") {
         return "Element matched multiple results. Use a more specific selector.".to_string();
     }
@@ -3570,6 +3575,15 @@ mod tests {
         assert_eq!(
             to_ai_friendly_error("Timeout waiting for element"),
             "Operation timed out. The page may still be loading or the element may not exist."
+        );
+        let validation = "evaluate requires positive timeoutMs";
+        assert_eq!(to_ai_friendly_error(validation), validation);
+        assert_ne!(
+            crate::native::service_failure::classify_service_failure(&to_ai_friendly_error(
+                validation
+            ))
+            .code,
+            "service_job_timed_out"
         );
     }
 

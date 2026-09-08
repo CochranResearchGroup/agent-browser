@@ -2778,6 +2778,8 @@ and the session name as `agentName`. Their stable self-declared identity permits
 ordinary shared-local use when the profile policy allows it. First `open`
 requires `profile_use` and `tab_create`; retained browsers still require current
 tab custody. A session label does not grant restricted-profile access.
+Owned-tab binding preserves native `eval` arguments and its per-command deadline.
+Explicit Service API evaluation still requires `timeoutMs` and `maxReturnBytes`.
 
 When running multiple agents or automations concurrently, always use named sessions to avoid command namespace conflicts. Do not add a new runtime profile merely to avoid another active job. For service-mode work, include `serviceName`, `agentName`, `taskName`, and a target identity so agent-browser can queue work against the right managed browser:
 

@@ -1467,6 +1467,8 @@ and the session name as `agentName`. This gives successive CLI connections a
 stable self-declared identity. A first `open` checks `profile_use` and `tab_create`
 before creating its tab; retained browsers continue to require current tab
 custody. Session labels do not grant access to restricted profiles.
+Owned-tab binding preserves native `eval` arguments and its per-command deadline.
+Explicit Service API evaluation still requires `timeoutMs` and `maxReturnBytes`.
 
 ```bash
 # Different sessions
