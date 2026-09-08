@@ -129,10 +129,13 @@ function guacamoleSharingRoot(root: URL): URL {
 
 async function readJson<T>(response: Response, operation: string): Promise<T> {
   if (!response.ok) {
-    if (operation === "Guacamole backend primary ownership") {
-      const failure = await response.json().catch(() => null) as { code?: unknown } | null;
+    if (operation === "Guacamole backend primary ownership" || operation === "Guacamole primary recovery") {
+      const failure = await response.json().catch(() => null) as { code?: unknown; occurrenceId?: unknown } | null;
       if (typeof failure?.code === "string" && /^guacamole_(primary_|viewer_primary_)[a-z_]+$/.test(failure.code)) {
-        throw new Error(`${operation}: ${failure.code}`);
+        const occurrence = typeof failure.occurrenceId === "string"
+          && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(failure.occurrenceId)
+          ? ` (occurrence ${failure.occurrenceId})` : "";
+        throw new Error(`${operation}: ${failure.code}${occurrence}`);
       }
     }
     throw new Error(`${operation} returned HTTP ${response.status}`);
@@ -247,6 +250,41 @@ function hasExactConnectableCandidate(
     && observed.sharingProfileIdentifier == null
     && expected.sharingProfileIdentifier == null
     && observed.startDate === expected.startDate;
+}
+
+/** Explicit operator recovery only. Ordinary frame resolution never restarts a failed owner. */
+export async function recoverGuacamolePrimary({
+  dashboardHref, stream, fetchImpl = globalThis.fetch, signal,
+}: {
+  dashboardHref: string;
+  stream: ServiceViewStream;
+  fetchImpl?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}): Promise<void> {
+  if (stream.providerMode !== "simultaneous_view") return;
+  const routeId = stream.routeId?.trim();
+  const connectionId = stream.connectionId?.trim();
+  if (!routeId || !connectionId) throw new Error("Guacamole primary binding is incomplete");
+  const request = (operation: string, expectedTerminalOccurrenceId?: string) => fetchImpl(
+    new URL("/api/guacamole-primary-claim", dashboardHref), {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation, routeId, connectionId, expectedTerminalOccurrenceId }),
+      cache: "no-store", signal,
+    });
+  const response = await request("ensure");
+  const observed = await response.json() as GuacamolePrimaryClaim & {
+    success?: boolean; terminalOccurrenceId?: string; code?: string; occurrenceId?: string;
+  };
+  if (response.ok && observed.primaryOwned === true && observed.granted === false && observed.activeConnectionId) return;
+  if (response.status !== 503 || observed.success !== false || !observed.terminalOccurrenceId) {
+    throw new Error(`Guacamole recovery lacks a terminated owner: ${observed.code ?? response.status}`);
+  }
+  const recovered = await readJson<GuacamolePrimaryClaim>(
+    await request("recover", observed.terminalOccurrenceId), "Guacamole primary recovery",
+  );
+  if (recovered.primaryOwned !== true || recovered.granted !== false || !recovered.activeConnectionId) {
+    throw new Error("Guacamole recovered primary identity is unavailable");
+  }
 }
 
 /**

@@ -6129,8 +6129,10 @@ Provider inventory refresh preserves current reservations as pending.
 Revalidation retains the same browser capacity slot and its recovery lease.
 Dashboard ingress allows up to 21 seconds for the primary-start response;
 reconcile an uncertain startup outcome before another attempt.
-A failed primary remains an explicit failure requiring provider reconciliation;
-reopening the durable URL does not elect another viewer as primary.
+A failed primary remains explicit; reopening the durable URL does not restart it.
+Dashboard Retry connection can replace the exact terminated attempt after fresh
+ownership verification. It preserves live primaries, browsers and durable URLs;
+changed ownership and stale terminal retries are refused.
 Primary guards distinguish state/authority read failures from identity changes.
 Primary termination records retain the typed cause, elapsed lifetime and
 route/session/display references in the private failure journal.

@@ -1821,16 +1821,21 @@ fn observe_primary_response_failure(
         return;
     }
     let input = serde_json::from_str::<Value>(body).unwrap_or(Value::Null);
+    let recovering = input["operation"] == "recover";
     let record = ServiceFailureRecord::new(
         ServiceFailureCategory::GuacamoleLoad,
         "guacamole_primary_endpoint",
-        "ensure",
+        if recovering { "recover" } else { "ensure" },
         response["code"]
             .as_str()
             .unwrap_or("guacamole_primary_failed"),
         "The authenticated dashboard could not obtain a ready Guacamole primary.",
     )
-    .with_action("guacamole_primary_ensure")
+    .with_action(if recovering {
+        "guacamole_primary_recover"
+    } else {
+        "guacamole_primary_ensure"
+    })
     .with_references(ServiceFailureReferences {
         route_id: input["routeId"].as_str().map(str::to_owned),
         ..ServiceFailureReferences::default()
@@ -1838,6 +1843,8 @@ fn observe_primary_response_failure(
     .with_details(json!({
         "authenticatedActorHash": opaque_identifier_hash(authenticated_actor),
         "terminalOccurrenceId": response["terminalOccurrenceId"],
+        "expectedTerminalOccurrenceId": input["expectedTerminalOccurrenceId"].as_str()
+            .and_then(|value| uuid::Uuid::parse_str(value).ok()).map(|value| value.to_string()),
         "retrySafe": false,
         "recourse": "inspect_remote_view_provider",
     }));
@@ -1866,13 +1873,25 @@ async fn guacamole_primary_claim_response(body: &str) -> (&'static str, Value) {
         );
     }
 
-    if value["operation"] != "ensure" {
+    if value["operation"] != "ensure" && value["operation"] != "recover" {
         return (
             "409 Conflict",
             json!({"success": false, "code": "guacamole_viewer_primary_retired"}),
         );
     }
-    match super::guacamole_primary_registry::ensure(route_id, connection_id).await {
+    let result = if value["operation"] == "recover" {
+        let expected = value["expectedTerminalOccurrenceId"].as_str().unwrap_or("");
+        if uuid::Uuid::parse_str(expected).is_err() {
+            return (
+                "400 Bad Request",
+                json!({"success": false, "code": "invalid_guacamole_primary_recovery"}),
+            );
+        }
+        super::guacamole_primary_registry::recover(route_id, connection_id, expected).await
+    } else {
+        super::guacamole_primary_registry::ensure(route_id, connection_id).await
+    };
+    match result {
         Ok(id) => (
             "200 OK",
             json!({
@@ -3800,6 +3819,22 @@ mod tests {
         observe_primary_response_failure("{}", "actor", &mut json!({"success":true}), |_| {
             panic!("success recorded as failure")
         });
+    }
+
+    #[tokio::test]
+    async fn guacamole_primary_recovery_requires_terminal_identity_before_effects() {
+        for expected in [Value::Null, json!("invalid"), json!(123)] {
+            let request = json!({"operation": "recover", "routeId": "route", "connectionId": "1",
+                "expectedTerminalOccurrenceId": expected})
+            .to_string();
+            let (status, mut response) = guacamole_primary_claim_response(&request).await;
+            assert_eq!(status, "400 Bad Request");
+            assert_eq!(response["code"], "invalid_guacamole_primary_recovery");
+            observe_primary_response_failure(&request, "actor", &mut response, |record| {
+                assert_eq!(record.action.as_deref(), Some("guacamole_primary_recover"));
+                assert!(record.details.as_ref().unwrap()["expectedTerminalOccurrenceId"].is_null());
+            });
+        }
     }
 
     #[tokio::test]

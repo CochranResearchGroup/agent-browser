@@ -4,29 +4,31 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 262 | 2026-09-08
+## Turn 263 | 2026-09-08
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
-Directory-alias delivery is now qualified in source. The resolver reads each
-owned/root-owned directory link through its descriptor in the browser namespace,
-remaps absolute targets, preserves relative-link ordering, and refuses leaf-file
-symlinks, substitution, loops and destination overwrites. Four focused tests,
-fmt/clippy and one 142-second optimized candidate passed. Real native transfers
-passed with retained host interruption and peer-first downloads for Windows
-Downloads/default policy (9Rot2W) and a private relative alias (iTgbzq). Both
-returned exact primary CSV bytes and preserved peer files/handles; cleanup zero.
-Evidence: download-directory-alias/. Production publication remains pending.
-Installed source remains 12f55652. Its initial source qualification and five-case
-release qualification passed, but installed Downloads delivery failed on the
-ordinary Windows alias. Chrome completed the synthetic CSV; its export button
-was removed. That failure remains in publication-12f55652/.
-Five browsers, storage and 33 tab records survive; doctor last exited 0 after
-maintenance removed nothing. Ten rollback holds remain; the timer is inactive.
-Viewer 0LgorK passed two viewers and same-link reconnect, then lost an iframe on
-controller refresh before input. One scoped Retry connection attempt is running
-against the same synthetic handoff; no browser/provider restart is authorized by
-that retry. Next: exact release qualification and publication of the alias repair,
-then installed CSV/input acceptance and remaining A1/A3/A4/AX requirements.
+A1–A4/AX remain OPEN. Explicit terminal-primary recovery is implemented;
+production is unchanged. Source e46d64af's directory-alias repair remains qualified
+but unpublished. Four focused tests, fmt/clippy, one optimized build and real
+Windows default/private-relative transfers passed; zero residue. Evidence:
+download-directory-alias/ and fixtures 9Rot2W/iTgbzq.
+The scoped Retry L4sk1e failed to restore an iframe without restarting browser
+or provider. The causal journal records guacamole_primary_state_lock_timeout
+at 08:13:28 UTC, occurrence 3131034f-05db-4743-b71f-6bce7fe3386e.
+The backend retains that closed primary; old Retry only reset frontend state.
+Explicit Retry now names the terminal occurrence and revalidates ownership before
+one replacement. Starting/live primaries coalesce; changed bindings and stale
+terminal IDs fail. The viewer obtains a fresh restricted key after recovery.
+Automatic resolution remains non-restarting. Recovery errors expose a journal
+occurrence ID. Browsers, profiles and durable URLs are preserved.
+Validation: 19 focused Rust primary tests, dashboard sharing/recovery and inspector
+action tests, dashboard production build, workspace clippy and fmt passed.
+The initial compile caught a missing repository type argument; corrected before
+passing. Provider-backed recovery remains unverified; custody is next.
+Then qualify the combined alias/recovery candidate before controlled publication.
+Recurring state-lock contention still needs disposition; usable Retry alone does
+not establish A1/A2 readiness. Installed source remains 12f55652; doctor last 0,
+five browsers/storage/33 tabs preserved, ten holds and inactive timer unchanged.
 Original SoyLei reconnect and CSV remain unverified.
 
 ### Current installed identity
@@ -100,7 +102,7 @@ still needs a reusable product diagnosis/recovery surface.
 ### A2 local acceptance and remaining A3/A4/AX work
 
 - A2: current 0LgorK passes two viewers, pixels and same-link reconnect, but
-  controller refresh lost one iframe before input. Earlier 34mn0F input recovery
+  controller refresh lost one iframe; Retry L4sk1e also failed. Earlier 34mn0F input recovery
   remains historical evidence. Original target and complete attestation survive.
   Plan0158 external-vantage acceptance remains separate.
 - A3: doctor exits 0 after one supported maintenance pass. Nothing was removed.

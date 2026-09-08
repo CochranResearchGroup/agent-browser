@@ -48,6 +48,7 @@ import {
   confirmGuacamolePrimaryWhenConnected,
   isConnectedGuacamolePrimaryFrame,
   resolveGuacamoleViewerFrame,
+  recoverGuacamolePrimary,
 } from "@/lib/guacamole-connection-sharing";
 import {
   deriveWorkspaceViewportReadiness,
@@ -2319,13 +2320,26 @@ export function WorkspaceRemoteViewport({
     }
   }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceViewerLeaseIds]);
 
-  const retryWorkspaceConnection = useCallback(() => {
-    automaticAttemptKeyRef.current.clear();
-    setAutomaticAttemptKeys([]);
-    setConnectionRetryNonce((current) => current + 1);
+  const retryWorkspaceConnection = useCallback(async () => {
+    if (recoveryPending) return;
+    setRecoveryPending("viewer-reconnect");
     setFocusMessage("Retrying the browser connection.");
-    refreshWorkspaceViewport();
-  }, [refreshWorkspaceViewport]);
+    try {
+      if (guacamoleSharingStream) {
+        await recoverGuacamolePrimary({ dashboardHref: window.location.href, stream: guacamoleSharingStream });
+        // A recovered tunnel needs a fresh restricted sharing key.
+        setSharingResolutionNonce((current) => current + 1);
+      }
+      automaticAttemptKeyRef.current.clear();
+      setAutomaticAttemptKeys([]);
+      setConnectionRetryNonce((current) => current + 1);
+      refreshWorkspaceViewport();
+    } catch (error) {
+      setFocusMessage(error instanceof Error ? error.message : "Browser connection recovery failed.");
+    } finally {
+      setRecoveryPending(null);
+    }
+  }, [guacamoleSharingStream, recoveryPending, refreshWorkspaceViewport]);
 
   useEffect(() => {
     automaticAttemptKeyRef.current.clear();

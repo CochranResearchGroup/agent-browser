@@ -6,6 +6,7 @@ import {
   classifyGuacamoleShareAuthMessage,
   isConnectedGuacamolePrimaryFrame,
   resolveGuacamoleViewerFrame,
+  recoverGuacamolePrimary,
 } from "../packages/dashboard/src/lib/guacamole-connection-sharing.ts";
 
 const viewportSource = readFileSync(
@@ -227,4 +228,44 @@ assert.deepEqual(await resolveGuacamoleViewerFrame({
   dashboardHref: "https://dashboard.example.test/service", frameUrl: direct,
   stream: { ...stream, providerMode: "exclusive" },
 }), { mode: "direct", url: direct });
-console.log("Guacamole backend ownership and exact sharing custody passed");
+
+
+// Explicit Retry can replace only a terminal attempt returned by the backend.
+for (const state of ["closed", "ready", "uncertain", "denied"] as const) {
+  const requests: Record<string, unknown>[] = [];
+  const retry = recoverGuacamolePrimary({
+    dashboardHref: "https://dashboard.example.test/",
+    stream: { providerMode: "simultaneous_view", routeId: "route-1", connectionId: "17" } as Parameters<typeof recoverGuacamolePrimary>[0]["stream"],
+    fetchImpl: async (_input, init) => {
+      const request = JSON.parse(String(init?.body));
+      requests.push(request);
+      assert.equal(init?.credentials, "include");
+      if (state === "ready" || request.operation === "recover") {
+        return response({ primaryOwned: true, granted: false, activeConnectionId: ownedId });
+      }
+      return new Response(JSON.stringify({
+        success: false, code: "guacamole_primary_state_lock_timeout",
+        ...(state !== "uncertain" ? { terminalOccurrenceId: ownedId } : {}),
+      }), { status: state === "denied" ? 403 : 503 });
+    },
+  });
+  if (state === "uncertain" || state === "denied") await assert.rejects(retry, /lacks a terminated owner/);
+  else await retry;
+  assert.deepEqual(requests, [
+    { operation: "ensure", routeId: "route-1", connectionId: "17" },
+    ...(state === "closed" ? [{ operation: "recover", routeId: "route-1", connectionId: "17", expectedTerminalOccurrenceId: ownedId }] : []),
+  ]);
+}
+
+await assert.rejects(recoverGuacamolePrimary({
+  dashboardHref: "https://dashboard.example.test/",
+  stream: { providerMode: "simultaneous_view", routeId: "route-1", connectionId: "17" } as Parameters<typeof recoverGuacamolePrimary>[0]["stream"],
+  fetchImpl: async (_input, init) => {
+    const recovering = JSON.parse(String(init?.body)).operation === "recover";
+    return new Response(JSON.stringify({ success: false,
+      code: recovering ? "guacamole_primary_recovery_binding_changed" : "guacamole_primary_state_lock_timeout",
+      terminalOccurrenceId: ownedId, occurrenceId: ownedId,
+    }), { status: 503 });
+  },
+}), /guacamole_primary_recovery_binding_changed \(occurrence 00000000-0000-4000-8000-000000000001\)/);
+console.log("Guacamole backend ownership, explicit terminal recovery and exact sharing custody passed");

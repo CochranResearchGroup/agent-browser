@@ -3131,9 +3131,15 @@ timeout/unavailability is distinct from owner or binding change. Every guard
 rejection still ends the primary and requires reconciliation before another attempt.
 
 A rejected key is discarded and reported through the existing bounded recovery
-flow. Recovery may request a fresh key from the same healthy primary. It cannot
-elect a viewer as primary or restart a failed backend owner. Provider failures
-remain explicit until reconciled; binding invalidation closes the owned tunnel.
+flow. Automatic recovery may request a fresh key from the same healthy primary;
+it cannot restart a failed backend owner or elect a viewer as primary.
+The explicit **Retry connection** action can replace a terminated backend primary
+once after fresh verification of the same browser, owner, process and display.
+It names the exact terminal occurrence; duplicate retries share a starting or
+live connection, and an old retry cannot restart a later failed attempt.
+Changed or unproven ownership is refused. Retry requests a fresh restricted key
+while preserving the browser and durable URL. Binding invalidation closes the
+owned tunnel.
 The backend records primary termination in the private failure journal with its
 typed cause, elapsed lifetime and route/session/display references, even when
 no viewer remains to report the failure. Failed primary requests return an

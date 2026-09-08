@@ -1,9 +1,10 @@
-//! Backend-scoped primary ownership. Failed attempts remain explicit and sticky.
+//! Backend-scoped primary ownership. Failed attempts remain sticky until an
+//! explicit recovery names the terminal occurrence and revalidates its binding.
 
 use super::guacamole_primary_binding::{PrimaryBinding, PrimaryGuard};
 use super::guacamole_primary_provider;
 use super::guacamole_primary_transport::{PrimaryStatus, PrimaryTask};
-use crate::native::service_store::LockedServiceStateRepository;
+use crate::native::service_store::{JsonServiceStateStore, LockedServiceStateRepository};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
@@ -28,6 +29,28 @@ impl From<&'static str> for PrimaryFailure {
 }
 
 pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String, PrimaryFailure> {
+    primary(route_id, connection_id, None).await
+}
+
+/// Recover only the named terminal attempt after fresh ownership verification.
+pub(super) async fn recover(
+    route_id: &str,
+    connection_id: &str,
+    expected_terminal_occurrence_id: &str,
+) -> Result<String, PrimaryFailure> {
+    primary(
+        route_id,
+        connection_id,
+        Some(expected_terminal_occurrence_id.to_owned()),
+    )
+    .await
+}
+
+async fn primary(
+    route_id: &str,
+    connection_id: &str,
+    expected_terminal: Option<String>,
+) -> Result<String, PrimaryFailure> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     let route_id = route_id.to_owned();
     let connection_id = connection_id.to_owned();
@@ -39,25 +62,18 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
         let mut registry = REGISTRY
             .get_or_init(|| Mutex::new(Registry::default()))
             .blocking_lock();
-        if let Some(task) = registry.retained(&route_id, &connection_id, |binding| {
+        if let Some(expected) = expected_terminal {
+            let binding = PrimaryBinding::resolve(&repository, &route_id, &connection_id)?;
+            registry.recover(binding, &expected, |binding| {
+                start_primary(binding, repository)
+            })
+        } else if let Some(task) = registry.retained(&route_id, &connection_id, |binding| {
             binding.is_current(&repository)
         })? {
             Ok(task)
         } else {
             let binding = PrimaryBinding::resolve(&repository, &route_id, &connection_id)?;
-            registry.admit(binding, |binding| {
-                let expected = binding.clone();
-                let is_current: PrimaryGuard =
-                    Arc::new(move || expected.verify_current(&repository));
-                let evidence_binding = binding.clone();
-                PrimaryTask::connect_observed(
-                    guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
-                    is_current,
-                    move |occurrence_id, code, elapsed_ms| {
-                        evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
-                    },
-                )
-            })
+            registry.admit(binding, |binding| start_primary(binding, repository))
         }
     })
     .await
@@ -75,7 +91,52 @@ pub(super) async fn ensure(route_id: &str, connection_id: &str) -> Result<String
     })
 }
 
+fn start_primary(
+    binding: &PrimaryBinding,
+    repository: LockedServiceStateRepository<JsonServiceStateStore>,
+) -> PrimaryTask {
+    let expected = binding.clone();
+    let is_current: PrimaryGuard = Arc::new(move || expected.verify_current(&repository));
+    let evidence_binding = binding.clone();
+    PrimaryTask::connect_observed(
+        guacamole_primary_provider::connect(binding.clone(), is_current.clone()),
+        is_current,
+        move |occurrence_id, code, elapsed_ms| {
+            evidence_binding.record_terminal(occurrence_id, code, elapsed_ms)
+        },
+    )
+}
+
 impl Registry {
+    fn recover(
+        &mut self,
+        binding: PrimaryBinding,
+        expected_terminal: &str,
+        start: impl FnOnce(&PrimaryBinding) -> PrimaryTask,
+    ) -> Result<Arc<PrimaryTask>, &'static str> {
+        let key = (
+            binding.provider_base.to_string(),
+            binding.connection_id.clone(),
+        );
+        let (previous, task) = self
+            .owners
+            .get(&key)
+            .ok_or("guacamole_primary_recovery_owner_missing")?;
+        if previous != &binding {
+            return Err("guacamole_primary_recovery_binding_changed");
+        }
+        // Duplicate explicit requests coalesce with a starting or live owner.
+        // Never stop a live primary as a consequence of viewer retry.
+        if !matches!(task.status(), PrimaryStatus::Closed(_)) {
+            return Ok(task.clone());
+        }
+        if task.occurrence_id != expected_terminal {
+            return Err("guacamole_primary_recovery_superseded");
+        }
+        self.owners.remove(&key);
+        self.admit(binding, start)
+    }
+
     fn retained(
         &self,
         route_id: &str,
@@ -137,6 +198,75 @@ mod tests {
             >(),
             Arc::new(|| Ok(())),
         )
+    }
+
+    #[tokio::test]
+    async fn explicit_recovery_is_bound_to_one_terminal_and_preserves_live_owners() {
+        let binding = PrimaryBinding::synthetic_fixture();
+        let mut registry = Registry::default();
+        let starts = AtomicUsize::new(0);
+        assert_eq!(
+            registry
+                .recover(binding.clone(), "missing", |_| pending_owner(&starts))
+                .err(),
+            Some("guacamole_primary_recovery_owner_missing")
+        );
+        let first = registry
+            .admit(binding.clone(), |_| pending_owner(&starts))
+            .unwrap();
+        let live = registry
+            .recover(binding.clone(), "stale", |_| pending_owner(&starts))
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, &live));
+        let mut changed = binding.clone();
+        changed.route_id = "changed".into();
+        assert_eq!(
+            registry
+                .recover(changed, &first.occurrence_id, |_| pending_owner(&starts))
+                .err(),
+            Some("guacamole_primary_recovery_binding_changed")
+        );
+        first.stop();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !matches!(first.status(), PrimaryStatus::Closed(_)) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            registry
+                .recover(binding.clone(), "stale", |_| pending_owner(&starts))
+                .err(),
+            Some("guacamole_primary_recovery_superseded")
+        );
+        let next = registry
+            .recover(binding.clone(), &first.occurrence_id, |_| {
+                pending_owner(&starts)
+            })
+            .unwrap();
+        let duplicate = registry
+            .recover(binding.clone(), &first.occurrence_id, |_| {
+                pending_owner(&starts)
+            })
+            .unwrap();
+        assert!(Arc::ptr_eq(&next, &duplicate));
+        assert!(!Arc::ptr_eq(&first, &next));
+        next.stop();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !matches!(next.status(), PrimaryStatus::Closed(_)) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            registry
+                .recover(binding, &first.occurrence_id, |_| pending_owner(&starts))
+                .err(),
+            Some("guacamole_primary_recovery_superseded")
+        );
+        assert_eq!(starts.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
