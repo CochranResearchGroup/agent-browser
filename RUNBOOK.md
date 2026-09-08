@@ -4,7 +4,7 @@ This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
 200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
 
-## Turn 232 | 2026-09-07
+## Turn 233 | 2026-09-07
 
 Authority: [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Installed `ac277ea0` preserves exact pending acquisition custody through inventory,
@@ -21,8 +21,8 @@ but viewport shrink hid the marker. Moving only the synthetic marker into the
 No mouse-delivery code changed. The failed `076f69ee` release remains retained.
 Cumulative inventory builds: five; one source rework; two viewer attempts in this
 publication, including the recorded fixture correction. No additional build.
-Progress: outcome_progress for A2 and A3. Next: remaining A1 consumer identity
-and artifact dispositions, then monitoring and pressure ownership readiness.
+Progress: outcome_progress for isolated A1 native artifacts; A2/A3 gains retained.
+Next: consumer reconnect/export, Playwright artifact boundary, monitor and pressure.
 Unrelated modified note0156 and untracked note0159 remain preserved.
 
 ### Current installed identity
@@ -65,30 +65,28 @@ Cleanup left zero owned processes. Private `ownership-dispositions.json` assigns
 all six records; combined identity recovery now has isolated exact-binary proof. Consumer capabilities were not borrowed to
 apply ownership changes or claim their workflows accepted.
 
-The stored consumer `owner_connection_still_active` refusal has matching
-self-declared subjects and both permissions. Fresh readback finds the identical
-historical owner-connection hash still marked active after host replacement.
-The isolated `retained-unit-sim-Q2Hc69` reproduction held an authenticated socket
-open, killed only its disposable host, preserved Chrome, then restarted the host.
-The original handle was refused with that same typed error because the dead
-connection remained active. Normal connection teardown passes; abrupt host death
-bypasses its disconnect guard. Source `3dfd4d09` now mints opaque connection IDs
-with boot, PID namespace, PID and process start evidence. Reconnect uses only
-persisted custody and positive host-death evidence; subject and permissions
-remain enforced. Legacy IDs and unreadable evidence never authorize takeover.
-`retained-unit-sim-8rJXkf` proves live-owner protection, host-kill recovery,
-complete attestation, original-handle evaluation, same Chrome and foreign denial
-without page effects. An initial attempt `retained-unit-sim-Xpwqqx` recovered
-custody but correctly refused control with conflicting fixture profile hints;
-correcting those hints before launch passed. The failure remains preserved.
-The consumer legacy access record exactly matches the pre-publication custody
-snapshot and remains active. Fresh census finds three production processes, all
-started after that snapshot, and six development processes with separate homes.
-The reviewed legacy transition affects one tab; no jobs were active. Native
-transactional repair is exact-release qualified; production preview passes.
-Production application succeeded for that one tab: the dead connection is now
-disconnected, with permissions, target and owner/lease authority unchanged. All
-five browsers survived. Consumer reconnect and artifact transport remain open.
+The stored consumer `owner_connection_still_active` refusal was reproduced after
+abrupt disposable-host death. Source `3dfd4d09` binds new connection IDs to boot,
+PID namespace, PID and start evidence. Retained handles recover only with positive
+host-death proof and unchanged subjects/permissions. Legacy repair subsequently
+used exact pre-publication custody plus a fresh producer census to disconnect
+one proven dead transport. Consumer permissions, owner/lease authority and all
+five browsers were preserved. See `legacy-connection-repair/` and Git `4c3d9156`
+for the detailed history. Actual consumer reconnect remains unverified.
+
+Current source `ac277ea0` also passed native synthetic CSV capture and client
+artifact retrieval after disposable host retirement (`retained-unit-sim-xNVafa`).
+An immediate Blob revocation did not prevent the download. A second fixture
+(`retained-unit-sim-vfstsf`) emitted a peer download first; both artifacts existed
+separately and the primary request returned its own bytes. This does not prove
+shared default-context policy ownership or ordinary Playwright namespace transfer.
+The three-tab fixture proved attach/detach and physical release of only the
+intended target. Its next assertion wrongly assumed top-level targetId was
+unsupported; the current schema supports it and the response named the requested
+target. `retained-unit-sim-3dOUr1/disposition.json` records that limit. Historical
+wrong-tab cause and independent post-close census remain unproven. Two earlier
+fixture setup errors are preserved. All five disposable runs cleaned to zero
+owned processes; no production browser action or new build occurred.
 
 ### Storage recovery and prevention
 
