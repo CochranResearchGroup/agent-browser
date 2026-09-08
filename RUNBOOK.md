@@ -142,6 +142,20 @@ uses the next completed invocation without altering timer or runtime settings.
 A shell sequencing mistake briefly started the timer after a failed readiness
 assertion; it was stopped before a scheduled cycle and no such cycle is claimed.
 
+### Git consolidation | 2026-09-08
+
+PR13 merged the three historical Reddit/X incident reports into main at b21c4459.
+Mergefffdbfc8 brought main into this active branch; the X report already matched,
+and the workflow conflict retained the existing run-name without executable changes.
+The clean P0137 and Reddit worktrees were retired after ancestry/content checks;
+original branch refs remain recoverable on origin or through the active branch.
+Ignored build outputs were archived and compared before removal. One worktree remains.
+The full runtime backlog is not merged to main:181 files changed since green
+CI49034e95. Reconcile existing validation by changed surface, then run missing
+integration gates once. This is a Git readiness gap, separate from full A1–A4/AX
+acceptance; installing052848aa does not prove the entire backlog merge-ready.
+The pre-existing incident0156 edits and untracked notes0159/0160 remain untouched.
+
 ### Policy adoption and preservation
 
 Policy commit e2b506b2 adds consolidation, separate evidence stages, candidate
