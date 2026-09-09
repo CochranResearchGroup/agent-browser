@@ -750,6 +750,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
     state.start_dialog_handler();
     state.update_stream_client().await;
     persist_adopted_logical_browser_health(state, &logical_browser_id, descriptor.host)?;
+    super::remote_headed::register_current_browser_lifecycle(state)?;
     Ok(json!(
         { "resumed" : true, "sessionName" : descriptor.session_name, "browserPid" :
         descriptor.browser_pid, "cdpUrl" : descriptor.cdp_url, "runtimeProfile" :

@@ -1417,6 +1417,48 @@ mod tests {
     }
 
     #[test]
+    fn managed_lane_registration_replaces_legacy_browser_alias_after_transfer() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let mut registration = ManagedLaneRegistration {
+            logical_browser_id: "session:legacy-route-alias".to_string(),
+            profile_root: std::env::temp_dir().join("agent-browser-lifecycle-transfer-alias"),
+            daemon_session_route: "candidate-route".to_string(),
+            process_group_id: Some(4200),
+            process_identity: crate::process_identity::RecordedProcessIdentity {
+                pid: 4200,
+                start_token: "linux:boot:4200".to_string(),
+                executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            },
+            browser_family: "chrome".to_string(),
+            cdp_endpoint: "ws://127.0.0.1:9444/devtools/browser/example".to_string(),
+            target_ids: vec!["target-a".to_string()],
+        };
+        let legacy = authority
+            .register_managed_lane(registration.clone())
+            .unwrap();
+
+        registration.logical_browser_id = "session:stable-browser".to_string();
+        let canonical = authority.register_managed_lane(registration).unwrap();
+
+        assert_eq!(canonical.claim.logical_browser_id, "session:stable-browser");
+        assert_eq!(
+            canonical.claim.owner_generation,
+            legacy.claim.owner_generation + 1
+        );
+        let state = repository.load_snapshot().unwrap();
+        assert!(!state
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key("session:legacy-route-alias"));
+        assert!(state
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key("session:stable-browser"));
+    }
+
+    #[test]
     fn retained_owner_history_cannot_veto_managed_lane_launch() {
         let repository = MemoryRepository::default();
         let authority = RuntimeLifecycleAuthority::new(&repository);
