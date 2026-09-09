@@ -461,6 +461,8 @@ Read-only evidence collection for later units may proceed without delaying W1.
 
 ## First-class profile remediation amendment, 2026-09-09
 
+Implementation authority: [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
+
 Profile repair and reset are product operations, not undocumented compositions
 of lease, browser, profile-config and manual filesystem actions. W1 must expose
 one coherent profile-level lifecycle through CLI, HTTP, MCP, the generated

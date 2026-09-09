@@ -151,7 +151,9 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 governs the four remaining production readiness items. Current execution,
 acceptance evidence, cumulative effort, and the next bounded action are owned by
 [RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis and preserving repair
-are the immediate product milestone for profile ownership and identity proof.
+are the immediate product milestone for profile ownership and identity proof,
+implemented through
+[Plan 0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
 Explicitly scoped runtime and authentication reset follow; destructive
 profile-data reset remains separately gated. The authenticated operator journey,
 maintenance reconciliation and unattended operation follow that owner/lease
