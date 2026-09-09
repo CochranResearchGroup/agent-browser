@@ -618,8 +618,15 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         .into_iter()
         .map(|page| page.target_id)
         .collect::<Vec<_>>();
-    let logical_browser_id = super::capability::service_browser_id(&state.session_id);
     let repository = LockedServiceStateRepository::default_json()?;
+    let service_state = repository.load_snapshot()?;
+    let process_instance_digest = crate::native::runtime_lifecycle::digest_json(&process_identity)?;
+    let logical_browser_id = managed_lane_logical_browser_id(
+        &state.session_id,
+        state.runtime_owner_binding.as_ref(),
+        &service_state,
+        &process_instance_digest,
+    )?;
     let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
     let registration = crate::native::runtime_lifecycle::ManagedLaneRegistration {
         logical_browser_id,
@@ -642,6 +649,121 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         manager.mark_lifecycle_managed(reviewed_process_tree);
     }
     Ok(())
+}
+
+fn managed_lane_logical_browser_id(
+    daemon_session_route: &str,
+    binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    service_state: &crate::native::service_model::ServiceState,
+    process_instance_digest: &str,
+) -> Result<String, String> {
+    let default_browser_id = super::capability::service_browser_id(daemon_session_route);
+    let Some(binding) = binding else {
+        return Ok(default_browser_id);
+    };
+    if binding.claim.daemon_session_route != daemon_session_route
+        || binding.claim.process_instance_digest != process_instance_digest
+    {
+        return Err("runtime_lifecycle_bound_browser_identity_inconsistent".to_string());
+    }
+    if service_state
+        .browsers
+        .get(&binding.claim.logical_browser_id)
+        .is_some_and(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|session_id| session_id == daemon_session_route)
+        })
+    {
+        return Ok(binding.claim.logical_browser_id.clone());
+    }
+    if binding.claim.logical_browser_id != default_browser_id
+        || service_state.browsers.contains_key(&default_browser_id)
+    {
+        return Err("runtime_lifecycle_bound_browser_identity_unproven".to_string());
+    }
+    let mut candidates = service_state
+        .browsers
+        .values()
+        .filter(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|session_id| session_id == daemon_session_route)
+        })
+        .filter(|browser| {
+            service_state
+                .browser_process_identities
+                .get(&browser.id)
+                .and_then(|identity| {
+                    crate::native::runtime_lifecycle::digest_json(&identity.process_identity).ok()
+                })
+                .as_deref()
+                == Some(process_instance_digest)
+        });
+    let candidate = candidates
+        .next()
+        .ok_or_else(|| "runtime_lifecycle_bound_browser_identity_unproven".to_string())?;
+    if candidates.next().is_some() {
+        return Err("runtime_lifecycle_bound_browser_identity_ambiguous".to_string());
+    }
+    Ok(candidate.id.clone())
+}
+
+#[cfg(test)]
+#[test]
+fn managed_lane_recovers_stable_browser_from_legacy_route_alias() {
+    let process_identity = crate::process_identity::RecordedProcessIdentity {
+        pid: 4242,
+        start_token: "linux:boot:4242".to_string(),
+        executable_path: Some("/opt/chrome".to_string()),
+        browser_family: Some("chrome".to_string()),
+    };
+    let process_instance_digest =
+        crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
+    let browser_id = "session:bill-soylei".to_string();
+    let daemon_session_route = "handoff-bill";
+    let service_state = crate::native::service_model::ServiceState {
+        browsers: std::collections::BTreeMap::from([(
+            browser_id.clone(),
+            crate::native::service_model::BrowserProcess {
+                id: browser_id.clone(),
+                active_session_ids: vec![daemon_session_route.to_string()],
+                ..Default::default()
+            },
+        )]),
+        browser_process_identities: std::collections::BTreeMap::from([(
+            browser_id.clone(),
+            crate::native::service_model::ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: None,
+                runtime_profile: Some("bill-soylei".to_string()),
+            },
+        )]),
+        ..Default::default()
+    };
+    let binding = crate::runtime_owner_transfer::RuntimeOwnerBinding::observation_only(
+        crate::runtime_owner_transfer::OwnerAuthorityClaim {
+            owner_id: "owner-bill".to_string(),
+            profile_identity_digest: "1".repeat(64),
+            owner_generation: 7,
+            logical_browser_id: "session:handoff-bill".to_string(),
+            daemon_session_route: daemon_session_route.to_string(),
+            process_instance_digest: process_instance_digest.clone(),
+        },
+    );
+
+    assert_eq!(
+        managed_lane_logical_browser_id(
+            daemon_session_route,
+            Some(&binding),
+            &service_state,
+            &process_instance_digest,
+        )
+        .unwrap(),
+        browser_id
+    );
 }
 /// Enforces service-owned profile leases before Chrome starts.
 ///

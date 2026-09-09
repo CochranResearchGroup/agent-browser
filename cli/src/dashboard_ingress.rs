@@ -1035,7 +1035,11 @@ pub(crate) fn candidate_presentation_prerequisite(
             );
         let owner = owner_session.as_deref().and_then(|owner_session| {
             state.runtime_owner_registry.owners.values().find(|owner| {
-                owner.browser_id.as_str() == handoff.browser_id.as_deref().unwrap_or_default()
+                crate::native::remote_view_handoff::runtime_owner_matches_browser_or_legacy_route_alias(
+                    state,
+                    owner,
+                    handoff.browser_id.as_deref().unwrap_or_default(),
+                )
                     && owner.daemon_session_route == owner_session
             })
         });
@@ -2314,6 +2318,56 @@ mod tests {
             prerequisite["nextAction"],
             "resolve_eligible_handoff_through_authenticated_candidate"
         );
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_accepts_exact_legacy_owner_route_alias() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .browser_id = "session:owner-session".to_string();
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+
+        let committed_prerequisite = candidate_presentation_prerequisite(&state);
+        assert_eq!(committed_prerequisite["ready"], true);
+        assert_eq!(committed_prerequisite["eligibleHandoffCount"], 1);
+    }
+
+    #[test]
+    fn candidate_presentation_bootstrap_rejects_occupied_legacy_owner_route_alias() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .runtime_owner_registry
+            .owners
+            .values_mut()
+            .next()
+            .unwrap()
+            .browser_id = "session:owner-session".to_string();
+        state.browsers.insert(
+            "session:owner-session".to_string(),
+            crate::native::service_model::BrowserProcess {
+                id: "session:owner-session".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["blockerCounts"]["current_owner_unproven"], 1);
     }
 
     #[test]

@@ -818,7 +818,7 @@ fn unique_ready_handoff_owner_session(
         .filter(|owner| {
             owner.state == ProfileOwnerState::Ready
                 && owner.pending_transfer.is_none()
-                && owner.browser_id == browser_id
+                && runtime_owner_matches_browser_or_legacy_route_alias(state, owner, browser_id)
                 && owner.process_instance_digest == process_instance_digest
                 && !owner.daemon_session_route.trim().is_empty()
                 && browser
@@ -832,6 +832,28 @@ fn unique_ready_handoff_owner_session(
         return None;
     }
     Some(owner.daemon_session_route.clone())
+}
+
+/// Accept the stable browser identity or one legacy owner record that copied
+/// its daemon route into `browserId`. The legacy form is admissible only when
+/// that synthetic browser does not exist and the stable browser is actively
+/// bound to the same daemon route. Callers must also prove process identity.
+pub(crate) fn runtime_owner_matches_browser_or_legacy_route_alias(
+    state: &ServiceState,
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+    browser_id: &str,
+) -> bool {
+    if owner.browser_id == browser_id {
+        return true;
+    }
+    owner.browser_id == format!("session:{}", owner.daemon_session_route)
+        && !state.browsers.contains_key(&owner.browser_id)
+        && state.browsers.get(browser_id).is_some_and(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|session_id| session_id == &owner.daemon_session_route)
+        })
 }
 
 /// Reapply a retained remote-view route only when current service state proves
