@@ -57,6 +57,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
