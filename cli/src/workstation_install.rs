@@ -56,6 +56,10 @@ const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Durati
 const DASHBOARD_PRESENTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(250);
+// Candidate ownership transfer can overlap a maintenance reconciliation of the
+// same large Service State file. Use the existing command-scoped wait instead
+// of failing the reversible upgrade at the one-second interactive default.
+const CANDIDATE_HANDOFF_STATE_LOCK_TIMEOUT_MS: &str = "30000";
 const POST_COMMIT_DOCTOR_ATTEMPTS: usize = 4;
 const POST_COMMIT_DOCTOR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 const LEGACY_DAEMON_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -8863,6 +8867,15 @@ fn configure_candidate_runtime_admission(
         );
 }
 
+fn candidate_transaction_command_args<'a>(command_args: &[&'a str]) -> Vec<&'a str> {
+    let mut args = command_args.to_vec();
+    args.extend([
+        "--service-state-lock-timeout-ms",
+        CANDIDATE_HANDOFF_STATE_LOCK_TIMEOUT_MS,
+    ]);
+    args
+}
+
 fn run_candidate_agent_json_in_socket_dir(
     binary: &Path,
     session: &str,
@@ -8875,10 +8888,11 @@ fn run_candidate_agent_json_in_socket_dir(
         "create candidate runtime host socket directory",
         socket_dir,
     ))?;
+    let transaction_command_args = candidate_transaction_command_args(command_args);
     run_agent_json_detailed_in_socket_dir_with(
         binary,
         session,
-        command_args,
+        &transaction_command_args,
         Some((socket_dir, true)),
         |command| {
             configure_candidate_runtime_admission(command, transaction_id, transaction_revision);
@@ -11715,6 +11729,26 @@ fn fail(message: &str, json: bool) -> ! {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn candidate_handoff_commands_wait_through_maintenance_state_contention() {
+        assert_eq!(
+            candidate_transaction_command_args(&[
+                "handoff",
+                "resume",
+                "--source-session",
+                "source-lane",
+            ]),
+            [
+                "handoff",
+                "resume",
+                "--source-session",
+                "source-lane",
+                "--service-state-lock-timeout-ms",
+                "30000",
+            ]
+        );
+    }
 
     #[cfg(unix)]
     #[test]
