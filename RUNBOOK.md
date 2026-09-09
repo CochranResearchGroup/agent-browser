@@ -4,7 +4,7 @@ Sole current execution status. Plan0160 owns scope, strategy and frozen acceptan
 This table owns current requirement status; receipts and archives preserve detail.
 Keep at or below 200 lines under policy0043.
 
-## Turn 284 | 2026-09-08
+## Turn 285 | 2026-09-09
 
 Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Operator authorized candidate installation and deferred standalone CLI compatibility
@@ -14,6 +14,14 @@ Full A1–A4/AX remains OPEN. Next round retains ownership/identity as highest
 priority, with standalone CLI compatibility explicitly deferred to that round.
 Do not restart A4 observation before its prerequisites and complete sequence
 budget are ready. No consumer payment/CSV action or unrelated cleanup.
+
+Operator direction now makes profile remediation a first-class product surface.
+Plan0160 defines read-only profile diagnosis, preserving plan/apply repair, and
+explicitly scoped reset across CLI, HTTP, MCP, generated client and dashboard.
+The next implementation milestone is diagnose plus preserving repair for the
+current owner/lease blocker. Runtime and authentication reset follow. Destructive
+profile-data reset remains separately gated and is not required for that first
+milestone. No profile or runtime was changed by this planning amendment.
 
 Private receipt prefixes:
 - R = ~/.local/state/agent-browser/campaigns/p160/consolidated-20260908/
@@ -63,6 +71,7 @@ not fresh executions on052848aa. N receipts identify the current installation.
 | A1 session-only lifecycle | yes / prior headless and headed pass / yes / synthetic | R/final-session-matrix-results.json; R/final-session-headed-results.json | Five production identities preserved and no fixture residue. Session-only, named and custom lifecycle cases all have prior-binary proof; broader cross-operation/negative joins remain separate. |
 | A1 pending confirm | yes / prior binary pass / yes / original synthetic tab pass | R/installed-modal-acceptance.json; R/final-dialog-bmPf4N | Installed original handle passed labeled confirm status/dismiss and preserved actual page title/marker. Isolated snapshot and wrong-target denial pass. Original consumer retry and cross-target pending-modal routing remain unproven. |
 | A1 lease findings | dispositions / scoped / yes / partial | P/post-r4-ownership-dispositions.json; R/primary-evidence-disposition.json | Keep seven advisory axes separate from ordinary control failures. Complete UI/network/file-transfer after peer-target selection and remaining negative joins with isolated fixtures. |
+| A1 first-class profile remediation | contract amended / incomplete / no / no | Plan0160 first-class profile remediation amendment | Implement profile diagnose and preserving repair first, then scoped runtime and authentication reset. Prove legacy-principal repair, stale-runtime repair, foreign-owner rejection, idempotency and peer survival with disposable profiles. |
 | A2 local remote-view journey | yes / installed052848aa pass with same-link recovery / yes / synthetic | local-viewers-RAELII under a2-operator-journey-r2/access-grant-attempt | Two authenticated viewers, anonymous denial, same-link reconnect and trusted input pass. Preserve initial local-viewers-2wL0BG failure; external vantage remains separate. |
 | A3 current readiness | yes / installed doctor pass / yes / n/a | N/installation-postjourney-doctor.json; N/configuration-freeze.json | Preserve warning dispositions and current evidence; doctor alone does not prove complete operation. |
 | A3 preserving shutdown delivery | scoped / replacement preservation pass / yes / synthetic handle pass | R/activation-receipt.json; R/retained-storage-after.json | Normal graceful restart is not a preserving path. Existing explicit browser-close semantics remain unchanged. |

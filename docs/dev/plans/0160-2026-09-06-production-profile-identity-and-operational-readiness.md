@@ -459,6 +459,62 @@ W1 takes precedence over unrelated maintenance or presentation polish. Ownership
 findings from W3 that affect profile usability are pulled into W1 immediately.
 Read-only evidence collection for later units may proceed without delaying W1.
 
+## First-class profile remediation amendment, 2026-09-09
+
+Profile repair and reset are product operations, not undocumented compositions
+of lease, browser, profile-config and manual filesystem actions. W1 must expose
+one coherent profile-level lifecycle through CLI, HTTP, MCP, the generated
+client and dashboard. Existing lower-level lease and recovery primitives remain
+implementation details and advanced diagnostics; operators should not need to
+choose among them to make an important stored profile usable again.
+
+The public lifecycle has three distinct operations:
+
+1. `diagnose` is read-only. It joins the exact profile record, aliases and
+   service sharing, target readiness, live browser/process/session/tab identity,
+   lease and principal proof, remote-view posture, stale references and the
+   recommended supported action. It returns a correlation identifier and the
+   evidence behind every blocking or advisory finding.
+2. `repair` preserves the profile directory, credentials, cookies, extensions
+   and authenticated site state. It plans first, then applies an idempotent,
+   exact-profile transition that may reconcile catalog metadata, shared-service
+   membership, current service-owned runtime references, lease bindings and
+   readiness projections only where current evidence proves the correction.
+   A live foreign or ambiguous owner makes the affected transition ineligible;
+   repair must not close, replace or claim it.
+3. `reset` requires an explicit scope and never defaults to deleting profile
+   data. Runtime reset closes and recreates only an exactly proven service-owned
+   browser lane while preserving the stored profile. Authentication reset
+   removes only the selected target service's authentication evidence and
+   starts the detached manual-seeding workflow. Full profile-data reset is a
+   separate destructive scope with a sealed preview, exact profile identity,
+   recoverable backup, explicit confirmation and postcondition receipt. Reset
+   must not be implemented as profile-config deletion or broad directory
+   removal.
+
+Every plan reports preserved data, proposed effects, blockers, rollback or
+recovery material, and whether manual authentication will be required. Every
+apply rechecks the profile revision, owner generation, boot/process identity,
+lease revision and active subordinate work before effects. Results join request,
+job, event and incident records so the returned identifier reaches the first
+causal decision and safe next action.
+
+The first maintained acceptance fixtures cover the real classes exposed by the
+BILL and QBO recovery: a healthy shared authenticated profile needs only normal
+relaunch; a shared profile missing authentication enters manual seeding; a live
+profile with legacy-principal lease evidence receives a preserving identity
+repair; and a stopped profile with stale runtime references receives a
+preserving runtime repair. Add foreign-owner rejection, changed-revision
+rejection, idempotent replay and peer-browser survival. No production profile is
+the implementation fixture.
+
+This amendment changes W1 delivery order. Implement `diagnose` and preserving
+`repair` first because they address the current owner/lease blocker. Implement
+runtime and authentication reset next. Keep full profile-data reset behind its
+destructive acceptance and backup gates; it does not block the preserving
+repair milestone. Update all user-facing surfaces required by AGENTS.md in the
+same implementation batch.
+
 ## Strategy amendment, 2026-09-07
 
 Preserve A1, A2, A3, A4 and AX in full. Execute consumer recovery before further

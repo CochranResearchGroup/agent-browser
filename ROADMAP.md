@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-02
+Updated: 2026-09-09
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -150,9 +150,12 @@ open until a fresh candidate is installed, externally calibrated, and frozen.
 [Plan 0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
 governs the four remaining production readiness items. Current execution,
 acceptance evidence, cumulative effort, and the next bounded action are owned by
-[RUNBOOK.md](RUNBOOK.md). Profile ownership/identity proof and causal error
-diagnosis remain first, followed by the authenticated operator journey,
-maintenance reconciliation and unattended operation. Plan 0159's bounded completion and installed profile repair do
+[RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis and preserving repair
+are the immediate product milestone for profile ownership and identity proof.
+Explicitly scoped runtime and authentication reset follow; destructive
+profile-data reset remains separately gated. The authenticated operator journey,
+maintenance reconciliation and unattended operation follow that owner/lease
+milestone. Plan 0159's bounded completion and installed profile repair do
 not establish whole production readiness. P158's historical calibration sequence
 remains paused and its incomplete criteria remain visible.
 
