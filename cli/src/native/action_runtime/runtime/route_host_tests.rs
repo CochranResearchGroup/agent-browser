@@ -1688,6 +1688,102 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
 }
 
 #[test]
+fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_binding() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("terminal-owner-shared-local-relaunch-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let profile_id = "bill-soylei";
+    let session_id = profile_id;
+    let browser_id = format!("session:{session_id}");
+    let user_data_dir = home.join("bill-profile");
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let owner_generation = 17;
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "terminal-bill-owner".to_string(),
+        profile_identity_digest: profile_identity_digest.clone(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation,
+        browser_id: browser_id.clone(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut runtime_owner_registry =
+        crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner);
+    runtime_owner_registry.lifecycle_records.insert(
+        browser_id.clone(),
+        crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+            logical_browser_id: browser_id,
+            profile_identity_digest: profile_identity_digest.clone(),
+            owner_generation,
+            lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal,
+            cleanup_obligation_state:
+                crate::runtime_owner_transfer::CleanupObligationState::Satisfied,
+            terminal_evidence: vec![
+                "exact_process_exited".to_string(),
+                "profile_lock_released".to_string(),
+            ],
+            ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+        },
+    );
+    runtime_owner_registry.principal_bindings.insert(
+        profile_identity_digest,
+        crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+            principal_id: "principal:registered-old-owner".to_string(),
+            profile_id: profile_id.to_string(),
+            profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+                &user_data_dir,
+            )
+            .unwrap(),
+            capability_id: "profile-capability-v1:historical".to_string(),
+            provenance:
+                crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+            owner_generation,
+        },
+    );
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.to_string_lossy().into_owned()),
+                allocation: ProfileAllocationPolicy::SharedService,
+                access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+                ..BrowserProfile::default()
+            },
+        )]),
+        runtime_owner_registry,
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+
+    let command = json!({
+        "action": "remote_view_open",
+        "runtimeProfile": profile_id,
+        "serviceName": "BooksReceipts",
+        "clientSubjectId": "service:BooksReceipts/agent:codex/task:bill-live",
+        "identityAssurance": "self-declared",
+    });
+    let mut options = LaunchOptions::default();
+    let selection =
+        apply_service_profile_selection(&mut options, &command, Some(session_id)).unwrap();
+
+    assert_eq!(selection, None);
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(options.profile.as_deref(), user_data_dir.to_str());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
 fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("registered-session-owner-exit-home");

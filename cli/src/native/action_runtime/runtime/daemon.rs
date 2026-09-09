@@ -1321,7 +1321,16 @@ fn exact_terminal_owner_allows_profile_relaunch(
         .runtime_owner_registry
         .principal_bindings
         .contains_key(&profile_digest);
-    if !(exact_terminal_owner && owner_projection_inert && principal_projection_absent) {
+    // A terminal owner cannot carry effect authority into its replacement.
+    // Once exact cleanup and process absence are proven, a current shared-local
+    // caller with profile_use permission may relaunch the same profile even if
+    // historical registered-principal metadata is still retained for audit.
+    let independent_shared_local_relaunch =
+        shared_local_profile_use_allowed(profile, profile_id, command);
+    if !(exact_terminal_owner
+        && owner_projection_inert
+        && (principal_projection_absent || independent_shared_local_relaunch))
+    {
         return Ok(false);
     }
     (options.runtime_profile, options.profile) =

@@ -105,76 +105,148 @@ impl ProductionInventory {
         )?;
         let mut slots = Vec::new();
         for expected in &self.routes {
-            let invalid = || {
+            let invalid = |reason: &str| {
                 format!(
-                    "production_presentation_inventory_binding_mismatch:{}",
-                    expected.route_id
+                    "production_presentation_inventory_binding_mismatch:{}:{}",
+                    expected.route_id, reason
                 )
             };
             let entry = state
                 .route_pool
                 .get(&expected.route_pool_entry_id)
-                .ok_or_else(invalid)?;
+                .ok_or_else(|| invalid("route_pool_entry_missing"))?;
             let route = state
                 .remote_view_routes
                 .get(&expected.route_id)
-                .ok_or_else(invalid)?;
+                .ok_or_else(|| invalid("route_missing"))?;
             let display = state
                 .display_allocations
                 .get(&expected.display_allocation_id)
-                .ok_or_else(invalid)?;
+                .ok_or_else(|| invalid("display_allocation_missing"))?;
             let pending_acquisition = has_current_acquisition_binding(state, route);
-            if entry.provider != ViewStreamProvider::RdpGateway
-                || route.provider != entry.provider
-                || entry.id != expected.route_pool_entry_id
-                || display.id != expected.display_allocation_id
-                || entry.route_id != route.id
-                || entry.connection_id.as_deref() != Some(&expected.connection_id)
-                || route.connection_id != entry.connection_id
-                || route.display_allocation_id.as_deref() != Some(&expected.display_allocation_id)
-                || display.display_name.as_deref() != Some(&expected.display_name)
-                || display.boot_epoch.as_deref() != Some(boot)
-                || entry.target["displayName"] != expected.display_name
-                || entry.target["routeUser"] != expected.route_user
-                || expected.route_user.trim().is_empty()
-                || !display.route_ids.contains(&route.id)
-                || route.browser_id != display.owner_browser_id
-                || route.session_id != display.owner_session_id
-                || (!matches!(route.state.as_str(), "ready" | "orphaned" | "checked_out")
-                    && !pending_acquisition)
-                || (!matches!(display.state.as_str(), "ready" | "active" | "orphaned")
-                    && !pending_acquisition)
-                || (!matches!(entry.state.as_str(), "available" | "checked_out")
-                    && !pending_acquisition)
-                || entry
-                    .current_route_allocation_id
-                    .as_ref()
-                    .is_some_and(|id| id != &route.id)
-            {
-                return Err(invalid());
+            let binding_mismatch = [
+                (
+                    "route_pool_provider",
+                    entry.provider != ViewStreamProvider::RdpGateway,
+                ),
+                ("route_provider", route.provider != entry.provider),
+                (
+                    "route_pool_entry_id",
+                    entry.id != expected.route_pool_entry_id,
+                ),
+                (
+                    "display_allocation_id",
+                    display.id != expected.display_allocation_id,
+                ),
+                ("route_pool_route_id", entry.route_id != route.id),
+                (
+                    "route_pool_connection_id",
+                    entry.connection_id.as_deref() != Some(&expected.connection_id),
+                ),
+                (
+                    "route_connection_id",
+                    route.connection_id != entry.connection_id,
+                ),
+                (
+                    "route_display_allocation_id",
+                    route.display_allocation_id.as_deref() != Some(&expected.display_allocation_id),
+                ),
+                (
+                    "display_name",
+                    display.display_name.as_deref() != Some(&expected.display_name),
+                ),
+                (
+                    "display_boot_epoch",
+                    display.boot_epoch.as_deref() != Some(boot),
+                ),
+                (
+                    "route_pool_display_name",
+                    entry.target["displayName"] != expected.display_name,
+                ),
+                (
+                    "route_pool_route_user",
+                    entry.target["routeUser"] != expected.route_user,
+                ),
+                (
+                    "inventory_route_user_empty",
+                    expected.route_user.trim().is_empty(),
+                ),
+                ("display_route_ids", !display.route_ids.contains(&route.id)),
+                (
+                    "route_display_browser_owner",
+                    route.browser_id != display.owner_browser_id,
+                ),
+                (
+                    "route_display_session_owner",
+                    route.session_id != display.owner_session_id,
+                ),
+                (
+                    "route_state",
+                    !matches!(route.state.as_str(), "ready" | "orphaned" | "checked_out")
+                        && !pending_acquisition,
+                ),
+                (
+                    "display_state",
+                    !matches!(display.state.as_str(), "ready" | "active" | "orphaned")
+                        && !pending_acquisition,
+                ),
+                (
+                    "route_pool_state",
+                    !matches!(entry.state.as_str(), "available" | "checked_out")
+                        && !pending_acquisition,
+                ),
+                (
+                    "route_pool_current_allocation",
+                    entry
+                        .current_route_allocation_id
+                        .as_ref()
+                        .is_some_and(|id| id != &route.id),
+                ),
+            ]
+            .into_iter()
+            .find_map(|(reason, mismatched)| mismatched.then_some(reason));
+            if let Some(reason) = binding_mismatch {
+                return Err(invalid(reason));
             }
             let browser = match route.browser_id.as_ref() {
-                Some(id) => {
-                    let browser = state.browsers.get(id).ok_or_else(invalid)?;
-                    if browser.display_allocation_id != route.display_allocation_id
-                        || browser.display_name != display.display_name
-                        || browser.boot_epoch.as_deref() != Some(boot)
-                        || route
-                            .session_id
-                            .as_ref()
-                            .is_none_or(|session| !browser.active_session_ids.contains(session))
-                    {
-                        return Err(invalid());
+                Some(id) if state.browsers.contains_key(id) => {
+                    let browser = &state.browsers[id];
+                    let browser_mismatch = [
+                        (
+                            "browser_display_allocation_id",
+                            browser.display_allocation_id != route.display_allocation_id,
+                        ),
+                        (
+                            "browser_display_name",
+                            browser.display_name != display.display_name,
+                        ),
+                        (
+                            "browser_boot_epoch",
+                            browser.boot_epoch.as_deref() != Some(boot),
+                        ),
+                        (
+                            "browser_active_session",
+                            route.session_id.as_ref().is_none_or(|session| {
+                                !browser.active_session_ids.contains(session)
+                            }),
+                        ),
+                    ]
+                    .into_iter()
+                    .find_map(|(reason, mismatched)| mismatched.then_some(reason));
+                    if let Some(reason) = browser_mismatch {
+                        return Err(invalid(reason));
                     }
                     Some(browser)
                 }
+                Some(_) if pending_acquisition => None,
+                Some(_) => return Err(invalid("browser_missing_outside_pending_acquisition")),
                 None if route.session_id.is_none()
                     && route.state == "ready"
                     && display.state == "ready" =>
                 {
                     None
                 }
-                None => return Err(invalid()),
+                None => return Err(invalid("route_browser_missing_for_bound_state")),
             };
             if !observe(expected, browser) {
                 return Err(format!(
@@ -184,7 +256,7 @@ impl ProductionInventory {
             }
             let mut slot = PresentationSlot::warm_idle(format!("slot:{}", entry.id))
                 .with_binding(route.id.clone(), display.id.clone());
-            slot.browser_id = route.browser_id.clone();
+            slot.browser_id = browser.and_then(|_| route.browser_id.clone());
             if browser.is_some() {
                 slot.state = PresentationSlotState::Active;
             }
@@ -348,6 +420,69 @@ mod tests {
         assert!(refreshed.admission_error.is_none());
         assert_eq!(state.remote_view_routes["route"].state, "orphaned");
         assert_eq!(state.display_allocations["display"].state, "orphaned");
+    }
+
+    #[test]
+    fn production_inventory_reports_the_exact_binding_axis() {
+        let (inventory, mut state, config) = fixture();
+        state.browsers.get_mut("browser").unwrap().display_name = Some(":99".into());
+
+        assert_eq!(
+            inventory
+                .qualify(&state, config, "production", "boot-test", |_, _| true)
+                .unwrap_err(),
+            "production_presentation_inventory_binding_mismatch:route:browser_display_name"
+        );
+    }
+
+    #[test]
+    fn production_inventory_preserves_pending_new_browser_acquisition() {
+        let (mut inventory, mut state, config) = fixture();
+        let boot = crate::process_identity::current_boot_epoch().unwrap();
+        inventory.boot_epoch = boot.clone();
+        state.browsers.clear();
+        let readiness = json!({
+            "state": "pending",
+            "component": "remote_view_open_acquisition",
+            "leaseId": "lease",
+        });
+        let route = state.remote_view_routes.get_mut("route").unwrap();
+        route.browser_id = Some("new-browser".into());
+        route.session_id = Some("new-session".into());
+        route.state = "pending".into();
+        route.last_provider_event = Some("remote_view_open_acquisition_pending".into());
+        route.readiness = Some(readiness.clone());
+        let display = state.display_allocations.get_mut("display").unwrap();
+        display.boot_epoch = Some(boot.clone());
+        display.owner_browser_id = Some("new-browser".into());
+        display.owner_session_id = Some("new-session".into());
+        display.state = "pending".into();
+        display.readiness = Some(readiness.clone());
+        let entry = state.route_pool.get_mut("pool").unwrap();
+        entry.state = "pending".into();
+        entry.current_route_allocation_id = Some("route".into());
+        entry.readiness = Some(readiness);
+        state.remote_view_acquisition_leases.insert(
+            "lease".into(),
+            crate::native::service_model::RemoteViewAcquisitionLease {
+                id: "lease".into(),
+                boot_epoch: Some(boot.clone()),
+                browser_id: "new-browser".into(),
+                session_id: "new-session".into(),
+                route_id: "route".into(),
+                display_allocation_id: "display".into(),
+                route_pool_entry_id: Some("pool".into()),
+                state: "pending".into(),
+                phase: "reserved".into(),
+                ..Default::default()
+            },
+        );
+
+        let capacity = inventory
+            .qualify(&state, config, "production", &boot, |_, _| true)
+            .unwrap();
+        assert_eq!(capacity.slots[0].state, PresentationSlotState::WarmIdle);
+        assert!(capacity.slots[0].browser_id.is_none());
     }
 
     #[test]

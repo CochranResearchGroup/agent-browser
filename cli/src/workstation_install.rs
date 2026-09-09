@@ -965,6 +965,7 @@ fn rehydrate_dashboard_candidate(
     if env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some()
         || transaction.state
             == crate::runtime_adoption::UpgradeTransactionState::StateMigrationValidated
+        || crate::runtime_replacement::plan_from_upgrade_transaction(transaction)?.is_some()
     {
         return Ok(None);
     }
@@ -1003,6 +1004,8 @@ fn resume_prepared_payload_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
+    let presentation_bypass =
+        crate::runtime_replacement::plan_from_upgrade_transaction(&prepared.transaction)?.is_some();
     let mut paths = install_paths(root);
     let mut quiesced = None;
 
@@ -1068,7 +1071,10 @@ fn resume_prepared_payload_transaction(
             ));
         }
     }
-    if prepared.transaction.state == UpgradeTransactionState::CandidateReady && !isolated_root {
+    if prepared.transaction.state == UpgradeTransactionState::CandidateReady
+        && !isolated_root
+        && !presentation_bypass
+    {
         if let Err(error) =
             wait_for_dashboard_candidate_commit(prepared, DASHBOARD_PRESENTATION_TIMEOUT)
         {
@@ -1126,7 +1132,7 @@ fn resume_prepared_payload_transaction(
             prepared.transaction.state
         ));
     }
-    let validation = if isolated_root {
+    let validation = if isolated_root || presentation_bypass {
         match isolated_post_commit_validation(&paths, prepared) {
             Ok(validation) => validation,
             Err(error) => {
@@ -9501,6 +9507,16 @@ fn runtime_finalization_required(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
     handoffs: &[PreparedRuntimeHandoff],
 ) -> bool {
+    if crate::runtime_replacement::effect_receipt_from_upgrade_transaction(transaction)
+        .ok()
+        .flatten()
+        .is_some_and(|receipt| {
+            receipt.state == crate::runtime_replacement::RuntimeReplacementEffectState::SourceAbsent
+                && receipt.source_exit_proven
+        })
+    {
+        return false;
+    }
     source_runtime_host_retirement_is_recorded(transaction)
         || handoffs
             .iter()
@@ -12003,6 +12019,36 @@ mod tests {
         });
 
         assert!(runtime_finalization_required(&transaction, &[]));
+    }
+
+    #[test]
+    fn completed_full_shutdown_does_not_finalize_the_absent_source_twice() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-complete-full-shutdown-finalization-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.successor_fields.insert(
+            "runtimeReplacementEffectReceipt".to_string(),
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-replacement-effect-receipt.v1",
+                "state": "source_absent",
+                "planDigest": "c".repeat(64),
+                "closedSessions": ["reviewed-session"],
+                "forcedBrowserIds": [],
+                "finalCensusDigest": "d".repeat(64),
+                "sourceExitProven": true,
+                "profilesPreserved": true
+            }),
+        );
+
+        assert!(!runtime_finalization_required(&transaction, &[]));
     }
 
     #[test]
