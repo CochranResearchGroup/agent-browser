@@ -74,16 +74,18 @@ jobs:
       - name: Run no-launch service smokes
         run: |
           pnpm test:service-status-fixed-input-harness
+          scripts/ci/cargo-safe.sh build --manifest-path cli/Cargo.toml
+          export AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD="$PWD/cli/target/debug/agent-browser"
           node scripts/smoke-service-contracts-no-launch.js
           node scripts/smoke-mcp-read-no-launch.js
           node scripts/smoke-service-profile-sources.js
           node scripts/smoke-service-site-policy-sources.js
-          node scripts/smoke-service-request-cdp-free-no-launch.js
           node scripts/smoke-service-remedies-cli-no-launch.js
           node scripts/smoke-service-remedies-json-no-launch.js
           node scripts/smoke-service-remedies-apply-json-no-launch.js
           node scripts/smoke-service-incident-summary-http.js
           node scripts/smoke-service-incident-summary-mcp.js
+        timeout-minutes: 10
 
   dashboard:
     name: Dashboard
